@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "name": "桃源科技研发团队 · 双十一大促",
+  "orchestrator": "kirocrew-team",
+  "scope": "mvp",
+  "delivery_defaults": {"kind": "新功能", "size": "中", "line": "电商"},
+  "official_stages": 23,
+  "extra_stages": [
+    "4.1 部署流水线",
+    "4.3 部署执行"
+  ],
+  "extra_note": "官方 mvp 不含运维阶段，这支团队加了部署",
+  "priority": 35,
+  "keywords": [
+    "双十一",
+    "大促",
+    "促销",
+    "满减",
+    "划线价",
+    "价保",
+    "活动方案",
+    "官方商城"
+  ],
+  "roster": "roster-taoyuan.json",
+  "starter": "starters/mall",
+  "spec_pack": "packs/taoyuan-promo",
+  "standards": "packs/taoyuan/standards.json",
+  "standards_always": [
+    "PRC",
+    "MGN",
+    "PP",
+    "BR"
+  ],
+  "knowledge": {
+    "source": "桃源科技",
+    "data_dir": "~/workplace/taoyuan/data"
+  },
+  "task_template": "task_template-taoyuan.md",
+  "test_command": [
+    "node",
+    "tests/enterprise/_run.cjs"
+  ],
+  "test_timeout_s": 30,
+  "test_owners": [
+    {
+      "glob": "tests/enterprise/data-copy*",
+      "role": "product"
+    },
+    {
+      "glob": "tests/enterprise/prc-*",
+      "role": "backend1"
+    },
+    {
+      "glob": "tests/enterprise/mgn-*",
+      "role": "backend1"
+    },
+    {
+      "glob": "tests/enterprise/pp-*",
+      "role": "backend1"
+    },
+    {
+      "glob": "tests/enterprise/api-*",
+      "role": "backend1"
+    },
+    {
+      "glob": "tests/enterprise/fe-campaign*",
+      "role": "frontend1"
+    },
+    {
+      "glob": "tests/enterprise/fe-site*",
+      "role": "frontend1"
+    },
+    {
+      "glob": "tests/enterprise/fe-admin*",
+      "role": "frontend2"
+    },
+    {
+      "glob": "tests/enterprise/ux-motion*",
+      "role": "motion"
+    },
+    {
+      "glob": "tests/api-*",
+      "role": "backend1"
+    },
+    {
+      "glob": "tests/web-campaign*",
+      "role": "frontend1"
+    },
+    {
+      "glob": "tests/web-admin*",
+      "role": "frontend2"
+    }
+  ],
+  "defaults": {
+    "model": "claude-sonnet-5.5",
+    "max_fix_rounds": 2,
+    "max_review_rounds": 1
+  },
+  "workspace": "taoyuan",
+  "roles": [
+    {
+      "key": "product",
+      "title": "产品经理",
+      "icon": "product",
+      "member": "aidlc-product-agent",
+      "aidlc_agent": "aidlc-product-agent",
+      "phase": "inception",
+      "stage": "1.1 意图捕获 · 2.3 需求分析",
+      "mission": "把需求写成验收标准，从知识库取数据，交给人批准",
+      "assignment": "查规范、取数据、写验收标准",
+      "depends_on": [],
+      "writable": [
+        "docs/aidlc/2-inception/requirements.md",
+        "server/data/**",
+        "docs/aidlc/2-inception/plan.json",
+        "docs/aidlc/2-inception/delivery.json"
+      ],
+      "outputs": [
+        "docs/aidlc/2-inception/requirements.md",
+        "docs/aidlc/2-inception/plan.json"
+      ],
+      "plan": "docs/aidlc/2-inception/plan.json",
+      "delivery": "docs/aidlc/2-inception/delivery.json",
+      "gate": "human",
+      "gate_label": "需求",
+      "gate_preset": "批准。补充一条：每人每款限购 2 台，超过时购物车提示「每款限购 2 台」。",
+      "brief": "先在知识库里查上面列出的规范和数据：《价格与促销合规规范》《毛利与定价规则》《价保规则》《官方商城商品和订单》《双十一活动方案》。商品和订单的说明里写了 JSON 数据文件的路径：把 `mall-products.json`、`mall-orders.json` 原样复制成 `server/data/products.json` 和 `server/data/orders.json`（用 `cp`，不要改内容；活动方案由后端开发复制，你不用管）。然后写 `docs/aidlc/2-inception/requirements.md`：为谁、为什么（运营部在后台配双十一大促、看上线前体检、一键上线；顾客在活动页看到价并下单）；做什么、不做什么；8 到 10 条验收标准 AC-n，分「活动页」「运营后台」「价格引擎」三组，每条写清对应哪条规则（PRC-n、MGN-n、PP-n）。接口和页面的外形 README「公司模板约定」已经定了，不重复写。一页以内，不写代码。最后写分工提案 `docs/aidlc/2-inception/plan.json`：这次给每位成员分的任务，一人一句、30 个字以内、写具体、写一遍就行（比如「价格引擎：划线价、毛利底线、价保」），键用成员代号：`backend1` 后端开发 #1、`frontend1` 前端开发 #1、`frontend2` 前端开发 #2、`motion` 动效设计师、`tester` 测试工程师、`compliance` 合规审查、`deploy` 部署工程师；按 README 的目录分工分，不新增成员。动效设计师（`motion`）是可选岗位：需求里有要动起来的地方（倒计时、商品卡片出现、加购、上线庆祝）就给它分工；用不到就不写它那一行，在同一个文件里加 `\"skip\": {\"motion\": \"一句理由\"}`。别的成员都要参加，不能写进 skip。任务里写了它这次不参加（未入职）时，不给它分工，也不写 skip。最后写交付标签 `docs/aidlc/2-inception/delivery.json`：一个 JSON 对象，键 name（这次交付的名称，16 个字以内）、kind（新应用、新功能或修复）、size（小、中或大）、line（电商、移动应用、客户关系管理、供应链或内部系统）、why（一句理由），计入公司的交付统计。写完会停下来由人批准（人看的是需求、分工和交付标签），人可能补充规则，以人的意见为准。"
+    },
+    {
+      "key": "backend1",
+      "title": "后端开发 #1",
+      "icon": "backend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "3.5 代码生成",
+      "mission": "价格引擎和全部接口",
+      "assignment": "价格引擎：划线价、毛利底线、价保、上线",
+      "depends_on": [
+        "product"
+      ],
+      "writable": [
+        "server/lib/pricing.js",
+        "server/routes/**",
+        "server/config/campaign.json"
+      ],
+      "outputs": [
+        "server/lib/pricing.js",
+        "server/routes/index.js"
+      ],
+      "brief": "先把知识库《双十一活动方案》写的 `mall-campaign.json` 原样复制成 `server/config/campaign.json`（用 `cp`）。再按 README「价格引擎」实现 `server/lib/pricing.js` 的 `finalPrice`、`linePrice`、`check`、`quote`，按「接口约定」在 `server/routes/` 里实现全部接口。规则在知识库《价格与促销合规规范》PRC-1、PRC-4、PRC-5，《毛利与定价规则》MGN-1～MGN-3，《价保规则》PP-1、PP-2：划线价按活动前 7 日最低成交价（不用运营填的）、到手价四舍五入到元、参加满减的最低到手价按 90% 算、价保只算 30 天内已完成的有价保订单、超过 30 万要 CFO 审批、体检没过不能上线、没上线不能按活动价下单。人在关卡上补的规则（任务里会写，比如限购）放在 `quote` 和购物车接口里。时间一律用 `ctx.now()`。写完跑 `npm run check-campaign` 看体检：按运营方案原样，它会说不能上线，这是对的。方案（折扣）是运营定的，你不要为了让它能上线去改 `campaign.json`，改不改由上线关卡上的人决定。再跑 `node tests/enterprise/_run.cjs prc- mgn- pp- api- data-`，除了 data-copy（那是产品经理的），要全绿。"
+    },
+    {
+      "key": "frontend1",
+      "title": "前端开发 #1",
+      "icon": "frontend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "3.5 代码生成",
+      "mission": "双十一活动页",
+      "assignment": "活动页：到手价、划线价说明、满减、倒计时",
+      "depends_on": [
+        "product"
+      ],
+      "writable": [
+        "web/pages/campaign.js",
+        "web/styles/campaign.css"
+      ],
+      "outputs": [
+        "web/pages/campaign.js"
+      ],
+      "brief": "按 README「页面约定」实现 `web/pages/campaign.js`（`render` 和 `mount`）和 `web/styles/campaign.css`。这是顾客看的双十一活动页，要有大促的样子：顶部活动名、满减规则（PRC-3：写全每满多少减多少、能否叠加折扣、能否叠加优惠券，不用「全网最低」这类说法）和倒计时（`data-countdown`、`data-end`，按 `/api/time` 的服务器时间每秒走，数字用 `ctx.motion.flip` 跳）；商品按品类分区（电视、空调、冰箱、洗衣机、厨卫、清洁、数码），每张卡片：名称、到手价大字（`data-final`）、折扣角标、划掉的划线价（`data-line`）和旁边的小字「活动前 7 日最低价」（PRC-2）、加购按钮（`data-action=\"add\"`）；活动还没上线时不显示加购、写明还没上线（PRC-4）；右侧或底部购物车（`data-cart`）：小计、满减、合计，接口报错（比如限购）就把中文提示显示出来。卡片出现调用 `ctx.motion.reveal`，加购调用 `ctx.motion.bump`。到手价的大数字要放得进卡片：字号用 `clamp()`，数字不换行、不溢出卡片。用 base.css 的全站组件，自己的类名以 `campaign-` 开头，颜色只用 tokens 变量（不写 #fff、rgba(…)）。动效设计师同时在写 `web/motion/`，你只调用它的接口。写完跑 `node tests/enterprise/_run.cjs fe-campaign fe-site`，要全绿。"
+    },
+    {
+      "key": "frontend2",
+      "title": "前端开发 #2",
+      "icon": "frontend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "3.5 代码生成",
+      "mission": "运营后台",
+      "assignment": "运营后台：改折扣、上线前体检、一键上线",
+      "depends_on": [
+        "product"
+      ],
+      "writable": [
+        "web/pages/admin.js",
+        "web/styles/admin.css"
+      ],
+      "outputs": [
+        "web/pages/admin.js"
+      ],
+      "brief": "按 README「页面约定」实现 `web/pages/admin.js`（`render` 和 `mount`）和 `web/styles/admin.css`：运营配双十一的后台，要让人一眼看出能不能上线、为什么。左边一张表，每款一行（`data-sku`、`data-ok`）：名称、日常价、折扣输入框（`data-pct`）、满减开关（`data-fr`）、到手价、划线价（和运营填的不一样时标出来）、最低到手价、毛利底线、达标与否；改了就 `PUT /api/campaign/items/:sku`，用返回的体检重画。右边「上线前体检」面板用 `position: sticky` 固定在视口里（滚表格时一直看得到），从上到下：结论（能上线 / 不能上线）、不能上线的原因（`data-blockers`）、「一键上线」按钮（`data-action=\"launch\"`，不能上线时 `disabled`），再往下是价保退差（单数、金额，`data-pp`，按商品列出退差最多的几款）和预估毛利率（日常 → 活动）。运营改一个数，要一眼看出变了什么：`mount` 里记住改之前的体检结果，作为可选的 `state.prev` 传给 `render`（没有 `prev` 时照常显示）；价保退差、毛利率旁边写出比刚才的变化量（比如「比刚才 +¥162,000」，变多用警示色、变少用通过色），改动的那一行和变化的数字高亮几秒，数字用 `ctx.motion.flip` 换；上线成功调用 `ctx.motion.celebrate(ctx.fx)`，显示已上线。加载、保存中、出错三种状态。表格在 1440 宽的屏幕上不用横向滚动就要看全每一列：「活动前 7 日最低价（系统算）」这类说明写在表头，不要每行重复；商品名可以换行；屏幕更窄时才在面板里横向滚动，不要裁掉列。活动时间按北京时间显示成「2026-11-01 00:00」，不要显示 ISO 原文。用 base.css 的 `.glass`、`.panel`、`.table`、`.btn--primary`、`.chip`、`.state`，自己的类名以 `admin-` 开头，颜色只用 tokens 变量。写完跑 `node tests/enterprise/_run.cjs fe-admin`，要全绿。"
+    },
+    {
+      "key": "motion",
+      "title": "动效设计师",
+      "icon": "motion",
+      "member": "taoyuan-motion-agent",
+      "aidlc_agent": "taoyuan-motion-agent",
+      "optional": true,
+      "phase": "construction",
+      "stage": "3.5 代码生成 · 品牌动效",
+      "mission": "倒计时、卡片出现、加购和上线庆祝的动效",
+      "assignment": "倒计时、卡片出现、加购和上线庆祝",
+      "depends_on": [
+        "product"
+      ],
+      "writable": [
+        "web/motion/**"
+      ],
+      "outputs": [
+        "web/motion/motion.js"
+      ],
+      "brief": "按 README「动效接口」实现 `web/motion/motion.js` 的 `prefersReduced`、`flip`、`reveal`、`bump`、`celebrate`，样式写 `web/motion/motion.css`。先在知识库查《品牌规范》BR-3 和《前端工程规范》UX-1。`flip`：倒计时的数字换的时候上下翻一下；`reveal`：商品卡片依次浮现（加 `is-in`，CSS 里定义进入前后的样子）；`bump`：购物车角标弹一下；`celebrate`：活动上线时在全屏 canvas 上放 3 秒左右的光点和彩纸，颜色用 `getComputedStyle(document.documentElement).getPropertyValue('--brand-peach')` 这类品牌变量读，不写死颜色值，结束时清空 canvas。关键帧只动 `transform` 和 `opacity`；`prefers-reduced-motion: reduce` 时不翻、不放彩纸，直接显示结果。不引任何动画库。写完跑 `node tests/enterprise/_run.cjs ux-motion`，要全绿。"
+    },
+    {
+      "key": "tester",
+      "title": "测试工程师",
+      "icon": "tester",
+      "member": "aidlc-quality-agent",
+      "aidlc_agent": "aidlc-quality-agent",
+      "phase": "construction",
+      "stage": "3.6 构建与测试",
+      "mission": "按验收标准写测试",
+      "assignment": "按验收标准写价格和活动页的测试",
+      "depends_on": [
+        "product"
+      ],
+      "writable": [
+        "tests/api-*",
+        "tests/web-*"
+      ],
+      "outputs": [
+        "tests/"
+      ],
+      "brief": "按 `docs/aidlc/2-inception/requirements.md` 的验收标准和 README 的约定写测试：接口和价格引擎写 `tests/api-promo.test.js`，活动页写 `tests/web-campaign.test.js`（ES 模块，`node:test`；页面直接 import `web/pages/campaign.js` 调 `render(state)`；接口用 `tests/enterprise/_lib.js` 的 `startServer`）。运营后台公司检查已经覆盖，不写。挑最要紧的 AC，每条一个测试，测试名以 AC 编号开头，两个文件一共不超过 14 个，人在关卡上补的规则一定要有；上线、改折扣会改状态，每个接口用例自己 `startServer()` 一个新实例，拿到以后马上进 `try`，在 `finally` 里 `close()`（辅助函数里也一样：断言失败时也要关）；公司检查已经覆盖的（PRC、MGN、PP、FE、BR）不重复写。实现还没写，测试现在是红的，这是对的；不要为了验证自己的测试去写实现、建临时文件或还原别的目录（`git checkout -- web` 这类）：你的分支上实现是空的，测试红是对的；只碰你能改的文件。写完跑 `node tests/enterprise/_run.cjs api- web-` 确认你的文件都能跑起来（红可以，跑不起来不行），再提交。"
+    },
+    {
+      "key": "compliance",
+      "title": "合规审查",
+      "icon": "compliance",
+      "member": "aidlc-compliance-agent",
+      "aidlc_agent": "aidlc-compliance-agent",
+      "phase": "construction",
+      "stage": "3.6 构建与测试 · 独立审查",
+      "mission": "只读，独立审查全部改动，给出上线前体检的结论",
+      "assignment": "读 git diff 和上线前体检，对照价格合规、毛利、价保",
+      "depends_on": [
+        "backend1",
+        "frontend1",
+        "frontend2",
+        "motion",
+        "tester"
+      ],
+      "writable": [],
+      "outputs": [],
+      "gate": "human",
+      "gate_label": "上线",
+      "gate_preset": "批准上线。价保退差按 28 万预留，活动结束后财务复核。",
+      "gate_revise_preset": "按上线前体检退回。\n打回：后端开发 #1。价保退差超过 30 万要 CFO 审批，这次不报：65 寸智能电视 Q7 从 8 折改 9 折，扫地机器人 X9 从 7 折改 8 折（改 server/config/campaign.json 里这两款的 pct：90 和 80）。",
+      "brief": "你和写代码的成员不是同一个会话，没看过他们的对话，只看实际改动：先在知识库查《价格与促销合规规范》《毛利与定价规则》《价保规则》，再读 `git diff`（命令见下），逐条对照 PRC-1～PRC-5、MGN-1～MGN-3、PP-1～PP-3。然后跑 `npm run check-campaign`，把它的结论放在报告最前面一段「上线前体检」：能不能上线、价保退差多少单多少钱、预估毛利率、不能上线的原因。注意：体检说不能上线，不算代码的问题：折扣方案是运营定的，要不要改、怎么改，由上线关卡上的负责人决定，你写清楚就行。只为真正的代码问题要改：划线价没按 7 日最低价、到手价或满减或价保算错、页面没写明划线价和满减规则、没上线也能按活动价下单、用了「全网最低」这类说法。风格问题不算。回复第一行写 `DONE: 可以交付` 或 `DONE: 要改：<一句话>`。下面列每条规则的结论（没问题的一行带过）；每个要改的问题单独编号 F-1、F-2……，每条写：违反哪条规则、文件和行、证据（代码原文）、怎么改。放行时也要列「不阻塞的风险提示」2～3 条，每条写清风险、建议怎么做、归谁（成员名，比如「归后端开发 #1」）；价格合规和财务负责人会在关卡上看你的报告，决定批准上线还是退回。"
+    },
+    {
+      "key": "deploy",
+      "title": "部署工程师",
+      "icon": "deploy",
+      "member": "aidlc-pipeline-deploy-agent",
+      "aidlc_agent": "aidlc-pipeline-deploy-agent",
+      "phase": "operation",
+      "stage": "4.1 部署流水线 · 4.3 部署执行",
+      "mission": "部署到本机",
+      "assignment": "部署到 127.0.0.1:8090",
+      "depends_on": [
+        "compliance"
+      ],
+      "writable": [
+        "deploy/**",
+        "docs/aidlc/4-operation/**"
+      ],
+      "outputs": [
+        "deploy/local.json"
+      ],
+      "deploy": {
+        "mode": "local",
+        "port": 8090,
+        "health": "/api/campaign",
+        "ttl_min": 240
+      },
+      "brief": "写部署配置 `deploy/local.json`：`{ \"port\": 8090, \"health\": \"/api/campaign\" }`（端口和健康检查路径），再写一页部署记录 `docs/aidlc/4-operation/deploy.md`：怎么起、健康检查、上线前体检的结论（跑 `npm run check-campaign`，原样贴进来）、回滚（停掉进程、退回上一个提交）。在空闲端口上冒一次烟：`PORT=18090 node server/server.js &`，`curl -s 127.0.0.1:18090/api/campaign` 返回 200 就停掉它。不要占用 8090：你提交以后，流水线（编排器）按你的配置部署到 127.0.0.1:8090，健康检查返回 200 才算部署成功，不成功会把原因发回给你。活动要不要上线不归你：运营负责人会在后台点「一键上线」。"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "桃源科技研发团队",
+  "note": "公司的 agent 研发团队，13 个岗位，每个岗位由一位 AI-DLC 专家（Crew「代理」里的成员）担任。编排器按需求从里面挑人：挑中的进这次的工作流，没挑中的这次不参与。团队文件（team-taoyuan-*.json）里的角色都要在这里。",
+  "people": [
+    {"key": "product", "title": "产品经理", "member": "aidlc-product-agent", "icon": "product"},
+    {"key": "architect", "title": "架构师", "member": "aidlc-architect-agent", "icon": "architect"},
+    {"key": "designer", "title": "界面设计师", "member": "aidlc-design-agent", "icon": "designer"},
+    {"key": "backend1", "title": "后端开发 #1", "member": "aidlc-developer-agent", "icon": "backend"},
+    {"key": "backend2", "title": "后端开发 #2", "member": "aidlc-developer-agent", "icon": "backend"},
+    {"key": "frontend1", "title": "前端开发 #1", "member": "aidlc-developer-agent", "icon": "frontend"},
+    {"key": "frontend2", "title": "前端开发 #2", "member": "aidlc-developer-agent", "icon": "frontend"},
+    {"key": "motion", "title": "动效设计师", "member": "taoyuan-motion-agent", "icon": "motion"},
+    {"key": "tester", "title": "测试工程师", "member": "aidlc-quality-agent", "icon": "tester"},
+    {"key": "security", "title": "安全审查", "member": "aidlc-devsecops-agent", "icon": "security"},
+    {"key": "compliance", "title": "合规审查", "member": "aidlc-compliance-agent", "icon": "compliance"},
+    {"key": "deploy", "title": "部署工程师", "member": "aidlc-pipeline-deploy-agent", "icon": "deploy"},
+    {"key": "ops", "title": "运维工程师", "member": "aidlc-operations-agent", "icon": "ops"}
+  ]
+}

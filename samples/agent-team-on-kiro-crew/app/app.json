@@ -1,0 +1,45 @@
+{
+  "name": "aidlc-team",
+  "version": "0.8.0",
+  "displayName": "AI-DLC 多 Agent 团队",
+  "description": "A team of AI-DLC expert agents on Kiro Crew: from a one-sentence requirement through human gates, company checks and an independent review to a local deployment, with a live team board and a CTO view.",
+  "author": "aws-samples",
+  "minKiroCrewVersion": "0.8.0",
+  "backend": {
+    "hooks": {
+      "routes": "backend.routes:register_routes",
+      "on_startup": "backend.hooks:on_startup",
+      "on_shutdown": "backend.hooks:on_shutdown"
+    }
+  },
+  "ui": {
+    "entry": "dist/index.mjs",
+    "pages": [
+      {
+        "route": "/apps/aidlc-team",
+        "label": "AI-DLC 多 Agent 团队",
+        "icon": "Users"
+      }
+    ],
+    "sidebar": {
+      "section": "Apps"
+    }
+  },
+  "permissions": {
+    "api": [
+      "/api/apps/aidlc-team",
+      "/api/chat",
+      "/api/models",
+      "/api/agents",
+      "/api/knowledge"
+    ],
+    "storage": true,
+    "sessionApproval": true
+  },
+  "platform": {
+    "os": [
+      "macos",
+      "linux"
+    ]
+  }
+}

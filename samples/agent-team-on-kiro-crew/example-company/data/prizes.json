@@ -1,0 +1,6 @@
+[
+ {"id": "P1", "level": "特等奖", "name": "MacBook Pro 14 英寸", "count": 1, "order": 4},
+ {"id": "P2", "level": "一等奖", "name": "iPhone 18", "count": 2, "order": 3},
+ {"id": "P3", "level": "二等奖", "name": "降噪耳机", "count": 5, "order": 2},
+ {"id": "P4", "level": "三等奖", "name": "小桃子定制礼盒", "count": 12, "order": 1}
+]

@@ -1,0 +1,321 @@
+{
+  "version": 1,
+  "name": "AI-DLC 专家团队",
+  "orchestrator": "kirocrew-team",
+  "scope": "feature",
+  "delivery_defaults": {"kind": "新应用", "size": "中", "line": "内部系统"},
+  "official_stages": 33,
+  "priority": 100,
+  "fallback": true,
+  "keywords": [],
+  "workspace": "taoyuan",
+  "starter": "starters/web",
+  "spec_pack": "packs/taoyuan-web",
+  "standards": "packs/taoyuan/standards.json",
+  "standards_always": [
+    "FE",
+    "BR"
+  ],
+  "knowledge": {
+    "source": "桃源科技",
+    "data_dir": "~/workplace/taoyuan/data"
+  },
+  "task_template": "task_template-aidlc.md",
+  "test_command": [
+    "node",
+    "tests/enterprise/_run.cjs"
+  ],
+  "test_timeout_s": 30,
+  "ownership": {
+    "file": "docs/aidlc/2-inception/ownership.json",
+    "from": "architect"
+  },
+  "test_owners": [],
+  "defaults": {
+    "model": "claude-sonnet-5.5",
+    "max_fix_rounds": 3,
+    "max_review_rounds": 2,
+    "gate_discuss": true,
+    "max_discuss_rounds": 5
+  },
+  "roles": [
+    {
+      "key": "intent",
+      "title": "意图",
+      "icon": "intent",
+      "member": "aidlc-product-agent",
+      "aidlc_agent": "aidlc-product-agent",
+      "phase": "ideation",
+      "stage": "1.1 意图捕获",
+      "mission": "把一句话需求说清楚：为谁、为什么、怎样算成功",
+      "depends_on": [],
+      "writable": [
+        "docs/aidlc/1-ideation/intent.md"
+      ],
+      "outputs": [
+        "docs/aidlc/1-ideation/intent.md"
+      ],
+      "brief": "先在知识库「桃源科技」里查任务里列出的规范和数据，再读 README 末尾的「需求」和 `.kiro/steering/`（这是公司网页模板：服务器骨架、页面外壳、品牌样式已经有了）。写 `docs/aidlc/1-ideation/intent.md`：为谁、为什么、怎样算成功（每条都能验证）、这次不做什么；需求要用到的数据在知识库里是哪一份，写明。一页以内，不写代码。"
+    },
+    {
+      "key": "feasibility",
+      "title": "约束",
+      "icon": "feasibility",
+      "member": "aidlc-compliance-agent",
+      "aidlc_agent": "aidlc-compliance-agent,aidlc-devsecops-agent",
+      "phase": "ideation",
+      "stage": "1.3 可行性与约束",
+      "mission": "对照公司规范，找出这次必须满足哪些、需求和规范哪里冲突",
+      "depends_on": [],
+      "writable": [
+        "docs/aidlc/1-ideation/constraints.md"
+      ],
+      "outputs": [
+        "docs/aidlc/1-ideation/constraints.md"
+      ],
+      "brief": "在知识库「桃源科技」里逐份查任务里列出的公司规范，逐条看编号（PII-n、FE-n、BR-n、ACC-n 等）这次适不适用、为什么。写 `docs/aidlc/1-ideation/constraints.md`：适用的规则（编号 + 一句话怎么落实）；不适用的一行带过；最后单独一节「要人决定的」：需求原话和哪条规则冲突、两种做法各自的后果。冲突不要替人决定，也不要悄悄按一边做。一页以内，不写代码。"
+    },
+    {
+      "key": "scope",
+      "title": "范围",
+      "icon": "scope",
+      "member": "aidlc-product-agent",
+      "aidlc_agent": "aidlc-product-agent",
+      "phase": "ideation",
+      "stage": "1.4 范围定义",
+      "mission": "把意图和约束合成一张范围清单，交给人批准",
+      "depends_on": [
+        "intent",
+        "feasibility"
+      ],
+      "gate": "human",
+      "gate_label": "范围",
+      "delivery": "docs/aidlc/1-ideation/delivery.json",
+      "writable": [
+        "docs/aidlc/1-ideation/scope.md",
+        "docs/aidlc/1-ideation/delivery.json",
+        "docs/aidlc/1-ideation/questions.json"
+      ],
+      "outputs": [
+        "docs/aidlc/1-ideation/scope.md"
+      ],
+      "brief": "读 `docs/aidlc/1-ideation/intent.md` 和 `constraints.md`，写 `docs/aidlc/1-ideation/scope.md`：这次要做的条目清单，每条一个编号 AC-n，一句话说做什么，对应哪条公司规则（写编号）；明确不做的；`constraints.md` 里「要人决定的」原样列出来，写清你建议怎么定、为什么。清单要短而准，宁可少不要虚。再写交付标签 `docs/aidlc/1-ideation/delivery.json`：一个 JSON 对象，键 name（这次交付的名称，16 个字以内）、kind（新应用、新功能或修复）、size（小、中或大）、line（电商、移动应用、客户关系管理、供应链或内部系统）、why（一句理由），计入公司的交付统计。把「要人决定的」同时写成 `docs/aidlc/1-ideation/questions.json`：`{\"questions\": [{\"id\": \"1\", \"q\": \"一句话的问题\", \"options\": [{\"key\": \"A\", \"text\": \"选项和它的代价\"}, {\"key\": \"B\", \"text\": \"…\"}], \"recommend\": \"A\", \"why\": \"一句理由\"}]}`，id 和文档里的编号一致，每题 2 到 4 个选项，recommend 写你建议的选项；没有要人决定的就写 `{\"questions\": []}`。人会在关卡上逐条选，选的结果以人为准，会交给后面的每个角色。写完会停下来交给人批准，人可能删改或者定下冲突怎么处理，以人的意见为准。",
+      "questions": "docs/aidlc/1-ideation/questions.json"
+    },
+    {
+      "key": "architect",
+      "title": "架构师",
+      "icon": "architect",
+      "member": "aidlc-architect-agent",
+      "aidlc_agent": "aidlc-architect-agent",
+      "model": "claude-opus-5.5",
+      "phase": "inception",
+      "stage": "2.8 接口约定 · 分工",
+      "mission": "定接口和页面的外形，给开发角色分目录",
+      "depends_on": [
+        "scope"
+      ],
+      "writable": [
+        "docs/aidlc/2-inception/**"
+      ],
+      "outputs": [
+        "docs/aidlc/2-inception/architecture.md",
+        "docs/aidlc/2-inception/interfaces.md",
+        "docs/aidlc/2-inception/ownership.json"
+      ],
+      "brief": "读范围清单（人批准时写的意见以人为准）和 README「公司模板约定」。写 `docs/aidlc/2-inception/architecture.md`（要哪些页面、哪些接口、用哪份数据、数据从知识库复制到 `server/data/` 的哪个文件，范围清单的每一条落在哪里）和 `interfaces.md`（每个接口：方法、路径、请求、成功和出错的返回；每个页面：页面名、`render(state)` 的 state 形状、测试要用的 `data-*`）。再写分工文件 `docs/aidlc/2-inception/ownership.json`，格式：`{\"roles\": {\"backend\": [\"server/routes/**\", \"server/data/**\"], \"frontend\": [\"web/pages/**\", \"web/styles/**\", \"web/motion/**\"], \"mobile\": []}, \"test_areas\": {\"server\": \"backend\", \"web\": \"frontend\"}}`：roles 只能用 backend、frontend、mobile 这三个 key，值是它能改的目录；这个模板没有安卓端，mobile 给空列表（它会被跳过）；test_areas 一定写 server 和 web（公司检查和测试的文件名靠它们分给角色）。只写文档，不写代码。"
+    },
+    {
+      "key": "designer",
+      "title": "界面",
+      "icon": "designer",
+      "member": "aidlc-design-agent",
+      "aidlc_agent": "aidlc-design-agent",
+      "phase": "inception",
+      "stage": "2.5 界面细化",
+      "mission": "用公司的组件和品牌样式设计页面",
+      "depends_on": [
+        "architect"
+      ],
+      "writable": [
+        "docs/aidlc/2-inception/design.md"
+      ],
+      "outputs": [
+        "docs/aidlc/2-inception/design.md"
+      ],
+      "brief": "先在知识库查《品牌规范》和《前端工程规范》。按范围清单和 `interfaces.md` 的页面写 `docs/aidlc/2-inception/design.md`：每个页面的布局、用 README 列的哪些全站组件、文案（按 BR-5 的语气）、加载中、空、出错三种状态；颜色只用 `tokens.css` 的品牌变量。一页以内，不写代码。"
+    },
+    {
+      "key": "pm",
+      "title": "需求",
+      "icon": "pm",
+      "member": "aidlc-product-agent",
+      "aidlc_agent": "aidlc-product-agent",
+      "phase": "inception",
+      "stage": "2.3 需求分析 · 启动关卡",
+      "mission": "把范围写成可验收的标准，汇总启动阶段交给人批准",
+      "depends_on": [
+        "architect",
+        "designer"
+      ],
+      "writable": [
+        "docs/aidlc/2-inception/acceptance.md",
+        "docs/aidlc/2-inception/questions.json"
+      ],
+      "outputs": [
+        "docs/aidlc/2-inception/acceptance.md"
+      ],
+      "brief": "读范围清单、`architecture.md`、`interfaces.md`、`ownership.json` 和 `design.md`，写 `docs/aidlc/2-inception/acceptance.md`：范围里的每一条写成验收标准（沿用 AC-n 编号），写清怎么验（调哪个接口、看页面上的什么）、对应哪条公司规则；写明是机器检查还是人看。人在关卡上补的意见一定要有对应的验收标准。一页以内。 然后汇总启动阶段（架构、接口、分工、界面和你写的验收标准）里要人定的事：前面的文档写了「要人决定」「待确认」的，和你发现的冲突，写成 `docs/aidlc/2-inception/questions.json`：`{\"questions\": [{\"id\": \"1\", \"q\": \"一句话的问题\", \"options\": [{\"key\": \"A\", \"text\": \"选项和它的代价\"}, {\"key\": \"B\", \"text\": \"…\"}], \"recommend\": \"A\", \"why\": \"一句理由\"}]}`，id 和文档里的编号一致，每题 2 到 4 个选项，recommend 写你建议的选项；没有要人决定的就写 `{\"questions\": []}`。人会在关卡上逐条选，选的结果以人为准，会交给后面的每个角色。写完会停下来，人在「启动」关卡看这一阶段的全部文档后批准，然后才开始写代码和检查。",
+      "gate": "human",
+      "gate_label": "启动",
+      "questions": "docs/aidlc/2-inception/questions.json"
+    },
+    {
+      "key": "compliance",
+      "title": "合规与安全",
+      "icon": "compliance",
+      "member": "aidlc-devsecops-agent",
+      "aidlc_agent": "aidlc-compliance-agent,aidlc-devsecops-agent",
+      "model": "claude-opus-5.5",
+      "phase": "construction",
+      "stage": "3.2 非功能需求 → 检查",
+      "mission": "把范围里适用的公司规则写成机器能判的检查，先红后绿",
+      "depends_on": [
+        "architect",
+        "pm"
+      ],
+      "writable": [
+        "tests/comp-*",
+        "docs/aidlc/3-construction/compliance.md"
+      ],
+      "outputs": [
+        "docs/aidlc/3-construction/compliance.md"
+      ],
+      "brief": "读 `constraints.md`、范围清单（人批准时的意见以人为准）和 `interfaces.md`，在知识库查适用的规范原文。`tests/enterprise/` 已经有公司下发的检查（看它的 README 和文件名：FE-1/2/4、UX-2、BR-1、PII-1 已经查了），不重复写。把剩下适用、又能机器判的规则写成检查 `tests/comp-<区域>-<主题>.test.js`（区域名用 ownership.json 的 test_areas：server 或 web；ES 模块、`node:test`；接口用 `tests/enterprise/_lib.js` 的 `startServer`，用完 `close()`；页面直接 import 调 `render`），测试名以规则编号开头，一共不超过 6 个。实现还没写，红是对的。再写一页 `docs/aidlc/3-construction/compliance.md`：每条适用规则由哪个检查管、哪些只能人看。写完跑 `node tests/enterprise/_run.cjs comp-` 确认能跑起来（红可以）。"
+    },
+    {
+      "key": "tester",
+      "title": "测试",
+      "icon": "tester",
+      "member": "aidlc-quality-agent",
+      "aidlc_agent": "aidlc-quality-agent",
+      "phase": "construction",
+      "stage": "3.6 构建与测试",
+      "mission": "按验收标准写测试",
+      "depends_on": [
+        "pm"
+      ],
+      "writable": [
+        "tests/ac-*"
+      ],
+      "outputs": [
+        "tests/"
+      ],
+      "brief": "按 `acceptance.md` 和 `interfaces.md` 写测试 `tests/ac-<区域>-<主题>.test.js`（区域名用 ownership.json 的 test_areas：server 或 web；ES 模块、`node:test`；接口用 `tests/enterprise/_lib.js` 的 `startServer`，每个用例自己起一个，`finally` 里 `close()`；页面直接 import `web/pages/<页面名>.js` 调 `render(state)`）。挑最要紧的 AC，每条一个测试，测试名以 AC 编号开头，一共不超过 12 个；人在关卡上补的意见一定要有。实现还没写，红是对的；不要为了验证测试去写实现。写完跑 `node tests/enterprise/_run.cjs ac-` 确认能跑起来，再提交。"
+    },
+    {
+      "key": "backend",
+      "title": "后端",
+      "icon": "backend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "3.5 代码生成",
+      "mission": "接口和数据",
+      "depends_on": [
+        "architect",
+        "compliance"
+      ],
+      "writable_from": "ownership",
+      "outputs": [],
+      "brief": "按 `interfaces.md` 在 `server/routes/` 实现接口（格式见 `server/routes/index.js` 开头的说明）；要用的数据从知识库取来，按知识库说明文档里写的路径原样复制进 `server/data/`（用 `cp`，不改内容）。在知识库查任务里列出的规范，规则编号写进代码注释和提交说明。修文件名里区域归你（server）的检查：`tests/enterprise/*-server-*`、`tests/comp-server-*`、`tests/ac-server-*`。写完跑 `node tests/enterprise/_run.cjs server-` 确认全绿。"
+    },
+    {
+      "key": "frontend",
+      "title": "网页",
+      "icon": "frontend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "3.5 代码生成",
+      "mission": "页面",
+      "depends_on": [
+        "architect",
+        "designer",
+        "compliance"
+      ],
+      "writable_from": "ownership",
+      "outputs": [],
+      "brief": "按 `interfaces.md` 和 `design.md` 写页面 `web/pages/<页面名>.js`（`render` / `mount`，README「页面约定」）和 `web/styles/<页面名>.css`，在 `web/pages/index.js` 里登记，模板的占位首页可以换掉。用 README 列的全站组件，颜色只用 `tokens.css` 的变量，个人信息按《个人信息展示规范》显示。修文件名里区域归你（web）的检查：`tests/enterprise/*-web-*`、`tests/comp-web-*`、`tests/ac-web-*`。写完跑 `node tests/enterprise/_run.cjs web-` 确认全绿。"
+    },
+    {
+      "key": "mobile",
+      "title": "安卓",
+      "icon": "mobile",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "3.5 代码生成",
+      "mission": "安卓端（分工里给了目录才开工）",
+      "depends_on": [
+        "architect",
+        "designer",
+        "compliance"
+      ],
+      "writable_from": "ownership",
+      "outputs": [],
+      "brief": "只做分工文件里分给你的目录；按 `interfaces.md` 调接口，个人信息按《个人信息展示规范》显示。修文件名里区域归你的检查。"
+    },
+    {
+      "key": "reviewer",
+      "title": "评审",
+      "icon": "reviewer",
+      "member": "aidlc-architecture-reviewer-agent",
+      "aidlc_agent": "aidlc-architecture-reviewer-agent,aidlc-product-lead-agent",
+      "model": "claude-opus-5.5",
+      "phase": "review",
+      "stage": "评审关卡",
+      "mission": "独立、只读，逐条核对；要改就打回",
+      "depends_on": [
+        "backend",
+        "frontend",
+        "mobile",
+        "compliance",
+        "tester"
+      ],
+      "writable": [],
+      "outputs": [],
+      "gate": "human",
+      "gate_label": "上线",
+      "brief": "你没有参与开发，只看结果：先在知识库查任务里列出的规范，再读范围清单（人批准时的意见以人为准）、`acceptance.md` 和 `git diff`（命令见下）。逐条核对：范围里的每一条做了没有，适用的公司规则落实了没有（个人信息、前端工程、品牌），测试墙上没过的算进结论。回复第一行写 `DONE: 可以交付` 或 `DONE: 要改：<一句话>`。下面每个要改的问题单独编号 F-1、F-2……：违反哪条、文件和行、证据（代码原文）、怎么改、归谁（写一行 `打回：后端` 这样的）；放行时也列 2～3 条「不阻塞的风险提示」。范围里人定过的事不算问题。负责人会在上线关卡上看你的报告，决定批准上线还是退回。"
+    },
+    {
+      "key": "ops",
+      "title": "部署",
+      "icon": "deploy",
+      "member": "aidlc-pipeline-deploy-agent",
+      "aidlc_agent": "aidlc-pipeline-deploy-agent",
+      "phase": "operation",
+      "stage": "4.1 部署流水线 · 4.3 部署执行",
+      "mission": "部署到本机",
+      "assignment": "部署到 127.0.0.1:8085",
+      "depends_on": [
+        "reviewer"
+      ],
+      "writable": [
+        "deploy/**",
+        "docs/aidlc/4-operation/**"
+      ],
+      "outputs": [
+        "deploy/local.json"
+      ],
+      "deploy": {
+        "mode": "local",
+        "port": 8085,
+        "health": "/",
+        "ttl_min": 240
+      },
+      "brief": "写部署配置 `deploy/local.json`：`{ \"port\": 8085, \"health\": \"/\" }`（端口和健康检查路径；有接口的话健康检查可以换成一个不带参数的 GET 接口），再写一页部署记录 `docs/aidlc/4-operation/deploy.md`：怎么起、健康检查、回滚（停掉进程、退回上一个提交）。在空闲端口上冒一次烟：`PORT=18085 node server/server.js &`，`curl -s -o /dev/null -w '%{http_code}' 127.0.0.1:18085/` 返回 200 就停掉它。不要占用 8085：你提交以后，流水线（编排器）按你的配置部署到 127.0.0.1:8085，健康检查返回 200 才算部署成功，不成功会把原因发回给你。"
+    }
+  ]
+}

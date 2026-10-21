@@ -21,6 +21,7 @@ for a one-day guided rehearsal.
 
 | Sample | Scenario | Toolchain highlights | Status |
 | --- | --- | --- | --- |
+| [AI-DLC agent team on Kiro Crew](samples/agent-team-on-kiro-crew/) | A team of AI-DLC expert agents takes a web feature from a one-sentence requirement through human gates, company checks and an independent review to a local deployment and a sign-off | Kiro Crew app (Python backend, React board), git worktrees, Node.js test runner, Kiro Crew knowledge base | Available |
 | [Embedded development](samples/embedded-development/) | Firmware and controller software in C and C++, including model-based design, validated in simulation and on hardware before an engineer signs off the release | Cross-compilers on a shared Linux build server, QEMU, OpenOCD and GDB, serial console, hardware-in-the-loop bench | In development |
 | [Enterprise application and data](samples/enterprise-application-and-data/) | Making legacy services, ERP, finance and supply-chain systems and their data usable by agents | OpenAPI specifications, row- and column-level access control, governed MCP servers | Planned |
 | [Mobile app development, iOS first](samples/mobile-app-development/) | Swift and Kotlin apps on release trains, where the definition of done includes app store review and regulatory rules | Amazon EC2 Mac instances, AWS Device Farm | Planned |
@@ -36,6 +37,8 @@ samples/<sample-name>/
 ├── reference-project/   A small runnable project to practice on
 └── rehearsal/           Guide and scorecard for a one-day guided rehearsal
 ```
+
+The agent-team sample is a Kiro Crew app rather than a plugin, and its README describes its own layout.
 
 A sample adds domain knowledge to AI-DLC as a
 [plugin](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md)

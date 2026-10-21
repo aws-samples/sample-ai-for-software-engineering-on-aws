@@ -1,0 +1,182 @@
+[
+ {
+  "sku": "TV65",
+  "name": "65 寸智能电视 Q7",
+  "category": "电视",
+  "price": 5399,
+  "cost": 3700,
+  "stock": 800,
+  "priceProtect": true
+ },
+ {
+  "sku": "TV55",
+  "name": "55 寸智能电视 Q5",
+  "category": "电视",
+  "price": 3299,
+  "cost": 2300,
+  "stock": 1200,
+  "priceProtect": false
+ },
+ {
+  "sku": "TV75",
+  "name": "75 寸 Mini LED 电视 Q9",
+  "category": "电视",
+  "price": 8999,
+  "cost": 6200,
+  "stock": 300,
+  "priceProtect": false
+ },
+ {
+  "sku": "AC35",
+  "name": "1.5 匹变频空调 KFR-35",
+  "category": "空调",
+  "price": 2999,
+  "cost": 2050,
+  "stock": 1500,
+  "priceProtect": true
+ },
+ {
+  "sku": "AC50",
+  "name": "2 匹柜机空调 KFR-50",
+  "category": "空调",
+  "price": 4599,
+  "cost": 3200,
+  "stock": 600,
+  "priceProtect": false
+ },
+ {
+  "sku": "RF500",
+  "name": "500L 十字门冰箱 R5",
+  "category": "冰箱",
+  "price": 4999,
+  "cost": 3450,
+  "stock": 500,
+  "priceProtect": false
+ },
+ {
+  "sku": "RF300",
+  "name": "300L 三门冰箱 R3",
+  "category": "冰箱",
+  "price": 2299,
+  "cost": 1600,
+  "stock": 900,
+  "priceProtect": false
+ },
+ {
+  "sku": "WM10",
+  "name": "10kg 滚筒洗衣机 W10",
+  "category": "洗衣机",
+  "price": 2799,
+  "cost": 1900,
+  "stock": 900,
+  "priceProtect": false
+ },
+ {
+  "sku": "WD10",
+  "name": "洗烘套装 WD10",
+  "category": "洗衣机",
+  "price": 6999,
+  "cost": 4800,
+  "stock": 300,
+  "priceProtect": false
+ },
+ {
+  "sku": "DW13",
+  "name": "13 套嵌入式洗碗机 D13",
+  "category": "厨卫",
+  "price": 3999,
+  "cost": 2700,
+  "stock": 400,
+  "priceProtect": false
+ },
+ {
+  "sku": "RH01",
+  "name": "烟灶套装 H1",
+  "category": "厨卫",
+  "price": 3699,
+  "cost": 2500,
+  "stock": 500,
+  "priceProtect": false
+ },
+ {
+  "sku": "X9",
+  "name": "扫地机器人 X9",
+  "category": "清洁",
+  "price": 2999,
+  "cost": 1950,
+  "stock": 1000,
+  "priceProtect": true
+ },
+ {
+  "sku": "V8",
+  "name": "无线吸尘器 V8",
+  "category": "清洁",
+  "price": 1599,
+  "cost": 1050,
+  "stock": 1200,
+  "priceProtect": true
+ },
+ {
+  "sku": "P5",
+  "name": "空气净化器 P5",
+  "category": "清洁",
+  "price": 1899,
+  "cost": 1250,
+  "stock": 800,
+  "priceProtect": false
+ },
+ {
+  "sku": "T1",
+  "name": "手机 T1 Pro",
+  "category": "数码",
+  "price": 3999,
+  "cost": 3100,
+  "stock": 2000,
+  "priceProtect": false
+ },
+ {
+  "sku": "PAD11",
+  "name": "平板 Pad 11",
+  "category": "数码",
+  "price": 2499,
+  "cost": 1850,
+  "stock": 1500,
+  "priceProtect": false
+ },
+ {
+  "sku": "BUDS3",
+  "name": "降噪耳机 Buds 3",
+  "category": "数码",
+  "price": 699,
+  "cost": 420,
+  "stock": 3000,
+  "priceProtect": true
+ },
+ {
+  "sku": "W2",
+  "name": "智能手表 W2",
+  "category": "数码",
+  "price": 1299,
+  "cost": 850,
+  "stock": 2000,
+  "priceProtect": true
+ },
+ {
+  "sku": "IH5",
+  "name": "IH 电饭煲 5L",
+  "category": "厨卫",
+  "price": 799,
+  "cost": 480,
+  "stock": 2500,
+  "priceProtect": true
+ },
+ {
+  "sku": "EH60",
+  "name": "60L 电热水器 E6",
+  "category": "厨卫",
+  "price": 1999,
+  "cost": 1300,
+  "stock": 700,
+  "priceProtect": false
+ }
+]
