@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>桃源科技官方商城 · 双十一</title>
+    <link rel="icon" href="img/logo.svg" />
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/base.css" />
+    <link rel="stylesheet" href="styles/shell.css" />
+    <link rel="stylesheet" href="styles/campaign.css" />
+    <link rel="stylesheet" href="styles/admin.css" />
+    <link rel="stylesheet" href="motion/motion.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="stage-bg" aria-hidden="true">
+      <span class="blob blob--violet"></span>
+      <span class="blob blob--peach"></span>
+      <span class="blob blob--lilac"></span>
+      <span class="stage-grid"></span>
+    </div>
+    <canvas id="fx" class="fx" aria-hidden="true"></canvas>
+    <header class="topbar">
+      <a class="brand" href="#/">
+        <img src="img/logo.svg" alt="" width="34" height="34" />
+        <span>桃源科技官方商城</span>
+      </a>
+      <nav class="nav" aria-label="页面">
+        <a href="#/" data-nav="campaign">双十一活动</a>
+        <a href="#/admin" data-nav="admin">运营后台</a>
+      </nav>
+    </header>
+    <main id="app" class="app"></main>
+  </body>
+</html>

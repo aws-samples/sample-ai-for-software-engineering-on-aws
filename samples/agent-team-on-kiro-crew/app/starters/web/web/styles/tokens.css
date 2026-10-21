@@ -1,0 +1,53 @@
+/* 品牌规范（设计部）BR-1～BR-3 的变量。别的样式文件只用这里的变量，不写新颜色（前端工程规范 UX-4）。 */
+:root {
+  /* BR-1 颜色 */
+  --brand-600: #7c3aed;
+  --brand-500: #8b5cf6;
+  --brand-400: #a78bfa;
+  --brand-300: #c4b5fd;
+  --brand-peach: #ff9a80;
+  --brand-peach-soft: #ffc9b8;
+  --brand-gold: #ffd27a;
+  --brand-ink: #0d0d1a;
+  --brand-ink-2: #4a4a6a;
+  --brand-stage: #140b2e;
+  --brand-stage-2: #1f1147;
+  --brand-white: #ffffff;
+  --brand-text: rgba(255, 255, 255, 0.92);
+  --brand-text-dim: rgba(255, 255, 255, 0.62);
+  --brand-line: rgba(255, 255, 255, 0.14);
+  --brand-glass: rgba(255, 255, 255, 0.07);
+  --brand-glass-strong: rgba(255, 255, 255, 0.12);
+  --brand-glow: rgba(139, 92, 246, 0.55);
+  --brand-glow-peach: rgba(255, 154, 128, 0.5);
+  --brand-danger: #ff8a8a;
+
+  /* BR-2 字体 */
+  --font-brand: "Space Grotesk", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --fs-hero: clamp(44px, 7vw, 104px);
+  --fs-title: clamp(26px, 3vw, 40px);
+  --fs-big: clamp(34px, 4.6vw, 64px);
+  --fs-body: 16px;
+  --fs-small: 13px;
+
+  /* BR-3 动效 */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 180ms;
+  --dur: 420ms;
+  --dur-slow: 900ms;
+
+  /* 间距、圆角、阴影 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-sm: 10px;
+  --radius: 18px;
+  --radius-lg: 28px;
+  --shadow: 0 20px 60px rgba(8, 3, 24, 0.55);
+  --shadow-glow: 0 0 0 1px var(--brand-line), 0 18px 50px var(--brand-glow);
+}

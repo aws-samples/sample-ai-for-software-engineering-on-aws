@@ -1,0 +1,2 @@
+/* 模板自带：hidden 属性一定隐藏（别的样式的 display 不能盖过它） */
+[hidden] { display: none !important; }

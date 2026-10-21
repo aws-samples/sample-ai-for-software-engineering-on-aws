@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>桃源科技</title>
+    <link rel="icon" href="img/logo.svg" />
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/base.css" />
+    <link rel="stylesheet" href="styles/shell.css" />
+    <link rel="stylesheet" href="motion/motion.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="stage-bg" aria-hidden="true">
+      <span class="blob blob--violet"></span>
+      <span class="blob blob--peach"></span>
+      <span class="blob blob--lilac"></span>
+      <span class="stage-grid"></span>
+    </div>
+    <canvas id="fx" class="fx" aria-hidden="true"></canvas>
+    <header class="topbar">
+      <a class="brand" href="#/">
+        <img src="img/logo.svg" alt="" width="34" height="34" />
+        <span>桃源科技</span>
+      </a>
+      <nav class="nav" id="nav" aria-label="页面"></nav>
+    </header>
+    <main id="app" class="app"></main>
+  </body>
+</html>

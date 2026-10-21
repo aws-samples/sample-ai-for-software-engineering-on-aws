@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "name": "修 bug · 两人小队",
+  "orchestrator": "kirocrew-team",
+  "scope": "bugfix",
+  "delivery_defaults": {"kind": "修复", "size": "小", "line": "内部系统"},
+  "official_stages": 9,
+  "priority": 10,
+  "keywords": [
+    "fix",
+    "bug",
+    "broken",
+    "bugfix",
+    "修复",
+    "修一下",
+    "修好",
+    "坏了",
+    "报错",
+    "算错",
+    "出错了"
+  ],
+  "needs_source": true,
+  "workspace": "taoyuan",
+  "standards": "packs/taoyuan/standards.json",
+  "knowledge": {
+    "source": "桃源科技",
+    "data_dir": "~/workplace/taoyuan/data"
+  },
+  "task_template": "task_template-bugfix.md",
+  "test_command": [
+    "node",
+    "--test"
+  ],
+  "defaults": {
+    "model": "claude-sonnet-5.5",
+    "max_fix_rounds": 2
+  },
+  "test_owners": [
+    {
+      "glob": "tests/**",
+      "role": "fixer"
+    }
+  ],
+  "roles": [
+    {
+      "key": "tester",
+      "title": "回归测试",
+      "icon": "tester",
+      "member": "aidlc-quality-agent",
+      "aidlc_agent": "aidlc-quality-agent",
+      "phase": "construction",
+      "stage": "3.6 构建与测试 · 复现",
+      "mission": "先写一个能复现问题的测试",
+      "depends_on": [],
+      "writable": [
+        "tests/regress-*"
+      ],
+      "outputs": [
+        "tests/"
+      ],
+      "brief": "读 README 末尾的问题描述，再看这个项目的 README、`package.json`（或别的构建文件）和目录，弄清它怎么跑、问题出在哪个接口、页面或函数；问题涉及公司规则的，在知识库「桃源科技」里查原文（任务里列出的规范）。写一个能复现它的测试 `tests/regress-<主题>.test.js`（`node:test`；模块写法跟项目一致；项目不是 JavaScript 写的，就在测试里用 `node:child_process` 跑项目自己的命令来复现），测试名以 `AC-1:` 开头，写清正确的行为是什么。现在它应该是红的：跑 `node --test tests/regress-<主题>.test.js` 确认它红、而且能跑起来。不改代码。"
+    },
+    {
+      "key": "fixer",
+      "title": "修复",
+      "icon": "backend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "2.1 逆向工程 · 3.5 代码生成",
+      "mission": "找到原因，最小改动修好",
+      "depends_on": [
+        "tester"
+      ],
+      "writable": [
+        "**",
+        "!tests/**"
+      ],
+      "outputs": [],
+      "brief": "读问题描述和回归测试 `tests/regress-*.test.js`，找到原因，用最小的改动修好，不顺手重构；涉及公司规则的，按知识库原文改，规则编号写进提交说明。测试归写测试的人，你不改 `tests/` 下的任何文件。改完跑回归测试和项目原有的测试（`npm test`，没有的话 `node --test \"tests/**/*.test.js\"`）：回归测试变绿，原来绿的不能变红。你认为测试本身写错了，不要硬改代码去迎合，在总结里写清理由。"
+    }
+  ]
+}

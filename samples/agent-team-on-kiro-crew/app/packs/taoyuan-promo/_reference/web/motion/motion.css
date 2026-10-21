@@ -1,0 +1,10 @@
+/* 参考实现 */
+@keyframes bump {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+.is-bump { animation: bump var(--dur) var(--ease-spring); }
+@media (prefers-reduced-motion: reduce) {
+  .is-bump { animation: none; }
+}

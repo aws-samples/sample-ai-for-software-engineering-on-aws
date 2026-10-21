@@ -1,0 +1,1502 @@
+{
+  "at": 1791231500.0,
+  "runs": [
+    {
+      "id": "r1006a",
+      "title": "活动报名小站",
+      "status": "running",
+      "started_at": 1791230000.0,
+      "ended_at": null,
+      "roles_done": 5,
+      "roles_total": 8,
+      "tests": {
+        "passed": 6,
+        "failed": 6,
+        "total": 12
+      },
+      "imported": false,
+      "name": "活动报名小站",
+      "issue": "TY-4127"
+    }
+  ],
+  "run": {
+    "id": "r1006a",
+    "title": "活动报名小站",
+    "status": "running",
+    "repo": "/Users/you/workplace/aidlc-team/runs/r1006a/repo",
+    "folder": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/_run",
+    "base": "5e1f0aa",
+    "branch": "team/r1006a/run",
+    "started_at": 1791230000.0,
+    "ended_at": null,
+    "wall_s": 1500,
+    "serial_s": 2900.0,
+    "credits": 66.5,
+    "roles": [
+      {
+        "key": "pm",
+        "title": "产品经理",
+        "emoji": "🧭",
+        "model": "claude-opus-5.5",
+        "status": "merged",
+        "depends_on": [],
+        "writable": [
+          "docs/product/**"
+        ],
+        "attempt": 1,
+        "agent": {
+          "id": "s-pm",
+          "turns": 9,
+          "tool_count": 9,
+          "last_tool": "Writing docs/product/acceptance.md",
+          "last_activity": 1791230175.0,
+          "started": 1791230000.0,
+          "elapsed_s": 1500,
+          "queued_reason": null,
+          "error": null,
+          "recent_tools": [],
+          "text_tail": null,
+          "credits": 6.1
+        },
+        "worktree": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/pm",
+        "branch": "team/r1006a/pm",
+        "files": [
+          {
+            "path": "docs/product/acceptance.md",
+            "added": 64,
+            "removed": 0,
+            "status": "A"
+          }
+        ],
+        "lines": {
+          "added": 64,
+          "removed": 0
+        },
+        "commits": [
+          {
+            "sha": "a1c9e02",
+            "subject": "[pm] 验收标准 AC-1…AC-12",
+            "at": 1791230176.0
+          }
+        ],
+        "violations": [],
+        "owns_tests": [],
+        "started_at": 1791230000.0,
+        "done_at": 1791230180.0,
+        "active_s": 180.0,
+        "summary": "12 条验收标准，覆盖列表、详情、报名校验、名额、重复、名单、手机端",
+        "credits": 6.1,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work"
+        ],
+        "session": null,
+        "deployed": null,
+        "member": "aidlc-product-agent",
+        "member_kind": "member",
+        "assignment": "",
+        "doing": "",
+        "icon": "pm",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      },
+      {
+        "key": "architect",
+        "title": "架构师",
+        "emoji": "🏛️",
+        "model": "claude-opus-5.5",
+        "status": "merged",
+        "depends_on": [
+          "pm"
+        ],
+        "writable": [
+          "docs/architecture/**",
+          "contracts/**"
+        ],
+        "attempt": 1,
+        "agent": {
+          "id": "s-ar",
+          "turns": 17,
+          "tool_count": 17,
+          "last_tool": "Writing contracts/api.md",
+          "last_activity": 1791230510.0,
+          "started": 1791230190.0,
+          "elapsed_s": 1310,
+          "queued_reason": null,
+          "error": null,
+          "recent_tools": [],
+          "text_tail": null,
+          "credits": 11.8
+        },
+        "worktree": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/architect",
+        "branch": "team/r1006a/architect",
+        "files": [
+          {
+            "path": "contracts/api.md",
+            "added": 118,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "docs/architecture/layout.md",
+            "added": 46,
+            "removed": 0,
+            "status": "A"
+          }
+        ],
+        "lines": {
+          "added": 164,
+          "removed": 0
+        },
+        "commits": [
+          {
+            "sha": "b7e4410",
+            "subject": "[architect] 接口契约 6 个端点",
+            "at": 1791230515.0
+          }
+        ],
+        "violations": [],
+        "owns_tests": [],
+        "started_at": 1791230190.0,
+        "done_at": 1791230520.0,
+        "active_s": 330.0,
+        "summary": "6 个接口、错误码表、四个角色的目录划分",
+        "credits": 11.8,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work"
+        ],
+        "session": null,
+        "deployed": null,
+        "member": "",
+        "member_kind": null,
+        "assignment": "",
+        "doing": "",
+        "icon": "architect",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      },
+      {
+        "key": "designer",
+        "title": "UI 设计",
+        "emoji": "🎨",
+        "model": "claude-opus-5.5",
+        "status": "merged",
+        "depends_on": [
+          "pm"
+        ],
+        "writable": [
+          "docs/design/**",
+          "frontend/styles/**"
+        ],
+        "attempt": 1,
+        "agent": {
+          "id": "s-ds",
+          "turns": 21,
+          "tool_count": 21,
+          "last_tool": "Writing frontend/styles/main.css",
+          "last_activity": 1791230590.0,
+          "started": 1791230190.0,
+          "elapsed_s": 1310,
+          "queued_reason": null,
+          "error": null,
+          "recent_tools": [],
+          "text_tail": null,
+          "credits": 13.4
+        },
+        "worktree": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/designer",
+        "branch": "team/r1006a/designer",
+        "files": [
+          {
+            "path": "docs/design/pages.md",
+            "added": 71,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "frontend/styles/main.css",
+            "added": 212,
+            "removed": 0,
+            "status": "A"
+          }
+        ],
+        "lines": {
+          "added": 283,
+          "removed": 0
+        },
+        "commits": [
+          {
+            "sha": "c2f8a31",
+            "subject": "[designer] 页面结构和样式",
+            "at": 1791230596.0
+          }
+        ],
+        "violations": [],
+        "owns_tests": [],
+        "started_at": 1791230190.0,
+        "done_at": 1791230600.0,
+        "active_s": 410.0,
+        "summary": "4 个页面、移动端断点、表单错误态",
+        "credits": 13.4,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work"
+        ],
+        "session": null,
+        "deployed": null,
+        "member": "",
+        "member_kind": null,
+        "assignment": "",
+        "doing": "",
+        "icon": "designer",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      },
+      {
+        "key": "tester",
+        "title": "测试",
+        "emoji": "🧪",
+        "model": "claude-opus-5.5",
+        "status": "merged",
+        "depends_on": [
+          "architect"
+        ],
+        "writable": [
+          "tests/**"
+        ],
+        "attempt": 1,
+        "agent": {
+          "id": "s-ts",
+          "turns": 26,
+          "tool_count": 26,
+          "last_tool": "Running: node --test tests/",
+          "last_activity": 1791230830.0,
+          "started": 1791230530.0,
+          "elapsed_s": 970,
+          "queued_reason": null,
+          "error": null,
+          "recent_tools": [],
+          "text_tail": null,
+          "credits": 17.2
+        },
+        "worktree": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/tester",
+        "branch": "team/r1006a/tester",
+        "files": [
+          {
+            "path": "tests/api-events.test.js",
+            "added": 142,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "tests/api-signup.test.js",
+            "added": 188,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "tests/web-render.test.js",
+            "added": 97,
+            "removed": 0,
+            "status": "A"
+          }
+        ],
+        "lines": {
+          "added": 427,
+          "removed": 0
+        },
+        "commits": [
+          {
+            "sha": "d91b6c7",
+            "subject": "[tester] 12 条验收测试（先红）",
+            "at": 1791230835.0
+          }
+        ],
+        "violations": [],
+        "owns_tests": [],
+        "started_at": 1791230530.0,
+        "done_at": 1791230840.0,
+        "active_s": 310.0,
+        "summary": "12 个测试，全部是红的：实现还没写",
+        "credits": 17.2,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work"
+        ],
+        "session": null,
+        "deployed": null,
+        "member": "",
+        "member_kind": null,
+        "assignment": "",
+        "doing": "",
+        "icon": "tester",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      },
+      {
+        "key": "backend",
+        "title": "后端",
+        "emoji": "⚙️",
+        "model": "claude-opus-5.5",
+        "status": "fixing",
+        "depends_on": [
+          "architect",
+          "tester"
+        ],
+        "writable": [
+          "backend/**"
+        ],
+        "attempt": 2,
+        "agent": {
+          "id": "s-be2",
+          "turns": 11,
+          "tool_count": 14,
+          "last_tool": "Editing backend/validate.js",
+          "last_activity": 1791231495.0,
+          "started": 1791231380.0,
+          "elapsed_s": 120,
+          "queued_reason": null,
+          "error": null,
+          "recent_tools": [
+            {
+              "at": 1791231480.0,
+              "tool": "fs_read",
+              "kind": "read",
+              "detail": "backend/server.js"
+            },
+            {
+              "at": 1791231484.0,
+              "tool": "fs_write",
+              "kind": "write",
+              "detail": "backend/validate.js"
+            },
+            {
+              "at": 1791231488.0,
+              "tool": "execute_bash",
+              "kind": "shell",
+              "detail": "node --test tests/api-signup.test.js"
+            },
+            {
+              "at": 1791231492.0,
+              "tool": "fs_write",
+              "kind": "write",
+              "detail": "backend/validate.js"
+            }
+          ],
+          "text_tail": "AC-6 失败是因为名额判断用了 >，应该是 >=；AC-7 要在写入前查同一邮箱。改 validate.js 的 checkCapacity 和 checkDuplicate……",
+          "credits": null
+        },
+        "worktree": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/backend",
+        "branch": "team/r1006a/backend",
+        "files": [
+          {
+            "path": "backend/server.js",
+            "added": 186,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "backend/store.js",
+            "added": 74,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "backend/validate.js",
+            "added": 41,
+            "removed": 0,
+            "status": "A"
+          }
+        ],
+        "lines": {
+          "added": 301,
+          "removed": 0
+        },
+        "commits": [
+          {
+            "sha": "e3a07d5",
+            "subject": "[backend] 接口和内存存储",
+            "at": 1791231180.0
+          },
+          {
+            "sha": "e8b11f2",
+            "subject": "[backend] 修：重复报名返回 409",
+            "at": 1791231460.0
+          }
+        ],
+        "violations": [],
+        "owns_tests": [
+          "api-signup.test.js#AC-6",
+          "api-signup.test.js#AC-7"
+        ],
+        "started_at": 1791230850.0,
+        "done_at": null,
+        "active_s": 560,
+        "summary": null,
+        "credits": 9.3,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work",
+          "work"
+        ],
+        "session": "aidlc-team-r0101abcd-3-9f2c",
+        "deployed": null,
+        "member": "",
+        "member_kind": null,
+        "assignment": "",
+        "doing": "",
+        "icon": "backend",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      },
+      {
+        "key": "frontend",
+        "title": "前端",
+        "emoji": "🖥️",
+        "model": "claude-opus-5.5",
+        "status": "running",
+        "depends_on": [
+          "architect",
+          "designer",
+          "tester"
+        ],
+        "writable": [
+          "frontend/**"
+        ],
+        "attempt": 1,
+        "agent": {
+          "id": "s-fe",
+          "turns": 34,
+          "tool_count": 41,
+          "last_tool": "Editing frontend/app.js",
+          "last_activity": 1791231498.0,
+          "started": 1791230850.0,
+          "elapsed_s": 650,
+          "queued_reason": null,
+          "error": null,
+          "recent_tools": [
+            {
+              "at": 1791231480.0,
+              "tool": "fs_read",
+              "kind": "read",
+              "detail": "contracts/api.md"
+            },
+            {
+              "at": 1791231484.0,
+              "tool": "fs_write",
+              "kind": "write",
+              "detail": "frontend/app.js"
+            },
+            {
+              "at": 1791231488.0,
+              "tool": "execute_bash",
+              "kind": "shell",
+              "detail": "node --test tests/web-render.test.js"
+            },
+            {
+              "at": 1791231492.0,
+              "tool": "fs_write",
+              "kind": "write",
+              "detail": "frontend/app.js"
+            }
+          ],
+          "text_tail": "报名失败时接口回 409 和 reason，页面要把 reason 显示在表单下面；先补 .error-msg 的渲染，再处理剩余名额刷新……",
+          "credits": null
+        },
+        "worktree": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/frontend",
+        "branch": "team/r1006a/frontend",
+        "files": [
+          {
+            "path": "frontend/index.html",
+            "added": 88,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "frontend/app.js",
+            "added": 203,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "frontend/event.html",
+            "added": 61,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "backend/server.js",
+            "added": 3,
+            "removed": 1,
+            "status": "M"
+          }
+        ],
+        "lines": {
+          "added": 355,
+          "removed": 1
+        },
+        "commits": [
+          {
+            "sha": "f5c2d90",
+            "subject": "[frontend] 首页和详情页",
+            "at": 1791231300.0
+          }
+        ],
+        "violations": [
+          "backend/server.js"
+        ],
+        "owns_tests": [
+          "web-render.test.js#AC-1"
+        ],
+        "started_at": 1791230850.0,
+        "done_at": null,
+        "active_s": 650,
+        "summary": null,
+        "credits": null,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work"
+        ],
+        "session": null,
+        "deployed": null,
+        "member": "",
+        "member_kind": null,
+        "assignment": "",
+        "doing": "",
+        "icon": "frontend",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      },
+      {
+        "key": "ops",
+        "title": "运维",
+        "emoji": "🚀",
+        "model": "claude-opus-5.5",
+        "status": "done",
+        "depends_on": [
+          "architect"
+        ],
+        "writable": [
+          "ops/**",
+          "Dockerfile",
+          ".dockerignore"
+        ],
+        "attempt": 1,
+        "agent": {
+          "id": "s-op",
+          "turns": 12,
+          "tool_count": 12,
+          "last_tool": "Running: sh ops/start.sh --check",
+          "last_activity": 1791230980.0,
+          "started": 1791230530.0,
+          "elapsed_s": 970,
+          "queued_reason": null,
+          "error": null,
+          "recent_tools": [],
+          "text_tail": null,
+          "credits": 8.7
+        },
+        "worktree": "/Users/you/workplace/aidlc-team/runs/r1006a/wt/ops",
+        "branch": "team/r1006a/ops",
+        "files": [
+          {
+            "path": "ops/start.sh",
+            "added": 38,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": "Dockerfile",
+            "added": 14,
+            "removed": 0,
+            "status": "A"
+          },
+          {
+            "path": ".dockerignore",
+            "added": 5,
+            "removed": 0,
+            "status": "A"
+          }
+        ],
+        "lines": {
+          "added": 57,
+          "removed": 0
+        },
+        "commits": [
+          {
+            "sha": "0a6d3e1",
+            "subject": "[ops] 启动脚本和 Dockerfile",
+            "at": 1791230985.0
+          }
+        ],
+        "violations": [],
+        "owns_tests": [],
+        "started_at": 1791230530.0,
+        "done_at": 1791230990.0,
+        "active_s": 460.0,
+        "summary": "start.sh 带健康检查，镜像 52 MB",
+        "credits": 8.7,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work"
+        ],
+        "session": null,
+        "deployed": null,
+        "member": "",
+        "member_kind": null,
+        "assignment": "",
+        "doing": "",
+        "icon": "ops",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      },
+      {
+        "key": "reviewer",
+        "title": "评审",
+        "emoji": "🔍",
+        "model": "claude-opus-5.5",
+        "status": "waiting",
+        "depends_on": [
+          "backend",
+          "frontend",
+          "ops"
+        ],
+        "writable": [],
+        "attempt": 1,
+        "agent": null,
+        "worktree": null,
+        "branch": null,
+        "files": [],
+        "lines": {
+          "added": 0,
+          "removed": 0
+        },
+        "commits": [],
+        "violations": [],
+        "owns_tests": [],
+        "started_at": null,
+        "done_at": null,
+        "active_s": 0,
+        "summary": null,
+        "credits": null,
+        "phase": "",
+        "stage": "",
+        "mission": "",
+        "aidlc_agent": "",
+        "gate": null,
+        "gate_label": "",
+        "kinds": [
+          "work"
+        ],
+        "session": null,
+        "deployed": null,
+        "member": "",
+        "member_kind": null,
+        "assignment": "",
+        "doing": "",
+        "icon": "reviewer",
+        "gate_preset": "",
+        "gate_revise_preset": "",
+        "optional": false,
+        "overrule": false,
+        "awaiting_member": null,
+        "delivery_gate": false,
+        "questions": [],
+        "answers": [],
+        "talk": [],
+        "can_discuss": false
+      }
+    ],
+    "edges": [
+      [
+        "pm",
+        "architect"
+      ],
+      [
+        "pm",
+        "designer"
+      ],
+      [
+        "architect",
+        "tester"
+      ],
+      [
+        "architect",
+        "backend"
+      ],
+      [
+        "tester",
+        "backend"
+      ],
+      [
+        "architect",
+        "frontend"
+      ],
+      [
+        "designer",
+        "frontend"
+      ],
+      [
+        "tester",
+        "frontend"
+      ],
+      [
+        "architect",
+        "ops"
+      ],
+      [
+        "backend",
+        "reviewer"
+      ],
+      [
+        "frontend",
+        "reviewer"
+      ],
+      [
+        "ops",
+        "reviewer"
+      ]
+    ],
+    "tests": {
+      "at": 1791231470.0,
+      "command": "node --test tests/",
+      "cases": [
+        {
+          "id": "web-render.test.js#AC-1",
+          "ac": "AC-1",
+          "name": "AC-1: 首页列出所有活动",
+          "file": "tests/web-render.test.js",
+          "status": "pass",
+          "owner": "frontend",
+          "ms": 23,
+          "message": null
+        },
+        {
+          "id": "api-events.test.js#AC-2",
+          "ac": "AC-2",
+          "name": "AC-2: 活动有名称、时间、地点、剩余名额",
+          "file": "tests/api-events.test.js",
+          "status": "pass",
+          "owner": "backend",
+          "ms": 12,
+          "message": null
+        },
+        {
+          "id": "api-events.test.js#AC-3",
+          "ac": "AC-3",
+          "name": "AC-3: 活动详情",
+          "file": "tests/api-events.test.js",
+          "status": "pass",
+          "owner": "backend",
+          "ms": 28,
+          "message": null
+        },
+        {
+          "id": "api-signup.test.js#AC-4",
+          "ac": "AC-4",
+          "name": "AC-4: 姓名不能为空",
+          "file": "tests/api-signup.test.js",
+          "status": "pass",
+          "owner": "backend",
+          "ms": 44,
+          "message": null
+        },
+        {
+          "id": "api-signup.test.js#AC-5",
+          "ac": "AC-5",
+          "name": "AC-5: 邮箱格式要对",
+          "file": "tests/api-signup.test.js",
+          "status": "pass",
+          "owner": "backend",
+          "ms": 6,
+          "message": null
+        },
+        {
+          "id": "api-signup.test.js#AC-6",
+          "ac": "AC-6",
+          "name": "AC-6: 名额满了不能报名",
+          "file": "tests/api-signup.test.js",
+          "status": "fail",
+          "owner": "backend",
+          "ms": 7,
+          "message": "expected 409, got 201"
+        },
+        {
+          "id": "api-signup.test.js#AC-7",
+          "ac": "AC-7",
+          "name": "AC-7: 同一邮箱不能重复报名",
+          "file": "tests/api-signup.test.js",
+          "status": "fail",
+          "owner": "backend",
+          "ms": 55,
+          "message": "expected 409, got 201"
+        },
+        {
+          "id": "web-render.test.js#AC-8",
+          "ac": "AC-8",
+          "name": "AC-8: 失败时说明原因",
+          "file": "tests/web-render.test.js",
+          "status": "fail",
+          "owner": "frontend",
+          "ms": 37,
+          "message": "no element .error-msg"
+        },
+        {
+          "id": "api-events.test.js#AC-9",
+          "ac": "AC-9",
+          "name": "AC-9: 主办方看报名名单",
+          "file": "tests/api-events.test.js",
+          "status": "pass",
+          "owner": "backend",
+          "ms": 9,
+          "message": null
+        },
+        {
+          "id": "api-events.test.js#AC-10",
+          "ac": "AC-10",
+          "name": "AC-10: 名单按报名时间排序",
+          "file": "tests/api-events.test.js",
+          "status": "fail",
+          "owner": "backend",
+          "ms": 26,
+          "message": "order mismatch at index 0"
+        },
+        {
+          "id": "web-render.test.js#AC-11",
+          "ac": "AC-11",
+          "name": "AC-11: 手机宽度下表单可用",
+          "file": "tests/web-render.test.js",
+          "status": "fail",
+          "owner": "frontend",
+          "ms": 40,
+          "message": "form wider than 375px"
+        },
+        {
+          "id": "web-render.test.js#AC-12",
+          "ac": "AC-12",
+          "name": "AC-12: 剩余名额实时更新",
+          "file": "tests/web-render.test.js",
+          "status": "fail",
+          "owner": "frontend",
+          "ms": 6,
+          "message": "count did not change"
+        }
+      ],
+      "passed": 6,
+      "failed": 6,
+      "total": 12,
+      "history": [
+        {
+          "at": 1791230840.0,
+          "passed": 0,
+          "failed": 12
+        },
+        {
+          "at": 1791231190.0,
+          "passed": 4,
+          "failed": 8
+        },
+        {
+          "at": 1791231310.0,
+          "passed": 5,
+          "failed": 7
+        },
+        {
+          "at": 1791231470.0,
+          "passed": 6,
+          "failed": 6
+        }
+      ]
+    },
+    "merges": [
+      {
+        "role": "pm",
+        "sha": "a1c9e02",
+        "at": 1791230182.0,
+        "status": "merged",
+        "files": 1,
+        "note": null
+      },
+      {
+        "role": "architect",
+        "sha": "b7e4410",
+        "at": 1791230522.0,
+        "status": "merged",
+        "files": 2,
+        "note": null
+      },
+      {
+        "role": "designer",
+        "sha": "c2f8a31",
+        "at": 1791230602.0,
+        "status": "merged",
+        "files": 2,
+        "note": null
+      },
+      {
+        "role": "tester",
+        "sha": "d91b6c7",
+        "at": 1791230842.0,
+        "status": "merged",
+        "files": 3,
+        "note": null
+      },
+      {
+        "role": "backend",
+        "sha": "e3a07d5",
+        "at": 1791231185.0,
+        "status": "merged",
+        "files": 3,
+        "note": null
+      },
+      {
+        "role": "frontend",
+        "sha": "f5c2d90",
+        "at": 1791231305.0,
+        "status": "conflict",
+        "files": 4,
+        "note": "backend/server.js"
+      }
+    ],
+    "events": [
+      {
+        "seq": 1,
+        "at": 1791230000.0,
+        "kind": "run",
+        "role": null,
+        "text": "运行开始：活动报名小站",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 2,
+        "at": 1791230001.0,
+        "kind": "spawned",
+        "role": "pm",
+        "text": "产品经理开工",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 3,
+        "at": 1791230180.0,
+        "kind": "done",
+        "role": "pm",
+        "text": "产品经理完成：12 条验收标准",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 4,
+        "at": 1791230182.0,
+        "kind": "merged",
+        "role": "pm",
+        "text": "产品经理的分支合入运行分支",
+        "from": "pm",
+        "to": "run",
+        "data": null
+      },
+      {
+        "seq": 5,
+        "at": 1791230186.0,
+        "kind": "handoff",
+        "role": "architect",
+        "text": "验收标准交给架构师",
+        "from": "pm",
+        "to": "architect",
+        "data": {
+          "carry": "验收标准"
+        }
+      },
+      {
+        "seq": 6,
+        "at": 1791230186.0,
+        "kind": "handoff",
+        "role": "designer",
+        "text": "验收标准交给 UI 设计",
+        "from": "pm",
+        "to": "designer",
+        "data": {
+          "carry": "验收标准"
+        }
+      },
+      {
+        "seq": 7,
+        "at": 1791230190.0,
+        "kind": "spawned",
+        "role": "architect",
+        "text": "架构师开工",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 8,
+        "at": 1791230190.0,
+        "kind": "spawned",
+        "role": "designer",
+        "text": "UI 设计开工",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 9,
+        "at": 1791230520.0,
+        "kind": "done",
+        "role": "architect",
+        "text": "架构师完成：6 个接口",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 10,
+        "at": 1791230522.0,
+        "kind": "merged",
+        "role": "architect",
+        "text": "架构师的分支合入运行分支",
+        "from": "architect",
+        "to": "run",
+        "data": null
+      },
+      {
+        "seq": 11,
+        "at": 1791230526.0,
+        "kind": "handoff",
+        "role": "tester",
+        "text": "接口契约交给测试",
+        "from": "architect",
+        "to": "tester",
+        "data": {
+          "carry": "接口契约"
+        }
+      },
+      {
+        "seq": 12,
+        "at": 1791230526.0,
+        "kind": "handoff",
+        "role": "ops",
+        "text": "接口契约交给运维",
+        "from": "architect",
+        "to": "ops",
+        "data": {
+          "carry": "接口契约"
+        }
+      },
+      {
+        "seq": 13,
+        "at": 1791230600.0,
+        "kind": "done",
+        "role": "designer",
+        "text": "UI 设计完成",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 14,
+        "at": 1791230602.0,
+        "kind": "merged",
+        "role": "designer",
+        "text": "UI 设计的分支合入运行分支",
+        "from": "designer",
+        "to": "run",
+        "data": null
+      },
+      {
+        "seq": 15,
+        "at": 1791230840.0,
+        "kind": "tests",
+        "role": null,
+        "text": "测试 0/12：实现还没写，全红",
+        "from": null,
+        "to": null,
+        "data": {
+          "passed": 0,
+          "total": 12
+        }
+      },
+      {
+        "seq": 16,
+        "at": 1791230842.0,
+        "kind": "merged",
+        "role": "tester",
+        "text": "测试的分支合入运行分支",
+        "from": "tester",
+        "to": "run",
+        "data": null
+      },
+      {
+        "seq": 17,
+        "at": 1791230846.0,
+        "kind": "handoff",
+        "role": "backend",
+        "text": "测试和契约交给后端",
+        "from": "tester",
+        "to": "backend",
+        "data": {
+          "carry": "测试和契约"
+        }
+      },
+      {
+        "seq": 18,
+        "at": 1791230846.0,
+        "kind": "handoff",
+        "role": "frontend",
+        "text": "测试、契约、设计交给前端",
+        "from": "tester",
+        "to": "frontend",
+        "data": {
+          "carry": "测试、契约、设计"
+        }
+      },
+      {
+        "seq": 19,
+        "at": 1791230850.0,
+        "kind": "spawned",
+        "role": "backend",
+        "text": "后端开工",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 20,
+        "at": 1791230850.0,
+        "kind": "spawned",
+        "role": "frontend",
+        "text": "前端开工",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 21,
+        "at": 1791230990.0,
+        "kind": "done",
+        "role": "ops",
+        "text": "运维完成：start.sh 和 Dockerfile",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 22,
+        "at": 1791231185.0,
+        "kind": "merged",
+        "role": "backend",
+        "text": "后端的分支合入运行分支",
+        "from": "backend",
+        "to": "run",
+        "data": null
+      },
+      {
+        "seq": 23,
+        "at": 1791231190.0,
+        "kind": "tests",
+        "role": null,
+        "text": "测试 4/12",
+        "from": null,
+        "to": null,
+        "data": {
+          "passed": 4,
+          "total": 12
+        }
+      },
+      {
+        "seq": 24,
+        "at": 1791231305.0,
+        "kind": "conflict",
+        "role": "frontend",
+        "text": "前端合入冲突：backend/server.js",
+        "from": "frontend",
+        "to": "run",
+        "data": {
+          "paths": [
+            "backend/server.js"
+          ]
+        }
+      },
+      {
+        "seq": 25,
+        "at": 1791231306.0,
+        "kind": "violation",
+        "role": "frontend",
+        "text": "前端改了不属于它的 backend/server.js",
+        "from": null,
+        "to": null,
+        "data": {
+          "paths": [
+            "backend/server.js"
+          ]
+        }
+      },
+      {
+        "seq": 26,
+        "at": 1791231310.0,
+        "kind": "tests",
+        "role": null,
+        "text": "测试 5/12",
+        "from": null,
+        "to": null,
+        "data": {
+          "passed": 5,
+          "total": 12
+        }
+      },
+      {
+        "seq": 27,
+        "at": 1791231375.0,
+        "kind": "bounce",
+        "role": "backend",
+        "text": "AC-6、AC-7 失败，打回后端",
+        "from": "tests",
+        "to": "backend",
+        "data": {
+          "cases": [
+            "AC-6",
+            "AC-7"
+          ]
+        }
+      },
+      {
+        "seq": 28,
+        "at": 1791231380.0,
+        "kind": "spawned",
+        "role": "backend",
+        "text": "后端第 2 轮：修 AC-6、AC-7",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 29,
+        "at": 1791231470.0,
+        "kind": "tests",
+        "role": null,
+        "text": "测试 6/12",
+        "from": null,
+        "to": null,
+        "data": {
+          "passed": 6,
+          "total": 12
+        }
+      },
+      {
+        "seq": 30,
+        "at": 1791231495.0,
+        "kind": "tool",
+        "role": "backend",
+        "text": "后端：Editing backend/validate.js",
+        "from": null,
+        "to": null,
+        "data": null
+      },
+      {
+        "seq": 31,
+        "at": 1791231498.0,
+        "kind": "tool",
+        "role": "frontend",
+        "text": "前端：Editing frontend/app.js",
+        "from": null,
+        "to": null,
+        "data": null
+      }
+    ],
+    "team": {
+      "name": "AI-DLC 专家团队",
+      "orchestrator": "kirocrew-team"
+    },
+    "ownership": {
+      "roles": {
+        "backend": [
+          "backend/**"
+        ],
+        "frontend": [
+          "frontend/**"
+        ]
+      },
+      "test_areas": {
+        "api": "backend",
+        "web": "frontend"
+      }
+    },
+    "review_rounds": 0,
+    "gate_notes": {},
+    "standards": [
+      {
+        "id": "RULE",
+        "title": "年会抽奖规则",
+        "kind": "standard",
+        "owner": "人力资源部",
+        "doc": "21-年会抽奖规则.md",
+        "rules": [
+          "RULE-1",
+          "RULE-2"
+        ],
+        "why": "命中「抽奖」"
+      },
+      {
+        "id": "DATA-EMP",
+        "title": "员工花名册",
+        "kind": "data",
+        "owner": "人力资源部",
+        "doc": "data/员工花名册.md",
+        "rules": [],
+        "why": "命中「员工」"
+      }
+    ],
+    "roster": null,
+    "imported": null,
+    "knowledge": {
+      "source": {
+        "name": "桃源科技",
+        "present": true,
+        "items": 9,
+        "status": "synced",
+        "files_total": 9,
+        "files_done": 9,
+        "path": "~/workplace/taoyuan/knowledge"
+      },
+      "hits": [
+        {
+          "role": "pm",
+          "at": 1791230020.0,
+          "kind": "search",
+          "text": "年会抽奖规则 RULE-1"
+        },
+        {
+          "role": "pm",
+          "at": 1791230031.0,
+          "kind": "data",
+          "text": "employees.json"
+        }
+      ]
+    },
+    "crew_members": [
+      "aidlc-product-agent",
+      "aidlc-developer-agent"
+    ],
+    "signoff": {
+      "by": "研发负责人",
+      "note": "已在预发环境看过",
+      "at": 1791230600.0,
+      "tests": "26/26"
+    },
+    "requirement": "为 2026 年会做一个员工抽奖页面",
+    "plan_skip": {},
+    "overruled": null,
+    "sign_block": "运行结束以后才能签字",
+    "delivery": {
+      "name": "活动报名小站",
+      "kind": "新应用",
+      "size": "中",
+      "line": "电商",
+      "why": "",
+      "confirmed": false
+    },
+    "issue": {
+      "id": "TY-4127",
+      "kind": "需求",
+      "reporter": "运营部",
+      "created_at": 1791230000.0
+    },
+    "pr": null,
+    "gate_discuss": false
+  }
+}

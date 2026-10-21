@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark" data-snapshot="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTO 视图 · 离线版</title>
+<link rel="icon" href="data:,">
+<style>
+/* 离线版不连 Kiro Crew：主题变量按宿主 kiro-dark / kiro-light 的默认值写死（取自 ui/preview/index.html） */
+:root {
+  color-scheme: dark;
+  --bg: #19161d; --bg-hover: #28242e; --card: #211d25; --text: #dcdadf; --text-strong: #f2f1f4; --muted: #938f9b;
+  --border: #352f3d; --border-strong: #4a464f; --accent: #8e48ff; --accent-fg: #fff; --cell: #19161d;
+  --font-body: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  /* 看板的状态色（ui/src/board/styles.ts）：洋红 = 等人批准，蓝 = 运行中，绿 = 通过 */
+  --kt-run: #3cc4ff; --kt-ok: #3ee08f; --kt-approve: #ff6ec7; --kt-warn: #ffc53d; --kt-glass: color-mix(in srgb, #dcdadf 4%, transparent);
+  /* 图表：新应用、新功能用两种色相（dataviz 校验在宿主卡片底色上通过），修复弱化为灰 */
+  --s1: #3987e5; --s2: #d95926; --s3: #6b6673; --s4: #9085e9; --deemph: #6b6673;
+}
+:root[data-mode="light"] {
+  color-scheme: light;
+  --bg: #fff; --bg-hover: #f0f0f0; --card: #fff; --text: #4a464f; --text-strong: #19161d; --muted: #5e5966;
+  --border: #e4e4e7; --border-strong: #d4d4d8; --cell: #f7f7f8;
+  --kt-run: #0a6db5; --kt-ok: #0a7d45; --kt-approve: #b8237a; --kt-warn: #946200; --kt-glass: color-mix(in srgb, #4a464f 4%, transparent);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #b9b6bf; --s4: #6250d6; --deemph: #b9b6bf;
+}
+.viz-root {
+  --page: var(--bg); --raise: var(--bg-hover); --text-primary: var(--text-strong); --text-secondary: var(--text);
+  --grid: color-mix(in srgb, var(--border) 85%, transparent); --axis: var(--border-strong); --good: var(--kt-ok); --accent-ink: var(--accent-fg);
+  --wash: color-mix(in srgb, var(--accent) 10%, transparent); --fresh: color-mix(in srgb, var(--accent) 16%, transparent); --gate: var(--kt-approve);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body.viz-root { background: var(--page); color: var(--text-primary); font: 15px/1.5 var(--font-body); }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 22px 28px 120px; }
+button, select, input { font: inherit; color: inherit; }
+.btn { padding: 7px 14px; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--card); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--raise); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.small { padding: 3px 10px; font-size: 13px; border-radius: 8px; }
+.btn[aria-pressed="true"] { border-color: var(--accent); background: var(--fresh); }
+select { padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); color: var(--text-secondary); }
+.tag.real { border-color: var(--accent); color: var(--text-primary); background: var(--fresh); }
+
+/* app 栏（与 Crew 里的 app 同一条：名称、两个视图的选项卡、投影）和本视图的顶栏 */
+.appbar { display: flex; align-items: center; gap: 6px 18px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.appbar .grow { flex: 1; }
+.appbar .btn { padding: 5px 12px; margin: 4px 0 6px; }
+.tabs { display: flex; gap: 4px; align-self: stretch; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; font-weight: 650; padding: 8px 12px 9px; margin-bottom: -1px; cursor: pointer; color: var(--text-secondary); }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--text-primary); }
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { font-weight: 700; color: var(--muted); font-size: 14px; letter-spacing: .04em; }
+.org { color: var(--text-secondary); font-size: 14px; }
+.top .grow { flex: 1; }
+
+/* 结论 */
+.hero { margin: 26px 0 18px; }
+.hero h1 { margin: 0; font-size: 34px; line-height: 1.3; font-weight: 700; letter-spacing: .01em; }
+.hero p { margin: 6px 0 0; color: var(--text-secondary); }
+
+/* 三张卡片 */
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; }
+.cards .card { position: relative; }
+.cards .card::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; background: radial-gradient(90% 70% at 100% 0%, var(--kt-glass), transparent 70%); }
+.eyebrow { font-size: 14px; font-weight: 700; color: var(--text-secondary); letter-spacing: .08em; }
+.value { font-size: 40px; font-weight: 650; line-height: 1.15; margin: 6px 0 2px; }
+.desc { color: var(--text-secondary); }
+.detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: grid; gap: 6px; font-size: 14px; }
+.detail .muted { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--cell); cursor: pointer; font-size: 13px; }
+.chip:hover, .chip[aria-pressed="true"] { border-color: var(--accent); }
+.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+.calc { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--text-secondary); }
+.calc input { width: 92px; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--cell); }
+.calc b { color: var(--text-primary); }
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0% { background: var(--fresh); } 100% { background: transparent; } }
+
+/* 卡片里的小图表 */
+.mini { position: relative; margin-top: 14px; }
+.mini svg { display: block; width: 100%; overflow: visible; }
+.mini text { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.mini text.strong { fill: var(--text-strong); font-weight: 600; font-size: 13px; }
+.mini .hitrow { fill: transparent; outline: none; }
+.mini .hitrow:hover, .mini .hitrow:focus { fill: var(--wash); }
+.mini-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 13px; color: var(--text-secondary); }
+.mini-legend span, .mini-legend button { display: inline-flex; align-items: center; gap: 6px; }
+.mini-legend button { border: 0; background: transparent; padding: 2px 6px; margin-left: -6px; border-radius: 6px; cursor: pointer; color: inherit; }
+.mini-legend button b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mini-legend button:hover, .mini-legend button[aria-pressed="true"] { background: var(--fresh); }
+.dotk { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.mini-foot { margin-top: 8px; font-size: 13px; color: var(--text-secondary); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.link { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
+.calc { margin-top: 6px; font-size: 13px; }
+body.is-projecting .mini text { font-size: 15px; } body.is-projecting .mini text.strong { font-size: 16px; }
+@media print { .link { display: none; } }
+
+/* 图表 */
+.chart-card { margin-top: 16px; }
+.chart-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.chart-head h2 { margin: 0; font-size: 16px; }
+.chart-head .sub { color: var(--text-secondary); font-size: 14px; }
+.legend { display: flex; gap: 14px; font-size: 13px; color: var(--text-secondary); margin: 8px 0 2px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.plot { position: relative; height: 270px; }
+.plot svg { display: block; width: 100%; height: 100%; }
+.plot text { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.plot .mark-label { fill: var(--text-secondary); font-size: 12px; }
+.hit { fill: transparent; cursor: default; outline: none; }
+.hit:hover, .hit:focus { fill: var(--wash); }
+.tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.25); min-width: 200px; display: none; z-index: 2; }
+.tip .when { white-space: nowrap; }
+.tip .when { color: var(--muted); margin-bottom: 4px; }
+.tip .row { display: flex; align-items: center; gap: 8px; }
+.tip .row b { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.tip .key { width: 12px; height: 2px; border-radius: 1px; }
+.tip .row span { color: var(--text-secondary); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 600; color: var(--text-secondary); padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.wk-table { max-height: 270px; overflow: auto; }
+
+/* 业务线 */
+.lines { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.lines button { display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); cursor: pointer; }
+.lines button b { font-variant-numeric: tabular-nums; }
+.lines button span { color: var(--muted); font-size: 13px; }
+.lines button[aria-pressed="true"] { border-color: var(--accent); background: var(--fresh); }
+
+/* 需求流动 */
+.flow { margin-top: 16px; }
+.now-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.now-head h2 { margin: 0; font-size: 16px; }
+.now-head .sub { color: var(--muted); font-size: 13px; }
+.now-head .grow { flex: 1; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.is-live { background: var(--good); animation: pulse 1.6s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.now-stats { font-size: 18px; font-weight: 650; margin-top: 10px; }
+.now-stats span { color: var(--muted); font-weight: 400; margin: 0 6px; }
+.now-note { color: var(--text-secondary); font-size: 14px; margin: 2px 0 0; }
+.kanban { display: grid; grid-template-columns: 88px repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.kb-h { padding: 4px 8px; }
+.kb-h b { font-size: 14px; }
+.kb-h .n { color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.kb-h .st { color: var(--muted); font-size: 12px; }
+.kb-lane { white-space: nowrap; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-radius: 10px; background: var(--cell); padding: 6px; }
+.kb-lane.is-wait { color: var(--text-primary); background: color-mix(in srgb, var(--gate) 16%, var(--cell)); }
+.kb-cell { background: var(--cell); border-radius: 10px; padding: 6px; display: grid; gap: 6px; align-content: start; min-height: 60px; }
+.kb-cell.is-wait { background: color-mix(in srgb, var(--gate) 6%, var(--cell)); }
+.kb-cell.span { grid-row: span 2; }
+.kcard { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; display: grid; gap: 2px; min-width: 0; }
+.kcard .ktop { display: flex; justify-content: space-between; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.kcard .gate { color: var(--gate); font-weight: 600; }
+.kcard .ktitle { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kcard .kfocus { color: var(--text-secondary); }
+.kcard .kmeta { color: var(--muted); font-size: 12px; }
+.kcard .btn { justify-self: start; margin-top: 4px; }
+.kcard.is-live { border-color: var(--accent); box-shadow: 0 0 0 2px var(--fresh); cursor: pointer; }
+.kcard.is-real { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); cursor: pointer; }
+.kcard.is-new { animation: flash 2.4s ease-out; }
+.kmore { color: var(--muted); font-size: 12px; padding: 0 4px; }
+.kb-empty { color: var(--muted); font-size: 12px; padding: 4px; }
+.flow { position: relative; }
+.pop { position: absolute; z-index: 5; width: 440px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--accent); background: var(--card); box-shadow: 0 16px 40px rgba(0,0,0,.35); display: grid; gap: 8px; }
+.pop-head { display: flex; align-items: center; gap: 8px; }
+.pop-head b { font-size: 15px; }
+.pop-head .x { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
+.pop-facts { color: var(--text-secondary); font-size: 13px; }
+.pop-sub { font-size: 13px; color: var(--muted); }
+.decisions { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14px; }
+.decisions li { display: grid; grid-template-columns: 72px 1fr; gap: 8px; }
+.decisions li b { font-weight: 600; white-space: nowrap; }
+.pop-act { display: flex; gap: 8px; margin-top: 2px; }
+
+/* 清单 */
+.ledger { margin-top: 16px; }
+.ledger-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.ledger-head h2 { margin: 0 8px 0 0; font-size: 16px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--fresh); font-weight: 600; }
+.ledger td .kind { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ledger td .was { color: var(--muted); font-size: 12px; }
+.ledger td .defect { color: var(--kt-warn); font-size: 12px; }
+.ledger td.ids { white-space: nowrap; font-size: 13px; }
+.ledger td .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ledger tr.is-real td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.ledger tr.is-new td { animation: flash 2.4s ease-out; }
+.ledger .src { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.more { margin-top: 10px; }
+
+/* 口径 */
+.sample-note { margin-top: 22px; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+@media print { .sample-note { display: none; } }
+.notes { margin-top: 10px; color: var(--muted); font-size: 13px; }
+.notes summary { cursor: pointer; color: var(--text-secondary); }
+.notes ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+
+/* 下载菜单 */
+.dl { position: relative; }
+.dl summary { list-style: none; }
+.dl summary::-webkit-details-marker { display: none; }
+.dl .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 6; min-width: 280px; padding: 6px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--card); box-shadow: 0 12px 30px rgba(0,0,0,.3); display: grid; }
+.dl .menu button { text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.dl .menu button:hover { background: var(--raise); }
+
+/* 投影：全屏、大字，藏起下载 */
+body.is-projecting .wrap { max-width: none; padding: 28px 56px 80px; }
+body.is-projecting { font-size: 18px; }
+body.is-projecting .hero h1 { font-size: 46px; }
+body.is-projecting .value { font-size: 56px; }
+body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head .tag, body.is-projecting #realOnly, body.is-projecting #more { display: none; }
+
+/* 打印（PDF） */
+.print-only { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body.viz-root { font-size: 11px; }
+  .wrap { max-width: none; padding: 0; }
+  .appbar, .top .btn, .dl, .now-head .tag, .seg, #realOnly, #more, .calc, .toast, .pop, .ledger .src .btn, .kcard .btn { display: none !important; }
+  .chip { cursor: default; }
+  .lines button:not([aria-pressed="true"]) { display: none; }
+  .print-only { display: block; color: var(--muted); margin: 4px 0 8px; }
+  .card, .kb-cell, .kcard, tr { break-inside: avoid; }
+  .flow { break-before: page; }
+  .hero h1 { font-size: 24px; } .value { font-size: 28px; }
+  .plot { height: 220px; }
+}
+
+/* 提示 */
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; border-radius: 12px; background: var(--raise); border: 1px solid var(--border); font-size: 14px; display: none; max-width: 640px; }
+@media (max-width: 960px) { .cards { grid-template-columns: 1fr; } .kanban { grid-template-columns: 1fr; } .kb-cell.span { grid-row: auto; } .pop { width: auto; left: 12px !important; right: 12px !important; } }
+</style>
+</head>
+<body class="viz-root">
+<div class="wrap">
+  <header class="appbar">
+    <span class="brand">AI-DLC 多 Agent 团队</span>
+    <div class="tabs" role="tablist" aria-label="视图">
+      <button role="tab" aria-selected="true" title="交付结果与需求流动">CTO 视图</button>
+      <button role="tab" aria-selected="false" id="toBoard" title="多 agent 团队怎么交付：角色、关卡、检查、签字">团队看板</button>
+    </div>
+    <span class="grow"></span>
+    <button class="btn" id="project">投影</button>
+  </header>
+  <header class="top">
+    <span class="tag" title="桃源科技是参照真实零售企业构建的模拟公司；标「实测」的是真实运行并签字的交付（含从其他电脑导入的运行）">模拟企业 · 含实测</span>
+    <span class="org" id="org"></span>
+    <span class="grow"></span>
+    <span class="tag" id="snapTag" hidden></span>
+    <details class="dl" id="dl"><summary class="btn">下载 ▾</summary>
+      <div class="menu">
+        <button id="dlPdf">PDF（打印版，A4 横向）</button>
+        <button id="dlCsv">交付清单（CSV，按当前筛选）</button>
+      </div>
+    </details>
+  </header>
+
+  <section class="hero">
+    <h1>同样的研发团队，交付更多、上线更快、成本更低。</h1>
+    <p id="heroSub"></p>
+    <div class="print-only" id="printMeta"></div>
+  </section>
+
+  <nav class="lines" id="lines" aria-label="业务线"></nav>
+
+  <section class="cards" id="cards">
+    <article class="card" id="cMore">
+      <div class="eyebrow">更多</div>
+      <div class="value" id="vMore"></div>
+      <div class="desc" id="dMore"></div>
+      <div class="mini" id="mMore"></div>
+      <div class="mini-legend" id="lMore"></div>
+    </article>
+    <article class="card" id="cFast">
+      <div class="eyebrow">更快</div>
+      <div class="value" id="vFast"></div>
+      <div class="desc">大型需求的交付周期</div>
+      <div class="mini" id="mFast"></div>
+      <div class="mini-legend"><span><i class="dotk" style="background:var(--deemph)"></i>以前</span><span><i class="dotk" style="background:var(--s4)"></i>现在</span></div>
+      <div class="mini-foot"><span id="xAdv"></span><button class="link" id="calcToggle">估算价值 ▸</button></div>
+      <label class="calc" id="calcRow" hidden>每项每天带来毛利 ¥<input id="perDay" type="number" min="0" step="100" placeholder="填入金额">，约多带来 <b id="vValue">—</b></label>
+    </article>
+    <article class="card" id="cCheap">
+      <div class="eyebrow">更省</div>
+      <div class="value" id="vCheap"></div>
+      <div class="desc">每人日工作量的成本</div>
+      <div class="mini" id="mCheap"></div>
+      <div class="mini-foot" id="xSave"></div>
+    </article>
+  </section>
+
+  <section class="card chart-card">
+    <div class="chart-head">
+      <h2>每周上线</h2><span class="sub" id="chartSub"></span>
+      <span class="grow" style="flex:1"></span>
+      <div class="seg" role="group" aria-label="图表或表格"><button id="asChart" aria-pressed="true">图</button><button id="asTable" aria-pressed="false">表格</button></div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="plot" id="plot"><div class="tip" id="tip"></div></div>
+    <div class="wk-table" id="wkTable" hidden></div>
+  </section>
+
+  <section class="card flow">
+    <div class="now-head">
+      <span class="dot is-live"></span><h2>需求流动</h2><span class="sub">快照时的状态</span>
+      <span class="grow"></span>
+    </div>
+    <div class="now-stats" id="nowStats"></div>
+    <div class="now-note" id="nowNote"></div>
+    <div class="kanban" id="kanban" role="table" aria-label="需求流动看板"></div>
+    <div class="pop" id="pop" hidden role="dialog" aria-label="这次交付中负责人的决定"></div>
+  </section>
+
+  <section class="card ledger">
+    <div class="ledger-head">
+      <h2>交付清单</h2>
+      <div class="seg" role="group" aria-label="类型" id="kindSeg"></div>
+      <button class="btn small" id="realOnly" aria-pressed="false">只看实测</button>
+      <span class="org" id="ledgerCount"></span>
+    </div>
+    <table>
+      <thead><tr><th>交付</th><th>业务线</th><th>类型</th><th>规模</th><th>上线</th><th>周期</th><th>签字</th><th>Issue · PR</th><th>来源</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <button class="btn small more" id="more">显示更多</button>
+  </section>
+
+  <p class="sample-note">离线版：数据为生成时的快照，跳转需在 Kiro Crew 中打开 CTO 视图。<button class="btn small" id="theme">切换明暗</button></p>
+
+  <details class="notes">
+    <summary>口径</summary>
+    <ul id="notes"></ul>
+  </details>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script id="data" type="application/json">/*__DATA__*/{}</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('data').textContent);
+  const M = D.meta;
+  const KIND = { app: '新应用', feat: '新功能', fix: '修复' };
+  const KIND_VAR = { app: '--s1', feat: '--s2', fix: '--s3' };
+  const SIZE = { S: '小', M: '中', L: '大' };
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const fmt = (n) => Math.round(n).toLocaleString('zh-CN');
+  const wan = (n) => (n >= 1e8 ? (n / 1e8).toFixed(2) + ' 亿' : fmt(n / 1e4) + ' 万');
+  const day1 = (d) => (d >= 10 ? Math.round(d) : Math.round(d * 10) / 10);
+  const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const md = (iso) => iso.slice(5).replace('-', '-');
+
+  const state = { line: -1, kind: 'all', realOnly: false, limit: 12, extra: [], sim: 0, live: null };
+  // 「以前」：引入前 12 周同规模交付的平均周期（全组织，不随筛选变化）
+  const BASE_CYC = {};
+  for (const s of ['S', 'M', 'L']) BASE_CYC[s] = mean(D.items.filter((i) => i.period === 'base' && i.size === s).map((i) => i.cyc));
+
+  const all = () => D.items.concat(state.extra);
+  const inLine = (i) => state.line < 0 || i.line === state.line;
+  const scoped = () => all().filter(inLine);
+
+  function metrics() {
+    const xs = scoped();
+    const base = xs.filter((i) => i.period === 'base');
+    const agent = xs.filter((i) => i.period === 'agent');
+    const cnt = (arr, k) => arr.filter((i) => i.kind === k).length;
+    const cyc = (arr, s) => mean(arr.filter((i) => i.size === s && !i.real).map((i) => i.cyc));
+    const eq = agent.reduce((a, i) => a + M.eq[i.size], 0);
+    const human = agent.reduce((a, i) => a + M.human[i.size], 0);
+    const seats = M.peoplePerLine * (state.line < 0 ? M.lines.length : 1);
+    const sub = seats * M.seatUsdMonth * M.months * M.fx;
+    const cost = human * M.dayRate + sub;
+    const unit = eq ? cost / eq : 0;
+    const built = agent.filter((i) => i.kind !== 'fix');
+    const adv = mean(built.map((i) => Math.max(0, BASE_CYC[i.size] - i.cyc)));
+    return { base, agent, cnt, cyc, eq, human, sub, cost, unit, save: eq * M.dayRate - cost, built, adv, seats };
+  }
+
+  function renderHeader(m) {
+    const scope = state.line < 0 ? `研发中心 ${m.seats} 人 · ${M.lines.length} 条业务线` : `${M.lines[state.line]} · ${m.seats} 人`;
+    $('org').textContent = `桃源科技 · ${scope} · 引入 AI-DLC 第 12 周`;
+    const real = m.agent.filter((i) => i.real).length;
+    $('heroSub').textContent = `近 12 周对比引入 AI-DLC 之前的 12 周 · 只计签字放行的交付` + (real ? ` · 其中 ${real} 项为真实运行（实测）` : '');
+  }
+
+  // 卡片小图表共用：提示框挂在卡片上（值在前、名称在后）
+  function cardTip(card, rows, x, y) {
+    let tip = card.querySelector(':scope > .tip'); if (!tip) { tip = el('div', 'tip'); card.append(tip); }
+    tip.replaceChildren();
+    for (const [v, label, color] of rows) { const r = el('div', 'row'); const b = el('b', null, v); r.append(b); if (color) { const k = el('i', 'key'); k.style.background = color; r.append(k); } r.append(el('span', null, label)); tip.append(r); }
+    tip.style.display = 'block';
+    tip.style.left = Math.min(Math.max(x - tip.offsetWidth / 2, 0), card.clientWidth - tip.offsetWidth) + 'px';
+    tip.style.top = y + 'px';
+  }
+  function hideTip(card) { const t = card.querySelector(':scope > .tip'); if (t) t.style.display = 'none'; }
+  function hitRow(svg, card, box, x, y, w, h, rows) {
+    const r = sv('rect', { x, y, width: w, height: h, rx: 6, class: 'hitrow', tabindex: 0 });
+    const show = () => cardTip(card, rows, box.offsetLeft + x + w / 2, box.offsetTop + y + h + 6);
+    r.addEventListener('pointerenter', show); r.addEventListener('focus', show);
+    r.addEventListener('pointerleave', () => hideTip(card)); r.addEventListener('blur', () => hideTip(card));
+    svg.append(r);
+  }
+  const svText = (svg, x, y, text, attrs) => { const t = sv('text', { x, y, ...(attrs || {}) }); t.textContent = text; svg.append(t); return t; };
+  function barEnd(svg, x0, y0, w, h, fill) {   // 右端 4px 圆角，基线端方角
+    const r = Math.min(4, w, h / 2);
+    svg.append(sv('path', { d: `M${x0},${y0} H${x0 + w - r} Q${x0 + w},${y0} ${x0 + w},${y0 + r} V${y0 + h - r} Q${x0 + w},${y0 + h} ${x0 + w - r},${y0 + h} H${x0} Z`, fill }));
+  }
+
+  function drawMore(m) {
+    const card = $('cMore'), box = $('mMore'); box.replaceChildren();
+    const W = box.clientWidth, L = 64, R = 70, bh = 22, gap = 14, H = 2 * bh + gap + 4;
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img', 'aria-label': `交付量：前 12 周 ${m.base.length} 项，近 12 周 ${m.agent.length} 项` });
+    const maxT = Math.max(m.base.length, m.agent.length, 1), pw = W - L - R;
+    [['前 12 周', m.base], ['近 12 周', m.agent]].forEach(([lab, arr], r) => {
+      const y0 = 2 + r * (bh + gap), now = r === 1;
+      svText(svg, 0, y0 + bh / 2 + 4, lab, now ? { class: 'strong' } : {});
+      let cum = 0; const segs = ['app', 'feat', 'fix'].map((k) => [k, m.cnt(arr, k)]).filter(([, n]) => n > 0);
+      segs.forEach(([k, n], j) => {
+        const x0 = L + (cum / maxT) * pw + (cum > 0 ? 2 : 0), x1 = L + ((cum + n) / maxT) * pw; cum += n;
+        if (x1 - x0 <= 0.5) return;
+        if (j === segs.length - 1) barEnd(svg, x0, y0, x1 - x0, bh, `var(${KIND_VAR[k]})`);
+        else svg.append(sv('rect', { x: x0, y: y0, width: x1 - x0, height: bh, fill: `var(${KIND_VAR[k]})` }));
+      });
+      svText(svg, L + (cum / maxT) * pw + 8, y0 + bh / 2 + 4, `${fmt(arr.length)} 项`, now ? { class: 'strong' } : {});
+      hitRow(svg, card, box, L - 4, y0 - 3, (cum / maxT) * pw + 8, bh + 6,
+        [[fmt(arr.length), `${lab} 合计`], ...['app', 'feat', 'fix'].map((k) => [fmt(m.cnt(arr, k)), KIND[k], `var(${KIND_VAR[k]})`])]);
+    });
+    box.append(svg);
+    const lg = $('lMore'); lg.replaceChildren();
+    for (const k of ['app', 'feat', 'fix']) {
+      const b = el('button'); b.setAttribute('aria-pressed', String(state.kind === k)); b.title = `前 12 周 ${m.cnt(m.base, k)} 项；点击筛选下方交付清单`;
+      const sw = el('i', 'sw'); sw.style.background = `var(${KIND_VAR[k]})`;
+      b.append(sw, document.createTextNode(KIND[k]), el('b', null, fmt(m.cnt(m.agent, k))));
+      b.onclick = () => { setKind(state.kind === k ? 'all' : k); document.querySelector('.ledger').scrollIntoView({ behavior: 'smooth' }); };
+      lg.append(b);
+    }
+  }
+
+  function drawFast(m) {
+    const card = $('cFast'), box = $('mFast'); box.replaceChildren();
+    const rows = [['大型', 'L'], ['中型', 'M'], ['小型', 'S']].map(([lab, s]) => [lab, BASE_CYC[s], m.cyc(m.agent, s)]);
+    const W = box.clientWidth, L = 40, R = 104, rh = 26, H = rows.length * rh;
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img', 'aria-label': '交付周期，以前与现在：' + rows.map(([l, b, a]) => `${l} ${day1(b)} 天 → ${day1(a)} 天`).join('，') });
+    const max = Math.max(...rows.map(([, b, a]) => Math.max(b, a)), 1), pw = W - L - R, x = (v) => L + (v / max) * pw;
+    svg.append(sv('line', { x1: L, x2: L, y1: 2, y2: H - 2, stroke: 'var(--axis)', 'stroke-width': 1 }));
+    rows.forEach(([lab, b, a], r) => {
+      const cy = r * rh + rh / 2;
+      svText(svg, 0, cy + 4, lab, r === 0 ? { class: 'strong' } : {});
+      svg.append(sv('line', { x1: x(a), x2: x(b), y1: cy, y2: cy, stroke: 'var(--axis)', 'stroke-width': 2, 'stroke-linecap': 'round' }));
+      svg.append(sv('circle', { cx: x(b), cy, r: 4.5, fill: 'var(--deemph)', stroke: 'var(--card)', 'stroke-width': 2 }));
+      svg.append(sv('circle', { cx: x(a), cy, r: 5, fill: 'var(--s4)', stroke: 'var(--card)', 'stroke-width': 2 }));
+      const t = sv('text', { x: W, y: cy + 4, 'text-anchor': 'end' });
+      const t1 = sv('tspan', {}); t1.textContent = `${day1(b)} → `;
+      const t2 = sv('tspan', { class: 'strong', style: 'fill:var(--text-strong);font-weight:600' }); t2.textContent = `${day1(a)} 天`;
+      t.append(t1, t2); svg.append(t);
+      hitRow(svg, card, box, 0, cy - rh / 2 + 1, W, rh - 2, [[`${day1(b)} 天`, '以前', 'var(--deemph)'], [`${day1(a)} 天`, '现在', 'var(--s4)'], [`${Math.round((1 - a / b) * 100)}%`, '缩短']]);
+    });
+    box.append(svg);
+  }
+
+  function drawCheap(m) {
+    const card = $('cCheap'), box = $('mCheap'); box.replaceChildren();
+    const W = box.clientWidth, L = 40, R = 70, bh = 22, gap = 14, H = 2 * bh + gap + 4;
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img', 'aria-label': `每人日工作量的成本：以前 ¥${fmt(M.dayRate)}，现在 ¥${fmt(m.unit)}` });
+    const pw = W - L - R, human = m.eq ? (m.human * M.dayRate) / m.eq : 0, agentPart = m.eq ? m.sub / m.eq : 0;
+    [['以前', M.dayRate, 'var(--deemph)'], ['现在', m.unit, 'var(--s4)']].forEach(([lab, v, fill], r) => {
+      const y0 = 2 + r * (bh + gap), w = (v / M.dayRate) * pw;
+      svText(svg, 0, y0 + bh / 2 + 4, lab, r === 1 ? { class: 'strong' } : {});
+      barEnd(svg, L, y0, w, bh, fill);
+      svText(svg, L + w + 8, y0 + bh / 2 + 4, `¥${fmt(v)}`, r === 1 ? { class: 'strong' } : {});
+      hitRow(svg, card, box, L - 4, y0 - 3, w + 8, bh + 6, r === 0 ? [[`¥${fmt(v)}`, '人工完成，每人日']] :
+        [[`¥${fmt(v)}`, 'agent 协作，每人日'], [`¥${fmt(human)}`, '其中人的时间'], [`¥${fmt(agentPart)}`, '其中 agent 订阅']]);
+    });
+    box.append(svg);
+  }
+
+  function renderCards(m) {
+    const ratio = m.base.length ? m.agent.length / m.base.length : 0;
+    $('vMore').textContent = ratio.toFixed(1) + ' 倍';
+    $('dMore').textContent = `交付量 · 同样 ${m.seats} 人`;
+    const bL = BASE_CYC.L, aL = m.cyc(m.agent, 'L');
+    $('vFast').textContent = aL ? `${day1(bL)} 天 → ${day1(aL)} 天` : `${day1(bL)} 天 → —`;
+    $('xAdv').textContent = `新应用和新功能平均每项提前 ${day1(m.adv)} 天上线`;
+    renderValue(m);
+    $('vCheap').textContent = '−' + Math.round((1 - m.unit / M.dayRate) * 100) + '%';
+    $('xSave').textContent = `近 12 周相当于节省研发投入 ¥${wan(m.save)}`;
+    drawMore(m); drawFast(m); drawCheap(m);
+  }
+
+  function renderValue(m) {
+    const v = Number($('perDay').value);
+    $('vValue').textContent = v > 0 ? `¥${wan(m.built.length * m.adv * v)}` : '—';
+  }
+
+  function weekly() {
+    const xs = scoped();
+    const t0 = new Date(M.weeks[0] + 'T00:00:00');
+    const W = M.weeks.map((w) => ({ start: w, app: 0, feat: 0, fix: 0 }));
+    for (const i of xs) {
+      const k = Math.floor((new Date(i.ship + 'T00:00:00') - t0) / 864e5 / 7);
+      if (k >= 0 && k < W.length) W[k][i.kind] += 1;
+    }
+    W.forEach((w) => { w.total = w.app + w.feat + w.fix; });
+    return W;
+  }
+
+  function niceMax(v) {
+    const p = Math.pow(10, Math.floor(Math.log10(Math.max(v, 1))));
+    for (const f of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (f * p >= v) return f * p;
+    return 10 * p;
+  }
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const sv = (tag, attrs) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v); return n; };
+
+  function renderChart() {
+    const W = weekly();
+    const before = mean(W.slice(0, 12).map((w) => w.total)), after = mean(W.slice(12).map((w) => w.total));
+    $('chartSub').textContent = `前 12 周平均每周 ${fmt(before)} 项 → 近 12 周平均每周 ${fmt(after)} 项；最近一周 ${fmt(W[W.length - 1].total)} 项（截至 ${md(M.today)}）`;
+    const legend = $('legend'); legend.replaceChildren();
+    for (const k of ['app', 'feat', 'fix']) { const s = el('span'); const sw = el('i', 'sw'); sw.style.background = `var(${KIND_VAR[k]})`; s.append(sw, document.createTextNode(KIND[k])); legend.append(s); }
+
+    const plot = $('plot'), tip = $('tip');
+    plot.querySelector('svg')?.remove();
+    const Wd = plot.clientWidth, H = plot.clientHeight, L = 44, R = 12, T = 26, B = 30;
+    const pw = Wd - L - R, ph = H - T - B, slot = pw / W.length, bw = Math.min(24, slot * 0.56);
+    const ymax = niceMax(Math.max(...W.map((w) => w.total)));
+    const y = (v) => T + ph - (v / ymax) * ph;
+    const svg = sv('svg', { viewBox: `0 0 ${Wd} ${H}`, role: 'img', 'aria-label': '每周上线数量，按类型堆叠' });
+    for (let t = 0; t <= 4; t++) {
+      const v = (ymax / 4) * t, yy = Math.round(y(v)) + 0.5;
+      svg.append(sv('line', { x1: L, x2: Wd - R, y1: yy, y2: yy, stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1 }));
+      const tx = sv('text', { x: L - 8, y: yy + 4, 'text-anchor': 'end' }); tx.textContent = fmt(v); svg.append(tx);
+    }
+    const xm = Math.round(L + 12 * slot) + 0.5;
+    svg.append(sv('line', { x1: xm, x2: xm, y1: T - 8, y2: T + ph, stroke: 'var(--muted)', 'stroke-width': 1 }));
+    const ml = sv('text', { x: xm + 6, y: T - 10, class: 'mark-label' }); ml.textContent = '引入 AI-DLC'; svg.append(ml);
+    const pl = sv('text', { x: L + 6 * slot, y: T - 10, class: 'mark-label', 'text-anchor': 'middle' }); pl.textContent = '引入前 12 周'; svg.append(pl);
+    W.forEach((w, i) => {
+      const cx = L + slot * i + slot / 2, x0 = cx - bw / 2;
+      let cum = 0;
+      const segs = ['app', 'feat', 'fix'].filter((k) => w[k] > 0);
+      segs.forEach((k, j) => {
+        const yb = y(cum) - (cum > 0 ? 2 : 0), yt = y(cum + w[k]);
+        cum += w[k];
+        const h = yb - yt;
+        if (h <= 0.5) return;
+        const fill = `var(${KIND_VAR[k]})`;
+        if (j === segs.length - 1) {
+          const r = Math.min(4, h, bw / 2);
+          svg.append(sv('path', { d: `M${x0},${yb} V${yt + r} Q${x0},${yt} ${x0 + r},${yt} H${x0 + bw - r} Q${x0 + bw},${yt} ${x0 + bw},${yt + r} V${yb} Z`, fill }));
+        } else svg.append(sv('rect', { x: x0, y: yt, width: bw, height: h, fill }));
+      });
+      if (i % 2 === 0) { const tx = sv('text', { x: cx, y: T + ph + 18, 'text-anchor': 'middle' }); tx.textContent = md(w.start).replace(/^0/, '').replace('-0', '-').replace('-', '/'); svg.append(tx); }
+      const hit = sv('rect', { x: L + slot * i, y: T, width: slot, height: ph, class: 'hit', tabindex: 0 });
+      const show = () => {
+        tip.replaceChildren(el('div', 'when', `${md(w.start).replace('-', '/')} 起的一周 · ${i < 12 ? '引入前' : '引入后第 ' + (i - 11) + ' 周'}`));
+        const tot = el('div', 'row'); tot.append(el('b', null, fmt(w.total)), el('span', null, '合计')); tip.append(tot);
+        for (const k of ['app', 'feat', 'fix']) { const r = el('div', 'row'); const key = el('i', 'key'); key.style.background = `var(${KIND_VAR[k]})`; r.append(el('b', null, fmt(w[k])), key, el('span', null, KIND[k])); tip.append(r); }
+        tip.style.display = 'block';
+        const left = Math.min(Math.max(cx - tip.offsetWidth / 2, 0), Wd - tip.offsetWidth);
+        tip.style.left = left + 'px'; tip.style.top = Math.max(0, y(w.total) - tip.offsetHeight - 10) + 'px';
+      };
+      hit.addEventListener('pointerenter', show); hit.addEventListener('focus', show);
+      hit.addEventListener('pointerleave', () => { tip.style.display = 'none'; }); hit.addEventListener('blur', () => { tip.style.display = 'none'; });
+      svg.append(hit);
+    });
+    plot.prepend(svg);
+
+    const tb = el('table'); const hr = el('tr');
+    for (const h of ['一周起始', '新应用', '新功能', '修复', '合计']) hr.append(el('th', h === '一周起始' ? null : 'num', h));
+    tb.append(el('thead')); tb.firstChild.append(hr); const body = el('tbody');
+    W.forEach((w, i) => { const r = el('tr'); r.append(el('td', null, `${w.start}${i === 12 ? '（引入 AI-DLC）' : ''}`)); for (const k of ['app', 'feat', 'fix', 'total']) r.append(el('td', 'num', fmt(w[k]))); body.append(r); });
+    tb.append(body); $('wkTable').replaceChildren(tb);
+  }
+
+  function rowsFor() {
+    let xs = scoped().filter((i) => i.period === 'agent');
+    if (state.kind !== 'all') xs = xs.filter((i) => i.kind === state.kind);
+    if (state.realOnly) xs = xs.filter((i) => i.real);
+    const pin = (i) => (i.fresh ? 0 : i.real ? 1 : 2);
+    return xs.sort((a, b) => pin(a) - pin(b) || (a.ship < b.ship ? 1 : a.ship > b.ship ? -1 : 0));
+  }
+
+  function renderLedger() {
+    const seg = $('kindSeg'); seg.replaceChildren();
+    for (const k of ['all', 'app', 'feat', 'fix']) { const b = el('button', null, k === 'all' ? '全部' : KIND[k]); b.setAttribute('aria-pressed', String(state.kind === k)); b.onclick = () => setKind(k); seg.append(b); }
+    $('realOnly').setAttribute('aria-pressed', String(state.realOnly));
+    const xs = rowsFor(), body = $('rows'); body.replaceChildren();
+    $('ledgerCount').textContent = `共 ${fmt(xs.length)} 项${state.realOnly ? '' : '，实测置顶'}`;
+    for (const i of xs.slice(0, state.limit)) {
+      const tr = el('tr'); if (i.real) tr.className = 'is-real'; if (i.fresh) tr.className += ' is-new';
+      tr.style.cursor = 'pointer'; tr.title = '交付详情'; tr.onclick = () => crew(`交付详情 › ${i.t}`);
+      const t = el('td'); t.append(el('div', null, i.t)); if (i.tests) t.append(el('div', 'was', `检查 ${i.tests} 通过`));
+      if (i.defects && i.defects.length) t.append(el('div', 'defect', `上线后缺陷 ${i.defects.length} · 修复见 ${i.defects.join('、')}`));
+      if (i.origin) t.append(el('div', 'was', `修复 ${i.origin} 上线后的缺陷`));
+      tr.append(t);
+      tr.append(el('td', null, M.lines[i.line]));
+      const kd = el('td'); const k = el('span', 'kind'); const sw = el('i', 'sw'); sw.style.background = `var(${KIND_VAR[i.kind]})`; k.append(sw, document.createTextNode(KIND[i.kind])); kd.append(k); tr.append(kd);
+      tr.append(el('td', null, SIZE[i.size]));
+      tr.append(el('td', 'num', i.fresh ? '刚刚' : md(i.ship)));
+      const c = el('td'); c.append(el('div', null, i.mins != null ? `${i.mins} 分钟` : `${day1(i.cyc)} 天`), el('div', 'was', `以前约 ${day1(BASE_CYC[i.size])} 天`)); tr.append(c);
+      tr.append(el('td', null, i.signer));
+      const ids = el('td', 'ids');
+      if (i.issue) { const n = el('div', 'mono', i.issue); if (i.reporter) { n.append(el('span', 'was', ` ${i.reporter}`)); n.title = `${i.reporter}提出` + (i.created ? `，${md(i.created)} 创建` : ''); } ids.append(n); if (i.pr) ids.append(el('div', 'was mono', `PR #${i.pr}`)); } else ids.textContent = '—';
+      tr.append(ids);
+      const s = el('td'); const box = el('div', 'src');
+      if (i.real) { box.append(el('span', 'tag real', '实测')); const b = el('button', 'btn small', '▶ 回放 ↗'); b.onclick = (e) => { e.stopPropagation(); crew(`运行 ${i.real === 'live' ? '（现场运行）' : i.real} › 回放`); }; box.append(b); }
+      else box.append(el('span', 'tag', '模拟'));
+      s.append(box); tr.append(s); body.append(tr);
+    }
+    $('more').hidden = xs.length <= state.limit;
+    $('more').textContent = `显示更多（还有 ${fmt(xs.length - state.limit)} 项）`;
+  }
+
+  function renderNotes() {
+    const n = $('notes'); n.replaceChildren();
+    for (const s of [
+      `数据：模拟的桃源科技研发中心（${M.lines.length} 条业务线，每条 ${M.peoplePerLine} 人）近 12 周与引入 AI-DLC 之前 12 周的交付记录` + (D.items.some((i) => i.real) ? `；另有 ${D.items.filter((i) => i.real).length} 项来自真实运行并签字的交付（含从其他电脑导入的运行），标为「实测」` : '') + '。只计签字放行的交付。',
+      '更多：近 12 周上线项数 ÷ 前 12 周上线项数，同一组织、人数不变。',
+      '更快：交付周期 = 上线日 − Issue 创建日；「以前」为引入前 12 周同规模交付的平均周期。模拟历史里的周期是示例值，不代表实测的效率提升。',
+      `更省：每人日工作量的成本 =（实际人工人日 × ¥${fmt(M.dayRate)} + agent 订阅）÷ 完成的等价工作量。等价工作量按规模：小 ${M.eq.S}、中 ${M.eq.M}、大 ${M.eq.L} 人日；agent 协作下的人工投入：小 ${M.human.S}、中 ${M.human.M}、大 ${M.human.L} 人日；订阅按每人 Kiro Pro+ 每月 ${M.seatUsdMonth} 美元、汇率 ${M.fx}（示例值，见 cto/history.json 的 meta）。`,
+      '价值：本页不推算收入。填入每项每天带来的毛利后，按「新应用和新功能的项数 × 平均提前天数 × 每天毛利」估算。',
+      '交付标签（类型、规模、业务线）由第一个关卡上的角色提议，负责人在关卡上确认。',
+      'Issue 与 PR：每项交付对应一个 Issue（提出方、创建日）和一个合入 main 的 PR；实测运行的 PR 是它的运行分支，负责人签字放行时合入。上线后报出的缺陷记为修复类交付，与原交付互相链接。',
+    ]) n.append(el('li', null, s));
+  }
+
+  function ratioOf(li) {
+    const xs = all().filter((i) => li < 0 || i.line === li);
+    const b = xs.filter((i) => i.period === 'base').length, a = xs.filter((i) => i.period === 'agent').length;
+    return b ? a / b : 0;
+  }
+  function renderLines() {
+    const nav = $('lines'); nav.replaceChildren();
+    [-1].concat(M.lines.map((_, i) => i)).forEach((li) => {
+      const b = el('button'); b.setAttribute('aria-pressed', String(state.line === li));
+      b.append(el('b', null, li < 0 ? '全部' : M.lines[li]), el('span', null, `交付量 ${ratioOf(li).toFixed(1)} 倍`));
+      b.onclick = () => { state.line = li; state.limit = 12; render(); };
+      nav.append(b);
+    });
+  }
+  const crew = (where) => toast(document.documentElement.dataset.snapshot ? `离线快照：请在 Kiro Crew 中打开 CTO 视图后再跳转（${where}）` : `请在 Kiro Crew 中打开：AI-DLC 多 Agent 团队 › ${where}`);
+  const waited = (h) => (h < 1 ? `${Math.max(1, Math.round(h * 60))} 分钟` : `${h.toFixed(1)} 小时`);
+  const COLS = [['需求池', '已提交，待组队'], ['构思', '意图 · 约束 · 范围'], ['启动', '需求 · 设计 · 分工'], ['构建', '代码 · 测试 · 独立审查'], ['运维', '部署 · 上线 · 签字'], ['已交付', '近 7 天 · 实测可点开']];
+  const STAGES = ['构思', '启动', '构建', '运维'];
+  function kcard(w) {
+    const c = el('div', 'kcard' + (w.live ? ' is-live' : ''));
+    const top = el('div', 'ktop');
+    if (w.state === 'wait') top.append(el('span', 'gate', w.gate), el('span', null, `已等 ${waited(w.hours)}`));
+    else if (w.state === 'agent') top.append(el('span', null, `${w.members} 位成员 · 已用 ${w.mins} 分钟`));
+    else top.append(el('span', null, '待组队'), el('span', null, `${w.mins} 分钟前提交`));
+    const tt = el('div', 'ktitle', w.t); tt.title = w.t; c.append(top, tt);
+    if (w.state === 'wait') c.append(el('div', 'kfocus', w.focus));
+    const km = el('div', 'kmeta', M.lines[w.line] + (w.issue ? ` · ${w.issue}` : '') + (w.pr ? ` · PR #${w.pr} 待合并` : '') + (w.state === 'wait' ? ` · 等 ${w.who}` : ''));
+    if (w.reporter) km.title = `${w.issue || ''} · ${w.reporter}提出`;
+    c.append(km);
+    if (w.live) {
+      const where = w.state === 'wait' ? '现场运行 › 上线关卡（打开审批弹窗）' : '现场运行 › 团队图';
+      const b = el('button', 'btn small primary', w.state === 'wait' ? '去审批 ↗' : '打开 ↗');
+      b.onclick = (e) => { e.stopPropagation(); crew(where); }; c.onclick = () => crew(where); c.append(b);
+    } else { c.style.cursor = 'pointer'; c.title = '交付详情'; c.onclick = () => crew(`交付详情 › ${w.t}`); }
+    return c;
+  }
+  function fill(cell, list, order) {
+    list.sort(order).slice(0, 2).forEach((w) => cell.append(kcard(w)));
+    if (list.length > 2) cell.append(el('div', 'kmore', `+${list.length - 2} 项`));
+  }
+  function renderFlow() {
+    const W = D.wip.concat(state.live ? [state.live] : []).filter(inLine);
+    const waits = W.filter((w) => w.state === 'wait'), agents = W.filter((w) => w.state === 'agent'), pool = W.filter((w) => w.state === 'pool');
+    const st = $('nowStats'); st.replaceChildren(document.createTextNode(`进行中 ${waits.length + agents.length} 项`), el('span', null, '·'), document.createTextNode(`agent 在做 ${agents.length} 项`), el('span', null, '·'), document.createTextNode(`等人批准 ${waits.length} 项`), el('span', null, '·'), document.createTextNode(`需求池 ${pool.length} 项`));
+    $('nowNote').textContent = `等人批准的平均已等 ${waited(mean(waits.map((w) => w.hours)))}；agent 完成一次运行，实测平均 ${M.realAvgMins} 分钟。`;
+    const d7 = (() => { const [y, m, d] = M.today.split('-').map(Number); const t = new Date(y, m - 1, d - 6); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; })(); // local days, as the app (metrics.daysBefore)
+    const done = scoped().filter((i) => i.period === 'agent' && i.ship >= d7);
+    const kb = $('kanban'); kb.replaceChildren(el('div'));
+    for (const [name, sub] of COLS) {
+      const n = name === '需求池' ? pool.length : name === '已交付' ? done.length : W.filter((w) => w.col === name && w.state !== 'pool').length;
+      const h = el('div', 'kb-h'); const t = el('div'); t.append(el('b', null, name), el('span', 'n', fmt(n))); h.append(t, el('div', 'st', sub)); kb.append(h);
+    }
+    const byLive = (a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0);
+    kb.append(el('div', 'kb-lane is-wait', '等人批准'));
+    const pc = el('div', 'kb-cell span'); fill(pc, pool, (a, b) => a.mins - b.mins); kb.append(pc);
+    for (const col of STAGES) { const c = el('div', 'kb-cell is-wait'); const ws = waits.filter((w) => w.col === col); if (!ws.length) c.append(el('div', 'kb-empty', col === '构建' ? '这一阶段没有人的关卡：检查不过自动退回给 agent' : '此刻没有')); fill(c, ws, (a, b) => byLive(a, b) || b.hours - a.hours); kb.append(c); }
+    const dc = el('div', 'kb-cell span');
+    const pin = (i) => (i.fresh ? 0 : i.real ? 1 : 2);
+    const shown = done.slice().sort((a, b) => pin(a) - pin(b) || (a.ship < b.ship ? 1 : -1)).slice(0, 4);
+    for (const i of shown) {
+      const c = el('div', 'kcard' + (i.real ? ' is-real' : '') + (i.fresh ? ' is-new' : ''));
+      const top = el('div', 'ktop'); top.append(el('span', null, i.fresh ? '刚刚' : md(i.ship)), i.real ? el('span', 'tag real', '实测') : el('span', null, '模拟'));
+      const tt = el('div', 'ktitle', i.t); tt.title = i.t;
+      c.append(top, tt, el('div', 'kmeta', `${M.lines[i.line]} · ${i.mins != null ? i.mins + ' 分钟' : day1(i.cyc) + ' 天'}`));
+      if (i.real) { c.title = '点开看负责人的决定'; c.onclick = (e) => { e.stopPropagation(); openPop(i, c); }; }
+      else { c.style.cursor = 'pointer'; c.title = '交付详情'; c.onclick = () => crew(`交付详情 › ${i.t}`); }
+      dc.append(c);
+    }
+    if (done.length > shown.length) dc.append(el('div', 'kmore', `+${fmt(done.length - shown.length)} 项（见下方交付清单）`));
+    kb.append(dc);
+    kb.append(el('div', 'kb-lane', 'agent 在做'));
+    for (const col of STAGES) { const c = el('div', 'kb-cell'); fill(c, agents.filter((w) => w.col === col), (a, b) => byLive(a, b) || b.mins - a.mins); kb.append(c); }
+
+  }
+
+  function openPop(i, anchor) {
+    const pop = $('pop'), sec = document.querySelector('.flow');
+    const rid = i.real === 'live' ? '现场运行' : `运行 ${i.real}`;
+    const head = el('div', 'pop-head'); head.append(el('b', null, i.t), el('span', 'tag real', '实测'));
+    const x = el('button', 'x', '×'); x.setAttribute('aria-label', '关闭'); x.onclick = closePop; head.append(x);
+    const ol = el('ol', 'decisions'); for (const [g, d] of i.decisions || []) { const li = el('li'); li.append(el('b', null, g), el('span', null, d)); ol.append(li); }
+    const act = el('div', 'pop-act');
+    for (const [label, where, primary] of [['▶ 回放 ↗', `${rid} › 回放（30 倍速）`, true], ['签字单 ↗', `${rid} › 签字单`]]) { const b = el('button', 'btn small' + (primary ? ' primary' : ''), label); b.onclick = () => crew(where); act.append(b); }
+    pop.replaceChildren(head, el('div', 'pop-facts', `${M.lines[i.line]} · ${i.mins} 分钟 · ${i.members} 位 agent 成员 · 检查 ${i.tests} 通过 · 签字：${i.signer}`),
+      ...(i.issue ? [el('div', 'pop-facts', `Issue ${i.issue}` + (i.reporter ? `（${i.reporter}提出）` : '') + (i.pr ? ` → PR #${i.pr}，签字放行时合入 main` : ''))] : []),
+      el('div', 'pop-sub', `负责人在关卡上的 ${(i.decisions || []).length} 个决定`), ol, act);
+    pop.hidden = false;
+    const s = sec.getBoundingClientRect(), a = anchor.getBoundingClientRect();
+    pop.style.top = Math.max(8, a.top - s.top - 8) + 'px';
+    pop.style.left = Math.max(12, a.left - s.left - pop.offsetWidth - 10) + 'px'; pop.style.right = 'auto';
+  }
+  function closePop() { $('pop').hidden = true; }
+  document.addEventListener('click', (e) => { if (!$('pop').hidden && !$('pop').contains(e.target)) closePop(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePop(); });
+
+  function render() { closePop(); const m = metrics(); renderHeader(m); renderLines(); renderCards(m); renderChart(); renderFlow(); renderLedger(); }
+  function setKind(k) { state.kind = k; state.limit = 12; render(); }
+  let toastTimer;
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3200); }
+
+  $('realOnly').onclick = () => { state.realOnly = !state.realOnly; state.limit = 12; renderLedger(); };
+  $('more').onclick = () => { state.limit += 30; renderLedger(); };
+  $('perDay').oninput = () => renderValue(metrics());
+  $('calcToggle').onclick = () => { const r = $('calcRow'); r.hidden = !r.hidden; $('calcToggle').textContent = r.hidden ? '估算价值 ▸' : '收起 ▾'; if (!r.hidden) $('perDay').focus(); };
+  const redraw = () => { renderChart(); renderCards(metrics()); };
+  $('asChart').onclick = () => { $('plot').hidden = false; $('legend').hidden = false; $('wkTable').hidden = true; $('asChart').setAttribute('aria-pressed', 'true'); $('asTable').setAttribute('aria-pressed', 'false'); renderChart(); };
+  $('asTable').onclick = () => { $('plot').hidden = true; $('legend').hidden = true; $('wkTable').hidden = false; $('asChart').setAttribute('aria-pressed', 'false'); $('asTable').setAttribute('aria-pressed', 'true'); };
+  $('theme').onclick = () => { const r = document.documentElement; r.dataset.mode = r.dataset.mode === 'light' ? 'dark' : 'light'; renderChart(); };
+
+  // 下载：PDF（浏览器打印）、清单 CSV、离线版 HTML
+  const SNAP = document.documentElement.dataset.snapshot;
+  if (SNAP) { $('snapTag').hidden = false; $('snapTag').textContent = `离线快照 · 生成于 ${SNAP}`; }
+  function download(text, name, type) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+  const scopeName = () => (state.line < 0 ? '全部业务线' : M.lines[state.line]);
+  $('dlCsv').onclick = () => {
+    $('dl').open = false;
+    const q = (v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+    const head = ['交付', '业务线', '类型', '规模', 'Issue', '提出方', 'Issue 创建日', '上线日', '周期（天）', '以前同规模平均周期（天）', '签字', 'PR', '上线后缺陷', '修复的 Issue', '来源', '运行编号'];
+    const lines = rowsFor().map((i) => [i.t, M.lines[i.line], KIND[i.kind], SIZE[i.size], i.issue || '', i.reporter || '', i.created || '', i.fresh ? M.today : i.ship, (i.mins != null ? i.mins / 1440 : i.cyc).toFixed(2), BASE_CYC[i.size].toFixed(1), i.signer,
+      i.pr ? `#${i.pr}` : '', (i.defects || []).join(' '), i.origin || '', i.real ? '实测' : '模拟', i.real && i.real !== 'live' ? i.real : ''].map(q).join(','));
+    download('\ufeff' + [head.join(',')].concat(lines).join('\r\n'), `CTO视图-交付清单-${scopeName()}-${M.today}.csv`, 'text/csv;charset=utf-8');
+    toast(`已导出 ${fmt(lines.length)} 行（${scopeName()}${state.kind === 'all' ? '' : ' · ' + KIND[state.kind]}${state.realOnly ? ' · 只看实测' : ''}）`);
+  };
+  let printMode = null;
+  window.addEventListener('beforeprint', () => {
+    printMode = document.documentElement.dataset.mode; document.documentElement.dataset.mode = 'light';
+    document.querySelector('.notes').open = true;
+    $('printMeta').textContent = `桃源科技 · ${scopeName()} · 导出于 ${new Date().toLocaleString('zh-CN', { hour12: false })} · 口径见末尾`;
+    renderChart();
+  });
+  window.addEventListener('afterprint', () => { if (printMode) document.documentElement.dataset.mode = printMode; renderChart(); });
+  $('dlPdf').onclick = () => { $('dl').open = false; closePop(); setTimeout(() => window.print(), 50); };
+
+  // 投影：全屏、大字
+  $('project').onclick = () => {
+    const on = !document.body.classList.contains('is-projecting');
+    document.body.classList.toggle('is-projecting', on); $('project').textContent = on ? '退出投影' : '投影';
+    if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen();
+    setTimeout(redraw, 200);
+  };
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('is-projecting')) { document.body.classList.remove('is-projecting'); $('project').textContent = '投影'; setTimeout(redraw, 200); } });
+  $('toBoard').onclick = () => crew('团队看板');
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(redraw, 120); });
+  renderNotes(); render();
+})();
+</script>
+</body>
+</html>
