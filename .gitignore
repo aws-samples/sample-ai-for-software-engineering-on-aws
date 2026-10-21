@@ -1,0 +1,20 @@
+# OS and editor files
+.DS_Store
+*.swp
+
+# Local environment and credentials
+.env
+.env.*
+
+# Build output
+node_modules/
+__pycache__/
+*.pyc
+build/
+dist/
+cdk.out/
+
+# Security review notes and scanner state stay out of this repository
+*review-notes*
+.ash/
+.holmes/
