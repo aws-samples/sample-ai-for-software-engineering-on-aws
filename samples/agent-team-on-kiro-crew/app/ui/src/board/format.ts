@@ -303,7 +303,7 @@ export const expertName = (key: string) => AIDLC_AGENTS.find((a) => a.key === ke
 
 /** The experts a run shows: the official 14, then the company's own its roles use. */
 /** The official expert a company's own copy of it stands for: a company's `acme-architect-agent` is AI-DLC's
- * `aidlc-architect-agent` with the company's working notes (example-company/agents/make_templates.py); "" for anything else. */
+ * `aidlc-architect-agent` with the company's working notes (example/agents/make_templates.py); "" for anything else. */
 export function officialOf(member: string): string {
   const key = member.replace(/^[a-z0-9]+-(.+-agent)$/, 'aidlc-$1')
   return AIDLC_AGENTS.some((a) => a.key === key) ? key : ''

@@ -35,7 +35,7 @@ detail** (交付详情, one delivery) and the **team board** (团队看板, how 
 | `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `board/` (team board), `cto/` (CTO view and delivery detail) |
 | `ui/preview/` | A preview page on test data, without Kiro Crew |
 | `team/` | Team files `team*.json`, the roster, task templates |
-| `starters/` | Project templates of the example company: `mall` (store promotion), `web` (internal web pages) |
+| `starters/` | Project templates of the example: `mall` (store promotion), `web` (internal web pages) |
 | `packs/` | Company checks in `tests/enterprise/`, reference implementations in `_reference/` for the checks' own tests, and the standards index `taoyuan/standards.json` |
 | `cto/history.json` | Synthetic history for the CTO view, made by `scripts/cto_history.py` |
 | `demo/target-template/` | The project the built-in team (`team/team.json`) starts from |

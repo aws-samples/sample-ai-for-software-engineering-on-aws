@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Install the example company, Taoyuan Tech (桃源科技, fictitious), into this Mac and into Kiro Crew. Safe to re-run:
-# what exists already is kept.
+# Install the example into this Mac and into Kiro Crew: simulated business rules, data and team members that give the
+# team realistic standards to follow. Safe to re-run: what exists already is kept.
 #
-#   bash scripts/install-example-company.sh
+#   bash scripts/install-example.sh
 #
 # Creates: ~/workplace/taoyuan/ (knowledge files, data, brand), 15 Kiro agent templates in ~/.kiro/agents/, the Kiro
 # Crew workspace "taoyuan", 15 members (Customize -> Teammates) and the knowledge source "桃源科技". A template that
@@ -11,7 +11,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 source "$ROOT/scripts/lib.sh"
-SRC="$ROOT/example-company"
+SRC="$ROOT/example"
 state() { "$PY" "$ROOT/scripts/state.py" "$@"; }   # what this script created: see scripts/state.py
 BACKUP="$HOME/.kiro/agents/.aidlc-team-sample-backup"
 
@@ -28,7 +28,7 @@ rsync -a --delete --exclude .DS_Store "$SRC/knowledge/" "$COMPANY_HOME/knowledge
 rsync -a --delete --exclude .DS_Store "$SRC/data/" "$COMPANY_HOME/data/"
 cp "$SRC/brand/mascot.svg" "$COMPANY_HOME/brand/mascot.svg"
 
-echo "2/5 Agent templates -> ~/.kiro/agents/ (14 AI-DLC experts and 1 company expert)"
+echo "2/5 Agent templates -> ~/.kiro/agents/ (14 AI-DLC experts and 1 expert the example adds)"
 TPL="$(mktemp -d)"
 "$PY" "$SRC/agents/make_templates.py" "$ROOT/vendor/aidlc-workflows/agents" "$TPL" "$KIROCREW_BIN"
 mkdir -p "$HOME/.kiro/agents"

@@ -1,6 +1,6 @@
 """桃源科技官方商城的模拟数据（双十一促销场景）：商品、过去 60 天的订单、运营提报的活动方案。
 
-    python3 example-company/tools/make_mall_data.py      # -> example-company/data/mall-*.json
+    python3 example/tools/make_mall_data.py      # -> example/data/mall-*.json
 
 固定随机种子，每次生成的内容一样。数字是按示例的情节凑的，生成完会打印校验：
 - 运营方案里 65 寸电视 Q7（8 折）和扫地机器人 X9（7 折）低于毛利底线（MGN-2）；

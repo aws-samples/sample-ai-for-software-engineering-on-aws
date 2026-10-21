@@ -4,7 +4,7 @@ verbatim as the prompt, plus how to work in Kiro Crew at that company) and one e
     python3 make_templates.py <vendor/aidlc-workflows/agents> <out dir> <kirocrew binary>
 
 桃源科技: the 14 experts under their official names and taoyuan-motion-agent.
-Writes <out>/<name>.json, one per agent. Nothing else is touched; scripts/install-example-company.sh copies them to
+Writes <out>/<name>.json, one per agent. Nothing else is touched; scripts/install-example.sh copies them to
 ~/.kiro/agents/.
 """
 import json

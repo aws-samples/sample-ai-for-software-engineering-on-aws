@@ -48,9 +48,9 @@ if echo "$out" | grep -q '"started": true'; then ok "app installed: Kiro Crew si
   exit 1
 fi
 
-step 3/4 "Example company: knowledge base, data and team members"
-bash "$ROOT/scripts/install-example-company.sh" 2>&1 | sed 's/^/     /'
-ok "example company installed"
+step 3/4 "Example: knowledge base, data and team members"
+bash "$ROOT/scripts/install-example.sh" 2>&1 | sed 's/^/     /'
+ok "example installed"
 
 step 4/4 "Wait for the knowledge base to be indexed (about 5 minutes)"
 want="$(find "$COMPANY_HOME/knowledge" -type f ! -name .DS_Store | wc -l | tr -d ' ')"
