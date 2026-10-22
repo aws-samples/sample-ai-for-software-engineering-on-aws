@@ -7,9 +7,10 @@ time.
 
 Each sample takes a feature from requirement to a validated release on a realistic toolchain, using
 [AI-DLC Workflows 2.0](https://github.com/awslabs/aidlc-workflows) with [Kiro](https://kiro.dev). It
-packages what a team needs to repeat the work on its own code: an AI-DLC plugin for the domain, Kiro
-steering rules, tool connectors (MCP servers) with guardrails, a small reference project, and a guide
-for a one-day guided rehearsal.
+packages what a team needs to repeat the work on its own code: the domain's standards as knowledge the
+agents cite and as checks they cannot change, tool connectors (MCP servers) with guardrails, a small
+reference project, and a guide for a one-day guided rehearsal. Samples run with Kiro (IDE or CLI) or
+[Kiro Crew](https://kiro.dev/docs/crew/).
 
 > [!IMPORTANT]
 > **Maturity: early development.** The samples are for learning and evaluation. They are not
@@ -22,7 +23,7 @@ for a one-day guided rehearsal.
 | Sample | Scenario | Toolchain highlights | Status |
 | --- | --- | --- | --- |
 | [AI-DLC agent team on Kiro Crew](samples/agent-team-on-kiro-crew/) | A team of AI-DLC expert agents takes a web feature from a one-sentence requirement through human gates, company checks and an independent review to a local deployment and a sign-off | Kiro Crew app (Python backend, React board), git worktrees, Node.js test runner, Kiro Crew knowledge base | Available |
-| [Embedded development](samples/embedded-development/) | Firmware and controller software in C and C++, including model-based design, validated in simulation and on hardware before an engineer signs off the release | Cross-compilers on a shared Linux build server, QEMU, OpenOCD and GDB, serial console, hardware-in-the-loop bench | In development |
+| [Embedded development](samples/embedded-development/) | Firmware and controller software in C and C++, including model-based design, validated in simulation and on hardware before an engineer signs off the release | Cross toolchain, QEMU, OpenOCD and GDB, serial console, hardware-in-the-loop bench; Kiro on the team's build server, or Kiro Crew | In development |
 | [Enterprise application and data](samples/enterprise-application-and-data/) | Making legacy services, ERP, finance and supply-chain systems and their data usable by agents | OpenAPI specifications, row- and column-level access control, governed MCP servers | Planned |
 | [Mobile app development, iOS first](samples/mobile-app-development/) | Swift and Kotlin apps on release trains, where the definition of done includes app store review and regulatory rules | Amazon EC2 Mac instances, AWS Device Farm | Planned |
 
@@ -53,24 +54,43 @@ for an organization rather than for one engineer.
 
 ![The team board during a run of the agent-team sample](samples/agent-team-on-kiro-crew/docs/images/team-board.jpg)
 
+## Sample overview: embedded development
+
+[`samples/embedded-development/`](samples/embedded-development/) is in development.
+
+- **What.** One firmware feature goes from a requirement and the hardware documents to code that builds with the
+  team's cross toolchain, passes unit and simulation tests on an emulated board, and runs on hardware only behind
+  guarded tools; the engineer who owns the release signs it off with the evidence in front of them.
+- **How.** Hardware facts from datasheets become knowledge cited to a page; AI-DLC phases with people deciding at the
+  requirements, build-start, hardware and release gates; checks the agents cannot change (build, coding rules, memory
+  budget, unit and simulation tests); MCP connectors for build, simulator, flash, serial and bench that enforce
+  approval, safe limits and one session per bench.
+- **Why.** Embedded work differs from web work: requirements live in datasheets, a build-and-flash loop takes minutes
+  to hours, and a failed run can damage hardware. An agent that cannot see the result of its own code is guessing, so
+  the sample closes that loop on an emulator first and on hardware only behind the gates.
+
+The [enterprise application and data](samples/enterprise-application-and-data/) and
+[mobile app](samples/mobile-app-development/) samples are planned; their pages set out what, how and why.
+
 ## How a sample is organized
 
 ```text
 samples/<sample-name>/
-├── README.md            What the sample covers, prerequisites, how to run it, cost, cleanup
-├── aidlc-plugin/        AI-DLC 2.0 plugin for the domain: stages, agents, knowledge, sensors
-├── steering/            Kiro steering rules: domain standards, coding standards, toolchain usage
+├── README.md            What it delivers, how it works and why; prerequisites, cost, cleanup
+├── knowledge/           Standards and reference documents the agents look up and cite
+├── checks/              Checks the team issues and the agents cannot change
 ├── mcp/                 Tool connectors the agents use, with their guardrails
 ├── reference-project/   A small runnable project to practice on
 └── rehearsal/           Guide and scorecard for a one-day guided rehearsal
 ```
 
-The agent-team sample is a Kiro Crew app rather than a plugin, and its README describes its own layout.
+The agent-team sample is a Kiro Crew app, and its README describes its own layout.
 
-A sample adds domain knowledge to AI-DLC as a
-[plugin](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md)
-instead of changing the framework. Teams keep receiving upstream AI-DLC releases, and they can
-enable or disable the domain plugin per project.
+Every sample README answers three questions: what it delivers, how it works, and why it is built that way. The
+knowledge, checks and connectors are plain files and MCP servers, so a sample runs in Kiro or in Kiro Crew. Where a
+team runs AI-DLC Workflows 2.0 directly, the same domain knowledge can be packaged as an AI-DLC
+[plugin](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md),
+which leaves the core framework unchanged.
 
 ## The one-day guided rehearsal
 
@@ -83,7 +103,8 @@ that later delivery is measured against; it is not a productivity claim. See
 
 ## Getting started
 
-1. Install Kiro IDE or Kiro CLI from [kiro.dev](https://kiro.dev).
+1. Install Kiro IDE or Kiro CLI from [kiro.dev](https://kiro.dev), or [Kiro Crew](https://kiro.dev/docs/crew/) for
+   the agent-team sample.
 2. Install AI-DLC by following the
    [AI-DLC Quick Start](https://github.com/awslabs/aidlc-workflows#quick-start).
 3. Pick a sample and follow its README. Each sample lists its own prerequisites, expected cost and

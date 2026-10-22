@@ -1,33 +1,37 @@
 # <Domain> with AI-DLC
 
-> **Status:** planned | in development | released
+> **Status:** planned | in development | available
 
-## What this sample covers
+## What: <the outcome in one line>
 
-<One paragraph: the engineering domain, the toolchain, and what "done" means for a change in this
-domain.>
+<Why teams in this domain get less from AI coding assistants than they expect, in two or three sentences.>
 
-| Step | What is different for this domain | What the sample provides |
-| --- | --- | --- |
-| Requirements and design | | |
-| Build | | |
-| Validate and release | | |
+| You start with | You end with |
+| --- | --- |
+| | |
 
-## Guardrails
+**What it means for the team.** <The change in delivery a team can expect, and what the rehearsal measures. Use
+measured results only when you have them, and say how they were measured.>
 
-<Which actions need human approval, which limits the agents work within, and what evidence each run
-leaves.>
+## How
 
-## Reference project
+1. **Knowledge.** <Which standards and reference documents the agents look up and cite.>
+2. **AI-DLC phases and gates.** <What the agents do in each phase in this domain, and where a person decides.>
+3. **Checks.** <Which rules run as checks the agents cannot change.>
+4. **Tools and guardrails.** <Which connectors the agents use, and which actions wait for a person.>
+5. **Where it runs.** <Kiro IDE or CLI, Kiro Crew, or both.>
 
-<What the reference project is, and how to run it without special hardware or production access.>
+## Why
+
+- <Why the domain needs these steps on top of a general AI-DLC flow.>
+- <Why each design choice above was made.>
 
 ## Layout
 
 | Folder | Contents |
 | --- | --- |
-| `aidlc-plugin/` | AI-DLC 2.0 plugin for the domain |
-| `steering/` | Kiro steering rules |
+| `knowledge/` | Standards and reference documents the agents look up and cite |
+| `checks/` | Checks the team issues and the agents cannot change |
 | `mcp/` | Tool connectors and their guardrails |
 | `reference-project/` | Runnable project to practice on |
 | `rehearsal/` | One-day rehearsal guide and scorecard |

@@ -1,10 +1,11 @@
 # Reference project: embedded development
 
-A small firmware project to practice the sample on.
+A small firmware project to practice the sample on, without hardware.
 
 Planned contents:
 
-- firmware in C for a target that QEMU can emulate, so the whole flow runs without hardware;
-- unit tests on the host and simulation tests on the emulated target;
-- a hardware profile that points the same flow at a real board and bench;
-- a backlog of feature requests to use during the rehearsal.
+- firmware in C for an Arm Cortex-M board that QEMU emulates, built with the Arm GNU Toolchain and CMake;
+- host unit tests, and simulation tests that boot the image in QEMU and check its console output;
+- knowledge for the emulated board, so the agents have hardware facts to cite from the start;
+- a backlog of features to try, such as a new console command, a debounced input driver and a watchdog;
+- a hardware profile that points the same flow at a real board and bench.
