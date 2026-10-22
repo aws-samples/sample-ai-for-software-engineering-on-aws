@@ -18,28 +18,48 @@ as it happens.
 and the credits it used, and opens its Kiro Crew session. The test wall on the right shows the company's 28 checks,
 8 of them still failing at this moment.*
 
-- [Why organizational efficiency](#why-organizational-efficiency)
-- [So what: what one delivery takes](#so-what-what-one-delivery-takes)
-- [How: AI-DLC run by an agent team](#how-ai-dlc-run-by-an-agent-team)
+- [So what: more delivered, earlier revenue, lower cost](#so-what-more-delivered-earlier-revenue-lower-cost)
+- [How: AI-DLC, a knowledge base and a team of agents](#how-ai-dlc-a-knowledge-base-and-a-team-of-agents)
 - [Why Kiro Crew](#why-kiro-crew)
 - [Guardrails](#guardrails) · [Set up](#set-up) · [Run it](#run-it) · [Use it with your own team](#use-it-with-your-own-team) · [Cost](#cost) · [Cleanup](#cleanup)
 
-## Why organizational efficiency
+## So what: more delivered, earlier revenue, lower cost
 
 AI coding assistants make one engineer faster at writing code. How fast an organization delivers is decided
 elsewhere: by how long a requirement waits to be clarified, how many decisions wait for someone, how much work
 comes back from testing, review and release approval, and how much of the company's own rules has to be checked by
-hand. A faster typist does not shorten those waits.
+hand. This sample moves the work between those points to a team of agents and keeps people on the decisions, so
+that the same people deliver more, sooner and at a lower cost per unit of work.
 
-This sample moves the work between those points to a team of agents, and keeps people on the decisions. Each role
-does the job of one AI-DLC expert. The company's standards are written once, as documents the agents look up and as
-checks they cannot change. People decide at gates. Every delivery leaves a record: elapsed time, how much of it
-was agent work and how much waiting for a person, credits used, checks passed, what was sent back and by whom. The
-CTO view rolls those records up, so an organization can see what changed, not just believe it.
+### What it adds up to for an organization (simulated)
 
-## So what: what one delivery takes
+The app's CTO view ships with a simulated development organization: 60 people in 5 business lines, with 12 weeks
+of deliveries before the agent team and 12 weeks after. A new installation opens on these figures. They are
+simulated, to show what the sample measures and the effect it is built to make visible; they are not results.
 
-Measured in October 2026, from the run records the app keeps for each run (`run.json` and `events.jsonl`):
+| Outcome | 12 weeks before | 12 weeks after | Change |
+| --- | --- | --- | --- |
+| **Efficiency**: deliveries, same 60 people | 445 | 1,359 | 3.1 times, from 37 to 113 a week |
+| **Efficiency**: cycle time from issue to release, large / medium / small | 29.8 / 9.9 / 2.0 days | 6.8 / 2.5 / 0.8 days | large requirements about 4 times faster |
+| **Revenue**: new applications and features released | | 489, each 8.8 days earlier on average | value = 489 × 8.8 days × gross margin per day; at CNY 1,000 a day each, about CNY 4.3 million in the 12 weeks |
+| **Cost**: per person-day of work delivered | CNY 2,000 | CNY 452 | 77 % lower, about CNY 6.9 million less development spend in the 12 weeks |
+
+How the CTO view computes them (the values are in `app/cto/history.json`, made by `app/scripts/cto_history.py`):
+a delivery counts once a person has signed it off; cycle time runs from the issue's creation to the release; the
+work a delivery is worth is 1, 5 or 30 person-days for a small, medium or large one, and the people's own effort
+with the agent team is 0.25, 1 or 7 person-days; cost per person-day of work is (people's person-days × CNY 2,000 +
+agent subscriptions at USD 40 per person per month) ÷ the person-days of work delivered. The view does not guess
+revenue: you enter the gross margin a new application or feature brings per day, and it multiplies.
+
+![The CTO view on the simulated organization: three cards for more, faster and cheaper, and deliveries per week before and after](docs/images/cto-view.jpg)
+
+*The CTO view (labelled 模拟企业 · 含实测, simulated organization with measured runs). This screenshot also
+counts six runs that had been signed off on the machine, so its totals are slightly higher than the table.*
+
+### What one delivery takes (measured)
+
+The simulated organization is built around what single deliveries take in real runs. Measured in October 2026,
+from the run records the app keeps for each run (`run.json` and `events.jsonl`):
 
 | Run | Team | Requirement to deployed | Of which waiting for a person | Credits | Checks passed at release | Sent back before release |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -48,16 +68,14 @@ Measured in October 2026, from the run records the app keeps for each run (`run.
 | 3 | New internal web page, 13 agents | 67 min | 27 min at 2 gates | 48 | 26/26 (8 issued by the company) | 1, by the checks |
 | 4 | New internal web page, 13 agents | — (a gate waited overnight) | — | 51 | 26/26 (8 issued by the company) | 3, by the checks; 2 rounds of discussion at the gates |
 
-What the numbers show:
-
 - **Speed.** For the promotion feature, the eight agents needed about 7 to 10 minutes of the elapsed time; the
   rest was a person deciding at a gate. The time a delivery takes becomes mostly the time people need to decide.
 - **Quality.** No change reaches a person's release gate before it passes the company's checks. The first merged
   work in run 2 passed 5 of the 28 company checks; the failures went back to their owners automatically until all
   40 checks passed. A read-only reviewer then read the whole diff. In run 1 the reviewer passed the code and
-  reported that the promotion plan itself failed the pre-launch check; the person sent it back at the release
-  gate, and the plan was changed before it went live.
-- **Cost.** 34 to 51 credits per delivery in these runs, visible per role.
+  reported that the promotion plan itself failed the pre-launch check; the person sent it back at the release gate,
+  and the plan was changed before it went live.
+- **Cost.** 34 to 51 credits per delivery, visible per agent.
 
 ![Delivery detail of a measured run: 17 minutes from issue to sign-off, 8 minutes of agent work, 9 minutes waiting at 3 gates, 34.2 credits, 37 of 37 checks, and a value stream showing each phase, gate and send-back](docs/images/delivery-detail.jpg)
 
@@ -66,18 +84,22 @@ minutes waiting for a person at 3 gates; 34.2 credits across 8 agents; 37 of 37 
 company; sent back once by the person. The value stream shows where the time went; every segment opens the team
 board at that moment.*
 
-**For an organization**, the CTO view rolls signed-off deliveries up into throughput, cycle time by size, and cost
-per unit of work, compared with a period before the change, by business line. It ships with synthetic history so
-that its charts are not empty; those numbers illustrate the measures and are not results. With your own signed-off
-runs and your own baseline it answers the question for your organization. How much faster, and at what quality, is
-what the [one-day guided rehearsal](../../docs/guided-rehearsal.md) measures on your own work.
+### How a new user gets there
 
-![The CTO view on its synthetic history: three cards for more, faster and cheaper, and deliveries per week before and after](docs/images/cto-view.jpg)
+1. **Install** the sample ([Set up](#set-up), about 10 minutes). The CTO view opens on the simulated organization.
+2. **Run a delivery.** On the team board, start the ready-made promotion scenario or write your own one-sentence
+   requirement, answer the gates, and sign the delivery off ([Run it](#run-it)). It joins the CTO view marked 实测
+   (measured), with its own delivery detail: cycle time, agent time versus waiting, credits, checks and send-backs.
+3. **Put a value on earlier releases.** In the CTO view, open 估算价值 (estimate value) and enter the gross margin a
+   new application or feature brings per day.
+4. **Measure your own organization.** Replace `app/cto/history.json` with your own delivery history in the same
+   format (`app/scripts/cto_history.py` shows every field), set your day rate and subscription cost in its `meta`,
+   and keep signing off the deliveries your teams run through the agent team. The same three cards then compare
+   your own period before with your period after.
 
-*The CTO view, here on the synthetic history it ships with (labelled 模拟企业 · 含实测, simulated organization with
-measured runs). Deliveries you sign off are added and marked 实测 (measured).*
+## How: AI-DLC, a knowledge base and a team of agents
 
-## How: AI-DLC run by an agent team
+### AI-DLC: phases and human gates
 
 [AI-DLC](https://github.com/awslabs/aidlc-workflows) (AI-Driven Development Life Cycle) is AWS's open method for
 building software with AI doing the work and people approving at defined points. AI-DLC 2.0 organizes delivery into
@@ -111,9 +133,28 @@ the architect builds on what was decided, not on what the scope role guessed.
 reason. The person picks an answer per question, can choose 其他 (other) and write their own, or open a discussion
 with the role before deciding.*
 
-### The 14 AI-DLC experts
+### The knowledge base: the company's standards, looked up and enforced
 
-All 14 are installed as Kiro Crew members. The two example teams use nine of them; the other five are ready for
+- **Written once, as documents.** The company's standards (such as brand, front-end engineering, personal information,
+  account security, pricing and promotion compliance, margins, price protection) and the descriptions of its data
+  are a Kiro Crew knowledge source.
+- **Matched to the requirement.** For each run the orchestrator picks the standards that apply, by the words in the
+  requirement plus those that always apply (`app/packs/taoyuan/standards.json`), and names them in each role's task
+  together with the knowledge source.
+- **Looked up and cited.** The agents search the knowledge base before they write, read the data files it points
+  to, and cite the rule they followed (for example PRC-1 or MGN-2) in their output. The board counts each agent's
+  lookups.
+- **Enforced as checks.** The same rules exist as checks the company issues (`app/packs/<pack>/tests/enterprise/`),
+  copied into every run and run by the orchestrator. The agents cannot change them.
+
+### A team of agents: the 14 AI-DLC experts, working in parallel
+
+Each role runs as one AI-DLC expert in its own Kiro Crew session, on its own git worktree and branch, and may write
+only its own paths. The orchestrator dispatches roles as soon as what they depend on is settled, so independent
+roles work at the same time; it merges each branch into the run branch, runs the checks after every merge, and sends
+each failure to the role that owns the failing test. A read-only reviewer reads the result before the release gate.
+
+All 14 AI-DLC experts are installed as Kiro Crew members. The two example teams use nine of them; the other five are ready for
 teams you write.
 
 | Expert | Responsibility in AI-DLC | In the example teams |
@@ -307,8 +348,8 @@ cd ui && npm ci && npm run check   # board: type check, component tests, build
 ## Cost
 
 The sample creates no AWS resources. The cost is Kiro Crew credits for the agents' sessions; see
-[Kiro pricing](https://kiro.dev/pricing/). The runs in [So what](#so-what-what-one-delivery-takes) used 34 to 51
-credits each.
+[Kiro pricing](https://kiro.dev/pricing/). The measured runs in [What one delivery takes](#what-one-delivery-takes-measured) used 34 to
+51 credits each.
 
 ## Cleanup
 
