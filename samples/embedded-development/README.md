@@ -11,6 +11,13 @@
 - [Why a framework, and why these blocks](#why-a-framework-and-why-these-blocks)
 - [Contributing an embedded sample](#contributing-an-embedded-sample)
 
+Scenarios built on this framework:
+
+| Scenario | What it shows | Status |
+| --- | --- | --- |
+| [In-vehicle software on a development server next to the bench](in-vehicle-dev-server/) | Static analysis fixes and a refactor of a C++ platform service, cross-built with bounded repair and checked on an emulated target against a baseline log | In development |
+| [Robot firmware and software: a digital twin decides, a person flashes](robot-twin-and-flash-gate/) | A controller firmware change judged in a twin that runs the firmware itself, flashed through a gate a person operates, with a separate software update path | In development |
+
 ## What: the outcome an embedded sample should show
 
 Embedded teams that try AI coding assistants usually find that the assistant writes plausible C quickly, and that
