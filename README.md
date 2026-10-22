@@ -23,7 +23,7 @@ reference project, and a guide for a one-day guided rehearsal. Samples run with 
 | Sample | Scenario | Toolchain highlights | Status |
 | --- | --- | --- | --- |
 | [AI-DLC agent team on Kiro Crew](samples/agent-team-on-kiro-crew/) | A team of AI-DLC expert agents takes a web feature from a one-sentence requirement through human gates, company checks and an independent review to a local deployment and a sign-off | Kiro Crew app (Python backend, React board), git worktrees, Node.js test runner, Kiro Crew knowledge base | Available |
-| [Embedded development](samples/embedded-development/) | Firmware and controller software in C and C++, including model-based design, validated in simulation and on hardware before an engineer signs off the release | AI-DLC plugin `embedded-firmware`; cross toolchain, QEMU, OpenOCD and GDB, serial console, hardware-in-the-loop bench; Kiro on the team's build server | In development |
+| [Embedded development](samples/embedded-development/) | Firmware and controller software in C and C++, including model-based design, validated in simulation and on hardware before an engineer signs off the release | A reference framework; contributors choose the toolchain, such as cross toolchains, QEMU, OpenOCD and GDB, hardware-in-the-loop benches; runs in Kiro and Kiro Crew | Open for contributions |
 | [Enterprise application and data](samples/enterprise-application-and-data/) | Making legacy services, ERP, finance and supply-chain systems and their data usable by agents | OpenAPI specifications, row- and column-level access control, governed MCP servers | Planned |
 | [Mobile app development, iOS first](samples/mobile-app-development/) | Swift and Kotlin apps on release trains, where the definition of done includes app store review and regulatory rules | Amazon EC2 Mac instances, AWS Device Farm | Planned |
 
@@ -56,18 +56,19 @@ for an organization rather than for one engineer.
 
 ## Sample overview: embedded development
 
-[`samples/embedded-development/`](samples/embedded-development/) is in development.
+[`samples/embedded-development/`](samples/embedded-development/) is a reference framework, open for contributions: contributors
+build samples for the embedded scenarios they know, and each one works in Kiro and in Kiro Crew.
 
-- **What.** One firmware feature goes from a requirement and the hardware documents to code that builds with the
-  team's cross toolchain, passes unit and simulation tests on an emulated board, and runs on hardware only behind
-  guarded tools; the engineer who owns the release signs it off with the evidence in front of them.
-- **How.** An AI-DLC plugin, `embedded-firmware`, adds the embedded steps to AI-DLC Workflows 2.0: hardware facts from
-  datasheets cited to a page; people deciding at the requirements, build-start, hardware and release gates; blocking
-  checks the engine runs at the gates (build, coding rules, memory budget, unit and simulation tests); MCP connectors
-  for build, simulator, flash, serial and bench that enforce approval, safe limits and one session per bench.
-- **Why.** Embedded work differs from web work: requirements live in datasheets, a build-and-flash loop takes minutes
-  to hours, and a failed run can damage hardware. An agent that cannot see the result of its own code is guessing, so
-  the sample closes that loop on an emulator first and on hardware only behind the gates.
+- **What.** A sample takes one embedded feature from a requirement and the hardware documents to code that builds
+  with the team's own toolchain and passes tests before any hardware is involved; hardware actions go only through
+  guarded tools, and the engineer who owns the release signs it off with the evidence in front of them.
+- **How.** Five building blocks: hardware knowledge with citations; AI-DLC phases with people deciding at the gates;
+  checks and gates before hardware; tool connectors (MCP servers) with guardrails; and the agent running next to the
+  bench. Built in plain formats (Markdown, MCP servers, scripts), the same parts run in Kiro and in Kiro Crew.
+- **Why.** Embedded toolchains differ widely, so samples come from the people who use them, on one shared framework.
+  Embedded work also differs from web work: requirements live in datasheets, a build-and-flash loop takes minutes to
+  hours, and a failed run can damage hardware, so the loop is closed in simulation first and on hardware only behind
+  the gates.
 
 The [enterprise application and data](samples/enterprise-application-and-data/) and
 [mobile app](samples/mobile-app-development/) samples are planned; their pages set out what, how and why.
@@ -77,22 +78,22 @@ The [enterprise application and data](samples/enterprise-application-and-data/) 
 ```text
 samples/<sample-name>/
 ├── README.md            What it delivers, how it works and why; prerequisites, cost, cleanup
-├── <plugin-name>/       The AI-DLC plugin: stages, checks as gate sensors, agent knowledge
+├── knowledge/           Standards and reference documents the agents look up and cite
+├── checks/              Checks the agents do not control
 ├── mcp/                 Tool connectors the agents use, with their guardrails
 ├── reference-project/   A small runnable project to practice on
 └── rehearsal/           Guide and scorecard for a one-day guided rehearsal
 ```
 
-The agent-team sample is a Kiro Crew app, and its README describes its own layout.
+This layout is a suggestion; a sample may adapt it. The agent-team sample is a Kiro Crew app, and its README
+describes its own layout.
 
-Every sample README answers three questions: what it delivers, how it works, and why it is built that way.
-
-Domain samples are packaged as AI-DLC
-[plugins](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md)
-where the domain allows, starting with embedded development. A plugin is the official extension mechanism of AI-DLC
-Workflows 2.0: a team that already runs AI-DLC adds the domain to its install without changing the framework, keeps
-receiving upstream releases, and enables the plugin per project. The connectors are MCP servers, so they also work
-outside AI-DLC, for example in Kiro Crew.
+Every sample README answers three questions: what it delivers, how it works, and why it is built that way. Samples
+are built from plain parts (Markdown knowledge and rules, MCP servers, checks as scripts) so that they run in Kiro and
+in Kiro Crew. A sample may also package its parts as an AI-DLC
+[plugin](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md),
+the official extension mechanism of AI-DLC Workflows 2.0, so that a team that runs AI-DLC can install it without
+changing the framework.
 
 ## The one-day guided rehearsal
 

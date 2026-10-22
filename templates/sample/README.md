@@ -19,7 +19,8 @@ measured results only when you have them, and say how they were measured.>
 2. **AI-DLC phases and gates.** <What the agents do in each phase in this domain, and where a person decides.>
 3. **Checks.** <Which rules run as checks the agents cannot change.>
 4. **Tools and guardrails.** <Which connectors the agents use, and which actions wait for a person.>
-5. **Where it runs.** <The harnesses the plugin is built for, such as Kiro IDE or CLI; or Kiro Crew.>
+5. **Where it runs.** <How the sample runs in Kiro and in Kiro Crew, and whether it is also packaged as an AI-DLC
+   plugin.>
 
 ## Why
 
@@ -28,9 +29,12 @@ measured results only when you have them, and say how they were measured.>
 
 ## Layout
 
+A suggested layout; adapt it to the sample.
+
 | Folder | Contents |
 | --- | --- |
-| `<plugin-name>/` | The AI-DLC plugin: stages, checks as gate sensors, agent knowledge |
+| `knowledge/` | Standards and reference documents the agents look up and cite |
+| `checks/` | Checks the agents do not control |
 | `mcp/` | Tool connectors and their guardrails |
 | `reference-project/` | Runnable project to practice on |
 | `rehearsal/` | One-day rehearsal guide and scorecard |
