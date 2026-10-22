@@ -33,6 +33,10 @@ reference project, and a guide for a one-day guided rehearsal. Samples run with 
 It turns a one-sentence requirement into a delivery by a team of AI-DLC expert agents, and shows what that changes
 for an organization rather than for one engineer.
 
+- **Try it in 10 minutes.** On a Mac with Kiro Crew and Node.js 22: clone this repository, run `bash setup.sh` in
+  the sample's folder, and hand a one-sentence requirement to the team; `cleanup.sh` removes what setup created. A run
+  costs Kiro Crew credits (34 to 51 per delivery in the measured runs) and creates no AWS resources. See
+  [Quick start](samples/agent-team-on-kiro-crew/README.md#quick-start).
 - **So what: more delivered, earlier revenue, lower cost.** The sample's CTO view opens on a simulated organization
   of 60 people: after it adopts the agent team it delivers 3.1 times as much in 12 weeks, large requirements take
   6.8 days instead of 29.8, new applications and features reach users 8.8 days earlier, and a person-day of work
@@ -40,10 +44,6 @@ for an organization rather than for one engineer.
   deliveries. In measured runs, a promotion feature built by 8 agents went from requirement to local deployment in
   13 to 20 minutes, of which the agents needed about 7 to 10, and passed all 40 checks, 28 of them issued by the
   company, before a person approved the release.
-- **Try it in 10 minutes.** On a Mac with Kiro Crew and Node.js 22: clone this repository, run `bash setup.sh` in
-  the sample's folder, and hand a one-sentence requirement to the team; `cleanup.sh` removes what setup created. A run
-  costs Kiro Crew credits (34 to 51 per delivery in the measured runs) and creates no AWS resources. See
-  [Get started](samples/agent-team-on-kiro-crew/README.md#get-started-in-10-minutes).
 - **How: AI-DLC, a knowledge base and a team of agents.** An orchestrator follows the AI-DLC phases with human gates
   (scope, build start, release) where a person answers the open questions one by one. The company's standards live
   in a knowledge base that the agents search and cite, and the same rules run as checks the agents cannot change.
