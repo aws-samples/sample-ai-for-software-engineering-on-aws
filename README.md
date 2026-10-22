@@ -23,7 +23,7 @@ reference project, and a guide for a one-day guided rehearsal. Samples run with 
 | Sample | Scenario | Toolchain highlights | Status |
 | --- | --- | --- | --- |
 | [AI-DLC agent team on Kiro Crew](samples/agent-team-on-kiro-crew/) | A team of AI-DLC expert agents takes a web feature from a one-sentence requirement through human gates, company checks and an independent review to a local deployment and a sign-off | Kiro Crew app (Python backend, React board), git worktrees, Node.js test runner, Kiro Crew knowledge base | Available |
-| [Embedded development](samples/embedded-development/) | Firmware and controller software in C and C++, including model-based design, validated in simulation and on hardware before an engineer signs off the release | Cross toolchain, QEMU, OpenOCD and GDB, serial console, hardware-in-the-loop bench; Kiro on the team's build server, or Kiro Crew | In development |
+| [Embedded development](samples/embedded-development/) | Firmware and controller software in C and C++, including model-based design, validated in simulation and on hardware before an engineer signs off the release | AI-DLC plugin `embedded-firmware`; cross toolchain, QEMU, OpenOCD and GDB, serial console, hardware-in-the-loop bench; Kiro on the team's build server | In development |
 | [Enterprise application and data](samples/enterprise-application-and-data/) | Making legacy services, ERP, finance and supply-chain systems and their data usable by agents | OpenAPI specifications, row- and column-level access control, governed MCP servers | Planned |
 | [Mobile app development, iOS first](samples/mobile-app-development/) | Swift and Kotlin apps on release trains, where the definition of done includes app store review and regulatory rules | Amazon EC2 Mac instances, AWS Device Farm | Planned |
 
@@ -61,10 +61,10 @@ for an organization rather than for one engineer.
 - **What.** One firmware feature goes from a requirement and the hardware documents to code that builds with the
   team's cross toolchain, passes unit and simulation tests on an emulated board, and runs on hardware only behind
   guarded tools; the engineer who owns the release signs it off with the evidence in front of them.
-- **How.** Hardware facts from datasheets become knowledge cited to a page; AI-DLC phases with people deciding at the
-  requirements, build-start, hardware and release gates; checks the agents cannot change (build, coding rules, memory
-  budget, unit and simulation tests); MCP connectors for build, simulator, flash, serial and bench that enforce
-  approval, safe limits and one session per bench.
+- **How.** An AI-DLC plugin, `embedded-firmware`, adds the embedded steps to AI-DLC Workflows 2.0: hardware facts from
+  datasheets cited to a page; people deciding at the requirements, build-start, hardware and release gates; blocking
+  checks the engine runs at the gates (build, coding rules, memory budget, unit and simulation tests); MCP connectors
+  for build, simulator, flash, serial and bench that enforce approval, safe limits and one session per bench.
 - **Why.** Embedded work differs from web work: requirements live in datasheets, a build-and-flash loop takes minutes
   to hours, and a failed run can damage hardware. An agent that cannot see the result of its own code is guessing, so
   the sample closes that loop on an emulator first and on hardware only behind the gates.
@@ -77,8 +77,7 @@ The [enterprise application and data](samples/enterprise-application-and-data/) 
 ```text
 samples/<sample-name>/
 ├── README.md            What it delivers, how it works and why; prerequisites, cost, cleanup
-├── knowledge/           Standards and reference documents the agents look up and cite
-├── checks/              Checks the team issues and the agents cannot change
+├── <plugin-name>/       The AI-DLC plugin: stages, checks as gate sensors, agent knowledge
 ├── mcp/                 Tool connectors the agents use, with their guardrails
 ├── reference-project/   A small runnable project to practice on
 └── rehearsal/           Guide and scorecard for a one-day guided rehearsal
@@ -86,11 +85,14 @@ samples/<sample-name>/
 
 The agent-team sample is a Kiro Crew app, and its README describes its own layout.
 
-Every sample README answers three questions: what it delivers, how it works, and why it is built that way. The
-knowledge, checks and connectors are plain files and MCP servers, so a sample runs in Kiro or in Kiro Crew. Where a
-team runs AI-DLC Workflows 2.0 directly, the same domain knowledge can be packaged as an AI-DLC
-[plugin](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md),
-which leaves the core framework unchanged.
+Every sample README answers three questions: what it delivers, how it works, and why it is built that way.
+
+Domain samples are packaged as AI-DLC
+[plugins](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md)
+where the domain allows, starting with embedded development. A plugin is the official extension mechanism of AI-DLC
+Workflows 2.0: a team that already runs AI-DLC adds the domain to its install without changing the framework, keeps
+receiving upstream releases, and enables the plugin per project. The connectors are MCP servers, so they also work
+outside AI-DLC, for example in Kiro Crew.
 
 ## The one-day guided rehearsal
 
