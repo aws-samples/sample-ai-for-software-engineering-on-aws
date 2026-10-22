@@ -1,77 +1,127 @@
 # Embedded development with AI-DLC
 
-> **Status: in development.** The structure and scope below are agreed; the plugin, connectors and
-> reference project are being built. Contributions are welcome; see
-> [Contributing to this sample](#contributing-to-this-sample).
+> **Status: open for contributions.** This page is a reference framework for embedded samples: the outcome a sample
+> should show, the building blocks it is expected to cover, and why. Contributors choose the scenario, the toolchain
+> and the implementation. Whatever they build must work in [Kiro](https://kiro.dev) and in
+> [Kiro Crew](https://kiro.dev/docs/crew/).
 
-## What this sample covers
+- [What: the outcome an embedded sample should show](#what-the-outcome-an-embedded-sample-should-show)
+- [How: five building blocks](#how-five-building-blocks)
+- [Works in Kiro and in Kiro Crew](#works-in-kiro-and-in-kiro-crew)
+- [Why a framework, and why these blocks](#why-a-framework-and-why-these-blocks)
+- [Contributing an embedded sample](#contributing-an-embedded-sample)
 
-Firmware and controller software in C and C++, including code generated from model-based design. In
-this domain the code is bound to hardware, a build-and-flash cycle can take minutes to hours, and a
-change is not done until it passes simulation and hardware-in-the-loop validation and an engineer
-signs off the release.
+## What: the outcome an embedded sample should show
 
-The sample takes one feature through AI-DLC and shows what changes for an embedded team at each step.
+Embedded teams that try AI coding assistants usually find that the assistant writes plausible C quickly, and that
+little of it survives contact with the real target: it does not know the board, it cannot see the result of a build
+or a flash, and nobody wants it touching a bench unsupervised.
 
-| Step | What is different for embedded teams | What the sample provides |
-| --- | --- | --- |
-| Requirements and design | Requirements come from datasheets, reference manuals, schematics and model diagrams, not only from user stories | A knowledge-ingestion step that turns hardware documents into Markdown with page references; steering for the hardware specification |
-| Build | Code drives registers and HALs; builds use cross toolchains, often on a shared Linux build server; repositories can be very large | Steering for coding standards and toolchain usage; skills that a whole team shares; connectors for build, simulator, flash and debug, and serial console |
-| Validate and release | Software-in-the-loop comes before hardware-in-the-loop; a failed run can damage hardware or create a safety risk | Three gates (action, physical, quality) and an evidence record for every run |
+A sample in this folder takes one embedded feature through AI-DLC on a realistic toolchain and shows a team how to
+change that. A good sample gets from the left column to the right one:
 
-## Gates and guardrails
-
-The guardrails are on from the first run, not added later.
-
-- **Action gate.** Flashing, power cycling and hardware-in-the-loop write operations need a person's
-  approval every time.
-- **Physical gate.** Thresholds such as battery level, supply voltage and temperature block agent
-  actions outside a safe range.
-- **Quality gate.** A build moves to hardware only after its simulation tests pass, and to release
-  only after hardware-in-the-loop evidence is reviewed.
-- **Lease.** One session holds a bench or target board at a time.
-- **Operation digest.** Every physical action leaves a record for audit and replay.
-- **Reconcile before retry.** After an interruption the target state is treated as unknown and checked
-  before anything else runs; nothing retries automatically.
-- **Permission tiers.** Read-only, controlled write and physical operation, granted by role.
-- **No `--trust-all-tools`.** Tools are approved one by one.
-
-## Deployment pattern: the agent next to the bench
-
-Many embedded teams build on a shared Linux development server that can reach their benches, and keep
-source code, toolchains, license dongles and benches on their own network. The sample runs the agent
-on that server, which engineers reach over remote SSH. Builds, flashing and on-target checks then run
-inside the team's network, and only the agent's service traffic leaves it, through the team's egress
-proxy. The sample documents this setup.
-
-## Reference project
-
-The reference project runs on a simulated target (QEMU), so you can follow the whole flow without
-hardware. A hardware profile shows how to point the same flow at a real board and bench.
-
-## Layout
-
-| Folder | Contents |
+| A team starts with | The sample shows how to end with |
 | --- | --- |
-| [`aidlc-plugin/`](aidlc-plugin/) | AI-DLC 2.0 plugin: embedded stages, agent knowledge, sensors for the gates |
-| [`steering/`](steering/) | Kiro steering for hardware specifications, coding standards and toolchains |
-| [`mcp/`](mcp/) | Connectors for build, simulator, flash and debug, serial console and bench, with guardrails |
-| [`reference-project/`](reference-project/) | Firmware project that runs on QEMU, plus a hardware profile |
-| [`rehearsal/`](rehearsal/) | One-day rehearsal guide and scorecard for embedded teams |
+| A requirement and the hardware documents: datasheets, reference manuals, schematics, models | Requirements with acceptance criteria, each hardware fact traceable to its source |
+| The team's coding standard, toolchain and resource limits | Code that builds with the team's own toolchain and stays within its limits |
+| The team's definition of done | Tests that pass before any hardware is involved, in simulation or emulation where the domain allows, and a record of every build, test and hardware action |
+| A bench the team does not want agents to damage | Hardware actions only through guarded tools, with a person's approval |
+| An engineer who owns the release | The same engineer signs it off, with the evidence in front of them |
 
-## Prerequisites, cost and cleanup
+For the team, the time an engineer spends on a feature moves from writing and re-flashing code to deciding and
+reviewing evidence, and defects are caught before a board is involved. A sample states how it measures that, for
+example with the one-day [guided rehearsal](../../docs/guided-rehearsal.md).
 
-To be published with the first release. The simulated-target path will run on a single Linux
-development machine or one Amazon EC2 instance.
+## How: five building blocks
 
-## Contributing to this sample
+These are the parts field engagements have found necessary. Each block lists a reference approach; a sample may
+implement a block differently, or leave out one that does not apply to its scenario, and says why.
 
-We are especially interested in:
+### 1. Hardware knowledge with citations
 
-- model-based design, including code generated from Simulink models;
-- in-vehicle infotainment and HMI user interface development and testing;
-- hardware-in-the-loop bench integration;
-- turning datasheets and schematics into knowledge that agents can cite.
+Hardware facts (registers, pin assignments, timing, electrical limits) are extracted from the documents into
+Markdown with their source and page, and checked against those pages. Agents cite the entry they used, so a reviewer
+checks evidence instead of the model's memory of a part. Complex drawings may need their own processing step, for
+example a vision model plus cross-checks, before the facts reach the development flow.
 
-See [docs/adding-a-sample.md](../../docs/adding-a-sample.md) for the rules every contribution
-follows.
+### 2. AI-DLC phases with people deciding at the gates
+
+A reference mapping, to adapt to the scenario:
+
+| AI-DLC phase | Embedded work | Human gate |
+| --- | --- | --- |
+| Inception | Requirements from the hardware facts; driver, interface, timing and resource design; work split | Requirements, then build start |
+| Construction | Code and tests; build with the cross toolchain; tests in simulation or emulation | The checks in block 3 decide |
+| Operation | Flash and test on a real board and bench, where the sample includes hardware | Each irreversible hardware action |
+| Release | Evidence collected for the release | The engineer who owns the release signs off |
+
+### 3. Checks and gates before hardware
+
+The team's rules run as checks that the agents do not control: for example, the build with warnings treated as
+errors, coding rules, resource limits, unit tests and simulation tests. A failure goes back to the work that caused
+it. Three gates are a useful reference:
+
+- **Quality gate:** nothing reaches hardware until its checks pass in simulation or emulation.
+- **Action gate:** flashing, power cycling and bench write operations wait for a person's approval, every time.
+- **Physical gate:** limits such as battery level, supply voltage and temperature block an action outside a safe
+  range.
+
+### 4. Tool connectors with guardrails
+
+Agents reach the toolchain through MCP servers: build, simulator, flash and debug, serial console, bench. The
+connectors enforce their guardrails themselves, whatever the agent session allows. A reference set: one session per
+bench or board at a time; a record of every physical action; after an interruption, check the target's state before
+anything else runs, with no automatic retry; read-only, controlled-write and physical permissions by role; and no
+`--trust-all-tools`.
+
+### 5. The agent next to the bench
+
+Many embedded teams build on a shared Linux development server that can reach their benches, and keep code,
+toolchains, license dongles and benches on their own network. A reference pattern is to run the agent on that
+server, which engineers reach over remote SSH, so that builds, flashing and on-target checks stay inside the network.
+What leaves it is the agent's traffic to the model service, which includes the code and documents the agent reads;
+use only material you are allowed to send there.
+
+## Works in Kiro and in Kiro Crew
+
+Build the parts in plain formats, and the same sample runs in either:
+
+| Part | Format | In Kiro (IDE or CLI) | In Kiro Crew |
+| --- | --- | --- | --- |
+| Knowledge and rules | Markdown | Steering files, or the knowledge of an AI-DLC plugin | A knowledge source the agents search and cite |
+| Tool connectors | MCP servers | MCP configuration | MCP servers of a custom agent or an app |
+| Checks | Command-line scripts with clear pass or fail | Hooks, or blocking gate sensors in an AI-DLC plugin | Checks run by an app, as in the [agent-team sample](../agent-team-on-kiro-crew/) |
+| Agent roles (optional) | Markdown prompts | Custom agents | Members of a team |
+
+A sample may also package its parts as an
+[AI-DLC plugin](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md),
+the official extension mechanism of AI-DLC Workflows 2.0, so that any team that runs AI-DLC can install it without
+changing the framework. Keep the plain parts usable on their own so that the sample still works in Kiro Crew.
+
+## Why a framework, and why these blocks
+
+- **Embedded toolchains differ widely.** Microcontroller firmware, model-based design and in-vehicle software each
+  have their own tools, tests and release rules. Samples built by people who work with those toolchains every day are
+  more useful than one generic implementation; a shared framework keeps them comparable and reusable.
+- **Embedded work is not web work.** Requirements live in datasheets and models, a build-and-flash loop takes minutes
+  to hours, a failed run can damage hardware, and benches sit on closed networks. A general AI-DLC flow does not cover
+  this; the five blocks do.
+- **No feedback, no reliable firmware.** An agent that cannot build, run and read the result of its own code is
+  guessing. Close the loop in simulation first, where it is cheap and safe, and on hardware only behind the gates.
+- **Citations instead of trust.** Engineers review evidence traced to a source, not the model's memory.
+- **Rules enforced, not suggested.** Checks the agents do not control make the output reviewable.
+- **Engineers keep the safety decisions.** AI output is not safety evidence on its own; the record a run leaves
+  supports the team's existing safety process.
+
+## Contributing an embedded sample
+
+1. **Pick a scenario you know.** For example: in-vehicle software built on a development server next to the bench;
+   model-based design, from models to code on the target; microcontroller firmware on an emulated board.
+2. **Give it its own folder,** `samples/embedded-development/<scenario>/`, with a README that answers what the
+   sample delivers, how it works and why, and that maps it to the five building blocks.
+3. **State how it runs in Kiro and in Kiro Crew.**
+4. **Follow the repository rules** in [docs/adding-a-sample.md](../../docs/adding-a-sample.md): synthetic data and no
+   customer information, a simulator or emulator wherever the domain allows, a person's approval on irreversible
+   actions, and prerequisites, cost and cleanup.
+
+Everything else, including the toolchain, the layout and the packaging, is the contributor's choice.

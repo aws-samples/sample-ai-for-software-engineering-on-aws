@@ -29,8 +29,11 @@ otherwise have to work out on its own how to fit AI-DLC to its work.
 
 1. Copy [`templates/sample/`](../templates/sample/) to `samples/<sample-name>/`, using a lowercase,
    hyphenated name.
-2. Fill in the sample README: scenario, what is different in this domain, what the sample provides,
-   guardrails, layout, prerequisites, cost and cleanup.
+2. Fill in the sample README so that it answers what the sample delivers, how it works and why it is
+   built that way, followed by layout, prerequisites, cost and cleanup. Build the parts in plain formats
+   (Markdown, MCP servers, scripts) so the sample runs in Kiro and in Kiro Crew, and say how. Packaging the
+   parts as an AI-DLC plugin as well is welcome: scaffold it with the official `aidlc-plugin-create.ts` and
+   check it with `aidlc-plugin-validate.ts`.
 3. Add the sample to the table in the [repository README](../README.md#samples).
 4. Open a pull request from a branch. Keep each pull request focused on one sample or one part of a
    sample.

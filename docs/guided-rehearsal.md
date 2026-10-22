@@ -18,14 +18,14 @@ of on a demo project.
    team's normal work.
 2. Write down the team's definition of done for that feature: tests, reviews, validation steps and any
    release checks.
-3. Set up access: AWS account, Kiro, AI-DLC with the sample's plugin, and the tools the sample's
-   connectors need.
+3. Set up access: AWS account, Kiro or Kiro Crew, the sample's knowledge and checks, and the tools the
+   sample's connectors need.
 4. Run the sample's reference project once in the team's environment to confirm that the toolchain and
    connectors work.
 
 ## On the day
 
-1. Start an AI-DLC workflow for the feature, with the sample's plugin enabled.
+1. Start an AI-DLC workflow for the feature with the sample's knowledge, checks and connectors in place.
 2. People review and approve each AI-DLC gate: requirements, design, and each unit of work.
 3. Agents build within what people approved; every irreversible action waits for a person.
 4. Close by scoring the result against the definition of done.
@@ -34,7 +34,7 @@ of on a demo project.
 
 - the feature, in its own repository;
 - the feature's tests, running in its own CI;
-- the steering rules, knowledge and connector settings the agents worked under.
+- the knowledge, checks and connector settings the agents worked under.
 
 ## The baseline
 
