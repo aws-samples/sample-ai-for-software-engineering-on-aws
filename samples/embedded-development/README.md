@@ -11,6 +11,12 @@
 - [Why a framework, and why these blocks](#why-a-framework-and-why-these-blocks)
 - [Contributing an embedded sample](#contributing-an-embedded-sample)
 
+Scenarios built on this framework:
+
+| Scenario | What it shows | Status |
+| --- | --- | --- |
+| [In-vehicle software on a development server next to the bench](in-vehicle-dev-server/) | Static analysis fixes and a refactor of a C++ platform service, cross-built with bounded repair and checked on an emulated target against a baseline log | In development |
+
 ## What: the outcome an embedded sample should show
 
 Embedded teams that try AI coding assistants usually find that the assistant writes plausible C quickly, and that
