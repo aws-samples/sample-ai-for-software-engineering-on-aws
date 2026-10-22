@@ -40,6 +40,10 @@ for an organization rather than for one engineer.
   deliveries. In measured runs, a promotion feature built by 8 agents went from requirement to local deployment in
   13 to 20 minutes, of which the agents needed about 7 to 10, and passed all 40 checks, 28 of them issued by the
   company, before a person approved the release.
+- **Try it in 10 minutes.** On a Mac with Kiro Crew and Node.js 22: clone this repository, run `bash setup.sh` in
+  the sample's folder, and hand a one-sentence requirement to the team; `cleanup.sh` removes what setup created. A run
+  costs Kiro Crew credits (34 to 51 per delivery in the measured runs) and creates no AWS resources. See
+  [Get started](samples/agent-team-on-kiro-crew/README.md#get-started-in-10-minutes).
 - **How: AI-DLC, a knowledge base and a team of agents.** An orchestrator follows the AI-DLC phases with human gates
   (scope, build start, release) where a person answers the open questions one by one. The company's standards live
   in a knowledge base that the agents search and cite, and the same rules run as checks the agents cannot change.
@@ -48,9 +52,6 @@ for an organization rather than for one engineer.
 - **Why Kiro Crew.** The sample is a Kiro Crew app. Kiro Crew is open source and provides the agents' sessions, the
   members that make up a team, a knowledge base, memory that builds from the work, and an app platform with explicit
   trust and permissions; the app uses only Kiro Crew's local API.
-- **What you need.** A Mac with Kiro Crew and Node.js 22; `setup.sh` installs everything in about 10 minutes and
-  `cleanup.sh` removes what it created. A run costs Kiro Crew credits (34 to 51 per delivery in the measured runs) and
-  creates no AWS resources.
 
 ![The team board during a run of the agent-team sample](samples/agent-team-on-kiro-crew/docs/images/team-board.jpg)
 

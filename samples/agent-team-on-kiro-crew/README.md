@@ -18,10 +18,14 @@ as it happens.
 and the credits it used, and opens its Kiro Crew session. The test wall on the right shows the company's 28 checks,
 8 of them still failing at this moment.*
 
+**Try it yourself:** [install it and run a first delivery in about 10 minutes](#get-started-in-10-minutes) on a
+Mac with Kiro Crew.
+
 - [So what: more delivered, earlier revenue, lower cost](#so-what-more-delivered-earlier-revenue-lower-cost)
+- [Get started in 10 minutes](#get-started-in-10-minutes)
 - [How: AI-DLC, a knowledge base and a team of agents](#how-ai-dlc-a-knowledge-base-and-a-team-of-agents)
 - [Why Kiro Crew](#why-kiro-crew)
-- [Guardrails](#guardrails) · [Set up](#set-up) · [Run it](#run-it) · [Use it with your own team](#use-it-with-your-own-team) · [Cost](#cost) · [Cleanup](#cleanup)
+- Reference: [Guardrails](#guardrails) · [Use it with your own team](#use-it-with-your-own-team) · [The example](#the-example) · [Layout](#layout) · [Develop and test](#develop-and-test) · [Known limitations](#known-limitations)
 
 ## So what: more delivered, earlier revenue, lower cost
 
@@ -84,18 +88,78 @@ minutes waiting for a person at 3 gates; 34.2 credits across 8 agents; 37 of 37 
 company; sent back once by the person. The value stream shows where the time went; every segment opens the team
 board at that moment.*
 
-### How a new user gets there
+## Get started in 10 minutes
 
-1. **Install** the sample ([Set up](#set-up), about 10 minutes). The CTO view opens on the simulated organization.
-2. **Run a delivery.** On the team board, start the ready-made promotion scenario or write your own one-sentence
-   requirement, answer the gates, and sign the delivery off ([Run it](#run-it)). It joins the CTO view marked 实测
-   (measured), with its own delivery detail: cycle time, agent time versus waiting, credits, checks and send-backs.
-3. **Put a value on earlier releases.** In the CTO view, open 估算价值 (estimate value) and enter the gross margin a
-   new application or feature brings per day.
-4. **Measure your own organization.** Replace `app/cto/history.json` with your own delivery history in the same
-   format (`app/scripts/cto_history.py` shows every field), set your day rate and subscription cost in its `meta`,
-   and keep signing off the deliveries your teams run through the agent team. The same three cards then compare
-   your own period before with your period after.
+### Prerequisites
+
+- A Mac with macOS. The scripts and the app have been tested on macOS on Apple silicon only.
+- [Kiro Crew](https://kiro.dev/docs/crew/) 0.8.0 or newer, running and signed in, with credits on the account. The
+  sample has been run end to end on Kiro Crew 0.8.0.9 and 0.9.0.4.
+- Node.js 22 or newer, git and python3 (`xcode-select --install` provides git and python3).
+- Network access to registry.npmjs.org for the board's build dependencies (about 100 MB).
+
+### Install
+
+```bash
+git clone https://github.com/aws-samples/sample-ai-for-software-engineering-on-aws.git
+cd sample-ai-for-software-engineering-on-aws/samples/agent-team-on-kiro-crew
+bash setup.sh
+```
+
+`setup.sh` takes about 10 minutes and is safe to re-run. It:
+
+1. checks the prerequisites and that Kiro Crew is running;
+2. builds the board, installs the app into Kiro Crew and adds it to Kiro Crew's trusted apps (this one app only).
+   It asks once whether the app may auto-approve the sessions it opens (see [Guardrails](#guardrails)). If Kiro Crew
+   keeps its trusted apps in a local configuration file that the API cannot change, setup says so: add `aidlc-team`
+   to the trusted apps in Kiro Crew's settings and run `setup.sh` again;
+3. installs the example: files under `~/workplace/taoyuan/`, 15 agent templates in `~/.kiro/agents/`, a Kiro Crew
+   workspace, 15 members and a knowledge source. What exists already is kept; an agent template with the same name
+   and other content is backed up to `~/.kiro/agents/.aidlc-team-sample-backup/` before it is replaced;
+4. waits until Kiro Crew has indexed the knowledge source.
+
+Keep the folder where it is after setup: Kiro Crew installs the app from it.
+
+### Run your first delivery
+
+1. In Kiro Crew, open **Apps → AI-DLC 多 Agent 团队**. The app opens on the CTO view (CTO 视图). Switch to
+   **团队看板** (team board) in the app bar.
+2. Click **新需求** (new requirement). Pick the ready-made promotion scenario to fill in the box, or write your own
+   requirement in one sentence. Leave the team on automatic: the preview shows which team the words select, which
+   members it uses and which standards apply. Click **交给团队** (hand to the team).
+3. Watch the team graph. Hover over a role to see its task, what it did and the credits it used, and to open its
+   Kiro Crew session. The test wall turns green as checks pass; failures go back to their owners.
+4. At each gate, click **✓ 批准** (approve), **讨论** (discuss) or **退回** (send back). The dialog shows the role's
+   documents, the questions it wants you to decide, and the discussion so far.
+5. When the run has been delivered, the site is deployed: open it from the deploy role's outputs (**看产出 →
+   打开网站**, view outputs → open site), or at the port the board shows. Then fill in **签字人** (who signs) and click
+   **签字放行** (sign off). The delivery joins the CTO view marked 实测 (measured), with its own delivery detail:
+   cycle time, agent time versus waiting, credits, checks and send-backs.
+
+The sample creates no AWS resources. A run costs Kiro Crew credits for the agents' sessions (see
+[Kiro pricing](https://kiro.dev/pricing/)); the measured runs above used 34 to 51 credits each.
+
+### See what it adds up to
+
+- **Revenue from earlier releases.** In the CTO view, open 估算价值 (estimate value) and enter the gross margin a new
+  application or feature brings per day.
+- **Your own organization.** Replace `app/cto/history.json` with your own delivery history in the same format
+  (`app/scripts/cto_history.py` shows every field), set your day rate and subscription cost in its `meta`, and keep
+  signing off the deliveries your teams run through the agent team. The same three cards then compare your own
+  period before with your period after.
+- **Your own team and standards.** See [Use it with your own team](#use-it-with-your-own-team).
+
+### Remove it
+
+```bash
+bash cleanup.sh --dry-run   # list what will be removed
+bash cleanup.sh             # remove it: type "remove" to confirm
+```
+
+It removes only what `setup.sh` recorded as created in `.install-state.json`: the app (stopping any site it
+deployed), the sessions of finished runs, the app's data and the run repositories in `~/workplace/aidlc-team/`; the
+members, the workspace and the knowledge source; the agent templates, putting back any it replaced; and
+`~/workplace/taoyuan/`. Whatever existed before setup is left alone, and so is Kiro Crew itself.
 
 ## How: AI-DLC, a knowledge base and a team of agents
 
@@ -208,31 +272,15 @@ an app platform. The sample is a Kiro Crew app, and leans on what Kiro Crew alre
 | Company standards the agents cite | [Knowledge](https://kiro.dev/docs/crew/features/): a local folder becomes an indexed source, and the agents search it and cite the rule they followed |
 | Getting better over time | [Memory](https://kiro.dev/docs/crew/features/) that builds from conversations (preferences, history, lessons and semantic facts) and stays visible and editable |
 | Control over what the app may do | Third-party apps are off until trusted; an app acts on sessions only after you grant it; the app asks only for the API routes it uses (`app.json`) |
-| Seeing a team at work | Agent Worlds, a built-in app, shows every agent of the run at its desk |
+| An open app ecosystem | Apps work side by side: Agent Worlds, another app that comes with Kiro Crew, shows this app's agents at their desks with no integration code |
 
 Because the app talks to Kiro Crew only through its local API, it needs no change to Kiro Crew, and the same app
 works wherever Kiro Crew runs.
 
 ![Agent Worlds during a run: each agent of the team at a desk, active or idle, with the task board on the wall](docs/images/agent-worlds.jpg)
 
-*Agent Worlds, built into Kiro Crew, during the same run: one desk per agent, active or idle, and the to-do,
-in-progress and done board on the wall.*
-
-## The example
-
-The sample ships example information that simulates the business rules, data and delivery flow of a
-consumer-electronics retailer, so that the team has realistic standards to follow and data to work with. All
-names, numbers and records in it are invented. `example/` holds:
-
-- `knowledge/`: the standards (brand, front-end engineering, personal-information display, account security,
-  annual-party lottery rules, price and promotion compliance, margin and pricing, price protection) and
-  descriptions of the data;
-- `data/`: products, 60 days of orders, a promotion plan, an employee list, prizes and a list of weak passwords;
-- `agents/make_templates.py`: builds the Kiro agent templates of the 15 members, the 14 AI-DLC experts and the
-  brand-motion expert the example adds.
-
-The app's `starters/` (project templates), `packs/` (the checks the company issues) and `team/roster-taoyuan.json`
-(the development team the board shows) belong to the same example.
+*Agent Worlds, another Kiro Crew app, during the same run: it picks up this app's agents by itself, one desk per
+agent.*
 
 ## Guardrails
 
@@ -264,61 +312,6 @@ What it does not enforce, and how to run it safely:
 - Generated code is not reviewed for production use. Read what the team built before you use any of it.
   Generative AI can make mistakes; see the [AWS Responsible AI Policy](https://aws.amazon.com/ai/responsible-ai/policy/).
 
-## Layout
-
-| Path | Contents |
-| --- | --- |
-| `app/` | The Kiro Crew app `aidlc-team`: orchestrator (`backend/`), board and CTO view (`ui/`), teams (`team/`), starter projects (`starters/`), company checks (`packs/`), tests. See [app/README.md](app/README.md) |
-| `example/` | The example information: knowledge base, data, member templates |
-| `vendor/aidlc-workflows/` | The 14 AI-DLC expert definitions, copied unmodified from awslabs/aidlc-workflows (MIT-0) |
-| `docs/images/` | The screenshots on this page |
-| `setup.sh`, `cleanup.sh`, `scripts/` | Install into Kiro Crew; remove what setup created (recorded in `.install-state.json`) |
-
-## Prerequisites
-
-- A Mac with macOS. The scripts and the app have been tested on macOS on Apple silicon only.
-- [Kiro Crew](https://kiro.dev/docs/crew/) 0.8.0 or newer, running and signed in, with credits on the account. The
-  sample has been run end to end on Kiro Crew 0.8.0.9 and 0.9.0.4.
-- Node.js 22 or newer, git and python3 (`xcode-select --install` provides git and python3).
-- Network access to registry.npmjs.org for the board's build dependencies (about 100 MB).
-
-## Set up
-
-```bash
-git clone https://github.com/aws-samples/sample-ai-for-software-engineering-on-aws.git
-cd sample-ai-for-software-engineering-on-aws/samples/agent-team-on-kiro-crew
-bash setup.sh
-```
-
-`setup.sh` takes about 10 minutes and is safe to re-run. It:
-
-1. checks the prerequisites and that Kiro Crew is running;
-2. builds the board, installs the app into Kiro Crew and adds it to Kiro Crew's trusted apps (this one app only).
-   It asks once whether the app may auto-approve the sessions it opens (see [Guardrails](#guardrails)). If Kiro Crew
-   keeps its trusted apps in a local configuration file that the API cannot change, setup says so: add `aidlc-team`
-   to the trusted apps in Kiro Crew's settings and run `setup.sh` again;
-3. installs the example: files under `~/workplace/taoyuan/`, 15 agent templates in `~/.kiro/agents/`, a Kiro Crew
-   workspace, 15 members and a knowledge source. What exists already is kept; an agent template with the same name
-   and other content is backed up to `~/.kiro/agents/.aidlc-team-sample-backup/` before it is replaced;
-4. waits until Kiro Crew has indexed the knowledge source.
-
-Keep the folder where it is after setup: Kiro Crew installs the app from it.
-
-## Run it
-
-1. In Kiro Crew, open **Apps → AI-DLC 多 Agent 团队**. The app opens on the CTO view (CTO 视图). Switch to
-   **团队看板** (team board) in the app bar.
-2. Click **新需求** (new requirement). Pick the ready-made promotion scenario to fill in the box, or write your own
-   requirement in one sentence. Leave the team on automatic: the preview shows which team the words select, which
-   members it uses and which standards apply. Click **交给团队** (hand to the team).
-3. Watch the team graph. Hover over a role to see its task, what it did and the credits it used, and to open its
-   Kiro Crew session. The test wall turns green as checks pass; failures go back to their owners.
-4. At each gate, click **✓ 批准** (approve), **讨论** (discuss) or **退回** (send back). The dialog shows the role's
-   documents, the questions it wants you to decide, and the discussion so far.
-5. When the run has been delivered, the site is deployed: open it from the deploy role's outputs (**看产出 →
-   打开网站**, view outputs → open site), or at the port the board shows. Then fill in **签字人** (who signs) and click
-   **签字放行** (sign off). The delivery now counts in the CTO view.
-
 ## Use it with your own team
 
 - **A team file** in `app/team/` defines the roles (`key`, `member`, `depends_on`, `writable`, `outputs`, `brief`,
@@ -335,6 +328,32 @@ Keep the folder where it is after setup: Kiro Crew installs the app from it.
 
 After a change to the app, run `bash setup.sh` again (or `app/scripts/dev-install.sh`) to update it in Kiro Crew.
 
+## The example
+
+The sample ships example information that simulates the business rules, data and delivery flow of a
+consumer-electronics retailer, so that the team has realistic standards to follow and data to work with. All
+names, numbers and records in it are invented. `example/` holds:
+
+- `knowledge/`: the standards (brand, front-end engineering, personal-information display, account security,
+  annual-party lottery rules, price and promotion compliance, margin and pricing, price protection) and
+  descriptions of the data;
+- `data/`: products, 60 days of orders, a promotion plan, an employee list, prizes and a list of weak passwords;
+- `agents/make_templates.py`: builds the Kiro agent templates of the 15 members, the 14 AI-DLC experts and the
+  brand-motion expert the example adds.
+
+The app's `starters/` (project templates), `packs/` (the checks the company issues) and `team/roster-taoyuan.json`
+(the development team the board shows) belong to the same example.
+
+## Layout
+
+| Path | Contents |
+| --- | --- |
+| `app/` | The Kiro Crew app `aidlc-team`: orchestrator (`backend/`), board and CTO view (`ui/`), teams (`team/`), starter projects (`starters/`), company checks (`packs/`), tests. See [app/README.md](app/README.md) |
+| `example/` | The example information: knowledge base, data, member templates |
+| `vendor/aidlc-workflows/` | The 14 AI-DLC expert definitions, copied unmodified from awslabs/aidlc-workflows (MIT-0) |
+| `docs/images/` | The screenshots on this page |
+| `setup.sh`, `cleanup.sh`, `scripts/` | Install into Kiro Crew; remove what setup created (recorded in `.install-state.json`) |
+
 ## Develop and test
 
 ```bash
@@ -344,24 +363,6 @@ cd ui && npm ci && npm run check   # board: type check, component tests, build
 ```
 
 `npm run preview:build` builds `ui/preview-dist/index.html`, the board and CTO view on test data without Kiro Crew.
-
-## Cost
-
-The sample creates no AWS resources. The cost is Kiro Crew credits for the agents' sessions; see
-[Kiro pricing](https://kiro.dev/pricing/). The measured runs in [What one delivery takes](#what-one-delivery-takes-measured) used 34 to
-51 credits each.
-
-## Cleanup
-
-```bash
-bash cleanup.sh --dry-run   # list what will be removed
-bash cleanup.sh             # remove it: type "remove" to confirm
-```
-
-It removes only what `setup.sh` recorded as created in `.install-state.json`: the app (stopping any site it
-deployed), the sessions of finished runs, the app's data and the run repositories in `~/workplace/aidlc-team/`; the
-members, the workspace and the knowledge source; the agent templates, putting back any it replaced; and
-`~/workplace/taoyuan/`. Whatever existed before setup is left alone, and so is Kiro Crew itself.
 
 ## Known limitations
 
