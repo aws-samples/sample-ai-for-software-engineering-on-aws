@@ -26,6 +26,33 @@ for a one-day guided rehearsal.
 | [Enterprise application and data](samples/enterprise-application-and-data/) | Making legacy services, ERP, finance and supply-chain systems and their data usable by agents | OpenAPI specifications, row- and column-level access control, governed MCP servers | Planned |
 | [Mobile app development, iOS first](samples/mobile-app-development/) | Swift and Kotlin apps on release trains, where the definition of done includes app store review and regulatory rules | Amazon EC2 Mac instances, AWS Device Farm | Planned |
 
+## Sample overview: AI-DLC agent team on Kiro Crew
+
+[`samples/agent-team-on-kiro-crew/`](samples/agent-team-on-kiro-crew/) is the first sample you can install and run.
+It turns a one-sentence requirement into a delivery by a team of AI-DLC expert agents, and shows what that changes
+for an organization rather than for one engineer.
+
+- **So what: more delivered, earlier revenue, lower cost.** The sample's CTO view opens on a simulated organization
+  of 60 people: after it adopts the agent team it delivers 3.1 times as much in 12 weeks, large requirements take
+  6.8 days instead of 29.8, new applications and features reach users 8.8 days earlier, and a person-day of work
+  costs 77 % less. Those figures are simulated; the sample shows how a new user gets the same measures for their own
+  deliveries. In measured runs, a promotion feature built by 8 agents went from requirement to local deployment in
+  13 to 20 minutes, of which the agents needed about 7 to 10, and passed all 40 checks, 28 of them issued by the
+  company, before a person approved the release.
+- **How: AI-DLC, a knowledge base and a team of agents.** An orchestrator follows the AI-DLC phases with human gates
+  (scope, build start, release) where a person answers the open questions one by one. The company's standards live
+  in a knowledge base that the agents search and cite, and the same rules run as checks the agents cannot change.
+  Each role runs as one of the 14 AI-DLC expert agents on its own git branch; failures go back to their owners, and
+  an independent reviewer reads the result. Teams are JSON files, so the orchestrator is not tied to its example.
+- **Why Kiro Crew.** The sample is a Kiro Crew app. Kiro Crew is open source and provides the agents' sessions, the
+  members that make up a team, a knowledge base, memory that builds from the work, and an app platform with explicit
+  trust and permissions; the app uses only Kiro Crew's local API.
+- **What you need.** A Mac with Kiro Crew and Node.js 22; `setup.sh` installs everything in about 10 minutes and
+  `cleanup.sh` removes what it created. A run costs Kiro Crew credits (34 to 51 per delivery in the measured runs) and
+  creates no AWS resources.
+
+![The team board during a run of the agent-team sample](samples/agent-team-on-kiro-crew/docs/images/team-board.jpg)
+
 ## How a sample is organized
 
 ```text

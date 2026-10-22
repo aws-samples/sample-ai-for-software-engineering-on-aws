@@ -2,7 +2,7 @@
 （入职第二、第三早的在职正式员工），组员按工号轮流分给组长；别的部门都直接向负责人汇报。职位按部门和入职年份定。
 可以重复跑：只按已有字段算，结果一样。
 
-    python3 example-company/tools/add_titles.py        # 改 example-company/data/employees.json，并重写 knowledge/data/员工花名册.md 里的样例表
+    python3 example/tools/add_titles.py        # 改 example/data/employees.json，并重写 knowledge/data/员工花名册.md 里的样例表
 """
 import json
 import re

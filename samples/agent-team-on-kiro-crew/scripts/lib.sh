@@ -1,4 +1,4 @@
-# Shared by setup.sh, cleanup.sh and install-example-company.sh. Source it after setting ROOT to the sample folder.
+# Shared by setup.sh, cleanup.sh and install-example.sh. Source it after setting ROOT to the sample folder.
 ROOT="${ROOT:?}"
 KC="$ROOT/app/scripts/kcapi.sh"   # calls the local Kiro Crew API as the dashboard owner
 PY=/usr/bin/python3
@@ -41,7 +41,7 @@ kb_state() {
   "$KC" GET /api/knowledge/sources | "$PY" -c "import json,sys; d=json.load(sys.stdin); rows=d.get('sources',d) if isinstance(d,dict) else d; r=[x for x in rows if x.get('name')==sys.argv[1]]; sp=(r[0].get('spend') or {}) if r else {}; print(r[0].get('sync_status') if r else 'absent', sp.get('files_done') or 0, sp.get('files_total') or 0)" "$1" 2>/dev/null || echo "unknown 0 0"
 }
 
-# The example company. install-example-company.sh creates these; cleanup.sh removes them.
+# The example's names in Kiro Crew and on disk. install-example.sh creates them; cleanup.sh removes what it created.
 COMPANY_HOME="$HOME/workplace/taoyuan"   # knowledge files and data the agents read
 WORKSPACE=taoyuan                         # the Kiro Crew workspace of the team's members
 KNOWLEDGE=桃源科技                          # the Kiro Crew knowledge source (the team files name it)
