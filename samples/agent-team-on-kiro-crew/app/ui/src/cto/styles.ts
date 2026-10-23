@@ -45,7 +45,8 @@ export const CTO_CSS = `
 .cto-lines button[aria-pressed="true"] { border-color: var(--accent); background: var(--cto-fresh); }
 
 .cto-card { position: relative; } /* frame, padding, glass: kit.ts */
-.cto-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.cto-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+
 .cto-value { margin: 6px 0 2px; } /* type: kit.ts */
 .cto-desc { color: var(--text); }
 .cto-mini { position: relative; margin-top: 14px; }
@@ -226,5 +227,6 @@ export const CTO_CSS = `
   .cto-hero h2 { font-size: 24px; } .cto-value { font-size: 28px; }
   .cto-plot { height: 220px; }
 }
+@media (max-width: 1180px) { .cto-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 960px) { .cto-cards { grid-template-columns: 1fr; } .cto-kanban { grid-template-columns: 1fr; } .cto-cell.is-span { grid-row: auto; } .cto-pop { width: auto; left: 12px !important; right: 12px !important; } }
 `

@@ -20,7 +20,7 @@ import { RoleIcon } from '../board/RoleIcon'
 import { errorText } from '../board/useBoard'
 import type { BoardEntry, CtoEntry, ItemEntry } from '../nav'
 import { MiniCycle, MiniSplit, fmtSec } from './charts'
-import { KIND, SIZE, baseCycles, day1, md, waited } from './metrics'
+import { KIND, SIZE, baseCycles, day1, md, money, waited } from './metrics'
 import { StreamChart, VS_COLOR, VS_NAME, boardAt, markAt, segAt, segKind } from './stream'
 import { CTO_CSS } from './styles'
 import { KIT_CSS } from '../kit'
@@ -233,8 +233,8 @@ export function ItemView({ entry, onCto, onItem, onBoard, onBack, returning = fa
           </article>
         )}
 
-        <article className={`cto-card${flow && flow.tests.total ? (flow.tests.passed === flow.tests.total ? ' is-ok' : ' is-bad') : ''}`} aria-label="质量">
-          <div className="cto-eyebrow">质量</div>
+        <article className={`cto-card${flow && flow.tests.total ? (flow.tests.passed === flow.tests.total ? ' is-ok' : ' is-bad') : ''}`} aria-label="更稳">
+          <div className="cto-eyebrow">更稳</div>
           {flow ? (
             <>
               <div className="cto-value">{flow.tests.passed}<span className="cto-of">/{flow.tests.total}</span></div>
@@ -247,6 +247,13 @@ export function ItemView({ entry, onCto, onItem, onBoard, onBack, returning = fa
                   <RoleIcon role="bounce" size={14} />退回 {sentBack} 次：人 {flow.sent_back.person} · 审查 {flow.sent_back.review} · 检查 {flow.sent_back.checks}{firstBack ? ' ↗' : ''}
                 </button>
               </div>
+              {flow.risks.map((r, i) => (
+                <div className="cto-legend" key={i}>
+                  <button type="button" data-testid="cto-item-risk" onClick={() => onBoard({ run: run as string, ...(r.role ? { role: r.role } : {}), at: Math.round(r.at) })} title="看板回放到这次退回">
+                    拦下的风险：{r.what}{r.amount != null ? ` ${money(r.amount)}` : ''}（{r.gate}关卡）↗
+                  </button>
+                </div>
+              ))}
             </>
           ) : (
             <div className="cto-value">{item?.origin ? '缺陷修复' : `${item?.defects?.length ?? 0}`}{!item?.origin && <span className="cto-of">项上线后缺陷</span>}</div>

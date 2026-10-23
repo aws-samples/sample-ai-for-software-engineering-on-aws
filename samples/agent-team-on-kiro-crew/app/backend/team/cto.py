@@ -85,7 +85,15 @@ def real_item(run: TeamRun, events: list[dict[str, Any]]) -> dict[str, Any]:
             "cyc": round(max(0.0, float(sig["at"]) - started) / 86400, 3), "mins": mins, "signer": sig.get("by") or "",
             "real": run.rid, "tests": sig.get("tests") or f"{s['tests']['passed']}/{s['tests']['total']}",
             "members": sum(run.lane(k)["status"] != "skipped" for k in run.order), "decisions": decisions(run, events),
-            "pr": (run.pr() or {}).get("number"), "defects": []}
+            "pr": (run.pr() or {}).get("number"), "defects": [],
+            **caught_of(run, events, float(sig["at"]))}
+
+
+def caught_of(run: TeamRun, events: list[dict[str, Any]], now: float) -> dict[str, Any]:
+    """更稳 for one run: what was sent back before release (by the checks, the independent review and people at the
+    gates, as its 价值流 counts them) and the risks people noted when they sent something back."""
+    f = flow(run, events, now)
+    return {"caught": f["sent_back"], "risks": f["risks"]}
 
 
 def decisions(run: TeamRun, events: list[dict[str, Any]]) -> list[list[str]]:
@@ -264,6 +272,9 @@ def flow(run: TeamRun, events: list[dict[str, Any]], now: float) -> dict[str, An
             "tests": {"passed": int(t.get("passed") or 0), "total": int(t.get("total") or 0),
                       "enterprise": sum(str(c.get("file") or "").startswith("tests/enterprise/") for c in cases)},
             "sent_back": {"person": count("bounce"), "review": count("review"), "checks": count("check")},
+            "risks": [{"what": str(r.get("what") or ""), "amount": r.get("amount"), "gate": str(r.get("gate") or ""),
+                       "role": r.get("role"), "at": rel(r["at"]) if r.get("at") is not None else 0.0}
+                      for r in s.get("risks") or [] if isinstance(r, dict)],
             "rework": sum(x["label"].startswith("返工") for x in segments if x["who"] == "agent"),
             "review": str(s.get("verdict") or ""), "deployed": any(m["kind"] == "deployed" for m in marks),
             "issue": run.issue(), "pr": run.pr(), "labels": _labels(run), "titles": {k: run.title(k) for k in run.order},

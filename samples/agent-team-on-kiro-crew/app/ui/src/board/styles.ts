@@ -137,6 +137,8 @@ ${toneVars}
 .kt-gate-delivery legend { padding: 0 4px; font-size: .9em; color: var(--muted); }
 .kt-gate-delivery input, .kt-gate-delivery select { font: inherit; font-size: .93em; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border-strong, var(--border)); background: var(--card); color: var(--text); }
 .kt-gate-delivery input { width: 13em; }
+.kt-gate-delivery .kt-gate-amount { width: 6em; }
+.kt-gate-risk .kt-gate-what { width: 24em; }
 .kt-sign-cto { margin-left: 10px; vertical-align: middle; }
 .kt-gate-split { list-style: none; margin: 6px 0 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--kt-handoff) 8%, transparent); display: grid; gap: 3px; font-size: .92em; }
 .kt-gate-split b { margin-right: 6px; }
@@ -200,7 +202,7 @@ ${toneVars}
   border: 1px solid var(--kt-bad); background: color-mix(in srgb, var(--kt-bad) 9%, var(--card)); }
 .kt-confirm strong { color: var(--text-strong); }
 .kt-gate-dialog { border-color: var(--kt-approve); background: color-mix(in srgb, var(--kt-approve) 9%, var(--card)); }
-.kt-gate-docs, .kt-gate-talk, .kt-gate-questions, .kt-gate-split, .kt-gate-report { flex: 1 1 100%; }
+.kt-gate-docs, .kt-gate-talk, .kt-gate-questions, .kt-gate-split, .kt-gate-report, .kt-gate-risk { flex: 1 1 100%; }
 .kt-gate-docs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; font-size: .93em; }
 .kt-gate-docs .kt-chip-link { display: inline-flex; align-items: center; gap: 4px; }
 .kt-gate-talk { list-style: none; margin: 6px 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--kt-glass); display: grid; gap: 6px; max-height: 260px; overflow: auto; font-size: .93em; }

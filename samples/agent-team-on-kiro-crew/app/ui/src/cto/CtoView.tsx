@@ -13,9 +13,9 @@ import { paths } from '../board/format'
 import { errorText } from '../board/useBoard'
 import { itemOf, type BoardEntry, type CtoEntry, type CtoFilters, type ItemEntry } from '../nav'
 import { boardAt } from './stream'
-import { MiniCheap, MiniFast, MiniMore, WeeklyChart } from './charts'
+import { MiniCheap, MiniFast, MiniMore, WeeklyChart, MiniSteady } from './charts'
 import { Flow } from './Flow'
-import { KIND, KINDS, KIND_VAR, SIZE, baseCycles, day1, fmt, ledger, ledgerCsv, md, metrics, ratioOf, wan, weekly } from './metrics'
+import { KIND, KINDS, KIND_VAR, SIZE, baseCycles, day1, fmt, ledger, ledgerCsv, md, metrics, ratioOf, wan, weekly, money } from './metrics'
 import { CTO_CSS } from './styles'
 import { KIT_CSS } from '../kit'
 import type { CtoData, CtoFlow, CtoItem, Kind, Size } from './types'
@@ -60,6 +60,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
   const [realOnly, setRealOnly] = useState(!!entry?.real)
   const [size, setSize] = useState<Size | null>(entry?.size ?? null)
   const [week, setWeek] = useState<string | null>(entry?.week ?? null)
+  const [defects, setDefects] = useState<boolean>(entry?.defects ?? false)
   const [hl, setHl] = useState<string | null>(null)
   const [limit, setLimit] = useState(12)
   const [perDay, setPerDay] = useState('')
@@ -128,9 +129,9 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
   const base = useMemo(() => (data ? baseCycles(data.items) : { S: 0, M: 0, L: 0 }), [data])
   const m = useMemo(() => (data ? metrics(data, line, base) : null), [data, line, base])
   const weeks = useMemo(() => (data ? weekly(data.items, data.meta, line) : []), [data, line])
-  const rows = useMemo(() => (data ? ledger(data.items, line, kind, realOnly, fresh, { size, week }) : []), [data, line, kind, realOnly, fresh, size, week])
+  const rows = useMemo(() => (data ? ledger(data.items, line, kind, realOnly, fresh, { size, week, defects }) : []), [data, line, kind, realOnly, fresh, size, week, defects])
   // the filters in the URL: a change rewrites the view's history entry (and drops the delivery picked out)
-  const filters = (): CtoFilters => ({ ...(line >= 0 ? { line } : {}), ...(kind !== 'all' ? { type: kind } : {}), ...(size ? { size } : {}), ...(week ? { week } : {}), ...(realOnly ? { real: true } : {}) })
+  const filters = (): CtoFilters => ({ ...(line >= 0 ? { line } : {}), ...(kind !== 'all' ? { type: kind } : {}), ...(size ? { size } : {}), ...(week ? { week } : {}), ...(realOnly ? { real: true } : {}), ...(defects ? { defects: true } : {}) })
   const now = useRef(filters)
   now.current = filters
   const first = useRef(true)
@@ -140,7 +141,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
       return
     }
     onState?.(filters())
-  }, [line, kind, realOnly, size, week]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [line, kind, realOnly, size, week, defects]) // eslint-disable-line react-hooks/exhaustive-deps
   // the way in: once the data is here, the delivery asked for is picked out — its ledger row under the filters it was left
   // with (they are relaxed, and the page says so, only when it is not under them), else its kanban card — or a part
   const entered = useRef(false)
@@ -157,7 +158,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
       setHl(null)
       onState?.(now.current())  // the URL no longer picks it out: a reload does not jump to it again
     }, 6000)
-    const under = ledger(data.items, line, kind, realOnly, fresh, { size, week }).findIndex(is)
+    const under = ledger(data.items, line, kind, realOnly, fresh, { size, week, defects }).findIndex(is)
     if (under >= 0) {
       setLimit((n) => Math.max(n, under + 1))
       go(`[data-key="${key}"]`, 'center')
@@ -171,6 +172,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
       setKind('all')
       setRealOnly(false)
       setSize(null)
+      setDefects(false)
       setWeek(before ? (data.meta.weeks.filter((w) => w <= before.ship).pop() ?? null) : null)
       setLimit(Math.max(12, before ? 30 : all + 1))
       go(`[data-key="${key}"]`, 'center')
@@ -192,6 +194,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
   const M = data.meta
   const scopeName = line < 0 ? '全部业务线' : M.lines[line]
   const scope = line < 0 ? `研发中心 ${m.seats} 人 · ${M.lines.length} 条业务线` : `${M.lines[line]} · ${m.seats} 人`
+  const st = m.steady
   const value = Number(perDay) > 0 ? `¥${wan(m.built.length * m.adv * Number(perDay))}` : '—'
   const pickKind = (k: Kind | 'all') => {
     setKind(k)
@@ -253,7 +256,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
       {error && <div className="kt-banner" role="status">CTO 视图刷新失败：{error}，显示的是上一次拿到的数据</div>}
 
       <section className="cto-hero">
-        <h2>同样的研发团队，交付更多、上线更快、成本更低。</h2>
+        <h2>同样的研发团队，交付更多、上线更快、成本更低、质量更稳。</h2>
         <p>近 12 周对比引入 AI-DLC 之前的 12 周 · 只计签字放行的交付{m.real ? <> · <button type="button" className="cto-link" onClick={() => { setRealOnly(true); setLimit(12); toLedger() }} title="在交付清单里只看实测">其中 {m.real} 项为真实运行（实测）</button></> : ''}</p>
         <div className="cto-print-only">桃源科技 · {scopeName} · 导出于 {new Date().toLocaleString('zh-CN', { hour12: false })} · 口径见末尾</div>
       </section>
@@ -311,6 +314,20 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
             {latest?.real && <button type="button" className="cto-link" onClick={() => item(latest)} title={`${latest.t}：agent 用量、人的时间和决定`}>看一次实测的消耗 ↗</button>}
           </div>
         </article>
+        <article className="cto-card" aria-label="更稳" data-anchor="steady">
+          <div className="cto-eyebrow">更稳</div>
+          <button type="button" className="cto-value cto-link-value" data-testid="cto-steady" onClick={() => { setDefects(true); setLimit(12); toLedger() }} title="看上线后报出缺陷的交付">{st.before.toFixed(1)} → {st.now.toFixed(1)}</button>
+          <div className="cto-desc">每 100 项新应用和新功能的上线后缺陷</div>
+          <MiniSteady m={m} />
+          <div className="cto-foot cto-foot-steady">
+            <span data-testid="cto-caught">{st.reals ? `${st.reals} 项实测交付上线前拦下 ${fmt(st.caughtAll)} 个问题：检查 ${st.caught.checks} · 审查 ${st.caught.review} · 人 ${st.caught.person}` : '上线前拦下的问题：实测交付才有'}</span>
+            {st.risks[0] && (
+              <button type="button" className="cto-link" data-testid="cto-risk" onClick={() => onItem({ ...itemOf(st.risks[0].item), at: Math.round(st.risks[0].at) })} title={`${st.risks[0].item.t}：负责人在${st.risks[0].gate}关卡退回时记下`}>
+                拦下的风险：{st.risks[0].what}{st.risks[0].amount != null ? ` ${money(st.risks[0].amount)}` : ''} ↗
+              </button>
+            )}
+          </div>
+        </article>
       </section>
 
       <WeeklyChart weeks={weeks} today={M.today} onWeek={(w) => { setWeek(w); setLimit(12); toLedger() }} />
@@ -328,6 +345,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
           <button type="button" className={`kt-btn is-small cto-noprint${realOnly ? ' is-on' : ''}`} aria-pressed={realOnly} onClick={() => { setRealOnly((v) => !v); setLimit(12) }}>只看实测</button>
           {size && <span className="cto-filter">{SIZE[size]}型<button type="button" aria-label="不按规模筛选" onClick={() => setSize(null)}>✕</button></span>}
           {week && <span className="cto-filter">{md(week)} 起的一周<button type="button" aria-label="不按周筛选" onClick={() => setWeek(null)}>✕</button></span>}
+          {defects && <span className="cto-filter">有上线后缺陷<button type="button" aria-label="不按上线后缺陷筛选" onClick={() => setDefects(false)}>✕</button></span>}
           <span className="cto-dim" data-testid="cto-ledger-count">共 {fmt(rows.length)} 项{realOnly ? '' : '，实测置顶'} · 点一行看交付详情</span>
         </div>
         <table className="cto-table">
@@ -387,6 +405,7 @@ export function CtoView({ onOpen, onItem = () => {}, onState, returning = false,
           <li>更多：近 12 周上线项数 ÷ 前 12 周上线项数，同一组织、人数不变。</li>
           <li>更快：交付周期 = 上线日 − Issue 创建日；「以前」为引入前 12 周同规模交付的平均周期。模拟历史里的周期是示例值，不代表实测的效率提升。</li>
           <li>更省：每人日工作量的成本 =（实际人工人日 × ¥{fmt(M.dayRate)} + agent 订阅）÷ 完成的等价工作量。等价工作量按规模：小 {M.eq.S}、中 {M.eq.M}、大 {M.eq.L} 人日；agent 协作下的人工投入：小 {M.human.S}、中 {M.human.M}、大 {M.human.L} 人日；订阅按每人 Kiro Pro+ 每月 {M.seatUsdMonth} 美元、汇率 {M.fx}（示例值，见 cto/history.json 的 meta）。</li>
+          <li>更稳：每 100 项新应用和新功能在上线后报出的缺陷（上线后报出的缺陷记为修复类交付，并链接回原交付）；实测交付还没有上线后的观察期，不计入这个比例。上线前拦下的问题 = 实测交付中检查、独立审查和人在关卡上的退回次数；拦下的风险由负责人在关卡退回时填写内容和金额。</li>
           <li>价值：本页不推算收入。填入每项每天带来的毛利后，按「新应用和新功能的项数 × 平均提前天数 × 每天毛利」估算。</li>
           <li>交付标签（类型、规模、业务线）由第一个关卡上的角色提议，负责人在关卡上确认。</li>
           <li>Issue 与 PR：每项交付对应一个 Issue（提出方、创建日）和一个合入 main 的 PR；实测运行的 PR 是它的运行分支，负责人签字放行时合入。上线后报出的缺陷记为修复类交付，与原交付互相链接。</li>

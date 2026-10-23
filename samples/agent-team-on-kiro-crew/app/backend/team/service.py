@@ -279,9 +279,10 @@ class Service:
         return {"ok": True, "run": run.rid, "roles": picked, "status": run.s["status"]}
 
     async def gate(self, rid: str, role: str, decision: str, note: str = "", delivery: Any = None,
-                   answers: Any = None) -> dict[str, Any]:
+                   answers: Any = None, risk: Any = None) -> dict[str, Any]:
         """A person at a gate: approve, send the role back with what to change, or 讨论 (it answers; the gate stays).
-        *delivery*: the 交付标签 they confirm; *answers*: their choice for each question the role put to them."""
+        *delivery*: the 交付标签 they confirm; *answers*: their choice for each question the role put to them; *risk*:
+        with 退回, what the send-back kept from going live (``{what, amount}``)."""
         run = self._run(rid)
         spec = run.roles.get(role) or {}
         pending = bool(spec) and run.lane(role).get("gate") == "pending"
@@ -295,7 +296,7 @@ class Service:
                 and not team_mod.review_targets(note, run.team["roles"])
                 and not team_mod.review_targets(run.overrule_review(role), run.team["roles"])):
             raise AppError("退回要写明打回给谁，比如「打回：前端开发 #2」", "no_target")
-        if not await run.gate(role, decision, note, delivery, answers):
+        if not await run.gate(role, decision, note, delivery, answers, risk if decision == "revise" else None):
             raise AppError("这个角色现在没有在等人批准", "not_gated", 409)
         return {"ok": True, "run": run.rid, "role": role, "decision": decision, "status": run.s["status"]}
 

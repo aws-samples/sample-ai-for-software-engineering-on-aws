@@ -47,7 +47,13 @@ export type CtoItem = {
   tests?: string // 实测: the checks when it was signed, 37/37
   members?: number // 实测: agent members that took part
   decisions?: [string, string][] // 实测: what people decided at its gates
+  caught?: { person: number; review: number; checks: number } // 实测: what was sent back before release, and by whom
+  risks?: CtoRisk[] // 实测: what people who sent work back at a gate noted it kept from going live
 }
+
+/** 拦下的风险: noted by the person who sent work back at a gate; the amount is in yuan (or none). ``at``: seconds from
+ * the run's start, to open its moment. */
+export type CtoRisk = { what: string; amount: number | null; gate: string; role?: string | null; at: number }
 
 /** One run's 价值流 (`GET /cto/flow?run=`, backend/team/cto.py flow): seconds count from the run's start. */
 export type FlowSegment = {
@@ -77,6 +83,7 @@ export type CtoFlow = {
   members: number
   tests: { passed: number; total: number; enterprise: number }
   sent_back: { person: number; review: number; checks: number }
+  risks: CtoRisk[]
   rework: number
   review: string
   deployed: boolean

@@ -27,7 +27,7 @@ import { EventFeed } from './board/EventFeed'
 import { LIVE, PHASES, POLL_MS, fmtClock, isRunActive, paths } from './board/format'
 import { FolderPanel } from './board/Folder'
 import { OutputsDrawer, type OutputsTarget } from './board/Outputs'
-import { EmptyStart, ExpertStrip, GateDialog, Kpis, StartForm, StopConfirm, TopBar, type DeliveryPick, type GateAnswers, type PreviewFn } from './board/Header'
+import { EmptyStart, ExpertStrip, GateDialog, Kpis, StartForm, StopConfirm, TopBar, type DeliveryPick, type GateAnswers, type GateRisk, type PreviewFn } from './board/Header'
 import { ClockContext, useReducedMotion, type SnapshotClock } from './board/hooks'
 import { Lanes } from './board/Lanes'
 import { layoutGraph, visibleGraph } from './board/layout'
@@ -301,9 +301,9 @@ export function TeamPage({ pollMs = POLL_MS, entry, onCto, onItem, onRun, onBack
   )
 
   const gate = useCallback(
-    async (note: string, delivery?: DeliveryPick, answers?: GateAnswers) => {
+    async (note: string, delivery?: DeliveryPick, answers?: GateAnswers, risk?: GateRisk) => {
       if (!run || !gateAsk) return
-      await api.post(paths.gate(run.id), { role: gateAsk.role, decision: gateAsk.decision, note, ...(delivery ? { delivery } : {}), ...(answers ? { answers } : {}) })
+      await api.post(paths.gate(run.id), { role: gateAsk.role, decision: gateAsk.decision, note, ...(delivery ? { delivery } : {}), ...(answers ? { answers } : {}), ...(risk ? { risk } : {}) })
       setGateAsk(null)
       reload()
     },
@@ -401,7 +401,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onCto, onItem, onRun, onBack
         {!board && loading && <p className="kt-loading">正在连接看板…</p>}
         {!projection && !inReplay && startOpen && run && <StartForm onStart={start} preview={preview} onCancel={() => setStartOpen(false)} />}
         {!projection && !inReplay && stopAsk && run && <StopConfirm run={run} onConfirm={stop} onCancel={() => setStopAsk(false)} />}
-        {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : (gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset) || GATE_PRESETS[gateLane?.gate_label || '']} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
+        {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : (gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset) || GATE_PRESETS[gateLane?.gate_label || '']} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
         {board && !run && board.runs.length === 0 && <EmptyStart onStart={start} preview={preview} />}
         {run && lay && (
           <>

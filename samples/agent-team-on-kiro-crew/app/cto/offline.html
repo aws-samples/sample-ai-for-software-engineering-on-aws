@@ -62,7 +62,8 @@ select { padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border)
 .hero p { margin: 6px 0 0; color: var(--text-secondary); }
 
 /* 三张卡片 */
-.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1180px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; }
 .cards .card { position: relative; }
 .cards .card::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; background: radial-gradient(90% 70% at 100% 0%, var(--kt-glass), transparent 70%); }
@@ -264,7 +265,7 @@ body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head 
   </header>
 
   <section class="hero">
-    <h1>同样的研发团队，交付更多、上线更快、成本更低。</h1>
+    <h1>同样的研发团队，交付更多、上线更快、成本更低、质量更稳。</h1>
     <p id="heroSub"></p>
     <div class="print-only" id="printMeta"></div>
   </section>
@@ -294,6 +295,13 @@ body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head 
       <div class="desc">每人日工作量的成本</div>
       <div class="mini" id="mCheap"></div>
       <div class="mini-foot" id="xSave"></div>
+    </article>
+    <article class="card" id="cSteady">
+      <div class="eyebrow">更稳</div>
+      <div class="value" id="vSteady"></div>
+      <div class="desc">每 100 项新应用和新功能的上线后缺陷</div>
+      <div class="mini" id="mSteady"></div>
+      <div class="mini-foot" id="xCaught"></div>
     </article>
   </section>
 
@@ -356,6 +364,7 @@ body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head 
   const fmt = (n) => Math.round(n).toLocaleString('zh-CN');
   const wan = (n) => (n >= 1e8 ? (n / 1e8).toFixed(2) + ' 亿' : fmt(n / 1e4) + ' 万');
   const day1 = (d) => (d >= 10 ? Math.round(d) : Math.round(d * 10) / 10);
+  const money = (n) => (n == null ? '' : n >= 1e4 ? `¥${(n / 1e4).toFixed(1)} 万` : `¥${fmt(n)}`);
   const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
   const md = (iso) => iso.slice(5).replace('-', '-');
 
@@ -382,7 +391,17 @@ body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head 
     const unit = eq ? cost / eq : 0;
     const built = agent.filter((i) => i.kind !== 'fix');
     const adv = mean(built.map((i) => Math.max(0, BASE_CYC[i.size] - i.cyc)));
-    return { base, agent, cnt, cyc, eq, human, sub, cost, unit, save: eq * M.dayRate - cost, built, adv, seats };
+    // 更稳: defects after release per 100 new apps and features (a measured run has had no time after release: left out)
+    const watched = (arr) => arr.filter((i) => i.kind !== 'fix' && !i.real);
+    const defects = (arr) => arr.reduce((a, i) => a + ((i.defects || []).length), 0);
+    const per100 = (arr) => (arr.length ? (defects(arr) / arr.length) * 100 : 0);
+    const wb = watched(base), wa = watched(agent), reals = agent.filter((i) => i.real);
+    const caught = { checks: 0, review: 0, person: 0 };
+    for (const i of reals) for (const k of Object.keys(caught)) caught[k] += ((i.caught || {})[k] || 0);
+    const risks = reals.flatMap((i) => (i.risks || []).map((r) => Object.assign({}, r, { item: i }))).sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    const steady = { before: per100(wb), now: per100(wa), dBefore: defects(wb), dNow: defects(wa), nBefore: wb.length, nNow: wa.length,
+                     caught, caughtAll: caught.checks + caught.review + caught.person, reals: reals.length, risks };
+    return { base, agent, cnt, cyc, eq, human, sub, cost, unit, save: eq * M.dayRate - cost, built, adv, seats, steady };
   }
 
   function renderHeader(m) {
@@ -483,6 +502,21 @@ body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head 
     box.append(svg);
   }
 
+  function drawSteady(m) {
+    const card = $('cSteady'), box = $('mSteady'); box.replaceChildren();
+    const st = m.steady, W = box.clientWidth, L = 40, R = 70, bh = 22, gap = 14, H = 2 * bh + gap + 4, max = Math.max(st.before, st.now, 0.1);
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img', 'aria-label': `每 100 项新应用和新功能的上线后缺陷：以前 ${st.before.toFixed(1)}，现在 ${st.now.toFixed(1)}` });
+    const pw = W - L - R;
+    [['以前', st.before, 'var(--deemph)', st.dBefore, st.nBefore], ['现在', st.now, 'var(--s4)', st.dNow, st.nNow]].forEach(([lab, v, fill, d, n], r) => {
+      const y0 = 2 + r * (bh + gap), w = (v / max) * pw;
+      svText(svg, 0, y0 + bh / 2 + 4, lab, r === 1 ? { class: 'strong' } : {});
+      barEnd(svg, L, y0, Math.max(w, 1), bh, fill);
+      svText(svg, L + w + 8, y0 + bh / 2 + 4, v.toFixed(1), r === 1 ? { class: 'strong' } : {});
+      hitRow(svg, card, box, L - 4, y0 - 3, w + 8, bh + 6, [[v.toFixed(1), '每 100 项的上线后缺陷'], [fmt(d), '上线后缺陷'], [fmt(n), '新应用和新功能']]);
+    });
+    box.append(svg);
+  }
+
   function renderCards(m) {
     const ratio = m.base.length ? m.agent.length / m.base.length : 0;
     $('vMore').textContent = ratio.toFixed(1) + ' 倍';
@@ -493,7 +527,12 @@ body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head 
     renderValue(m);
     $('vCheap').textContent = '−' + Math.round((1 - m.unit / M.dayRate) * 100) + '%';
     $('xSave').textContent = `近 12 周相当于节省研发投入 ¥${wan(m.save)}`;
-    drawMore(m); drawFast(m); drawCheap(m);
+    const st = m.steady;
+    $('vSteady').textContent = `${st.before.toFixed(1)} → ${st.now.toFixed(1)}`;
+    const top = st.risks[0];
+    $('xCaught').textContent = (st.reals ? `${st.reals} 项实测交付上线前拦下 ${fmt(st.caughtAll)} 个问题：检查 ${st.caught.checks} · 审查 ${st.caught.review} · 人 ${st.caught.person}` : '上线前拦下的问题：实测交付才有')
+      + (top ? `；拦下的风险：${top.what}${top.amount != null ? ' ' + money(top.amount) : ''}` : '');
+    drawMore(m); drawFast(m); drawCheap(m); drawSteady(m);
   }
 
   function renderValue(m) {
@@ -631,6 +670,7 @@ body.is-projecting #dl, body.is-projecting #theme, body.is-projecting .now-head 
       `更省：每人日工作量的成本 =（实际人工人日 × ¥${fmt(M.dayRate)} + agent 订阅）÷ 完成的等价工作量。等价工作量按规模：小 ${M.eq.S}、中 ${M.eq.M}、大 ${M.eq.L} 人日；agent 协作下的人工投入：小 ${M.human.S}、中 ${M.human.M}、大 ${M.human.L} 人日；订阅按每人 Kiro Pro+ 每月 ${M.seatUsdMonth} 美元、汇率 ${M.fx}（示例值，见 cto/history.json 的 meta）。`,
       '价值：本页不推算收入。填入每项每天带来的毛利后，按「新应用和新功能的项数 × 平均提前天数 × 每天毛利」估算。',
       '交付标签（类型、规模、业务线）由第一个关卡上的角色提议，负责人在关卡上确认。',
+      '更稳：每 100 项新应用和新功能在上线后报出的缺陷（上线后报出的缺陷记为修复类交付，并链接回原交付）；实测交付还没有上线后的观察期，不计入这个比例。上线前拦下的问题 = 实测交付中检查、独立审查和人在关卡上的退回次数；拦下的风险由负责人在关卡退回时填写内容和金额。',
       'Issue 与 PR：每项交付对应一个 Issue（提出方、创建日）和一个合入 main 的 PR；实测运行的 PR 是它的运行分支，负责人签字放行时合入。上线后报出的缺陷记为修复类交付，与原交付互相链接。',
     ]) n.append(el('li', null, s));
   }

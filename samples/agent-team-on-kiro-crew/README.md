@@ -46,18 +46,18 @@ goes back to the role that owns it. An independent reviewer reads the diff, and 
 result is deployed on your machine, and the person who owns the delivery signs it off. A live board shows all of it
 as it happens.
 
-- [So what: more delivered, earlier revenue, lower cost](#so-what-more-delivered-earlier-revenue-lower-cost)
+- [So what: more delivered, earlier revenue, lower cost, fewer defects](#so-what-more-delivered-earlier-revenue-lower-cost-fewer-defects)
 - [How: AI-DLC, a knowledge base and a team of agents](#how-ai-dlc-a-knowledge-base-and-a-team-of-agents)
 - [Why Kiro Crew](#why-kiro-crew)
 - Reference: [Install and run in detail](#install-and-run-in-detail) · [Guardrails](#guardrails) · [Use it with your own team](#use-it-with-your-own-team) · [The example](#the-example) · [Layout](#layout) · [Develop and test](#develop-and-test) · [Known limitations](#known-limitations)
 
-## So what: more delivered, earlier revenue, lower cost
+## So what: more delivered, earlier revenue, lower cost, fewer defects
 
 AI coding assistants make one engineer faster at writing code. How fast an organization delivers is decided
 elsewhere: by how long a requirement waits to be clarified, how many decisions wait for someone, how much work
 comes back from testing, review and release approval, and how much of the company's own rules has to be checked by
 hand. This sample moves the work between those points to a team of agents and keeps people on the decisions, so
-that the same people deliver more, sooner and at a lower cost per unit of work.
+that the same people deliver more, sooner and at a lower cost per unit of work, without more defects reaching users.
 
 ### What it adds up to for an organization (simulated)
 
@@ -71,18 +71,24 @@ simulated, to show what the sample measures and the effect it is built to make v
 | **Efficiency**: cycle time from issue to release, large / medium / small | 29.8 / 9.9 / 2.0 days | 6.8 / 2.5 / 0.8 days | large requirements about 4 times faster |
 | **Revenue**: new applications and features released | | 489, each 8.8 days earlier on average | value = 489 × 8.8 days × gross margin per day; at CNY 1,000 a day each, about CNY 4.3 million in the 12 weeks |
 | **Cost**: per person-day of work delivered | CNY 2,000 | CNY 452 | 77 % lower, about CNY 6.9 million less development spend in the 12 weeks |
+| **Quality**: defects reported after release, per 100 new applications and features | 10.9 | 6.1 | 44 % fewer; the measured runs also show what was caught before release, and the risks people noted when they sent work back |
 
 How the CTO view computes them (the values are in `app/cto/history.json`, made by `app/scripts/cto_history.py`):
 a delivery counts once a person has signed it off; cycle time runs from the issue's creation to the release; the
 work a delivery is worth is 1, 5 or 30 person-days for a small, medium or large one, and the people's own effort
 with the agent team is 0.25, 1 or 7 person-days; cost per person-day of work is (people's person-days × CNY 2,000 +
 agent subscriptions at USD 40 per person per month) ÷ the person-days of work delivered. The view does not guess
-revenue: you enter the gross margin a new application or feature brings per day, and it multiplies.
+revenue: you enter the gross margin a new application or feature brings per day, and it multiplies. A defect
+reported after release is a fix that links back to what it fixes; a measured run has had no time after release
+yet, so it is not counted in the defect rate.
 
-![The CTO view on the simulated organization: three cards for more, faster and cheaper, and deliveries per week before and after](docs/images/cto-view.jpg)
+![The CTO view on the simulated organization: four cards for more, faster, cheaper and steadier, and deliveries per week before and after](docs/images/cto-view.jpg)
 
 *The CTO view (labelled 模拟企业 · 含实测, simulated organization with measured runs). This screenshot also
-counts six runs that had been signed off on the machine, so its totals are slightly higher than the table.*
+counts seven runs that had been signed off on the machine, so its totals are slightly higher than the table. The
+更稳 (steadier) card shows what those runs caught before release (checks, review, people) and the largest risk a
+person noted at a gate: a promotion plan whose price-protection refunds were over the approval limit, sent back
+and cut by CNY 206,100.*
 
 ### What one delivery takes (measured)
 
@@ -311,7 +317,9 @@ members, the workspace and the knowledge source; the agent templates, putting ba
 What the sample enforces:
 
 - **Human gates.** A run stops at each gate until a person decides: answer each question, discuss with the role,
-  approve, or send it back with a note. On the AI-DLC expert team nothing is built before the 启动 gate.
+  approve, or send it back with a note. On the AI-DLC expert team nothing is built before the 启动 gate. A person
+  who sends work back can note the risk it keeps from going live (what, and how much); the 签字单 (sign-off sheet),
+  the delivery detail and the CTO view's 更稳 card show it.
 - **Company checks.** The checks under `packs/<pack>/tests/enterprise/` are copied into every run repository and run
   by the orchestrator, not by the agents. A failure goes back to the role that owns the file, up to a fixed number of
   fix rounds.

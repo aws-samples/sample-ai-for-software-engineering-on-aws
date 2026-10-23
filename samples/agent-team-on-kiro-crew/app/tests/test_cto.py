@@ -153,7 +153,8 @@ def test_the_history_moves_to_today_and_a_signed_run_joins_it_as_measured(tmp_pa
                      "decisions": [["批准需求", "补充一条：每人每款限购 2 台。"],
                                    ["退回上线", "价保退差超过 30 万要 CFO 审批，这次不报：65 寸智能电视 Q7 从 8 折改 9 折。"],
                                    ["批准上线", "无补充意见"]],
-                     "pr": delivery.pr_number(run.rid), "defects": []}]
+                     "pr": delivery.pr_number(run.rid), "defects": [],
+                     "caught": {"person": 0, "review": 0, "checks": 0}, "risks": []}]  # these events carry no moments
     assert out["meta"]["realAvgMins"] == 17 and out["wip"] == history()["wip"]
     run.s["decisions"] = [["批准需求", "补充规则"]]  # an imported run brings its own list
     assert cto.build({run.rid: run}, NOW, events_of=lambda r: events, history=history())["items"][1]["decisions"] == [["批准需求", "补充规则"]]

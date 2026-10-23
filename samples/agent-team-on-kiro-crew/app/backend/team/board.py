@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from . import gitwork
 from .sessions import agent_fields, find_agent
-from .team import ACTIVE, TeamRun, live_status
+from .team import ACTIVE, TeamRun, clean_risk, live_status
 from .toollog import short
 
 
@@ -75,6 +75,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "roster": [dict(x) for x in s["roster"]] if s.get("roster") else None,
         "imported": dict(s["imported"]) if s.get("imported") else None,
         "signoff": dict(s["signoff"]) if s.get("signoff") else None,
+        "risks": [{k: r.get(k) for k in ("what", "amount", "gate", "role", "at")} for r in s.get("risks") or [] if isinstance(r, dict)],
         "requirement": s.get("requirement") or "",
         "knowledge": {"source": (crew.knowledge_view(str(kb.get("source") or "")) if crew is not None else None)
                       or (source_row(str(kb["source"]), None) if kb.get("source") else None),
@@ -169,6 +170,7 @@ def lane(run: TeamRun, key: str, *, mgr: Any, scrub: Callable[[str], str], now: 
         "aidlc_agent": role.get("aidlc_agent") or "", "gate": ln.get("gate") if role.get("gate") == "human" else None,
         "gate_label": role.get("gate_label") or "", "gate_preset": str(role.get("gate_preset") or ""),
         "gate_revise_preset": str(role.get("gate_revise_preset") or ""),
+        "gate_revise_risk": clean_risk(role.get("gate_revise_risk")),
         "kinds": [a["kind"] for a in atts],
         "session": _session(atts, mgr),
         "icon": str(role.get("icon") or key),
