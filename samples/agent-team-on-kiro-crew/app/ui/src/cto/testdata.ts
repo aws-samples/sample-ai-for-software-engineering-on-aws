@@ -19,7 +19,8 @@ export function ctoData(): CtoData {
     items: [
       { ...agent, t: '双十一家电大促活动页', line: 0, kind: 'feat', size: 'M', ship: '2026-10-19', cyc: 0.012, mins: 17, signer: '研发负责人', real: 'r1013f04d', tests: '37/37', members: 8,
         issue: 'TY-4127', reporter: '运营部', created: '2026-10-19', pr: 5123, defects: [],
-        decisions: [['批准需求', '补充规则：每人每款限购 2 台'], ['退回上线', '价保退差 48.6 万元，超过 30 万需 CFO 审批'], ['批准上线', '价保退差按 28 万元预留']] },
+        decisions: [['批准需求', '补充规则：每人每款限购 2 台'], ['退回上线', '价保退差 48.6 万元，超过 30 万需 CFO 审批'], ['批准上线', '价保退差按 28 万元预留']],
+        caught: { person: 1, review: 0, checks: 2 }, risks: [{ what: '价保退差超过 30 万审批线', amount: 206000, gate: '上线', role: 'compliance', at: 731 }] },
       { ...agent, t: '商品参数对比（冰箱）', line: 0, kind: 'feat', size: 'M', ship: '2026-10-19', cyc: 2.5, issue: 'TY-2790', reporter: '商品部', created: '2026-10-17', pr: 2990, defects: ['TY-2801'] },
       { ...agent, t: '带,逗号的交付', line: 0, kind: 'feat', size: 'M', ship: '2026-10-18', cyc: 0.02, mins: 25, signer: 'Wu Hao', real: 'r1020live', tests: '20/20', members: 5, decisions: [['批准范围', '无补充意见']] },
       { ...agent, t: '库存预警阈值配置（华东仓）', line: 4, kind: 'fix', size: 'S', ship: '2026-10-18', cyc: 0.8 },
@@ -64,7 +65,7 @@ export function ctoFlow(): CtoFlow {
       { at: 951, role: 'compliance', gate: '批准上线', note: '价保退差按 28 万元预留' },
     ],
     agent_s: 504, person_s: 516, gates: 3, credits: 34.2, members: 8, tests: { passed: 37, total: 37, enterprise: 28 },
-    sent_back: { person: 1, review: 0, checks: 0 }, rework: 1, review: '审查说可以交付', deployed: true,
+    sent_back: { person: 1, review: 0, checks: 0 }, risks: [{ what: '价保退差超过 30 万审批线', amount: 206000, gate: '上线', role: 'compliance', at: 731 }], rework: 1, review: '审查说可以交付', deployed: true,
     issue: { id: 'TY-4127', kind: '需求', reporter: '运营部', created_at: 1791840066 },
     pr: { number: 5123, head: 'team/r1013f04d/run', base: 'main', state: 'signed', opened_at: 1791841088, merged_at: 1791841088, merged_by: '研发负责人', sha: '', files: 17, added: 1523, removed: 40, checks: '37/37', review: '审查说可以交付' },
     titles: { product: '产品经理', backend1: '后端开发 #1', tester: '测试工程师', compliance: '合规审查', deploy: '部署工程师' },

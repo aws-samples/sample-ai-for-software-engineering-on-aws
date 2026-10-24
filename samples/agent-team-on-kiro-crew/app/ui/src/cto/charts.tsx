@@ -218,6 +218,35 @@ export function fmtSec(sec: number): string {
 }
 
 /** 更省: the cost of a person-day of work, 以前 and 现在 (its split into people's time and the agent subscription on hover). */
+/** 更稳: defects raised after release per 100 new apps and features, 以前 (grey) and 现在 (violet), on one scale. */
+export function MiniSteady({ m }: { m: Metrics }) {
+  const st = m.steady
+  const bh = 22, gap = 14, H = 2 * bh + gap + 4, L = 40, R = 70
+  const rows: [string, number, string, number, number][] = [
+    ['以前', st.before, 'var(--deemph)', st.defectsBefore, st.watchedBefore],
+    ['现在', st.now, 'var(--s4)', st.defectsNow, st.watchedNow],
+  ]
+  const max = Math.max(st.before, st.now, 0.1)
+  return (
+    <Mini label={`每 100 项新应用和新功能的上线后缺陷：以前 ${st.before.toFixed(1)}，现在 ${st.now.toFixed(1)}`} height={H}>
+      {(W, onTip) => {
+        const pw = Math.max(10, W - L - R)
+        return rows.map(([lab, v, fill, d, n], r) => {
+          const y0 = 2 + r * (bh + gap), w = (v / max) * pw
+          return (
+            <g key={lab}>
+              <text x={0} y={y0 + bh / 2 + 4} className={r === 1 ? 'is-strong' : undefined}>{lab}</text>
+              <BarEnd x={L} y={y0} w={Math.max(w, 1)} h={bh} fill={fill} />
+              <text x={L + w + 8} y={y0 + bh / 2 + 4} className={r === 1 ? 'is-strong' : undefined}>{v.toFixed(1)}</text>
+              <Hit x={L - 4} y={y0 - 3} w={w + 8} h={bh + 6} onTip={onTip} rows={[[v.toFixed(1), '每 100 项的上线后缺陷'], [fmt(d), '上线后缺陷'], [fmt(n), '新应用和新功能']]} />
+            </g>
+          )
+        })
+      }}
+    </Mini>
+  )
+}
+
 export function MiniCheap({ m, meta }: { m: Metrics; meta: CtoMeta }) {
   const bh = 22, gap = 14, H = 2 * bh + gap + 4, L = 40, R = 70
   const human = m.eq ? (m.human * meta.dayRate) / m.eq : 0, agentPart = m.eq ? m.sub / m.eq : 0

@@ -101,6 +101,8 @@ def check_team(team: Any) -> dict[str, Any]:
         r.setdefault("stage", "")
         if r.get("gate") not in (None, "human"):
             raise ValueError(f"team.json：{r['key']} 的 gate 只能是 human")
+        if r.get("gate_revise_risk") is not None and clean_risk(r["gate_revise_risk"]) is None:
+            raise ValueError(f"team.json：{r['key']} 的 gate_revise_risk 要写成 {{what, amount}}（amount 以元计）")
         if r.get("questions") is not None and not (r.get("gate") == "human" and isinstance(r["questions"], str) and _app_rel(r["questions"])):
             raise ValueError(f"team.json：{r['key']} 的 questions 要写成仓库里的相对路径，而且它要有人的关卡")
         if not isinstance(r.get("optional", False), bool):
@@ -166,6 +168,31 @@ def ownership_problem(path: Path, dynamic: list[str]) -> str | None:
                                           for a, r in areas.items()):
         return "test_areas 要写成 区域名 → 分到了目录的角色 key（区域名只用小写字母和数字）"
     return None
+
+
+def clean_risk(raw: Any) -> dict[str, Any] | None:
+    """拦下的风险: what a person sent back at a gate kept from going live, as they write it: ``{what, amount}`` with the
+    amount in yuan (or none). Nothing usable (no words and no amount): None."""
+    if not isinstance(raw, dict):
+        return None
+    what = " ".join(str(raw.get("what") or "").split())[:60]
+    amount = raw.get("amount")
+    try:
+        amount = round(float(amount), 2) if amount not in (None, "") else None
+    except (TypeError, ValueError):
+        amount = None
+    if amount is not None and not (0 < amount < 1e12):
+        amount = None
+    if not what and amount is None:
+        return None
+    return {"what": what or "未写明", "amount": amount}
+
+
+def money(amount: float | None) -> str:
+    """¥20.6 万 · ¥8,000 · '' (no amount)."""
+    if amount is None:
+        return ""
+    return f"¥{amount / 1e4:,.1f} 万" if amount >= 1e4 else f"¥{amount:,.0f}"
 
 
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
@@ -997,12 +1024,14 @@ class TeamRun:
         self.emit("ownership", f"编排器按{self.title(own['from'])}的分工派活：" + "；".join(
             f"{self.title(k)} {'、'.join(g)}" for k, g in assigned.items()), data={"roles": assigned})
 
-    async def gate(self, key: str, decision: str, note: str = "", delivery: Any = None, answers: Any = None) -> bool:
+    async def gate(self, key: str, decision: str, note: str = "", delivery: Any = None, answers: Any = None,
+                   risk: Any = None) -> bool:
         """A person's answer at a gate: approve (the roles after it start), send it back with what to change, or 讨论
         (it answers, and changes its documents if it has to; the gate stays). *delivery*: the 交付标签 as the person
         confirms them when approving the gate of the role that proposes them (fields left out keep the proposal's).
         *answers*: the person's choice for each question the role put to them (``{id: {"choice": "A", "text": ""}}``;
-        a question left out takes the role's recommendation)."""
+        a question left out takes the role's recommendation). *risk*: with 退回, what the send-back kept from going live
+        (``{what, amount}``, amount in yuan): kept on the run for 更稳 in the CTO view and on the 签字单."""
         async with self._lock:
             lane, role = self.lane(key), self.roles.get(key) or {}
             if self.ended or role.get("gate") != "human" or lane.get("gate") != "pending":
@@ -1057,8 +1086,9 @@ class TeamRun:
                 lane.update(gate=None, overrule=False)
                 if note:
                     self.s["review_note"] = note
+                caught = self._keep_risk(key, label, clean_risk(risk), note)
                 self.emit("bounce", f"人在{label}关卡退回：按审查意见再改一轮" + (f"：{note}" if note else ""), role=key,
-                          frm="person", to=key)
+                          frm="person", to=key, data=caught)
                 await self._review_bounce(key, review, only=review_targets(note, self.team["roles"]) or None)
             elif not role["writable"]:  # a review gate: the person sends work back to the members the note names
                 targets = review_targets(note, self.team["roles"])
@@ -1066,7 +1096,8 @@ class TeamRun:
                     return False  # 退回 has to say to whom (打回：前端开发 #2 …)
                 lane.update(gate=None, passed=False)
                 self.s["human_review"] = note
-                self.emit("bounce", f"人在{label}关卡退回：{note}", role=key, frm="person", to=key)
+                caught = self._keep_risk(key, label, clean_risk(risk), note)
+                self.emit("bounce", f"人在{label}关卡退回：{note}", role=key, frm="person", to=key, data=caught)
                 lane["status"] = "waiting"
                 mgr = self.d.manager()
                 for t in targets:
@@ -1074,11 +1105,20 @@ class TeamRun:
                     await self._start(t, "review", mgr, review=HUMAN_MARK + note)
             else:
                 lane["gate"] = None
-                self.emit("bounce", f"人退回了{label}：{note or '没写原因'}", role=key, frm="person", to=key)
+                caught = self._keep_risk(key, label, clean_risk(risk), note)
+                self.emit("bounce", f"人退回了{label}：{note or '没写原因'}", role=key, frm="person", to=key, data=caught)
                 await self._start(key, "revise", self.d.manager(), review=f"人在关卡上没有批准，意见：{note or '没写原因'}")
             self._settle()
             await self.save()
             return True
+
+    def _keep_risk(self, key: str, label: str, risk: dict[str, Any] | None, note: str) -> dict[str, Any] | None:
+        """A send-back's 拦下的风险 on the run (``risks``), with the gate and the moment; the event carries it too."""
+        if risk is None:
+            return None
+        rec = {**risk, "role": key, "gate": str(label), "at": self.d.now(), "note": " ".join(note.split())[:200]}
+        self.s.setdefault("risks", []).append(rec)
+        return {"risk": {k: rec[k] for k in ("what", "amount", "gate")}}
 
     def _read_plan(self, key: str, rel: str) -> None:
         """分工提案: the gated role proposed who does what this time (``{member key: one line}``, a JSON file in the run

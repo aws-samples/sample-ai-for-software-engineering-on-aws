@@ -66,6 +66,7 @@ export type RunDetail = {
   knowledge: { source: KnowledgeSource | null; hits: KnowledgeHit[] } // the team's knowledge source and what roles looked up
   crew_members: string[] | null // the team's members on Kiro Crew's 「代理」 page now (its workspace's), null while not read yet
   signoff: SignOff | null // 签字放行: the person who took responsibility for the release, once they did
+  risks: Risk[] // 拦下的风险: what people who sent work back at a gate noted it kept from going live
   requirement: string // the requirement as the person wrote it
   plan_skip: Record<string, string> // the optional members the planner's 分工提案 leaves out this run, with why (applied once a person approves)
   overruled: { role: string; note: string; review: string } | null // a person approved a gate over a review that still said 要改, and why
@@ -106,6 +107,9 @@ export type Delivery = {
 }
 
 /** A person's signature on a finished run: what the machine checks said when they signed. */
+/** 拦下的风险: noted by the person who sent work back at a gate (amount in yuan, or none). */
+export type Risk = { what: string; amount: number | null; gate: string; role: string | null; at: number }
+
 export type SignOff = { by: string; note: string; at: number; tests: string }
 
 /** One company standard (or knowledge-base data set) a requirement touches, and why. */
@@ -165,6 +169,7 @@ export type Lane = {
   gate_label: string // what the person approves, e.g. '范围'
   gate_preset: string // the team file's preset note for approving that gate (填入预设意见), '' when none
   gate_revise_preset: string // …and for sending it back (a review gate: says whom, 打回：前端开发 #2)
+  gate_revise_risk: { what: string; amount: number | null } | null // …and the risk that send-back keeps from going live
   kinds: string[] // every attempt's kind, oldest first: 'work' | 'fix' | 'conflict' | 'review' | 'revise' | 'discuss'
   session: string | null // the Kiro Crew chat session it works in, null before it opened
   deployed: { url: string; at: number } | null // 部署执行: where the app started the service a deploy role configured

@@ -22,7 +22,7 @@ detail** (交付详情, one delivery) and the **team board** (团队看板, how 
 | 7 Merge | Uncommitted changes inside the write scope are committed for the role; changes outside it are recorded as violations; the branch is merged into the run branch, and a conflict goes back to the role. A human gate then stops the run | `team._integrate`, `gitwork.merge` |
 | 8 Checks | The app runs `node --test` file by file on the run branch and assigns failures to roles by `test_owners` | `checks.run_tests`, `team._test_and_bounce` |
 | 9 Review | The read-only reviewer answers `DONE: 可以交付` (deliverable) or `DONE: 要改：…` (changes needed) with the roles to send back to | `team._review_done` |
-| 10 Gates | Approve: later roles start with the note and the per-question decisions, which are also written to `docs/aidlc/decisions.md` on the run branch. Discuss: the role answers in its own session and may revise its documents while the gate stays open. Send back: the role reworks with the note | `team.TeamRun.gate` |
+| 10 Gates | Approve: later roles start with the note and the per-question decisions, which are also written to `docs/aidlc/decisions.md` on the run branch. Discuss: the role answers in its own session and may revise its documents while the gate stays open. Send back: the role reworks with the note; the person may note the risk the send-back keeps from going live (`{what, amount}` in yuan, on the run's `risks`) | `team.TeamRun.gate` |
 | 11 Deploy | The deploy role writes `deploy/local.json` (port, health path); the app starts the site with `HOST=127.0.0.1`, waits for the health check, and stops a site that listens beyond loopback (checked with `lsof`) | `service._deploy`, `site.Site` |
 | 12 End | `done` when every role merged, `failed` when a role failed. Only a delivered run can be signed off; signing merges the run branch into the run repository's `main` | `team._settle`, `service.signoff` |
 
@@ -69,6 +69,7 @@ Role level:
 | `depends_on`, `writable`, `outputs` | Whom it waits for; paths it may write (`!` excludes); outputs handed downstream |
 | `brief`, `mission`, `assignment` | The task; what the board shows it is doing |
 | `gate: "human"`, `gate_label`, `plan` | A human gate after this role; its button label; the work split file |
+| `gate_preset`, `gate_revise_preset`, `gate_revise_risk` | Notes the gate dialog can fill in for approving and for sending back, and the risk filled in with the send-back |
 | `questions` | File on the run branch with the questions the person decides at the gate: `{"questions": [{id, q, options: [{key, text}], recommend, why}]}` |
 | `delivery` | File on the run branch with the proposed delivery labels |
 | `optional` | Sits the run out when its member does not exist or the approved work split leaves it out |

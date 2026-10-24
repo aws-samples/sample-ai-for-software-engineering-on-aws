@@ -39,8 +39,8 @@ for an organization rather than for one engineer.
   [Quick start](samples/agent-team-on-kiro-crew/README.md#quick-start).
 - **So what: more delivered, earlier revenue, lower cost.** The sample's CTO view opens on a simulated organization
   of 60 people: after it adopts the agent team it delivers 3.1 times as much in 12 weeks, large requirements take
-  6.8 days instead of 29.8, new applications and features reach users 8.8 days earlier, and a person-day of work
-  costs 77 % less. Those figures are simulated; the sample shows how a new user gets the same measures for their own
+  6.8 days instead of 29.8, new applications and features reach users 8.8 days earlier, a person-day of work
+  costs 77 % less, and defects after release fall from 10.9 to 6.1 per 100 new applications and features. Those figures are simulated; the sample shows how a new user gets the same measures for their own
   deliveries. In measured runs, a promotion feature built by 8 agents went from requirement to local deployment in
   13 to 20 minutes, of which the agents needed about 7 to 10, and passed all 40 checks, 28 of them issued by the
   company, before a person approved the release.

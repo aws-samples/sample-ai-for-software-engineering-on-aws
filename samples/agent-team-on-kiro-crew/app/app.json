@@ -1,6 +1,6 @@
 {
   "name": "aidlc-team",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "displayName": "AI-DLC 多 Agent 团队",
   "description": "A team of AI-DLC expert agents on Kiro Crew: from a one-sentence requirement through human gates, company checks and an independent review to a local deployment, with a live team board and a CTO view.",
   "author": "aws-samples",

@@ -9,6 +9,7 @@ import { useState, type FormEvent } from 'react'
 import type { RunDetail } from '../types'
 import { CASE_GROUPS, caseGroup, fmtCredits, fmtSpan } from './format'
 import { RoleIcon } from './RoleIcon'
+import { money } from '../cto/metrics'
 
 const SIGNER_KEY = 'aidlc-team:signer'
 
@@ -100,6 +101,20 @@ export function SignOff({ run, onSign, onCto, onItem }: { run: RunDetail; onSign
             )}
           </dd>
         </div>
+        {(run.risks ?? []).length > 0 && (
+          <div>
+            <dt>拦下的风险</dt>
+            <dd data-testid="kt-sign-risks">
+              <ul>
+                {(run.risks ?? []).map((r, i) => (
+                  <li key={i} className="kt-sign-back">
+                    {r.what}{r.amount != null ? ` ${money(r.amount)}` : ''}（{r.gate}关卡退回时记下）
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        )}
         <div>
           <dt>机器检查</dt>
           <dd>

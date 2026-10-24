@@ -632,16 +632,19 @@ const DELIVERY_LINES: Delivery['line'][] = ['电商', '移动应用', '客户关
  * overruling the review (a reason is required), sending it back is one more round as the review says. */
 /** The person's choice for each question of a gate, by question id (sent with 批准). */
 export type GateAnswers = Record<string, { choice: string; text: string }>
+/** 拦下的风险 sent with 退回: what the send-back keeps from going live, the amount in yuan (or none). */
+export type GateRisk = { what: string; amount: number | null }
 
 /** A gate: 批准 (with an answer for each question the role put to the person), 讨论 (it answers; the gate stays open),
  * or 退回. What was said in a 讨论 so far is shown in all three; at a writing role's gate, the stage's documents too. */
-export function GateDialog({ label, who = '', decision, preset, split, skips, report, onReport, overrule = false, delivery, questions = [], talk = [], outputs = [], onConfirm, onCancel }: {
-  label: string; who?: string; decision: GateDecision; preset?: string; split?: { key: string; title: string; icon: string; assignment: string }[]
+export function GateDialog({ label, who = '', decision, preset, presetRisk, split, skips, report, onReport, overrule = false, delivery, questions = [], talk = [], outputs = [], onConfirm, onCancel }: {
+  label: string; who?: string; decision: GateDecision; preset?: string; presetRisk?: GateRisk | null; split?: { key: string; title: string; icon: string; assignment: string }[]
   skips?: { key: string; title: string; why: string }[]; report?: string; onReport?: () => void; overrule?: boolean; delivery?: Delivery
   questions?: GateQuestion[]; talk?: TalkLine[]; outputs?: { key: string; title: string; icon: string; onOpen: () => void }[]
-  onConfirm: (note: string, delivery?: DeliveryPick, answers?: GateAnswers) => Promise<void>; onCancel: () => void
+  onConfirm: (note: string, delivery?: DeliveryPick, answers?: GateAnswers, risk?: GateRisk) => Promise<void>; onCancel: () => void
 }) {
   const [note, setNote] = useState('')
+  const [risk, setRisk] = useState({ what: '', wan: '' }) // 退回: what it keeps from going live, the amount in 万元
   const [pick, setPick] = useState<DeliveryPick | null>(delivery ? { name: delivery.name, kind: delivery.kind, size: delivery.size, line: delivery.line } : null)
   const [answers, setAnswers] = useState<GateAnswers>(() => Object.fromEntries(questions.map((q) => [q.id, { choice: q.recommend || q.options[0]?.key || '', text: '' }])))
   const [busy, setBusy] = useState(false)
@@ -649,6 +652,11 @@ export function GateDialog({ label, who = '', decision, preset, split, skips, re
   const approve = decision === 'approve'
   const discuss = decision === 'discuss'
   const asking = approve && questions.length > 0
+  const back = !approve && !discuss
+  const riskOut = (): GateRisk | undefined => {
+    const what = risk.what.trim(), wan = Number(risk.wan)
+    return back && (what || wan > 0) ? { what, amount: wan > 0 ? Math.round(wan * 1e4) : null } : undefined
+  }
   const answer = (id: string, a: Partial<{ choice: string; text: string }>) => setAnswers((x) => ({ ...x, [id]: { ...x[id], ...a } }))
   const confirm = async () => {
     if (overrule && approve && !note.trim()) {
@@ -671,7 +679,8 @@ export function GateDialog({ label, who = '', decision, preset, split, skips, re
     setBusy(true)
     setErr('')
     try {
-      await (asking ? onConfirm(note.trim(), pick ?? undefined, answers) : approve && pick ? onConfirm(note.trim(), pick) : onConfirm(note.trim()))
+      const r = riskOut()
+      await (asking ? onConfirm(note.trim(), pick ?? undefined, answers) : approve && pick ? onConfirm(note.trim(), pick) : r ? onConfirm(note.trim(), undefined, undefined, r) : onConfirm(note.trim()))
     } catch (x) {
       setErr(errorText(x))
       setBusy(false)
@@ -788,10 +797,19 @@ export function GateDialog({ label, who = '', decision, preset, split, skips, re
           </select>
         </fieldset>
       )}
+      {back && (
+        <fieldset className="kt-gate-delivery kt-gate-risk" data-testid="kt-gate-risk">
+          <legend title="计入 CTO 视图的「更稳」和签字单">拦下的风险（可选）</legend>
+          <input aria-label="拦下的风险" className="kt-gate-what" value={risk.what} maxLength={60} onChange={(e) => setRisk({ ...risk, what: e.target.value })} placeholder="例如：价保退差超过审批线" />
+          <label>
+            金额 <input aria-label="金额（万元）" className="kt-gate-amount" type="number" min={0} step={0.1} value={risk.wan} onChange={(e) => setRisk({ ...risk, wan: e.target.value })} placeholder="可不填" /> 万元
+          </label>
+        </fieldset>
+      )}
       <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={discuss ? '例如：第 2 题为什么建议 B？改成 A 会有什么影响？' : overrule && approve ? '例如：风险我担，价保退差按 28 万预留，活动结束后财务复核' : approve ? '例如：补充一条业务规则' : '例如：漏了一条验收标准'} autoFocus aria-label={discuss ? '讨论' : '意见'} />
       <span className="kt-confirm-actions">
         {preset && note !== preset && !discuss && (
-          <button type="button" className="kt-btn" onClick={() => setNote(preset)} title={preset}>
+          <button type="button" className="kt-btn" onClick={() => { setNote(preset); if (back && presetRisk) setRisk({ what: presetRisk.what, wan: presetRisk.amount != null ? String(presetRisk.amount / 1e4) : '' }) }} title={preset}>
             填入预设意见
           </button>
         )}

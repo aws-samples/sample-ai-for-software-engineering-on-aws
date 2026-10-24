@@ -4,9 +4,9 @@
  * a filter, the run picked — replaces the current one):
  *
  *   /apps/aidlc-team                         CTO 视图 (the default): every delivery of the company
- *     ?line=0..4&kind=app|feat|fix&size=S|M|L&week=<YYYY-MM-DD>&real=1   …its filters (业务线, 类型, 规模, 一周, 只看实测)
+ *     ?line=0..4&kind=app|feat|fix&size=S|M|L&week=<YYYY-MM-DD>&real=1&defect=1   …its filters (业务线, 类型, 规模, 一周, 只看实测, 有上线后缺陷)
  *     ?hl=<run | TY-1234>                    …that delivery picked out (its ledger row or its kanban card)
- *     ?at=more|fast|cheap|weekly|flow|ledger …scrolled to that part
+ *     ?at=more|fast|cheap|steady|weekly|flow|ledger …scrolled to that part
  *   ?view=item&run=<id>                      交付详情 of a run of this app (实测, or still going)
  *   ?view=item&issue=TY-1234                 交付详情 of a delivery of the simulated history
  *     &at=<seconds>                          …the segment of its 价值流 at that moment picked out
@@ -29,9 +29,9 @@ export type BoardEntry = {
   from?: 'cto' | 'item'; pick?: 'latest'
 }
 export type ItemEntry = { run?: string; issue?: string; at?: number; from?: 'cto' | 'board' }
-export type CtoAnchor = 'more' | 'fast' | 'cheap' | 'weekly' | 'flow' | 'ledger'
+export type CtoAnchor = 'more' | 'fast' | 'cheap' | 'steady' | 'weekly' | 'flow' | 'ledger'
 /** the CTO view's filters, as the URL carries them (absent: not filtered) */
-export type CtoFilters = { line?: number; type?: 'app' | 'feat' | 'fix'; size?: 'S' | 'M' | 'L'; week?: string; real?: boolean } // type: the URL's kind=
+export type CtoFilters = { line?: number; type?: 'app' | 'feat' | 'fix'; size?: 'S' | 'M' | 'L'; week?: string; real?: boolean; defects?: boolean } // type: the URL's kind=; defects: defect=1
 export type CtoEntry = CtoFilters & { hl?: string; at?: CtoAnchor }
 export type View = ({ kind: 'cto' } & CtoEntry) | ({ kind: 'item' } & ItemEntry) | ({ kind: 'board' } & BoardEntry)
 
@@ -41,7 +41,7 @@ const ISSUE = /^TY-\d{4}$/
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 export const PHASE_KEYS = ['ideation', 'inception', 'construction', 'review', 'operation'] as const
 const FOCUS: readonly string[] = ['signoff', 'tests', 'cost', 'lanes']
-const ANCHORS: readonly string[] = ['more', 'fast', 'cheap', 'weekly', 'flow', 'ledger']
+const ANCHORS: readonly string[] = ['more', 'fast', 'cheap', 'steady', 'weekly', 'flow', 'ledger']
 const seconds = (x: string | null) => {
   const n = Number(x ?? 'x')
   return x !== null && x !== '' && Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined
@@ -100,13 +100,14 @@ function parseFilters(q: URLSearchParams): CtoFilters {
   const week = q.get('week') ?? ''
   if (DAY.test(week)) f.week = week
   if (q.get('real') === '1') f.real = true
+  if (q.get('defect') === '1') f.defects = true
   return f
 }
 
 /** Only the filters of a CTO view entry (what coming back to the CTO view restores). */
 export function filtersOf(e: CtoEntry): CtoFilters {
-  const { line, type, size, week, real } = e
-  return Object.fromEntries(Object.entries({ line, type, size, week, real }).filter(([, x]) => x !== undefined && x !== false)) as CtoFilters
+  const { line, type, size, week, real, defects } = e
+  return Object.fromEntries(Object.entries({ line, type, size, week, real, defects }).filter(([, x]) => x !== undefined && x !== false)) as CtoFilters
 }
 
 export function searchOf(v: View): string {
@@ -118,6 +119,7 @@ export function searchOf(v: View): string {
     if (f.size) q.set('size', f.size)
     if (f.week) q.set('week', f.week)
     if (f.real) q.set('real', '1')
+    if (f.defects) q.set('defect', '1')
     if (v.hl) q.set('hl', v.hl)
     if (v.at) q.set('at', v.at)
   } else if (v.kind === 'item') {

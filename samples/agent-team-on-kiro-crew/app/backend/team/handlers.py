@@ -88,8 +88,11 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
             raise AppError("delivery 是交付标签 {name, kind, size, line}", "invalid_gate")
         if answers is not None and not (isinstance(answers, dict) and all(isinstance(v, dict) for v in answers.values())):
             raise AppError("answers 是每个问题的选择 {id: {choice, text}}", "invalid_gate")
+        risk = body.get("risk")
+        if risk is not None and not isinstance(risk, dict):
+            raise AppError("risk 是拦下的风险 {what, amount}（amount 以元计）", "invalid_gate")
         return kit.json(await svc.gate(str(request.match_info.get("rid", "")), role, decision, (note or "").strip()[:4000],
-                                       delivery, answers))
+                                       delivery, answers, risk))
 
     async def cto(request: Any) -> Any:
         return kit.json(await svc.cto())

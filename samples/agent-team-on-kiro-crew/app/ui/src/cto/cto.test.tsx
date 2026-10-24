@@ -100,8 +100,9 @@ describe('the CTO view and the board, both ways', () => {
     expect(await screen.findByTestId('item-cycle')).toHaveTextContent('17 分钟')
     const item = screen.getByTestId('item-root')
     expect(within(item).getByRole('article', { name: '时间花在哪' })).toHaveTextContent('8 分钟agent 在做 · 等人批准 9 分钟（3 次关卡）')
-    expect(within(item).getByRole('article', { name: '质量' })).toHaveTextContent('检查 37/37')
-    expect(within(item).getByRole('article', { name: '质量' })).toHaveTextContent('退回 1 次：人 1 · 审查 0 · 检查 0')
+    expect(within(item).getByRole('article', { name: '更稳' })).toHaveTextContent('检查 37/37')
+    expect(within(item).getByRole('article', { name: '更稳' })).toHaveTextContent('退回 1 次：人 1 · 审查 0 · 检查 0')
+    expect(within(item).getByTestId('cto-item-risk')).toHaveTextContent('拦下的风险：价保退差超过 30 万审批线 ¥20.6 万（上线关卡）↗')
     const decided = within(item).getByRole('region', { name: '负责人的决定' })
     expect(decided).toHaveTextContent('退回上线价保退差 48.6 万元，超过 30 万需 CFO 审批')
     await user.click(within(decided).getAllByRole('button', { name: '看板 · 回放到这一刻 ↗' })[1])
@@ -138,7 +139,7 @@ describe('the CTO view and the board, both ways', () => {
     expect(await screen.findByText('模拟交付，没有运行记录：环节明细只有真实运行才有。')).toBeInTheDocument()
     const twin = screen.getByTestId('item-twin')
     expect(twin).toHaveTextContent('双十一家电大促活动页')
-    expect(screen.getByRole('article', { name: '质量' })).toHaveTextContent('上线后缺陷 1：TY-2801')
+    expect(screen.getByRole('article', { name: '更稳' })).toHaveTextContent('上线后缺陷 1：TY-2801')
     await user.click(within(twin).getByRole('button', { name: '看它的价值流 ↗' }))
     expect(parseView(window.location.search)).toEqual({ kind: 'item', run: 'r1013f04d' })
   })
@@ -387,5 +388,64 @@ describe('moving between the three views', () => {
     await user.click(screen.getByRole('tab', { name: '交付详情' }))
     await user.click(await screen.findByRole('button', { name: '← 返回团队看板' }))
     await waitFor(() => expect(window.location.search).toBe('?view=board&run=r1006a'))
+  })
+})
+
+describe('更稳: the fourth outcome, defects after release and what was caught before it', () => {
+  test('the card compares defects per 100 new apps and features, counts what measured runs caught, and opens the largest risk', async () => {
+    const user = userEvent.setup()
+    routes()
+    render(<AidlcTeamApp pollMs={60_000} />)
+    expect(await screen.findByRole('heading', { name: '同样的研发团队，交付更多、上线更快、成本更低、质量更稳。' })).toBeInTheDocument()
+    const card = screen.getByRole('article', { name: '更稳' })
+    expect(within(card).getByTestId('cto-steady')).toHaveTextContent('0.0 → 50.0') // the test data: none before, 1 of 2 since
+    expect(within(card).getByText('每 100 项新应用和新功能的上线后缺陷')).toBeInTheDocument()
+    expect(within(card).getByTestId('cto-caught')).toHaveTextContent('2 项实测交付上线前拦下 3 个问题：检查 2 · 审查 0 · 人 1')
+    await user.click(within(card).getByTestId('cto-risk'))
+    expect(parseView(window.location.search)).toEqual({ kind: 'item', run: 'r1013f04d', at: 731, from: 'cto' })
+  })
+
+  test('its number filters the ledger to deliveries with defects after release, and the URL keeps the filter', async () => {
+    const user = userEvent.setup()
+    routes()
+    render(<AidlcTeamApp pollMs={60_000} />)
+    await user.click(await screen.findByTestId('cto-steady'))
+    const ledger = screen.getByRole('region', { name: '交付清单' })
+    expect(within(ledger).getByText('有上线后缺陷')).toBeInTheDocument()
+    expect(within(ledger).getByTestId('cto-ledger-count')).toHaveTextContent('共 1 项')
+    expect(within(ledger).getByText('商品参数对比（冰箱）')).toBeInTheDocument()
+    await waitFor(() => expect(window.location.search).toContain('defect=1'))
+    expect(parseView('?defect=1')).toEqual({ kind: 'cto', defects: true })
+    expect(searchOf({ kind: 'cto', defects: true })).toBe('?defect=1')
+    await user.click(within(ledger).getByRole('button', { name: '不按上线后缺陷筛选' }))
+    expect(within(ledger).queryByText('有上线后缺陷')).toBeNull()
+  })
+
+  test('a send-back can note the risk it keeps from going live; the preset fills it in; without one nothing extra is sent', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn(async () => undefined)
+    const { unmount } = render(<GateDialog label="上线" decision="revise" preset="按上线前体检退回。打回：后端开发 #1" presetRisk={{ what: '价保退差超过 30 万审批线', amount: 206000 }} report="" onConfirm={onConfirm} onCancel={() => undefined} />)
+    const risk = screen.getByTestId('kt-gate-risk')
+    await user.click(screen.getByRole('button', { name: '填入预设意见' }))
+    expect(within(risk).getByLabelText('拦下的风险')).toHaveValue('价保退差超过 30 万审批线')
+    expect(within(risk).getByLabelText('金额（万元）')).toHaveValue(20.6)
+    await user.click(screen.getByRole('button', { name: '确认退回' }))
+    expect(onConfirm).toHaveBeenCalledWith('按上线前体检退回。打回：后端开发 #1', undefined, undefined, { what: '价保退差超过 30 万审批线', amount: 206000 })
+    unmount()
+    const plain = vi.fn(async () => undefined)
+    render(<GateDialog label="需求" decision="revise" onConfirm={plain} onCancel={() => undefined} />)
+    await user.type(screen.getByLabelText('意见'), '漏了一条验收标准')
+    await user.click(screen.getByRole('button', { name: '确认退回' }))
+    expect(plain).toHaveBeenCalledWith('漏了一条验收标准')
+    expect(screen.queryByTestId('kt-gate-risk')).toBeInTheDocument() // 退回 offers it…
+  })
+
+  test('approving offers no risk, and the 签字单 lists the risks people noted', () => {
+    render(<GateDialog label="需求" decision="approve" onConfirm={async () => undefined} onCancel={() => undefined} />)
+    expect(screen.queryByTestId('kt-gate-risk')).toBeNull() // …批准 does not: nothing was kept from going live
+    const run = clone(finishedBoard()).run!
+    run.risks = [{ what: '价保退差超过 30 万审批线', amount: 206000, gate: '上线', role: 'compliance', at: 1 }]
+    render(<SignOff run={run} />)
+    expect(screen.getByTestId('kt-sign-risks')).toHaveTextContent('价保退差超过 30 万审批线 ¥20.6 万（上线关卡退回时记下）')
   })
 })
