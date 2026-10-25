@@ -1,7 +1,25 @@
 # AI-DLC agent team on Kiro Crew
 
-A Kiro Crew app in which a team of AI-DLC expert agents turns a one-sentence requirement into a tested, reviewed
-web feature running on your Mac, while you make the decisions at the gates.
+AI coding assistants make one engineer faster at writing code. This sample makes the organization deliver several
+times as much, end to end: a team of AI-DLC expert agents takes each requirement to a tested, reviewed release, while
+people make the decisions.
+
+- **3.1 times the deliveries** with the same 60 people in 12 weeks.
+- **A large requirement in 6.8 days instead of 29.8**; new features reach users 8.8 days earlier on average.
+- **44 % fewer defects after release.**
+
+These are simulated figures from the sample's CTO view
+([how they are computed](#so-what-several-times-the-delivery-end-to-end)). In real runs, 8 agents took a promotion
+feature from a one-sentence requirement to a deployment on the Mac in 13 to 20 minutes and passed all 40 checks
+before a person approved the release.
+
+**How:** a Kiro Crew app runs the [AI-DLC](https://github.com/awslabs/aidlc-workflows) phases with a person deciding
+at the gates. Each role is one of the 14 AI-DLC expert agents and the roles work in parallel; the company's
+standards sit in a knowledge base and in checks the agents cannot change. [More](#how-ai-dlc-a-knowledge-base-and-a-team-of-agents)
+
+![The CTO view on the simulated organization: four cards for more, faster, cheaper and steadier, and deliveries per week before and after](docs/images/cto-view.jpg)
+
+*The CTO view (模拟企业 · 含实测: the simulated organization, with the measured runs added).*
 
 ## Quick start
 
@@ -36,28 +54,20 @@ early development, and its board is in Simplified Chinese.
 
 *The team board during a run: each box is an agent, and the test wall on the right shows the company's checks.*
 
-## What it does
+Read on:
 
-A one-sentence requirement goes in. An orchestrator forms a team of
-[AI-DLC](https://github.com/awslabs/aidlc-workflows) expert agents for it, each role a real
-[Kiro Crew](https://kiro.dev/docs/crew/) session. The roles work in parallel on their own git branches and look up
-the company's standards in a Kiro Crew knowledge base. Company-issued checks decide what passes, and every failure
-goes back to the role that owns it. An independent reviewer reads the diff, and a person decides at the gates. The
-result is deployed on your machine, and the person who owns the delivery signs it off. A live board shows all of it
-as it happens.
-
-- [So what: more delivered, earlier revenue, lower cost, fewer defects](#so-what-more-delivered-earlier-revenue-lower-cost-fewer-defects)
+- [So what: several times the delivery, end to end](#so-what-several-times-the-delivery-end-to-end)
 - [How: AI-DLC, a knowledge base and a team of agents](#how-ai-dlc-a-knowledge-base-and-a-team-of-agents)
 - [Why Kiro Crew](#why-kiro-crew)
 - Reference: [Install and run in detail](#install-and-run-in-detail) · [Guardrails](#guardrails) · [Use it with your own team](#use-it-with-your-own-team) · [The example](#the-example) · [Layout](#layout) · [Develop and test](#develop-and-test) · [Known limitations](#known-limitations)
 
-## So what: more delivered, earlier revenue, lower cost, fewer defects
+## So what: several times the delivery, end to end
 
-AI coding assistants make one engineer faster at writing code. How fast an organization delivers is decided
-elsewhere: by how long a requirement waits to be clarified, how many decisions wait for someone, how much work
-comes back from testing, review and release approval, and how much of the company's own rules has to be checked by
-hand. This sample moves the work between those points to a team of agents and keeps people on the decisions, so
-that the same people deliver more, sooner and at a lower cost per unit of work, without more defects reaching users.
+How fast an organization delivers is not decided by how fast its engineers write code. It is decided elsewhere: by
+how long a requirement waits to be clarified, how many decisions wait for someone, how much work comes back from
+testing, review and release approval, and how much of the company's own rules has to be checked by hand. This sample
+moves the work between those points to a team of agents and keeps people on the decisions, so that the same people
+deliver several times as much, and sooner, without more defects reaching users.
 
 ### What it adds up to for an organization (simulated)
 
@@ -82,13 +92,10 @@ revenue: you enter the gross margin a new application or feature brings per day,
 reported after release is a fix that links back to what it fixes; a measured run has had no time after release
 yet, so it is not counted in the defect rate.
 
-![The CTO view on the simulated organization: four cards for more, faster, cheaper and steadier, and deliveries per week before and after](docs/images/cto-view.jpg)
-
-*The CTO view (labelled 模拟企业 · 含实测, simulated organization with measured runs). This screenshot also
-counts seven runs that had been signed off on the machine, so its totals are slightly higher than the table. The
-更稳 (steadier) card shows what those runs caught before release (checks, review, people) and the largest risk a
-person noted at a gate: a promotion plan whose price-protection refunds were over the approval limit, sent back
-and cut by CNY 206,100.*
+The CTO view at the top of this page also counts seven runs that had been signed off on the machine, so its totals
+are slightly higher than the table. Its 更稳 (steadier) card shows what those runs caught before release (checks,
+review, people) and the largest risk a person noted at a gate: a promotion plan whose price-protection refunds were
+over the approval limit, sent back and cut by CNY 206,100.
 
 ### What one delivery takes (measured)
 
@@ -119,6 +126,14 @@ company; sent back once by the person. The value stream shows where the time wen
 board at that moment.*
 
 ## How: AI-DLC, a knowledge base and a team of agents
+
+A one-sentence requirement goes in. An orchestrator forms a team of
+[AI-DLC](https://github.com/awslabs/aidlc-workflows) expert agents for it, each role a real
+[Kiro Crew](https://kiro.dev/docs/crew/) session. The roles work in parallel on their own git branches and look up
+the company's standards in a Kiro Crew knowledge base. Company-issued checks decide what passes, and every failure
+goes back to the role that owns it. An independent reviewer reads the diff, and a person decides at the gates. The
+result is deployed on your machine, and the person who owns the delivery signs it off. A live board shows all of it
+as it happens.
 
 ### AI-DLC: phases and human gates
 
