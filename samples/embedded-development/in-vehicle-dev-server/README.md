@@ -120,9 +120,9 @@ The three gates of the framework apply:
 
 **Evidence tiers.** Each result on the evidence page carries the tier its evidence came from: unit test, emulation
 or real target (the optional profile). The page also lists what emulation cannot show, such as CPU load on the real
-SoC. While a requirement that the team rules mark as real-target only has emulation evidence alone, it is reported
-as blocked, not passed, and the release check fails. The sample's work item has no such requirement, so the default
-profile can be signed off.
+SoC. When the team rules mark a requirement as real-target only and its only evidence comes from emulation, it is
+reported as blocked, not passed, and the release check fails. The sample's work item has no such requirement, so the
+default profile can be signed off.
 
 ### 4. Tool connectors with guardrails
 

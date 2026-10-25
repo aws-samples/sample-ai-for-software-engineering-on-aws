@@ -71,6 +71,10 @@ build samples for the embedded scenarios they know, and each one works in Kiro a
   hours, and a failed run can damage hardware, so the loop is closed in simulation first and on hardware only behind
   the gates.
 
+Two scenarios are in development on this framework:
+[in-vehicle software on a development server next to the bench](samples/embedded-development/in-vehicle-dev-server/)
+and [robot firmware and software, where a digital twin decides and a person flashes](samples/embedded-development/robot-twin-and-flash-gate/).
+
 The [enterprise application and data](samples/enterprise-application-and-data/) and
 [mobile app](samples/mobile-app-development/) samples are planned; their pages set out what, how and why.
 
