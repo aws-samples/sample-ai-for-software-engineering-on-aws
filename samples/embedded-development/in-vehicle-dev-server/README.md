@@ -109,6 +109,7 @@ Checks are command-line scripts with pass or fail. The build server runs them; t
 | `checks/trace.sh` | Before deploy | Every change and justification cites a finding, and a fact entry where it touches behaviour |
 | `checks/runtime-limits.sh` | After deploy | Peak memory of `vstatd` during the replay within the limit. CPU is reported only relative to the baseline on the same emulator, because emulated CPU time says little about the real SoC. Both are labelled as emulation results |
 | `checks/logdiff.sh` | After deploy | The runtime log on the replay matches the baseline: same signals and values, same timeouts and errors, in the same order. Guest time runs on QEMU's instruction counter (`-icount`) so timing is repeatable; the tolerance is a setting in the platform notes. Differences listed in the approved triage are allowed |
+| `checks/release.sh` | Before sign-off | Every check passed on the final commit, and no requirement is blocked by its evidence tier |
 
 The three gates of the framework apply:
 
@@ -116,6 +117,12 @@ The three gates of the framework apply:
 - **Action gate:** every deploy, restart and target write waits for a person at the operator console.
 - **Physical gate:** the bench refuses an action when the simulated supply is outside 11.0 to 14.8 V, or when the
   ignition is in the wrong state for it (a deploy needs KL15 on).
+
+**Evidence tiers.** Each result on the evidence page carries the tier its evidence came from: unit test, emulation
+or real target (the optional profile). The page also lists what emulation cannot show, such as CPU load on the real
+SoC. While a requirement that the team rules mark as real-target only has emulation evidence alone, it is reported
+as blocked, not passed, and the release check fails. The sample's work item has no such requirement, so the default
+profile can be signed off.
 
 ### 4. Tool connectors with guardrails
 
@@ -130,6 +137,25 @@ Two MCP servers. Their guardrails live in the servers, whatever the agent sessio
   - After an interruption the bench reports the target as *unknown* and accepts only reads and a reconcile until a
     person has checked its state. Nothing is retried automatically.
   - Permissions are read-only, controlled-write and physical, granted by role.
+- **Both servers:**
+  - Deny by default. Each tool has a permission class, and a call is refused unless the caller's role grants that
+    class. A request that needs approval is refused when nobody answers at the operator console before its timeout,
+    a setting recorded with each run.
+  - No tool merges, tags or publishes; that stays with the release owner.
+  - Every call, reads included, goes to a JSONL audit log with its class and outcome. The action record is the part
+    of that log for physical actions. The evidence page takes its tool-call and action lists from it.
+
+**Around the servers (defence in depth).** The servers are the only path that is meant to work; these measures
+make the other paths fail too:
+
+- Only `bench` can reach the target: the agents' shell runs without the target's SSH key and without access to the
+  gateway socket. A hook also refuses shell commands that reach the target directly, for example `ssh` or `scp` to
+  the emulated CC-1.
+- The agent configurations deny `git push` and history rewrites (`push --force`, `rebase`, `reset --hard`). Command
+  patterns are easy to get around, for example with `git -C <dir> push` or a compound command, so the build server
+  also holds no push credentials.
+- A probe test tries these commands and their variants against the agent configurations. Run it again after each
+  Kiro or Kiro Crew update, because how rules match commands can change between versions.
 
 Neither server needs `--trust-all-tools`, and the sample's agent configurations do not use it.
 
@@ -149,7 +175,7 @@ there.
 | --- | --- | --- |
 | `knowledge/` | Steering files | A knowledge source the agents search and cite |
 | `mcp/build`, `mcp/bench` | MCP configuration | MCP servers of a custom agent |
-| `checks/` | Hooks that block the next tool call on failure; the guardrails themselves are in the MCP servers | Run by a Kiro Crew app before each gate, as in the [agent-team sample](../../agent-team-on-kiro-crew/) |
+| `checks/` | Hooks that block the next tool call on failure; a hook on raw target commands as defence in depth; the guardrails themselves are in the MCP servers | Run by a Kiro Crew app before each gate, as in the [agent-team sample](../../agent-team-on-kiro-crew/) |
 | Roles (optional) | Custom agents | Team members |
 
 The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable on their own.
@@ -164,6 +190,9 @@ The rehearsal scorecard records, for the batch:
 - check failures caught before the bench, by check;
 - log differences found, and how many were real behaviour changes;
 - bench actions approved, refused and reconciled;
+- tool calls by permission class, and how many were refused;
+- checks whose result changed when a person, or a separate session, reran every check on the final commit from a
+  clean build with no build cache;
 - defects found later that a check should have caught.
 
 The first rehearsal's numbers are the baseline. The sample publishes measured numbers only, with how they were
@@ -198,11 +227,15 @@ been dry-run once.
 2. `vstatd` reference project: the service, its unit tests, CMake with the cross toolchain file, and the seeded
    findings and difficulties.
 3. Bench emulation: a script that builds the emulated CC-1 image, the gateway socket and drive replay, the baseline
-   log, the simulated supply, the operator console and a reset script.
-4. Checks, each with a failing and a passing example.
-5. MCP servers `build` and `bench` with their guardrails and a test for each guardrail.
-6. Kiro and Kiro Crew configurations; optional AI-DLC plugin.
-7. Rehearsal guide and scorecard; one dry run with the time and credits it used.
+   log, the simulated supply, the operator console and a reset script. Also a `doctor` script that checks the host
+   before a session.
+4. Checks, each with a failing and a passing example; the release check and the evidence page generator.
+5. MCP servers `build` and `bench`, with their guardrails, the audit log, a test for each guardrail and a smoke test
+   of both.
+6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin.
+7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
+   session and a person answers only at the operator console, followed by an independent rerun of the checks.
+   Record the time and credits it used.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page; `cleanup.sh` removes everything it created; every third-party tool is listed with its
@@ -214,10 +247,11 @@ identifiers; no `--trust-all-tools`.
 | Folder | Contents |
 | --- | --- |
 | `knowledge/` | Synthetic interface specification, platform notes, fact entries, team rules, findings backlog |
-| `checks/` | The seven checks |
+| `checks/` | The seven checks, the release check and the evidence page generator |
 | `mcp/` | `build` and `bench` servers and their guardrail tests |
+| `agents/` | Kiro and Kiro Crew configurations, the bypass hook, the permission probe test |
 | `reference-project/` | `vstatd`, its tests, the cross toolchain file |
-| `bench/` | Emulated-target image build script, drive replay, baseline log, simulated supply, operator console |
+| `bench/` | Emulated-target image build script, drive replay, baseline log, simulated supply, operator console, doctor script |
 | `rehearsal/` | One-day guide and scorecard |
 
 ## Prerequisites
