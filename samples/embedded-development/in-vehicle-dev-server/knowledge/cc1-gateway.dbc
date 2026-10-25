@@ -1,0 +1,134 @@
+VERSION "VSTATD-IF rev 1.3"
+
+NS_ :
+    CM_
+    BA_DEF_
+    BA_DEF_DEF_
+    BA_
+    VAL_
+
+BS_:
+
+BU_: VCU BMS BCM TPMS CC1
+
+BO_ 256 VCU_PowerState: 8 VCU
+ SG_ LvSystemState : 0|3@1+ (1,0) [0|5] "" CC1
+ SG_ LvBatteryVoltage : 8|10@1+ (0.02,0) [6|18] "V" CC1
+
+BO_ 257 VCU_Speed: 8 VCU
+ SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|300] "km/h" CC1
+
+BO_ 258 VCU_Gear: 8 VCU
+ SG_ CurrentGear : 0|8@1- (1,0) [-1|8] "" CC1
+ SG_ SelectedGear : 8|8@1- (1,0) [-1|127] "" CC1
+ SG_ ParkingBrakeEngaged : 16|2@1+ (1,0) [0|1] "" CC1
+
+BO_ 259 VCU_Odometer: 8 VCU
+ SG_ TraveledDistance : 0|24@1+ (100,0) [0|1677721400] "m" CC1
+
+BO_ 512 BMS_Status: 8 BMS
+ SG_ SocDisplayed : 0|8@1+ (0.5,0) [0|100] "%" CC1
+ SG_ RemainingRange : 8|16@1+ (10,0) [0|655340] "m" CC1
+ SG_ IsCharging : 24|2@1+ (1,0) [0|1] "" CC1
+
+BO_ 768 BCM_Lights: 8 BCM
+ SG_ LowBeamOn : 0|2@1+ (1,0) [0|1] "" CC1
+ SG_ HighBeamOn : 2|2@1+ (1,0) [0|1] "" CC1
+ SG_ IndicatorLeft : 4|2@1+ (1,0) [0|1] "" CC1
+ SG_ IndicatorRight : 6|2@1+ (1,0) [0|1] "" CC1
+ SG_ HazardOn : 8|2@1+ (1,0) [0|1] "" CC1
+
+BO_ 769 BCM_Closures: 8 BCM
+ SG_ DriverDoorOpen : 0|2@1+ (1,0) [0|1] "" CC1
+ SG_ PassengerDoorOpen : 2|2@1+ (1,0) [0|1] "" CC1
+ SG_ TrunkOpen : 4|2@1+ (1,0) [0|1] "" CC1
+ SG_ DriverBelted : 6|2@1+ (1,0) [0|1] "" CC1
+
+BO_ 1024 TPMS_Pressures: 8 TPMS
+ SG_ TirePressureFL : 0|8@1+ (2,0) [0|500] "kPa" CC1
+ SG_ TirePressureFR : 8|8@1+ (2,0) [0|500] "kPa" CC1
+ SG_ TirePressureRL : 16|8@1+ (2,0) [0|500] "kPa" CC1
+ SG_ TirePressureRR : 24|8@1+ (2,0) [0|500] "kPa" CC1
+
+BO_ 1025 BCM_Exterior: 8 BCM
+ SG_ ExteriorAirTemp : 0|8@1+ (0.5,-40) [-40|85] "degC" CC1
+
+CM_ "Synthetic CAN database for the fictional CC-1 cockpit computer, written for this sample. Signal names on the vstatd side follow COVESA VSS v6.1; see vss-mapping.yaml. The signal attribute SnaRaw is defined by this sample: the raw value that means signal not available.";
+CM_ SG_ 256 LvSystemState "VSS Vehicle.LowVoltageSystemState";
+CM_ SG_ 256 LvBatteryVoltage "VSS Vehicle.LowVoltageBattery.CurrentVoltage";
+CM_ SG_ 257 VehicleSpeed "VSS Vehicle.Speed";
+CM_ SG_ 258 CurrentGear "VSS Vehicle.Powertrain.Transmission.CurrentGear";
+CM_ SG_ 258 SelectedGear "VSS Vehicle.Powertrain.Transmission.SelectedGear";
+CM_ SG_ 258 ParkingBrakeEngaged "VSS Vehicle.Chassis.ParkingBrake.IsEngaged";
+CM_ SG_ 259 TraveledDistance "VSS Vehicle.TraveledDistance";
+CM_ SG_ 512 SocDisplayed "VSS Vehicle.Powertrain.TractionBattery.StateOfCharge.Displayed";
+CM_ SG_ 512 RemainingRange "VSS Vehicle.Powertrain.Range";
+CM_ SG_ 512 IsCharging "VSS Vehicle.Powertrain.TractionBattery.Charging.IsCharging";
+CM_ SG_ 768 LowBeamOn "VSS Vehicle.Body.Lights.Beam.Low.IsOn";
+CM_ SG_ 768 HighBeamOn "VSS Vehicle.Body.Lights.Beam.High.IsOn";
+CM_ SG_ 768 IndicatorLeft "VSS Vehicle.Body.Lights.DirectionIndicator.Left.IsSignaling";
+CM_ SG_ 768 IndicatorRight "VSS Vehicle.Body.Lights.DirectionIndicator.Right.IsSignaling";
+CM_ SG_ 768 HazardOn "VSS Vehicle.Body.Lights.Hazard.IsSignaling";
+CM_ SG_ 769 DriverDoorOpen "VSS Vehicle.Cabin.Door.Row1.DriverSide.IsOpen";
+CM_ SG_ 769 PassengerDoorOpen "VSS Vehicle.Cabin.Door.Row1.PassengerSide.IsOpen";
+CM_ SG_ 769 TrunkOpen "VSS Vehicle.Body.Trunk.Rear.IsOpen";
+CM_ SG_ 769 DriverBelted "VSS Vehicle.Cabin.Seat.Row1.DriverSide.IsBelted";
+CM_ SG_ 1024 TirePressureFL "VSS Vehicle.Chassis.Axle.Row1.Wheel.Left.Tire.Pressure";
+CM_ SG_ 1024 TirePressureFR "VSS Vehicle.Chassis.Axle.Row1.Wheel.Right.Tire.Pressure";
+CM_ SG_ 1024 TirePressureRL "VSS Vehicle.Chassis.Axle.Row2.Wheel.Left.Tire.Pressure";
+CM_ SG_ 1024 TirePressureRR "VSS Vehicle.Chassis.Axle.Row2.Wheel.Right.Tire.Pressure";
+CM_ SG_ 1025 ExteriorAirTemp "VSS Vehicle.Exterior.AirTemperature";
+
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 65535;
+BA_DEF_ BO_ "GenMsgSendType" ENUM "Cyclic","NotUsed";
+BA_DEF_ SG_ "SnaRaw" INT -128 16777215;
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+BA_DEF_DEF_ "GenMsgSendType" "Cyclic";
+BA_DEF_DEF_ "SnaRaw" 0;
+BA_ "GenMsgCycleTime" BO_ 256 100;
+BA_ "GenMsgCycleTime" BO_ 257 20;
+BA_ "GenMsgCycleTime" BO_ 258 50;
+BA_ "GenMsgCycleTime" BO_ 259 1000;
+BA_ "GenMsgCycleTime" BO_ 512 100;
+BA_ "GenMsgCycleTime" BO_ 768 100;
+BA_ "GenMsgCycleTime" BO_ 769 100;
+BA_ "GenMsgCycleTime" BO_ 1024 1000;
+BA_ "GenMsgCycleTime" BO_ 1025 1000;
+BA_ "SnaRaw" SG_ 256 LvSystemState 7;
+BA_ "SnaRaw" SG_ 256 LvBatteryVoltage 1023;
+BA_ "SnaRaw" SG_ 257 VehicleSpeed 65535;
+BA_ "SnaRaw" SG_ 258 CurrentGear -128;
+BA_ "SnaRaw" SG_ 258 SelectedGear -128;
+BA_ "SnaRaw" SG_ 258 ParkingBrakeEngaged 3;
+BA_ "SnaRaw" SG_ 259 TraveledDistance 16777215;
+BA_ "SnaRaw" SG_ 512 SocDisplayed 255;
+BA_ "SnaRaw" SG_ 512 RemainingRange 65535;
+BA_ "SnaRaw" SG_ 512 IsCharging 3;
+BA_ "SnaRaw" SG_ 768 LowBeamOn 3;
+BA_ "SnaRaw" SG_ 768 HighBeamOn 3;
+BA_ "SnaRaw" SG_ 768 IndicatorLeft 3;
+BA_ "SnaRaw" SG_ 768 IndicatorRight 3;
+BA_ "SnaRaw" SG_ 768 HazardOn 3;
+BA_ "SnaRaw" SG_ 769 DriverDoorOpen 3;
+BA_ "SnaRaw" SG_ 769 PassengerDoorOpen 3;
+BA_ "SnaRaw" SG_ 769 TrunkOpen 3;
+BA_ "SnaRaw" SG_ 769 DriverBelted 3;
+BA_ "SnaRaw" SG_ 1024 TirePressureFL 255;
+BA_ "SnaRaw" SG_ 1024 TirePressureFR 255;
+BA_ "SnaRaw" SG_ 1024 TirePressureRL 255;
+BA_ "SnaRaw" SG_ 1024 TirePressureRR 255;
+BA_ "SnaRaw" SG_ 1025 ExteriorAirTemp 255;
+
+VAL_ 256 LvSystemState 0 "UNDEFINED" 1 "LOCK" 2 "OFF" 3 "ACC" 4 "ON" 5 "START" 6 "error" 7 "SNA" ;
+VAL_ 258 SelectedGear -1 "R" 0 "N" 126 "P" 127 "D" -128 "SNA" ;
+VAL_ 258 ParkingBrakeEngaged 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 512 IsCharging 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 768 LowBeamOn 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 768 HighBeamOn 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 768 IndicatorLeft 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 768 IndicatorRight 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 768 HazardOn 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 769 DriverDoorOpen 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 769 PassengerDoorOpen 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 769 TrunkOpen 0 "false" 1 "true" 2 "error" 3 "SNA" ;
+VAL_ 769 DriverBelted 0 "false" 1 "true" 2 "error" 3 "SNA" ;
