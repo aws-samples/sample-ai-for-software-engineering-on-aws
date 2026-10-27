@@ -1,7 +1,7 @@
 # Knowledge for the in-vehicle scenario
 
 Everything the agents need to know about `vstatd` and CC-1, with citations. All of it is synthetic and written for
-this sample (build plan item 1).
+this sample.
 
 | File | What it is | Cite as |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ this sample (build plan item 1).
   a knowledge source the agents search. See
   [Where it runs](../README.md#where-it-runs).
 - Every triage decision, change and justification cites a finding and, where it touches behaviour, a fact entry or a
-  page of VSTATD-IF. `checks/trace.sh` (build plan item 4) enforces it.
+  page of VSTATD-IF. `checks/trace.sh` enforces it.
 - The specification describes the current behaviour, which the batch must keep ([TR §4.2](team-rules.md)). A change
   that would alter it needs a specification change first.
 

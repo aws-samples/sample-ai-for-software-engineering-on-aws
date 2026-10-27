@@ -12,7 +12,7 @@
 ## §2 The emulated CC-1 in this sample
 
 - **§2.1 Emulator.** QEMU system emulation of the `virt` machine with a 64-bit Arm CPU, four virtual CPUs and 512 MiB
-  of guest RAM, booting a Linux image built with Buildroot by the bench scripts (build plan item 3).
+  of guest RAM, booting a Linux image built with Buildroot by the bench scripts.
 - **§2.2 Time.** Guest time runs on QEMU's instruction counter with a fixed shift and no real-time sleep
   (`-icount shift=<n>,sleep=off`, not `shift=auto`), so that timing on a replay is repeatable. The drive player runs
   inside the emulated CC-1 in place of `cc1-gwd`, paces its records by the guest's monotonic clock and starts the
