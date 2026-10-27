@@ -19,6 +19,9 @@ bench (item 3) and the checks (item 4) must do so that it works.
 
 Notes for item 2:
 
+- [seed-checks/](seed-checks/) shows each seed and its wrong fix on the build server (`run.sh`), with the results of
+  the last run. Memory figures there are host figures.
+
 - F-011 is simply a bug: an off-by-one in `SignalTable::find` that reads past the table only when a path is not
   found. A unit test that looks up a path not in the table (the `E02` case of `[VSTATD-IF p.9 §6.1]`) under
   AddressSanitizer shows it `[TR §2.2]`.
