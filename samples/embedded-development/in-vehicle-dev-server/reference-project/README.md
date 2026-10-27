@@ -28,11 +28,14 @@ docker run --rm -it -v "$PWD":/work -v /opt/cc1-sysroot:/opt/cc1-sysroot:ro vsta
 ```
 
 The CC-1 sysroot (glibc and the libsystemd headers, CC1-PN §7.2) comes from the Buildroot build of the bench's target
-image (build plan item 3) and is expected in `/opt/cc1-sysroot`. Until that build exists, a stand-in made from Ubuntu
-24.04 arm64 packages can be unpacked there; nothing is installed into the host system:
+image and is expected in `/opt/cc1-sysroot`. Until that build exists, a stand-in made from Ubuntu 24.04 arm64 packages
+can be unpacked there. The script runs inside the build container, with the sysroot directory mounted read-write; it
+downloads over HTTPS, checks each package's SHA-256 against the package index, and installs nothing into the host
+system or the image:
 
 ```bash
-python3 tools/make-standin-sysroot.py /opt/cc1-sysroot
+docker run --rm -v "$PWD":/work -v /opt/cc1-sysroot:/opt/cc1-sysroot vstatd-build \
+  python3 tools/make-standin-sysroot.py /opt/cc1-sysroot
 ```
 
 ## Host build and unit tests
@@ -77,7 +80,10 @@ tools/match-backlog.py build-cross/analysis ../knowledge/findings-backlog.md
 ```
 
 `match-backlog.py` maps every finding to the function that contains it and pairs it with its backlog row; it lists
-findings that are not in the backlog and backlog rows that the analysers no longer report.
+findings that are not in the backlog (`NOT IN BACKLOG`) and backlog rows that the analysers no longer report
+(`MISSING`), and exits non-zero on either. On the current release every row matches. Once findings are fixed, or
+justified with an inline suppression, their rows are expected to show as `MISSING`. The release's static check
+applies this rule: no finding outside the backlog, and `MISSING` only for rows triaged as fixed or justified.
 
 ## Running
 

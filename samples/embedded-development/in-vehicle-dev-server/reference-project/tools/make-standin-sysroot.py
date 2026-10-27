@@ -3,15 +3,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 """Build a stand-in CC-1 sysroot from Ubuntu 24.04 arm64 packages.
 
-The real sysroot comes from the Buildroot build of the bench (build plan item 3). Until that exists, this script
+The real sysroot comes from the Buildroot build of the bench's target image. Until that exists, this script
 unpacks the arm64 packages that provide glibc, the Linux UAPI headers, libsystemd and the C++ runtime into a
 directory, without installing anything into the host system:
 
     python3 tools/make-standin-sysroot.py /opt/cc1-sysroot
 
-It downloads the package index of ports.ubuntu.com, picks the newest version of each package from noble-updates,
-noble-security or noble, downloads the .deb files, unpacks each with `dpkg -x` and writes `standin-manifest.txt`
-(package, version, SHA-256) into the sysroot.
+It downloads the package index of ports.ubuntu.com over HTTPS, picks the newest version of each package from
+noble-updates, noble-security or noble, downloads the .deb files, checks their SHA-256 against the index, unpacks each
+with `dpkg -x` and writes `standin-manifest.txt` (package, version, SHA-256) into the sysroot. Run it in the build
+container (tools/Dockerfile), which has dpkg, Python and the CA certificates.
 """
 
 import hashlib
@@ -23,7 +24,7 @@ import sys
 import tempfile
 import urllib.request
 
-MIRROR = "http://ports.ubuntu.com/ubuntu-ports"
+MIRROR = "https://ports.ubuntu.com/ubuntu-ports"
 SUITES = ("noble-updates", "noble-security", "noble")
 COMPONENTS = ("main", "universe")
 PACKAGES = (

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT-0
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Build environment for vstatd: host compiler for the unit tests, the aarch64 cross compiler, CMake, GoogleTest
-# and the static analysers of the team rules. The sysroot is not part of the image (see tools/make-standin-sysroot.sh).
+# and the static analysers of the team rules. The sysroot is not part of the image (see tools/make-standin-sysroot.py).
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      cmake ninja-build make file binutils-aarch64-linux-gnu \
+      cmake ninja-build file binutils-aarch64-linux-gnu \
       g++-12 g++-12-aarch64-linux-gnu \
       cppcheck clang-tidy-18 \
       libgtest-dev python3 ca-certificates \

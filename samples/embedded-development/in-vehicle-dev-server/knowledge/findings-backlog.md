@@ -1,8 +1,8 @@
 # Findings backlog for `vstatd`
 
 > Synthetic, written for the AI-DLC embedded sample. The findings come from the analysers and settings of
-> `[TR §3]` on the current release. Locations are given by file and function; the reference project (build plan
-> item 2) contains the code they point at, and its analyser run reproduces them with line numbers.
+> `[TR §3]` on the current release. Locations are given by file and function; the reference project contains the
+> code they point at, and its analyser run reproduces them with line numbers.
 
 Label `fix` puts a finding in the current batch; each one gets a triage decision under `[TR §4]`. Label `later` keeps
 it in the backlog.

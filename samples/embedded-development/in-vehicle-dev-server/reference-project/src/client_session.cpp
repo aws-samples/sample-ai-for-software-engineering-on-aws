@@ -321,7 +321,7 @@ bool ClientSession::flush() {
         head_ = static_cast<std::uint16_t>((head_ + 1U) % kQueueLines);
         --count_;
     }
-    // An empty queue starts again at its first line, so that only the lines in use are touched.
+    // An empty queue starts again at its first slot.
     head_ = 0;
     return true;
 }

@@ -13,13 +13,15 @@ Scenarios:
   demo   drive, plus a pause of VCU_Speed (timeout and recovery), an out-of-range speed (INVALID), a bad record, a
          short frame, a gateway loss and a reconnection, and one app that sends GET, LIST and erroneous requests
 
-Prints one JSON object: counts of each log event, VmHWM in KiB (host), the exit status and the app's answers.
+Prints one JSON object: counts of each log event, VmHWM in KiB (host), the exit status and the app's answers. Exits
+non-zero when vstatd does not get ready, exits with a non-zero status or has no VmHWM.
 """
 
 import argparse
 import json
 import os
 import pathlib
+import shutil
 import signal
 import socket
 import subprocess
@@ -176,53 +178,66 @@ def main():
 
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="vstatd-replay-"))
     gw_path, ipc_path, log_path = tmp / "can.sock", tmp / "vstatd.sock", tmp / "run.jsonl"
-    gw = Gateway(str(gw_path))
-    env = dict(os.environ, VSTATD_GATEWAY_SOCKET=str(gw_path), VSTATD_IPC_SOCKET=str(ipc_path))
-    with open(log_path, "w") as out:
-        proc = subprocess.Popen([args.vstatd], stdout=out, stderr=subprocess.STDOUT, env=env)
-    if not wait_for(log_path, '"SERVICE_READY"', 5):
-        proc.kill()
-        raise SystemExit("vstatd did not get ready")
-    apps = [App(str(ipc_path), [f"SUB {p} 100" for p in SUBSCRIBED]) for _ in range(args.clients)]
-    for a in apps:
-        a.start()
-    gw.accept()
-    t0 = time.monotonic()
-    time.sleep(0.2)  # the first frames come 200 ms after the connection
-    answers = []
-    if args.scenario == "drive":
-        drive(gw, args.seconds, t0)
-    else:
-        drive(gw, 1.0, t0)
-        tester = App(str(ipc_path), ["GET Vehicle.Speed", "SUB Vehicle.Speed 50", "LIST", "FOO", "SUB Vehicle.Speed 10",
-                                     "GET Vehicle.Unknown", "UNSUB Vehicle.Speed"])
-        tester.start()
-        drive(gw, 1.6, t0, pause=(1.2, 1.4), invalid_at=1.5)
-        gw.send("this is not a record\nF 1 101 2 C409\n")
-        drive(gw, 1.8, t0)
-        gw.drop()                     # gateway loss (closed)
-        gw.accept()                   # vstatd reconnects after 100 ms
-        t1 = time.monotonic()
-        time.sleep(0.2)
-        drive(gw, 0.6, t1)
-        tester.close()
-        answers = tester.lines
-    hwm = vm_hwm_kib(proc.pid)
-    proc.send_signal(signal.SIGTERM)
-    status = proc.wait(timeout=5)
-    for a in apps:
-        a.close()
-    events = {}
-    lines = log_path.read_text().splitlines()
-    for line in lines:
-        ev = json.loads(line)["ev"]
-        events[ev] = events.get(ev, 0) + 1
-    if args.log:
-        pathlib.Path(args.log).write_text("\n".join(lines) + "\n")
-    print(json.dumps({"events": events, "vm_hwm_kib_host": hwm, "exit_status": status, "clients": args.clients,
-                      "app_answers": answers}, indent=1))
-    return 0
-
+    proc = None
+    apps = []
+    try:
+        gw = Gateway(str(gw_path))
+        env = dict(os.environ, VSTATD_GATEWAY_SOCKET=str(gw_path), VSTATD_IPC_SOCKET=str(ipc_path))
+        with open(log_path, "w") as out:
+            proc = subprocess.Popen([args.vstatd], stdout=out, stderr=subprocess.STDOUT, env=env)
+        if not wait_for(log_path, '"SERVICE_READY"', 5):
+            print("vstatd did not get ready", file=sys.stderr)
+            return 1
+        apps = [App(str(ipc_path), [f"SUB {p} 100" for p in SUBSCRIBED]) for _ in range(args.clients)]
+        for a in apps:
+            a.start()
+        gw.accept()
+        t0 = time.monotonic()
+        time.sleep(0.2)  # the first frames come 200 ms after the connection
+        answers = []
+        if args.scenario == "drive":
+            drive(gw, args.seconds, t0)
+        else:
+            drive(gw, 1.0, t0)
+            tester = App(str(ipc_path), ["GET Vehicle.Speed", "SUB Vehicle.Speed 50", "LIST", "FOO",
+                                         "SUB Vehicle.Speed 10", "GET Vehicle.Unknown", "UNSUB Vehicle.Speed"])
+            tester.start()
+            drive(gw, 1.6, t0, pause=(1.2, 1.4), invalid_at=1.5)
+            gw.send("this is not a record\nF 1 101 2 C409\n")
+            drive(gw, 1.8, t0)
+            gw.drop()                     # gateway loss (closed)
+            gw.accept()                   # vstatd reconnects after 100 ms
+            t1 = time.monotonic()
+            time.sleep(0.2)
+            drive(gw, 0.6, t1)
+            tester.close()
+            answers = tester.lines
+        hwm = vm_hwm_kib(proc.pid)
+        proc.send_signal(signal.SIGTERM)
+        status = proc.wait(timeout=5)
+        events = {}
+        lines = log_path.read_text().splitlines()
+        for line in lines:
+            ev = json.loads(line)["ev"]
+            events[ev] = events.get(ev, 0) + 1
+        if args.log:
+            pathlib.Path(args.log).write_text("\n".join(lines) + "\n")
+        print(json.dumps({"events": events, "vm_hwm_kib_host": hwm, "exit_status": status, "clients": args.clients,
+                          "app_answers": answers}, indent=1))
+        if status != 0:
+            print(f"vstatd exited with status {status}", file=sys.stderr)
+            return 1
+        if hwm is None:
+            print("no VmHWM for vstatd", file=sys.stderr)
+            return 1
+        return 0
+    finally:
+        for a in apps:
+            a.close()
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        shutil.rmtree(tmp, ignore_errors=True)
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -270,18 +270,24 @@ or Kiro Crew. Third-party tools and their licences will be listed here, among th
 target's Linux image built by `setup.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed to the
 repository. They are used as tools and not redistributed.
 
-The reference project builds in the container of `reference-project/tools/Dockerfile` (Ubuntu 24.04), with these
-tools from Ubuntu's packages:
+The reference project builds in the container of `reference-project/tools/Dockerfile`, based on the `ubuntu:24.04`
+image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own licence, recorded in
+`/usr/share/doc/<package>/copyright` in the image), with these tools from Ubuntu's packages. The versions are those `dpkg-query` reports in the container; GCC 12.4 is Ubuntu's
+`g++-12` and `g++-12-aarch64-linux-gnu` 12.4.0-2ubuntu1~24.04.1 from `noble-updates`:
 
 | Tool | Version | Licence |
 | --- | --- | --- |
 | GCC, host and `aarch64-linux-gnu` cross compiler | 12.4 | GPL-3.0-or-later with the GCC Runtime Library Exception |
+| GNU Binutils for `aarch64-linux-gnu` (`binutils-aarch64-linux-gnu`: linker, `strip`) | 2.42 | GPL-3.0-or-later |
 | CMake | 3.28 | BSD-3-Clause |
 | Ninja | 1.11 | Apache-2.0 |
 | GoogleTest | 1.14 | BSD-3-Clause |
 | cppcheck | 2.13 | GPL-3.0-or-later |
 | clang-tidy | 18.1 | Apache-2.0 WITH LLVM-exception |
 | Python | 3.12 | PSF-2.0 |
+| dpkg (`dpkg -x` for the stand-in sysroot) | 1.22 | GPL-2.0-or-later |
+| `file` | 5.45 | BSD-2-Clause |
+| `ca-certificates` (HTTPS downloads of the stand-in sysroot) | 20260816 | MPL-2.0 (certificate data) |
 
 Until the bench's Buildroot build (build plan item 3) provides the CC-1 sysroot, `tools/make-standin-sysroot.py`
 unpacks a stand-in from Ubuntu 24.04 arm64 packages; it is generated on the build server and not committed:
@@ -298,7 +304,8 @@ unpacks a stand-in from Ubuntu 24.04 arm64 packages; it is generated on the buil
 | `liblzma5` (xz 5.4) | Public domain |
 | `libzstd1` | BSD-3-Clause or GPL-2.0 |
 | `libgcc-s1`, `libgcc-12-dev`, `libstdc++6`, `libstdc++-12-dev` | GPL-3.0-or-later with the GCC Runtime Library Exception |
- The knowledge uses signal names from the COVESA Vehicle Signal Specification
+
+The knowledge uses signal names from the COVESA Vehicle Signal Specification
 v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and PyYAML (MIT); see
 [knowledge/README.md](knowledge/README.md#third-party-references).
 

@@ -103,14 +103,16 @@ TEST(Service, RecordsToLogAndApps) {
     gw.send(speed_frame(2500));
     gw.send("F 1 300 8 E101000000000000\n");
     gw.send("F 1 555 8 0000000000000000\nbad record\nF 1 101 2 C409\nH 2\n");
+    // The short frame is the last record logged: wait for it, then everything before it is in the log.
     ASSERT_TRUE(vstatd_test::wait_for(
-        [&]() { return sink.contains(R"("path":"Vehicle.Speed","value":"25.00","status":"AVAILABLE")"); }, 1000ms));
+        [&]() { return sink.contains(R"("ev":"GATEWAY_RECORD_INVALID","reason":"short_dlc","suppressed":"0")"); },
+        1000ms));
+    EXPECT_TRUE(sink.contains(R"("path":"Vehicle.Speed","value":"25.00","status":"AVAILABLE")"));
     EXPECT_TRUE(sink.contains(R"("path":"Vehicle.LowVoltageSystemState","value":"ON","status":"AVAILABLE")"));
     EXPECT_TRUE(sink.contains(R"("path":"Vehicle.LowVoltageBattery.CurrentVoltage","value":"13.48","status":"AVAILABLE")"));
     EXPECT_TRUE(sink.contains(R"("path":"Vehicle.Body.Lights.Beam.Low.IsOn","value":"true","status":"AVAILABLE")"));
     EXPECT_TRUE(sink.contains(R"("path":"Vehicle.Body.Lights.DirectionIndicator.Left.IsSignaling","value":"-","status":"INVALID")"));
     EXPECT_TRUE(sink.contains(R"("ev":"GATEWAY_RECORD_INVALID","reason":"format","suppressed":"0")"));
-    EXPECT_TRUE(sink.contains(R"("ev":"GATEWAY_RECORD_INVALID","reason":"short_dlc","suppressed":"0")"));
 
     // An app: LIST, GET, SUB, and errors.
     const int app = vstatd_test::connect_unix(config.ipc_socket());
@@ -141,8 +143,10 @@ TEST(Service, RecordsToLogAndApps) {
     gw.send("H 3\n");
     ASSERT_TRUE(vstatd_test::wait_for([&]() { return sink.contains(R"("ev":"SIGNAL_TIMEOUT","message":"VCU_Speed")"); }, 1000ms));
     gw.send(speed_frame(2700));
-    ASSERT_TRUE(vstatd_test::wait_for([&]() { return sink.contains(R"("ev":"SIGNAL_RECOVERED","message":"VCU_Speed")"); }, 1000ms));
-    EXPECT_TRUE(sink.contains(R"("path":"Vehicle.Speed","value":"27.00","status":"AVAILABLE")"));
+    // SIGNAL_RECOVERED comes before the values of the same step (§7.3): wait for the value.
+    ASSERT_TRUE(vstatd_test::wait_for(
+        [&]() { return sink.contains(R"("path":"Vehicle.Speed","value":"27.00","status":"AVAILABLE")"); }, 1000ms));
+    EXPECT_TRUE(sink.contains(R"("ev":"SIGNAL_RECOVERED","message":"VCU_Speed")"));
 
     // The subscriber saw the timeout at once.
     const auto updates = vstatd_test::read_until(
@@ -200,8 +204,10 @@ TEST(Service, SeventeenthClientIsRejected) {
     const auto lines = vstatd_test::read_until(extra, buffer, [](const std::string&) { return true; }, 1000ms);
     ASSERT_EQ(lines.size(), 1U);
     EXPECT_EQ(lines[0], "ERR E06 too many clients");
-    ASSERT_TRUE(vstatd_test::wait_for([&]() { return sink.contains(R"("ev":"CLIENT_REJECTED","client":"17")"); }, 1000ms));
-    EXPECT_TRUE(sink.contains(R"("ev":"REQUEST_ERROR","client":"17","code":"E06","suppressed":"0")"));
+    // The IPC thread logs CLIENT_REJECTED, then REQUEST_ERROR, after it has sent the error line: wait for the last.
+    ASSERT_TRUE(vstatd_test::wait_for(
+        [&]() { return sink.contains(R"("ev":"REQUEST_ERROR","client":"17","code":"E06","suppressed":"0")"); }, 1000ms));
+    EXPECT_TRUE(sink.contains(R"("ev":"CLIENT_REJECTED","client":"17")"));
     ::close(extra);
     for (const int fd : apps) {
         ::close(fd);
