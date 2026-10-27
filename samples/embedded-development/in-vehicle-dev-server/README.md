@@ -46,7 +46,7 @@ All names, code and data in this scenario are synthetic.
 - **Service:** `vstatd`, a C++17 platform service. It reads vehicle signals from a gateway socket (a simplification
   of a SocketCAN or SOME/IP gateway), keeps their latest values, and serves them to cockpit apps over a local
   inter-process communication (IPC) socket. It writes a structured runtime log: start-up, subscriptions, signal
-  updates, timeouts and errors. About 5,000 lines, written for the sample.
+  updates, timeouts and errors. About 3,000 lines of product code and 1,000 lines of unit tests, written for the sample.
 - **Build server:** a Linux container with the cross toolchain (`aarch64-linux-gnu-g++`), CMake, the unit-test
   framework and the static analysers. Agents run here, next to the bench, as engineers would over remote SSH.
 - **Bench:** the emulated CC-1; a signal player that replays a recorded drive (synthetic) into the gateway socket; a
@@ -57,7 +57,7 @@ All names, code and data in this scenario are synthetic.
   action with its build digest (the SHA-256 of the exact build) and approves or refuses it. The supply and ignition
   values are set only here or by a scripted scenario; the agents' tools can read them but not change them.
 - **Work item:** *Fix the static analysis findings in `vstatd` marked "fix" in the backlog, and split the signal table
-  handling out of the 900-line `Service::run()`. No change in behaviour: same signals, same values, same timeouts and
+  handling out of the 750-line `Service::run()`. No change in behaviour: same signals, same values, same timeouts and
   same errors on the recorded drive; memory on the target within the limit.* The backlog holds about 30 synthetic
   findings of common kinds: null dereference on an error path, resource leak, uninitialised member, implicit widening
   in a scaling, unchecked return value. A data race on the shared signal table is seeded too; ThreadSanitizer in the
@@ -233,7 +233,8 @@ been dry-run once.
    fact entries, team rules and the findings backlog, with a consistency check; facilitator notes on the seeded
    difficulties. *Done:* [knowledge/](knowledge/), [rehearsal/facilitator-notes.md](rehearsal/facilitator-notes.md).
 2. `vstatd` reference project: the service, its unit tests, CMake with the cross toolchain file, and the seeded
-   findings and difficulties.
+   findings and difficulties. *Done:* [reference-project/](reference-project/); the facilitators' seed checks are in
+   [rehearsal/seed-checks/](rehearsal/seed-checks/).
 3. Bench emulation: a script that builds the emulated CC-1 image, the gateway socket and drive replay, the baseline
    log, the simulated supply, the operator console and a reset script. Also a `doctor` script that checks the host
    before a session.
@@ -258,18 +259,46 @@ identifiers; no `--trust-all-tools`.
 | `checks/` | The seven checks, the release check and the evidence page generator |
 | `mcp/` | `build` and `bench` servers and their guardrail tests |
 | `agents/` | Kiro and Kiro Crew configurations, the bypass hook, the permission probe test |
-| `reference-project/` | `vstatd`, its tests, the cross toolchain file |
+| `reference-project/` | `vstatd`, its GoogleTest unit tests, CMake with the cross toolchain file, the build-environment Dockerfile, a stand-in sysroot script and the analyser scripts |
 | `bench/` | Emulated-target image build script, drive replay, baseline log, simulated supply, operator console, doctor script |
-| `rehearsal/` | One-day guide, scorecard and facilitator notes; not copied into the agents' workspace |
+| `rehearsal/` | One-day guide, scorecard, facilitator notes and seed checks; not copied into the agents' workspace |
 
 ## Prerequisites
 
 To be completed with the build: a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro
-or Kiro Crew. Third-party tools and their licences will be listed here, among them CMake (BSD-3-Clause), the GNU
-cross toolchain (GPL-3.0 with the GCC runtime library exception; glibc LGPL-2.1), QEMU (GPL-2.0), the emulated
+or Kiro Crew. Third-party tools and their licences will be listed here, among them QEMU (GPL-2.0) and the emulated
 target's Linux image built by `setup.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed to the
-repository, GoogleTest (BSD-3-Clause), cppcheck (GPL-3.0) and clang-tidy (Apache-2.0 with LLVM exception). They are
-used as tools and not redistributed. The knowledge uses signal names from the COVESA Vehicle Signal Specification
+repository. They are used as tools and not redistributed.
+
+The reference project builds in the container of `reference-project/tools/Dockerfile` (Ubuntu 24.04), with these
+tools from Ubuntu's packages:
+
+| Tool | Version | Licence |
+| --- | --- | --- |
+| GCC, host and `aarch64-linux-gnu` cross compiler | 12.4 | GPL-3.0-or-later with the GCC Runtime Library Exception |
+| CMake | 3.28 | BSD-3-Clause |
+| Ninja | 1.11 | Apache-2.0 |
+| GoogleTest | 1.14 | BSD-3-Clause |
+| cppcheck | 2.13 | GPL-3.0-or-later |
+| clang-tidy | 18.1 | Apache-2.0 WITH LLVM-exception |
+| Python | 3.12 | PSF-2.0 |
+
+Until the bench's Buildroot build (build plan item 3) provides the CC-1 sysroot, `tools/make-standin-sysroot.py`
+unpacks a stand-in from Ubuntu 24.04 arm64 packages; it is generated on the build server and not committed:
+
+| Packages | Licence |
+| --- | --- |
+| `libc6`, `libc6-dev` (glibc) | LGPL-2.1-or-later |
+| `libcrypt1`, `libcrypt-dev` (libxcrypt) | LGPL-2.1-or-later |
+| `linux-libc-dev` (Linux UAPI headers) | GPL-2.0 WITH Linux-syscall-note |
+| `libsystemd0`, `libsystemd-dev` (systemd) | LGPL-2.1-or-later |
+| `libcap2` | BSD-3-Clause or GPL-2.0 |
+| `libgcrypt20`, `libgpg-error0` | LGPL-2.1-or-later |
+| `liblz4-1` | BSD-2-Clause |
+| `liblzma5` (xz 5.4) | Public domain |
+| `libzstd1` | BSD-3-Clause or GPL-2.0 |
+| `libgcc-s1`, `libgcc-12-dev`, `libstdc++6`, `libstdc++-12-dev` | GPL-3.0-or-later with the GCC Runtime Library Exception |
+ The knowledge uses signal names from the COVESA Vehicle Signal Specification
 v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and PyYAML (MIT); see
 [knowledge/README.md](knowledge/README.md#third-party-references).
 
