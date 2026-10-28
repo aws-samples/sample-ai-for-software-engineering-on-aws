@@ -4,6 +4,21 @@
 > definition of done that the runnable sample must meet. The runnable parts are being built against it (see
 > [Build plan](#build-plan)). It follows the [embedded framework](../README.md) and its five building blocks.
 
+## Business measures
+
+The measures a platform team would use to decide whether this pays off, each with a target stated as a hypothesis
+and the [scorecard](#how-the-sample-is-measured) item that measures it. Targets are set against the team's own
+baseline (its history for comparable batches, or the same batch done the usual way) and corrected after the first
+rehearsal.
+
+| Business measure | Target (hypothesis) | Business goal | Scorecard item |
+| --- | --- | --- | --- |
+| Engineer hours per finding: triage, fix and verification | −50 % | Every finding in the batch decided (fix, justify or defer) and traceable | Engineer hours per finding; findings fixed, justified and deferred; justifications overturned |
+| Changes that pass every pre-bench check on the first round | Set after the first rehearsal | Changes build with the team's toolchain, add no findings and stay within limits | Changes that passed every pre-bench check on the first round; build repair rounds |
+| Behaviour changes that escape to the bench or later | 0 | No change in behaviour, shown by the target's own log | Log differences and real behaviour changes; defects found later |
+| Engineer time attending the bench | −50 % | Bench actions only through guarded tools, each one approved by a person | Engineer time at the operator console and the bench; bench actions approved, refused and reconciled |
+| Cycle time of a batch, from backlog to sign-off | −50 % | The release owner signs off from one evidence page | Time to an approved triage, to the first passing check run and to sign-off |
+
 ## What: clean up a vehicle platform service on the cockpit computer, without changing what it does
 
 In-vehicle software teams rarely build on a laptop. Code, cross toolchains, licence servers and test benches sit on
@@ -86,12 +101,16 @@ All names, code and data in this scenario are synthetic.
 
 ### 2. AI-DLC phases and gates
 
+The five phases of AI-DLC Workflows 2.0, with the hardware stages of the
+[framework](../README.md#2-ai-dlc-phases-with-people-deciding-at-the-gates):
+
 | AI-DLC phase | Work in this scenario | Human gate |
 | --- | --- | --- |
-| Inception | Triage the findings against the rules and the specification; propose fix, justify or defer for each; plan the refactor; split the work into units | The triage list approved; build start approved |
-| Construction | Fixes and the refactor with unit tests; cross build with warnings as errors; static analysis; size check | The checks decide; a unit returns to its owner on any failure |
-| Operation | Deploy to the emulated target, restart `vstatd`, replay the recorded drive, collect the runtime log and memory figures, compare with the baseline | Each deploy, restart and target write, approved one at a time at the operator console |
-| Release | One evidence page for the batch | The release owner signs off |
+| Initialization | Detect the build server, the cross toolchain and sysroot, the emulated CC-1 and, if present, a real bench | None; automatic |
+| Ideation | Decide which findings the batch takes (label `fix`) and whether the batch is worth the effort against the team's baseline | The batch scope approved |
+| Inception | Fact entries from the specification and platform notes; triage of the findings against the rules and the specification (fix, justify or defer); the verification plan, including any requirement that needs the real target; units of work | The triage list approved; build start approved |
+| Construction | Fixes and the refactor with unit tests; cross build with warnings as errors; static analysis; size check; the back-to-back check in the model-based profile | The checks decide; a unit returns to its owner on any failure |
+| Operation | Deploy to the emulated target, restart `vstatd`, replay the recorded drive, collect the runtime log and memory figures, compare with the baseline; one evidence page for the batch | Each deploy, restart and target write, approved one at a time at the operator console; the release owner signs off |
 
 Repair loops are bounded by settings recorded with each run: by default the agents may retry a failing cross build
 three times and a failing log comparison twice; after that the unit stops and a person decides.
@@ -109,11 +128,13 @@ Checks are command-line scripts with pass or fail. The build server runs them; t
 | `checks/trace.sh` | Before deploy | Every change and justification cites a finding, and a fact entry where it touches behaviour |
 | `checks/runtime-limits.sh` | After deploy | Peak memory of `vstatd` during the replay within the limit. CPU is reported only relative to the baseline on the same emulator, because emulated CPU time says little about the real SoC. Both are labelled as emulation results |
 | `checks/logdiff.sh` | After deploy | The runtime log on the replay matches the baseline: same signals and values, same timeouts and errors, in the same order. Guest time runs on QEMU's instruction counter (`-icount`) so timing is repeatable; the tolerance is a setting in the platform notes. Differences listed in the approved triage are allowed |
+| `checks/backtoback.sh` | Before deploy, model-based profile only | Software-in-the-loop results of the generated filter equal its model-in-the-loop results on every test, within the tolerances in the verification plan |
 | `checks/release.sh` | Before sign-off | Every check passed on the final commit, and no requirement is blocked by its evidence tier |
 
 The three gates of the framework apply:
 
-- **Quality gate:** nothing is deployed until build, static, unit, size and trace pass.
+- **Quality gate:** nothing is deployed until build, static, unit, size and trace pass, and back-to-back in the
+  model-based profile.
 - **Action gate:** every deploy, restart and target write waits for a person at the operator console.
 - **Physical gate:** the bench refuses an action when the simulated supply is outside 11.0 to 14.8 V, or when the
   ignition is in the wrong state for it (a deploy needs KL15 on).
@@ -169,6 +190,19 @@ a hybrid activation and the advanced-instances tier, which has a cost. What leav
 to the model service, which includes the code and documents they read; use only material you are allowed to send
 there.
 
+### Optional: a component generated from a model
+
+Some platform services include code generated from models, for example signal filters. The optional model-based profile
+adds one: `soc_display_filter`, a Simulink model of the filter that smooths the displayed state of charge, generated as
+C and linked into `vstatd`. A change request to the filter goes through the `model-design` stage: the agent changes the
+model in Simulink through MathWorks' [MATLAB MCP Core
+Server](https://www.mathworks.com/products/matlab-mcp-core-server.html) and [Simulink Agentic
+Toolkit](https://www.mathworks.com/products/simulink-agentic-toolkit.html), which the agent uses as one more MCP server
+with its own permission class, and runs model-in-the-loop tests. Generated code then has to match the model: a
+back-to-back comparison of software-in-the-loop results with model-in-the-loop results, within the tolerances in the
+verification plan, before the usual checks and the log comparison. The profile needs MathWorks licences; without them,
+the generated code and recorded model results are committed and the agents cannot change the model.
+
 ### Where it runs
 
 | Part | In Kiro (IDE or CLI) | In Kiro Crew |
@@ -184,11 +218,15 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 
 The rehearsal scorecard records, for the batch:
 
+- engineer hours on the batch, by phase and per finding, and engineer time at the operator console and the bench;
 - findings fixed, justified and deferred, and how many justifications the reviewer overturned;
+- changes that passed every pre-bench check on the first round;
 - time from the backlog to an approved triage, to the first passing check run, and to the release sign-off;
 - build repair rounds used;
 - check failures caught before the bench, by check;
 - log differences found, and how many were real behaviour changes;
+- in the model-based profile, back-to-back differences found, and how many were real defects in the model or the
+  code generation settings;
 - bench actions approved, refused and reconciled;
 - tool calls by permission class, and how many were refused;
 - checks whose result changed when a person, or a separate session, reran every check on the final commit from a
@@ -236,6 +274,8 @@ been dry-run once.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
    Record the time and credits it used.
+8. Optional model-based profile: the `soc_display_filter` model, its generated code, recorded model results and
+   `checks/backtoback.sh`.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page; `cleanup.sh` removes everything it created; every third-party tool is listed with its
@@ -243,6 +283,9 @@ licence; synthetic data only, with no customer names, code, data or identifying 
 identifiers; no `--trust-all-tools`.
 
 ## Layout
+
+The optional model-based profile adds `model/` (the model, its generated code and recorded model results) and
+`checks/backtoback.sh`.
 
 | Folder | Contents |
 | --- | --- |
@@ -262,6 +305,10 @@ cross toolchain (GPL-3.0 with the GCC runtime library exception; glibc LGPL-2.1)
 target's Linux image built by `setup.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed to the
 repository, GoogleTest (BSD-3-Clause), cppcheck (GPL-3.0) and clang-tidy (Apache-2.0 with LLVM exception). They are
 used as tools and not redistributed.
+
+The optional model-based profile also needs MATLAB, Simulink and Embedded Coder from MathWorks (commercial
+licences), and the MATLAB MCP Core Server and the Simulink Agentic Toolkit, whose terms are checked before the profile
+is built.
 
 ## Cost
 

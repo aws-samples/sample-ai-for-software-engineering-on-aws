@@ -4,6 +4,20 @@
 > definition of done that the runnable sample must meet. The runnable parts are being built against it (see
 > [Build plan](#build-plan)). It follows the [embedded framework](../README.md) and its five building blocks.
 
+## Business measures
+
+The measures a robot team would use to decide whether this pays off, each with a target stated as a hypothesis and
+the [scorecard](#how-the-sample-is-measured) item that measures it. Targets are set against the team's own baseline
+(its history for comparable changes, or the same change done the usual way) and corrected after the first
+rehearsal.
+
+| Business measure | Target (hypothesis) | Business goal | Scorecard item |
+| --- | --- | --- | --- |
+| Cycle time of a firmware change, from request to sign-off | −50 % | The agents try designs in the twin against a frozen requirement; only passing designs reach a person | Time to an approved requirement, to the first candidate that passes the twin and to sign-off; engineer hours on the change |
+| Flashes and test moves on real hardware | −70 % | Most verification happens in the twin and the emulator | Flashes and test moves approved, refused and reconciled; results by evidence tier |
+| Behaviour on the device that the twin did not predict | 0 | The twin's verdict holds on the emulated board and the device | Behaviour on the emulated board or the device that the twin did not predict |
+| Unsafe physical actions carried out | 0 | Nothing flashes or moves the robot unsupervised | Requests refused because the robot was not in a safe state; actions carried out outside a safe state |
+
 ## What: change how a robot behaves, prove it in a twin, then update the robot through two separate paths
 
 Robots, and many physical AI devices, have two computers. A real-time controller (a microcontroller running
@@ -34,8 +48,8 @@ profile further down is optional too.
 | An engineer who owns the release | The same engineer signs it off from one evidence page, with every result labelled by its evidence tier |
 
 **What it means for the team.** The agents can try many designs in the twin, and only designs that pass the frozen
-requirement reach a person. The engineer's time moves from re-flashing and watching test runs to deciding at three
-points: the requirement, the flash, the release. The sample measures this with the
+requirement reach a person. The engineer's time moves from re-flashing and watching test runs to deciding at four
+points: the change, the requirement, the flash, the release. The sample measures this with the
 [one-day guided rehearsal](../../../docs/guided-rehearsal.md); the [scorecard](#how-the-sample-is-measured) lists
 what is recorded. It reports no productivity figures until a rehearsal has produced them.
 
@@ -89,12 +103,16 @@ All names, code and data in this scenario are synthetic.
 
 ### 2. AI-DLC phases and gates
 
+The five phases of AI-DLC Workflows 2.0, with the hardware stages of the
+[framework](../README.md#2-ai-dlc-phases-with-people-deciding-at-the-gates):
+
 | AI-DLC phase | Work in this scenario | Human gate |
 | --- | --- | --- |
-| Inception | Requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; design of the guard change | Requirements and test definition approved; build start approved |
-| Construction | Firmware change and unit tests; builds for the controller and for the twin; static checks; the twin runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure |
-| Operation | Flash the emulated board through the gate, or a real robot in the device profile; update the main computer's software through its own path; boot and self-test on the target | Each flash and test move, approved for its build digest at the operator console; each software release to the robot |
-| Release | One evidence page with every result labelled by tier | The release owner signs off |
+| Initialization | Detect the toolchains for both computers, the twin, the emulated board and, if present, a real robot | None; automatic |
+| Ideation | Decide whether the behaviour change is worth doing and whether it touches safety functions | The change approved for work |
+| Inception | Requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; the verification plan: the evidence tier each requirement needs and, in the model-based profile, the back-to-back tolerances; design of the guard change | Requirements and test definition approved; build start approved |
+| Construction | Firmware change, or a change to the control-law model, with unit tests; builds for the controller and for the twin; static checks; the twin runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure |
+| Operation | Flash the emulated board through the gate, or a real robot in the device profile; update the main computer's software through its own path; boot and self-test on the target; one evidence page with every result labelled by tier | Each flash and test move, approved for its build digest at the operator console; each software release to the robot; the release owner signs off |
 
 ### 3. Checks and gates before the robot
 
@@ -109,6 +127,7 @@ parameters.
 | `checks/size.sh` | Flash and RAM use of the controller build within the limits in the team rules |
 | `checks/twin.sh` | The frozen push tests in the twin, with the firmware in the loop: no falls up to the rated impulse, travel and wheel speed within the limits, for every seed |
 | `checks/trace.sh` | Every requirement, test and twin parameter cites a fact entry; every result carries its evidence tier |
+| `checks/backtoback.sh` | Model-based profile only: the twin's results with the generated control code equal the model-in-the-loop results on every frozen test, within the tolerances in the verification plan |
 
 **Evidence tiers.** Every test result on the evidence page carries one of four tiers: *mock* (unit tests against
 fakes), *simulation* (the twin), *emulation* (the QEMU board) and *device* (a real robot, in the optional device
@@ -159,6 +178,20 @@ availability and Regions before choosing this profile. It needs an AWS
 account and credentials allowed to create the gateway and the policy, it is charged at AgentCore's prices, and
 `cleanup.sh` deletes what it created.
 
+### Optional: a control law designed in Simulink
+
+Controller teams often design control laws as models and generate the firmware's control code from them. The optional
+model-based profile does this for the balance controller and the actuator guard: a Simulink model with a plant model of
+RB-1, configured to generate fixed-point C for the Cortex-M3. In the `model-design` stage the agent changes the model
+through MathWorks' [MATLAB MCP Core Server](https://www.mathworks.com/products/matlab-mcp-core-server.html) and
+[Simulink Agentic Toolkit](https://www.mathworks.com/products/simulink-agentic-toolkit.html), which the agent uses as
+one more MCP server with its own permission class, and runs model-in-the-loop tests. The generated code goes into the
+firmware, and the twin then runs that firmware against the frozen requirement as usual. A back-to-back comparison of the
+twin's results with the model-in-the-loop results shows that, on the frozen tests, the generated code matches the model
+within the tolerances in the verification plan; fixed-point saturation is one difference it can catch. Flashing still
+goes through the gate. The profile needs MathWorks licences; without them, the generated code and recorded model results
+are committed and the agents cannot change the model.
+
 ### 5. The agent next to the robot
 
 The agents run on the team's development host next to the twin and the robot. Flashing waits for the operator
@@ -181,13 +214,18 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 
 The rehearsal scorecard records:
 
+- engineer hours on the change, by phase;
 - candidates tried in the twin, and how many passed;
 - time from the change request to an approved requirement, to the first candidate that passes the twin, and to the
   release sign-off;
 - check failures caught before the flash, by check;
-- flashes and test moves approved, refused and reconciled;
+- flashes and test moves approved, refused and reconciled, by target (emulated board or device);
 - results by evidence tier;
-- any behaviour on the emulated board or the device that the twin did not predict.
+- any behaviour on the emulated board or the device that the twin did not predict;
+- flash and move requests refused because the robot was not in a safe state, and any action carried out outside a
+  safe state;
+- in the model-based profile, back-to-back differences found, and how many were real defects in the model or the
+  code generation settings.
 
 The first rehearsal's numbers are the baseline. The sample publishes measured numbers only, with how they were
 measured, and labels each by its evidence tier.
@@ -221,6 +259,8 @@ been dry-run once.
 6. MCP servers `build`, `twin` and `robot` with a test for each guardrail; the optional AWS profile.
 7. Kiro and Kiro Crew configurations; optional AI-DLC plugin.
 8. The evidence page generator; rehearsal guide and scorecard; one dry run with the time and credits it used.
+9. Optional model-based profile: the Simulink model of the balance controller and actuator guard with the RB-1 plant
+   model, generated code, recorded model results and `checks/backtoback.sh`.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page without a robot; `cleanup.sh` removes everything it created, including the optional
@@ -232,7 +272,8 @@ names, code, data or identifying details; no credentials or account identifiers;
 | Folder | Contents |
 | --- | --- |
 | `knowledge/` | Synthetic robot notes, fact entries, team rules, the frozen requirement and tests |
-| `checks/` | The six checks |
+| `checks/` | The six checks and the back-to-back check of the model-based profile |
+| `model/` | The optional model-based profile: model, generated code, recorded model results |
 | `mcp/` | `build`, `twin` and `robot` servers and their guardrail tests |
 | `reference-project/` | Controller firmware with its hardware abstraction layer, the main computer's app and update client |
 | `twin/` | MuJoCo model, firmware-in-the-loop harness, the simple simulator and the rewritten controller |
@@ -249,6 +290,10 @@ or Kiro Crew. Third-party tools and their licences will be listed here, among th
 licences), CMake (BSD-3-Clause), Unity (ThrowTheSwitch, MIT) for firmware unit tests, GoogleTest (BSD-3-Clause) for
 the app, cppcheck (GPL-3.0) and clang-tidy (Apache-2.0 with LLVM exception). They are used as tools and
 not redistributed. The optional AWS profile also needs an AWS account and the AWS CLI.
+
+The optional model-based profile also needs MATLAB, Simulink, Stateflow and Embedded Coder from MathWorks
+(commercial licences), and the MATLAB MCP Core Server and the Simulink Agentic Toolkit, whose terms are checked before
+the profile is built.
 
 ## Cost
 
