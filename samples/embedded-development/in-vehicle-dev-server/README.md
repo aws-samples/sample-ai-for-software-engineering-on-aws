@@ -102,7 +102,8 @@ All names, code and data in this scenario are synthetic.
 ### 2. AI-DLC phases and gates
 
 The five phases of AI-DLC Workflows 2.0, with the hardware steps of the
-[framework](../README.md#2-ai-dlc-phases-with-people-deciding-at-the-gates):
+[framework](../README.md#2-ai-dlc-phases-with-people-deciding-at-the-gates) (packaged as the
+[`hw` plugin](../aidlc-plugin/hw/)):
 
 | AI-DLC phase | Work in this scenario | Human gate |
 | --- | --- | --- |
