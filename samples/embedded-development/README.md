@@ -39,6 +39,13 @@ For the team, the time an engineer spends on a feature moves from writing and re
 reviewing evidence, and defects are caught before a board is involved. A sample states how it measures that, for
 example with the one-day [guided rehearsal](../../docs/guided-rehearsal.md).
 
+**Business measures come first.** A scenario page opens with the few business measures a team would use to decide
+whether the work pays off, for example engineer hours per change, cycle time from request to sign-off, bench time,
+and defects that escape to the bench or later. Each measure has a target, stated as a hypothesis, and the scorecard
+item that measures it. A claim such as "50 % less time" needs a baseline: the team's own history for comparable work,
+or the same work done the usual way. Quality measures are always reported with efficiency measures. A sample built on
+synthetic data shows that the mechanism works; the headline numbers come from a rehearsal on a team's own work.
+
 ## How: five building blocks
 
 These are the parts field engagements have found necessary. Each block lists a reference approach; a sample may
@@ -53,14 +60,41 @@ example a vision model plus cross-checks, before the facts reach the development
 
 ### 2. AI-DLC phases with people deciding at the gates
 
-A reference mapping, to adapt to the scenario:
+Embedded samples keep the five phases of [AI-DLC Workflows 2.0](https://github.com/awslabs/aidlc-workflows) and its
+core stages. Hardware work is added inside those phases the way an
+[AI-DLC plugin](https://github.com/awslabs/aidlc-workflows/blob/9863ec8b8485af5953266df550caf5a26e709ab1/docs/harness-engineering/10-authoring-a-plugin.md)
+does it: new stages, and contributions that add to core stages, so that a team that already runs AI-DLC keeps its
+lifecycle. Which phases run depends on the scope: Initialization always runs and has no approval gate; small scopes
+may skip Ideation. A reference mapping, to adapt to the scenario:
 
 | AI-DLC phase | Embedded work | Human gate |
 | --- | --- | --- |
-| Inception | Requirements from the hardware facts; driver, interface, timing and resource design; work split | Requirements, then build start |
-| Construction | Code and tests; build with the cross toolchain; tests in simulation or emulation | The checks in block 3 decide |
-| Operation | Flash and test on a real board and bench, where the sample includes hardware | Each irreversible hardware action |
-| Release | Evidence collected for the release | The engineer who owns the release signs off |
+| Initialization | AI-DLC's own set-up: workspace scan and workflow state | None; automatic |
+| Ideation | Intent; feasibility including the hardware (resource budget, target, bench availability); scope, including whether functional safety applies | Scope approved |
+| Inception | Detect the toolchain, licence server, benches and simulators, and record which evidence tiers the run can reach; hardware facts from datasheets and specifications; requirements; interfaces in the domain's formats (for example DBC, ARXML, VSS); a verification plan with the evidence tier each requirement needs; units of work | Requirements and verification plan approved; build start |
+| Construction | Code or model changes and tests; build with the cross toolchain; tests in simulation or a twin; back-to-back comparison where code is generated from models | The checks in block 3 decide |
+| Operation | Deploy or flash through guarded tools; validation on an emulator, a bench or a device, labelled by tier; sign-off from one evidence page | Each irreversible hardware action; the engineer who owns the release signs off |
+
+Hardware steps of the embedded AI-DLC plugin [`hw`](aidlc-plugin/hw/). A plugin cannot override or remove anything in a
+core stage; it adds new stages, and steps and inputs to core stages. In AI-DLC Workflows 2.11.2, Initialization is
+run by AI-DLC itself and a plugin's stages come after the core stages of their phase, so the steps that must come
+earlier are added to a core stage at the right place:
+
+| Step | Phase | Form in the plugin | What it adds |
+| --- | --- | --- | --- |
+| `hw-environment-detection` | Inception | Added to `requirements-analysis`, before the analysis. New, not a rewrite of `workspace-detection`, which is unchanged | Toolchain, licences, benches, simulators and reachable evidence tiers |
+| `hw-knowledge` | Inception | Added to `requirements-analysis`, before the analysis; the requirements cite the fact entries | Datasheets, specifications and interface files turned into fact entries with page and section |
+| `hw-verification-planning` | Inception | New stage, after the core Inception stages | Evidence tier per requirement, requirements that need a real target, coverage and back-to-back tolerances |
+| `hw-model-design` | Construction | Added to `code-generation`, before generation, for units built from a model | Model changes made by the agent in the modelling tool through its MCP server, with model-in-the-loop tests |
+| `hw-simulation-verification` | Construction | New stage at the end of Construction, after `build-and-test`. Not a rewrite of `build-and-test`, which is unchanged apart from added steps: the cross build and the checks before hardware | Simulator and twin runs on the build server, with no deploy to a target; back-to-back comparison of generated code with the model |
+| `hw-bench-deployment` | Operation | New stage. Not a rewrite of `deployment-execution`, which deploys through a CD pipeline and is unchanged | Deploys and flashes to an emulated or real target only through guarded tools, approved for a build digest at an operator console, refused outside safe physical conditions; the checks that need the target, such as a log comparison with a baseline |
+| `hw-evidence-signoff` | Operation | New stage | One evidence page with every result labelled by tier, signed off by the release owner |
+
+The plugin also keeps limits that need a tier above `build-and-test` out of the measurable targets of
+`nfr-requirements` and `nfr-design`, which `build-and-test` would otherwise have to verify.
+
+The five phases and the human gates are what every embedded sample shares. The hardware steps are a reference: a
+sample may use only some of them, and may add steps of its own.
 
 ### 3. Checks and gates before hardware
 
@@ -84,7 +118,7 @@ anything else runs, with no automatic retry; read-only, controlled-write and phy
 ### 5. The agent next to the bench
 
 Many embedded teams build on a shared Linux development server that can reach their benches, and keep code,
-toolchains, license dongles and benches on their own network. A reference pattern is to run the agent on that
+toolchains, licence dongles and benches on their own network. A reference pattern is to run the agent on that
 server, which engineers reach over remote SSH, so that builds, flashing and on-target checks stay inside the network.
 What leaves it is the agent's traffic to the model service, which includes the code and documents the agent reads;
 use only material you are allowed to send there.
@@ -123,9 +157,11 @@ changing the framework. Keep the plain parts usable on their own so that the sam
 ## Contributing an embedded sample
 
 1. **Pick a scenario you know.** For example: in-vehicle software built on a development server next to the bench;
-   model-based design, from models to code on the target; microcontroller firmware on an emulated board.
-2. **Give it its own folder,** `samples/embedded-development/<scenario>/`, with a README that answers what the
-   sample delivers, how it works and why, and that maps it to the five building blocks.
+   microcontroller firmware on an emulated board. Model-based design fits inside such a scenario, as in the two
+   scenarios above.
+2. **Give it its own folder,** `samples/embedded-development/<scenario>/`, with a README that opens with its business
+   measures, answers what the sample delivers, how it works and why, and maps it to the five building blocks and the
+   five AI-DLC phases.
 3. **State how it runs in Kiro and in Kiro Crew.**
 4. **Follow the repository rules** in [docs/adding-a-sample.md](../../docs/adding-a-sample.md): synthetic data and no
    customer information, a simulator or emulator wherever the domain allows, a person's approval on irreversible
