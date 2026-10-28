@@ -105,7 +105,9 @@ three times and a failing log comparison twice; after that the unit stops and a 
 
 ### 3. Checks and gates before the bench
 
-Checks are command-line scripts with pass or fail. The build server runs them; the agents cannot change them.
+Checks are command-line scripts whose exit status is the verdict: pass, fail, or blocked when a check cannot judge,
+for example because a run had not ended ([checks/README.md](checks/README.md)). The build server runs them; the
+agents cannot change them.
 
 | Check | When | Pass condition |
 | --- | --- | --- |
@@ -239,6 +241,9 @@ been dry-run once.
    log, the simulated supply, the operator console and a reset script. Also a `doctor` script that checks the host
    before a session.
 4. Checks, each with a failing and a passing example; the release check and the evidence page generator.
+   *Done:* [checks/](checks/README.md), with the triage format and the run directories the bench hands over (a
+   proposed interface with item 3); the facilitators' runs on the reference project are in
+   [rehearsal/check-examples/](rehearsal/check-examples/).
 5. MCP servers `build` and `bench`, with their guardrails, the audit log, a test for each guardrail and a smoke test
    of both.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin.
@@ -256,7 +261,7 @@ identifiers; no `--trust-all-tools`.
 | Folder | Contents |
 | --- | --- |
 | `knowledge/` | Synthetic interface specification, CAN database, VSS mapping, platform notes, fact entries, team rules, findings backlog, consistency check |
-| `checks/` | The seven checks, the release check and the evidence page generator |
+| `checks/` | The seven checks, the release check, the evidence page generator, their limits and their tests |
 | `mcp/` | `build` and `bench` servers and their guardrail tests |
 | `agents/` | Kiro and Kiro Crew configurations, the bypass hook, the permission probe test |
 | `reference-project/` | `vstatd`, its GoogleTest unit tests, CMake with the cross toolchain file, the build-environment Dockerfile, a stand-in sysroot script and the analyser scripts |
@@ -280,6 +285,7 @@ image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own l
 | GCC, host and `aarch64-linux-gnu` cross compiler | 12.4 | GPL-3.0-or-later with the GCC Runtime Library Exception |
 | GNU Binutils for `aarch64-linux-gnu` (`binutils-aarch64-linux-gnu`: linker, `strip`) | 2.42 | GPL-3.0-or-later |
 | CMake | 3.28 | BSD-3-Clause |
+| Git (the checks judge committed trees) | 2.43 | GPL-2.0-only |
 | Ninja | 1.11 | Apache-2.0 |
 | GoogleTest | 1.14 | BSD-3-Clause |
 | cppcheck | 2.13 | GPL-3.0-or-later |

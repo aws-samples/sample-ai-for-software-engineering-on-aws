@@ -1,0 +1,155 @@
+{
+  "_comment": "An example of the triage file's format, not a triage of the current backlog: only F-013 and F-018 are decided here, every other finding is deferred so that the file is complete. See checks/README.md.",
+  "batch": "vstatd example batch",
+  "base": "0000000000000000000000000000000000000000",
+  "approved": {
+    "by": "release owner",
+    "at": "2026-11-02"
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-002",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-003",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-004",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-005",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-006",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-007",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-008",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-010",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-011",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-012",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-013",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "Pass the line by const reference; no observable effect, so the analyser run of checks/static.sh is the test (TR §4.1)."
+    },
+    {
+      "id": "F-014",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-015",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-016",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-017",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-018",
+      "decision": "fix",
+      "behaviour": true,
+      "evidence": "unit-test",
+      "cites": [
+        "[VSTATD-IF p.8 §5.2]",
+        "[VSTATD-IF p.9 §6.1]"
+      ],
+      "facts": [
+        "IPC-REQUESTS",
+        "ERR-CODES"
+      ],
+      "note": "Parse the interval with strtol and answer E05 for anything that is not a number in range."
+    },
+    {
+      "id": "F-021",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-023",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-025",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-027",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-028",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    }
+  ],
+  "allowed_log_differences": [],
+  "requirements": []
+}
