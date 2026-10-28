@@ -103,14 +103,14 @@ All names, code and data in this scenario are synthetic.
 
 ### 2. AI-DLC phases and gates
 
-The five phases of AI-DLC Workflows 2.0, with the hardware stages of the
+The five phases of AI-DLC Workflows 2.0, with the hardware steps of the
 [framework](../README.md#2-ai-dlc-phases-with-people-deciding-at-the-gates):
 
 | AI-DLC phase | Work in this scenario | Human gate |
 | --- | --- | --- |
-| Initialization | Detect the toolchains for both computers, the twin, the emulated board and, if present, a real robot | None; automatic |
+| Initialization | AI-DLC's own set-up | None; automatic |
 | Ideation | Decide whether the behaviour change is worth doing and whether it touches safety functions | The change approved for work |
-| Inception | Requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; the verification plan: the evidence tier each requirement needs and, in the model-based profile, the back-to-back tolerances; design of the guard change | Requirements and test definition approved; build start approved |
+| Inception | Detect the toolchains for both computers, the twin, the emulated board and, if present, a real robot; requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; the verification plan: the evidence tier each requirement needs and, in the model-based profile, the back-to-back tolerances; design of the guard change | Requirements and test definition approved; build start approved |
 | Construction | Firmware change, or a change to the control-law model, with unit tests; builds for the controller and for the twin; static checks; the twin runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure |
 | Operation | Flash the emulated board through the gate, or a real robot in the device profile; update the main computer's software through its own path; boot and self-test on the target; one evidence page with every result labelled by tier | Each flash and test move, approved for its build digest at the operator console; each software release to the robot; the release owner signs off |
 
@@ -182,7 +182,7 @@ account and credentials allowed to create the gateway and the policy, it is char
 
 Controller teams often design control laws as models and generate the firmware's control code from them. The optional
 model-based profile does this for the balance controller and the actuator guard: a Simulink model with a plant model of
-RB-1, configured to generate fixed-point C for the Cortex-M3. In the `model-design` stage the agent changes the model
+RB-1, configured to generate fixed-point C for the Cortex-M3. In the `hw-model-design` step the agent changes the model
 through MathWorks' [MATLAB MCP Core Server](https://www.mathworks.com/products/matlab-mcp-core-server.html) and
 [Simulink Agentic Toolkit](https://www.mathworks.com/products/simulink-agentic-toolkit.html), which the agent uses as
 one more MCP server with its own permission class, and runs model-in-the-loop tests. The generated code goes into the

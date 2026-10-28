@@ -62,31 +62,36 @@ example a vision model plus cross-checks, before the facts reach the development
 
 Embedded samples keep the five phases of [AI-DLC Workflows 2.0](https://github.com/awslabs/aidlc-workflows) and its
 core stages. Hardware work is added inside those phases the way an
-[AI-DLC plugin](https://github.com/awslabs/aidlc-workflows/blob/main/docs/harness-engineering/10-authoring-a-plugin.md)
-does it: new stages, and contributions that adjust core stages, so that a team that already runs AI-DLC keeps its
+[AI-DLC plugin](https://github.com/awslabs/aidlc-workflows/blob/9863ec8b8485af5953266df550caf5a26e709ab1/docs/harness-engineering/10-authoring-a-plugin.md)
+does it: new stages, and contributions that add to core stages, so that a team that already runs AI-DLC keeps its
 lifecycle. Which phases run depends on the scope: Initialization always runs and has no approval gate; small scopes
 may skip Ideation. A reference mapping, to adapt to the scenario:
 
 | AI-DLC phase | Embedded work | Human gate |
 | --- | --- | --- |
-| Initialization | Detect the toolchain, licence server, benches and simulators; record which evidence tiers the run can reach | None; automatic |
+| Initialization | AI-DLC's own set-up: workspace scan and workflow state | None; automatic |
 | Ideation | Intent; feasibility including the hardware (resource budget, target, bench availability); scope, including whether functional safety applies | Scope approved |
-| Inception | Hardware facts from datasheets and specifications; requirements; interfaces in the domain's formats (for example DBC, ARXML, VSS); a verification plan with the evidence tier each requirement needs; units of work | Requirements and verification plan approved; build start |
-| Construction | Code or model changes and tests; build with the cross toolchain; tests in simulation, emulation or a twin; back-to-back comparison where code is generated from models | The checks in block 3 decide |
+| Inception | Detect the toolchain, licence server, benches and simulators, and record which evidence tiers the run can reach; hardware facts from datasheets and specifications; requirements; interfaces in the domain's formats (for example DBC, ARXML, VSS); a verification plan with the evidence tier each requirement needs; units of work | Requirements and verification plan approved; build start |
+| Construction | Code or model changes and tests; build with the cross toolchain; tests in simulation or a twin; back-to-back comparison where code is generated from models | The checks in block 3 decide |
 | Operation | Deploy or flash through guarded tools; validation on an emulator, a bench or a device, labelled by tier; sign-off from one evidence page | Each irreversible hardware action; the engineer who owns the release signs off |
 
-Hardware stages proposed for an embedded AI-DLC plugin, each added to the phase shown (their order inside a phase
-follows from the stages each one requires):
+Hardware steps proposed for an embedded AI-DLC plugin named `hw`. A plugin cannot override or remove anything in a
+core stage; it adds new stages, and steps and inputs to core stages. In AI-DLC Workflows 2.11.2, Initialization is
+run by AI-DLC itself and a plugin's stages come after the core stages of their phase, so the steps that must come
+earlier are added to a core stage at the right place:
 
-| Stage | Phase | What it adds |
-| --- | --- | --- |
-| `hw-environment-detection` | Initialization | Toolchain, licences, benches, simulators and reachable evidence tiers |
-| `hardware-knowledge` | Inception | Datasheets, specifications and interface files turned into fact entries with page and section |
-| `verification-planning` | Inception | Evidence tier per requirement, requirements that need a real target, coverage and back-to-back tolerances |
-| `model-design` | Construction | Model changes made by the agent in the modelling tool through its MCP server, with model-in-the-loop tests (when the scenario uses model-based design) |
-| `simulation-verification` | Construction | Simulation, emulation or twin runs; back-to-back comparison of generated code with the model; log comparison with a baseline |
-| `bench-deployment` | Operation | Deploys and flashes only through guarded tools, approved for a build digest at an operator console, refused outside safe physical conditions |
-| `evidence-signoff` | Operation | One evidence page with every result labelled by tier, signed off by the release owner |
+| Step | Phase | Form in the plugin | What it adds |
+| --- | --- | --- | --- |
+| `hw-environment-detection` | Inception | Added to `requirements-analysis`, before the analysis. New, not a rewrite of `workspace-detection`, which is unchanged | Toolchain, licences, benches, simulators and reachable evidence tiers |
+| `hw-knowledge` | Inception | Added to `requirements-analysis`, before the analysis; the requirements cite the fact entries | Datasheets, specifications and interface files turned into fact entries with page and section |
+| `hw-verification-planning` | Inception | New stage, after the core Inception stages | Evidence tier per requirement, requirements that need a real target, coverage and back-to-back tolerances |
+| `hw-model-design` | Construction | Added to `code-generation`, before generation, for units built from a model | Model changes made by the agent in the modelling tool through its MCP server, with model-in-the-loop tests |
+| `hw-simulation-verification` | Construction | New stage at the end of Construction, after `build-and-test`. Not a rewrite of `build-and-test`, which is unchanged apart from an added step: the cross build and the checks before hardware | Simulator and twin runs on the build server, with no deploy to a target; back-to-back comparison of generated code with the model |
+| `hw-bench-deployment` | Operation | New stage. Not a rewrite of `deployment-execution`, which deploys through a CD pipeline and is unchanged | Deploys and flashes to an emulated or real target only through guarded tools, approved for a build digest at an operator console, refused outside safe physical conditions; the checks that need the target, such as a log comparison with a baseline |
+| `hw-evidence-signoff` | Operation | New stage | One evidence page with every result labelled by tier, signed off by the release owner |
+
+The five phases and the human gates are what every embedded sample shares. The hardware steps are a reference: a
+sample may use only some of them, and may add steps of its own.
 
 ### 3. Checks and gates before hardware
 

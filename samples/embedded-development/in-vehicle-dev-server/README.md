@@ -101,14 +101,14 @@ All names, code and data in this scenario are synthetic.
 
 ### 2. AI-DLC phases and gates
 
-The five phases of AI-DLC Workflows 2.0, with the hardware stages of the
+The five phases of AI-DLC Workflows 2.0, with the hardware steps of the
 [framework](../README.md#2-ai-dlc-phases-with-people-deciding-at-the-gates):
 
 | AI-DLC phase | Work in this scenario | Human gate |
 | --- | --- | --- |
-| Initialization | Detect the build server, the cross toolchain and sysroot, the emulated CC-1 and, if present, a real bench | None; automatic |
+| Initialization | AI-DLC's own set-up | None; automatic |
 | Ideation | Decide which findings the batch takes (label `fix`) and whether the batch is worth the effort against the team's baseline | The batch scope approved |
-| Inception | Fact entries from the specification and platform notes; triage of the findings against the rules and the specification (fix, justify or defer); the verification plan, including any requirement that needs the real target; units of work | The triage list approved; build start approved |
+| Inception | Detect the build server, the cross toolchain and sysroot, the emulated CC-1 and, if present, a real bench; fact entries from the specification and platform notes; triage of the findings against the rules and the specification (fix, justify or defer); the verification plan, including any requirement that needs the real target; units of work | The triage list approved; build start approved |
 | Construction | Fixes and the refactor with unit tests; cross build with warnings as errors; static analysis; size check; the back-to-back check in the model-based profile | The checks decide; a unit returns to its owner on any failure |
 | Operation | Deploy to the emulated target, restart `vstatd`, replay the recorded drive, collect the runtime log and memory figures, compare with the baseline; one evidence page for the batch | Each deploy, restart and target write, approved one at a time at the operator console; the release owner signs off |
 
@@ -194,7 +194,7 @@ there.
 
 Some platform services include code generated from models, for example signal filters. The optional model-based profile
 adds one: `soc_display_filter`, a Simulink model of the filter that smooths the displayed state of charge, generated as
-C and linked into `vstatd`. A change request to the filter goes through the `model-design` stage: the agent changes the
+C and linked into `vstatd`. A change request to the filter goes through the `hw-model-design` step: the agent changes the
 model in Simulink through MathWorks' [MATLAB MCP Core
 Server](https://www.mathworks.com/products/matlab-mcp-core-server.html) and [Simulink Agentic
 Toolkit](https://www.mathworks.com/products/simulink-agentic-toolkit.html), which the agent uses as one more MCP server
