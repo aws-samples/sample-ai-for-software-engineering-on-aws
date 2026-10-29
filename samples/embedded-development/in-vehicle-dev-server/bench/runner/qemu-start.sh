@@ -12,7 +12,7 @@ SHIFT=${CC1_ICOUNT_SHIFT:?set CC1_ICOUNT_SHIFT}
 
 [[ -f /secrets/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -C cc1-bench -f /secrets/id_ed25519
 cp /images/rootfs.ext4 /state/rootfs.ext4
-rm -f /state/console.log /state/monitor.sock
+rm -f /state/console.log /state/monitor.sock /state/deployed.json
 
 cmd=(qemu-system-aarch64
   -M virt -cpu cortex-a53 -smp 4 -m 512M

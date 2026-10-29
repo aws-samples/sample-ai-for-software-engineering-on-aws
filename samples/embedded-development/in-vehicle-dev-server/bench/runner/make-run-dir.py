@@ -17,6 +17,7 @@ def main():
     ap = argparse.ArgumentParser()
     for k in ("--kind", "--out", "--log", "--result", "--qemu-command", "--deployed", "--replay-id"):
         ap.add_argument(k, required=True)
+    ap.add_argument("--approval", default="")
     a = ap.parse_args()
     if a.kind not in ("run", "baseline"):
         sys.exit("--kind must be run or baseline")
@@ -37,6 +38,7 @@ def main():
         "readback_digest": deployed["readback_digest"],
         "vstatd_restarts": res["restarts"],
         "journal_marker": res["marker"],
+        "approval_request": a.approval,
     }
     (out / f"{a.kind}-result.json").write_text(json.dumps(result, indent=1) + "\n")
     print(out)
