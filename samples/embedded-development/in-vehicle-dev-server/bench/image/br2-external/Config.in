@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: MIT-0
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+source "$BR2_EXTERNAL_CC1_PATH/package/cc1-bench/Config.in"

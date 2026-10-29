@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MIT-0
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# The bench's drive player in place of the CAN gateway daemon (CC1-PN §2.2). Started by the bench for each replay.
+[Unit]
+Description=cc1-gwd stand-in: the bench's drive player
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cc1-bench player --socket /run/cc1-gwd/can.sock --drive /var/lib/cc1-bench/drive.rec --end-marker /run/cc1-gwd/end-of-drive --connected-marker /run/cc1-gwd/connected
+RuntimeDirectory=cc1-gwd
+RuntimeDirectoryMode=0755

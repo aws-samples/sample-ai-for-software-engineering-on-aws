@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT-0
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# The replay's cockpit apps (CC1-PN §2.2): 16 clients that subscribe to vstatd, from 1.2 s after the gateway
+# connection, after every message's first frame. Started by the bench for each replay.
+[Unit]
+Description=Replay clients of vstatd
+
+[Service]
+Type=simple
+User=vstat
+Group=vstat
+ExecStart=/usr/bin/cc1-bench clients --socket /run/vstatd/vstatd.sock --anchor /run/cc1-gwd/connected --count 16 --first-ms 1200 --step-ms 20 --interval-ms 100
