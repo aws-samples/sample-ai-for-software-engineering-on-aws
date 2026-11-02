@@ -19,6 +19,8 @@ import contextlib
 import json
 import re
 import shlex
+import shutil
+import tarfile
 import time
 import uuid
 from pathlib import Path
@@ -261,3 +263,114 @@ async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: 
     failed = sum(c["status"] != "pass" for c in cases)
     return {"at": time.time(), "command": " ".join(names), "cases": cases, "passed": passed, "failed": failed,
             "total": len(cases), "head": head, "checks": rows, "results": str(results)}
+
+
+# --- tests first (D6, TR §4.1) ----------------------------------------------------------------------------------- #
+# unit.sh checks only that a new or changed test names its finding and passes; that it failed before the fix is the
+# app's to see. The rules below mirror checks/lib/check_unit.py (which the app does not import): the same test
+# definitions, the same build and binary, the same ways of writing a finding ID.
+
+_TEST_DEF = re.compile(r"^\s*(?:TEST|TEST_F|TEST_P|TYPED_TEST|TYPED_TEST_P)\(\s*(\w+)\s*,\s*(\w+)\s*\)", re.M)
+
+
+def test_blocks(text: str) -> dict[str, str]:
+    """Suite.Name → its definition, from the macro to the closing brace of its body (as check_unit.test_blocks)."""
+    code = re.sub(r'"(?:\\.|[^"\\\n])*"', lambda m: '"' + " " * (len(m.group(0)) - 2) + '"', text)
+    code = re.sub(r"'(?:\\.|[^'\\\n])*'", lambda m: "'" + " " * (len(m.group(0)) - 2) + "'", code)
+    code = re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), code)
+    blocks = {}
+    for m in _TEST_DEF.finditer(text):
+        start, depth, end = code.find("{", m.end()), 0, len(text)
+        for i in range(start, len(code)) if start >= 0 else ():
+            depth += {"{": 1, "}": -1}.get(code[i], 0)
+            if depth == 0:
+                end = i + 1
+                break
+        blocks[f"{m.group(1)}.{m.group(2)}"] = text[m.start():end]
+    return blocks
+
+
+def id_pattern(fid: str) -> re.Pattern[str]:
+    """F-012, F012 or F_012, never inside F-0121 (checks/README.md)."""
+    return re.compile(rf"(?<![\w-])F[-_]?{fid[2:]}(?!\d)")
+
+
+def _normalize(name: str) -> str:
+    """Suite.Name of a test as GoogleTest reports it (Prefix/Suite.Name/0 for parameterised tests)."""
+    suite, _, test = name.partition(".")
+    return f"{suite.rsplit('/', 1)[-1]}.{test.split('/', 1)[0]}"
+
+
+async def _blocks_at(repo: Path, rev: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    _, files, _ = await gitwork.git(repo, "ls-tree", "-r", "--name-only", rev, "--", "tests", locks=False)
+    for f in files.split():
+        if f.endswith(".cpp"):
+            out.update(test_blocks((await gitwork.git(repo, "show", f"{rev}:{f}", locks=False))[1]))
+    return out
+
+
+async def _extract(repo: Path, rev: str, dest: Path, *paths: str) -> None:
+    archive = dest.parent / f"{dest.name}.tar"
+    await gitwork.git(repo, "archive", "--format=tar", "-o", str(archive), rev, "--", *paths)
+
+    def unpack() -> None:
+        with tarfile.open(archive) as t:
+            t.extractall(dest, filter="data")
+        archive.unlink()
+    await asyncio.to_thread(unpack)
+
+
+async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: str, triage: dict[str, Any],
+                      results: Path) -> dict[str, Any]:
+    """The tests that are new or changed at *head*, built with the code of *base* in the team's build container and
+    run as unit.sh runs them (plain build): every one that names a finding triaged fix with evidence unit-test must
+    fail there, and each such finding needs one. → {ok, reasons, tests: {finding: [Suite.Name]}, results}."""
+    run_wt, results = Path(run_wt), Path(results)
+    results.mkdir(parents=True, exist_ok=True)
+    before, after = await _blocks_at(run_wt, base), await _blocks_at(run_wt, head)
+    changed = {n: text for n, text in after.items() if before.get(n) != text}
+    wanted = sorted(f["id"] for f in triage.get("findings") or [] if isinstance(f, dict)
+                    and f.get("decision") == "fix" and f.get("evidence") == "unit-test")
+    named = {fid: [n for n, text in changed.items() if id_pattern(fid).search(text)] for fid in wanted}
+    reasons = [f"{fid}：分诊定为修复、证据是单元测试，但没有新写或改过的测试写了这个编号" for fid, ns in named.items() if not ns]
+    out = {"ok": False, "reasons": reasons, "tests": named, "results": str(results), "base": base, "head": head}
+    names = sorted({n for ns in named.values() for n in ns})
+    if not names:
+        out["ok"] = not reasons
+        return out
+    tree, build, report, log = results / "tree", results / "build", results / "gtest.json", results / "tests-first.log"
+    await asyncio.to_thread(shutil.rmtree, tree, True)
+    tree.mkdir()
+    await _extract(run_wt, base, tree)  # the code of the base commit …
+    await asyncio.to_thread(shutil.rmtree, tree / "tests", True)
+    await _extract(run_wt, head, tree, "tests")  # … with the tests as the tester wrote them
+    script = (f"cmake -S {shlex.quote(str(tree))} -B {shlex.quote(str(build))} -G Ninja && "
+              f"ninja -C {shlex.quote(str(build))} vstatd_tests && "
+              f"{shlex.quote(str(build / 'tests' / 'vstatd_tests'))} --gtest_output=json:{shlex.quote(str(report))}")
+    root = run_wt.parents[1]
+    container = f"vstatd-tests-first-{uuid.uuid4().hex[:12]}"
+    cmd = docker_command(team["check_runner"], [(str(root), True)], ["sh", "-c", script], name=container)
+    (results / "tests-first.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")
+    rc, why = await _exec(cmd, log, DEFAULT_TIMEOUT_S, container)
+    try:
+        data = json.loads(report.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        tail = log.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-3:] if log.is_file() else []
+        out["reasons"] = reasons + [f"新测试在需求提交 {base[:12]} 的代码上没有跑起来（{why or f'退出码 {rc}'}）：" + " / ".join(tail)[:300]]
+        return out
+    ran: dict[str, bool] = {}  # Suite.Name → failed
+    for suite in data.get("testsuites") or []:
+        for t in suite.get("testsuite") or []:
+            n = _normalize(f"{suite.get('name')}.{t.get('name')}")
+            ran[n] = ran.get(n, False) or bool(t.get("failures"))
+    for fid, ns in named.items():
+        for n in ns:
+            if n not in ran:
+                reasons.append(f"{fid}：测试 {n} 在需求提交上没有跑")
+            elif not ran[n]:
+                reasons.append(f"{fid}：测试 {n} 在需求提交 {base[:12]} 上通过了，它要先失败（TR §4.1）")
+    out.update(ok=not reasons, reasons=reasons, failed=sorted(n for n in names if ran.get(n)))
+    return out

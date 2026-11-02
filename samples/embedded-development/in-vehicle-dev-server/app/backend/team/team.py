@@ -48,8 +48,8 @@ REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 v
 _DONE_RE = re.compile(r"(?<![A-Za-z])DONE\s*[:：]\s*(.*)$", re.M)  # also mid-line: KiroCrew joins messages with no break
 REVIEW_KEEP = 12_000  # characters of a 要改 review a bounced role is given
 TALK_KEEP = 2_000  # characters of a role's answer in a 讨论 at its gate, kept for the gate card
-DECISIONS_FILE = "docs/aidlc/decisions.md"
-TRIAGE_FILE = "triage.json"  # the approved triage, beside the run's repository (runs/<run>/), out of the agents' worktrees  # what people decided at the gates, written into the run branch by the app
+DECISIONS_FILE = "docs/aidlc/decisions.md"  # what people decided at the gates, written into the run branch by the app
+TRIAGE_FILE = "triage.json"  # the approved triage, beside the run's repository (runs/<run>/), out of the agents' worktrees
 # A review names who fixes what: its own `打回：` line (role keys or titles), else every 归X it writes.
 _BOUNCE_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*打回[*_`]*\s*[:：]\s*(.+)$", re.M)  # a list item too
 _OWNER_RE = re.compile(r"归([^）)，,；;。\n]{1,40})")
@@ -312,6 +312,7 @@ class TeamRun:
         self._save_lock = asyncio.Lock()
         self._head: str | None = None  # the run branch head, known within one tick
         self._tests: tuple[str, asyncio.Task[dict[str, Any]]] | None = None  # (head, the test run in the background)
+        self._first: tuple[str, asyncio.Task[dict[str, Any]]] | None = None  # (head, the tester's tests on the base)
         self.errors = 0
 
     @property
@@ -397,6 +398,8 @@ class TeamRun:
         if self.s["needs_test"] and not self.ended:
             await self._test_and_bounce(mgr)
         if not self.ended:
+            await self._tests_first()
+        if not self.ended:
             self._settle()
 
     async def _setup(self) -> None:
@@ -449,6 +452,8 @@ class TeamRun:
     def _settled(self, key: str) -> bool:
         """Done as a dependency: merged (and, behind a person's gate, approved) or skipped."""
         lane = self.lane(key)
+        if (lane.get("first") or {}).get("status", "passed") != "passed":  # the tester's tests did not fail on the base yet
+            return False
         if not self.roles[key]["writable"]:  # a reviewer: done, it let the work through, and a person did (its gate)
             return lane["status"] == "skipped" or (lane["status"] == "done" and bool(lane.get("passed")) and (
                 self.roles[key].get("gate") != "human" or lane.get("gate") == "approved"))
@@ -771,7 +776,11 @@ class TeamRun:
                     t = self.s["tests"]
                     failing = [c for c in t["cases"] if c.get("owner") == key and c["status"] == "fail"]
                     lane.update(status="merged", stuck=False)
-                    if failing:
+                    first = lane.get("first") or {}
+                    if first.get("status") == "failed":  # its tests did not fail on the base: one more round at that
+                        first["status"] = "sent_back"
+                        await self._start(key, "revise", mgr, review=self._first_review(first))
+                    elif failing:
                         await self._start(key, "fix", mgr, failing=failing)
                 else:
                     lane.update(status="waiting" if not self._ready(key) else lane["status"])
@@ -826,6 +835,9 @@ class TeamRun:
             if key in self.test_writers and att["kind"] == "fix":
                 for k in self.impl:  # the tests changed: an implementer that gave up on the old ones may be sent back
                     self.lane(k)["stuck"] = False
+            if (key in self.test_writers and self._approved_triage() is not None
+                    and all(self.lane(k)["status"] in ("waiting", "skipped") for k in self.impl if k != key)):
+                lane["first"] = {"status": "pending"}  # tests first: the developers wait until they fail on the base
             self.emit("merged", f"{self.title(key)}的分支合入运行分支", role=key, frm=key, to="run")
             if own and own.get("from") == key:
                 await self._resolve_ownership()  # before any role it dispatches is looked at in this same tick
@@ -927,6 +939,64 @@ class TeamRun:
         if self._tests is not None:
             self._tests[1].cancel()
             self._tests = None
+        if self._first is not None:
+            self._first[1].cancel()
+            self._first = None
+
+    def _approved_triage(self) -> dict[str, Any] | None:
+        """The approved triage beside the run's repository (None: none yet, or the team has no triage)."""
+        try:
+            data = json.loads((Path(self.s["repo"]).parent / TRIAGE_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) and isinstance(data.get("approved"), dict) else None
+
+    async def _tests_first(self) -> None:
+        """Tests first (D6): once the tester is merged, its new tests run on the triage's base commit in the build
+        container, in the background; every test for a fix must fail there. One that does not goes back to the tester
+        (a round of its own, as any send-back); the developers start only when they all fail."""
+        key = next((k for k in self.test_writers if (self.lane(k).get("first") or {}).get("status") == "pending"), None)
+        triage = self._approved_triage()
+        if key is None or triage is None:
+            return
+        lane, head = self.lane(key), await self.run_head()
+        if self._first is not None and self._first[0] != head:
+            self.cancel_tests()
+        if self._first is None:
+            root = Path(self.s["repo"]).parent
+            n = sum(a["kind"] in ("work", "revise", "fix") for a in lane["attempts"])
+            self._first = (head, asyncio.create_task(checks.tests_first(
+                Path(self.s["run_wt"]), self.team, base=str(triage.get("base") or ""), head=head, triage=triage,
+                results=root / "results" / "tests-first" / str(n))))
+            await asyncio.sleep(0)
+        if not self._first[1].done():
+            return
+        task, self._first = self._first[1], None
+        try:
+            res = task.result()
+        except (checks.TestsUnavailable, gitwork.GitError) as exc:
+            await self.stop(status="failed", text=f"运行失败：app 没法在需求提交上跑测试：{exc}")
+            return
+        lane["first"] = {"status": "passed" if res["ok"] else "failed", "head": head, "base": res["base"],
+                         "tests": res["tests"], "reasons": res["reasons"][:20], "results": res["results"], "at": self.d.now()}
+        if res["ok"]:
+            self.emit("tests", f"{self.title(key)}的新测试在需求提交上都失败了，开发开工", role=key,
+                      data={"first": sorted({n for ns in res["tests"].values() for n in ns})[:40]})
+            return
+        why = "；".join(res["reasons"][:6])
+        if lane["attempt"] >= self.max_attempts(key):
+            self._fail_lane(key, f"测试先行没过，修改的轮数用完了：{why}")
+            return
+        lane["first"]["status"] = "sent_back"
+        self.emit("bounce", f"测试先行没过，打回{self.title(key)}：{why}", role=key, frm="tests", to=key)
+        await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
+
+    def _first_review(self, res: dict[str, Any]) -> str:
+        return "\n".join([f"app 在需求提交 `{res['base'][:12]}` 的代码上跑了你的新测试（构建容器里、和 unit.sh 一样构建，"
+                          "不带消毒器）。TR §4.1 要求测试在修复之前失败，这些不满足：", ""]
+                         + [f"- {r}" for r in res["reasons"][:15]]
+                         + ["", "改测试：断言 VSTATD-IF 规定的正确行为，让它在需求提交上失败、修好以后通过；测试名或测试体里写发现编号。"
+                            f"每次跑的结果在 `{res['results']}`。"])
 
     async def _check_bounce(self, mgr: Any) -> None:
         """A round of the team file's checks: each failure back to the role it was attributed to, one fix round per
@@ -1458,7 +1528,8 @@ class TeamRun:
     def _settle(self) -> None:
         """End a run nothing can move any more; else name what it is doing."""
         lanes = [self.lane(k) for k in self.order]
-        busy = self.s["needs_test"] or any(lane["status"] in ACTIVE for lane in lanes)
+        busy = (self.s["needs_test"] or any(lane["status"] in ACTIVE for lane in lanes)
+                or any((lane.get("first") or {}).get("status") == "pending" for lane in lanes))
         gating = any(lane.get("gate") == "pending" for lane in lanes)
         if not busy and not gating and not any(self.lane(k)["status"] == "waiting" and self._ready(k) for k in self.order):
             held = self.s["tests"].get("held")
