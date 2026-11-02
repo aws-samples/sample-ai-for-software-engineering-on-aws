@@ -85,8 +85,8 @@ if [ "$DRY" = 1 ]; then echo "   (dry run) would wait until Kiro Crew has indexe
   want="$(find "$TEAM_HOME/knowledge" -type f ! -name .DS_Store | wc -l | tr -d ' ')"
   for i in $(seq 1 60); do
     set -- $(kb_state "$KNOWLEDGE")
-    # Kiro Crew counts files as it finds them: wait until it has at least as many as the folder holds
-    if [ "$1" = synced ] && [ "$2" -ge "$want" ] && [ "$2" = "$3" ]; then ok "knowledge source $KNOWLEDGE: $2 documents indexed"; break; fi
+    # Kiro Crew skips file types it does not index (the folder holds $want files), so trust its own count once synced
+    if [ "$1" = synced ] && [ "$3" -gt 0 ] && [ "$2" = "$3" ]; then ok "knowledge source $KNOWLEDGE: $2 of $want files indexed"; break; fi
     [ "$i" = 60 ] && { warn "still indexing ($1, $2 of $want): wait for Knowledge -> Sources to show it synced before the first run"; break; }
     printf "     indexing (%s, %s of %s)...\r" "$1" "$2" "$want"; sleep 10
   done
