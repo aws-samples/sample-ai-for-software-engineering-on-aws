@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MIT-0
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# vstatd on CC-1 (CC1-PN §1.2, §3, §4).
+[Unit]
+Description=vstatd vehicle status service
+After=cc1-gwd.service
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/vstatd
+User=vstat
+Group=vstat
+RuntimeDirectory=vstatd
+RuntimeDirectoryMode=0750
+Restart=on-failure
+RestartSec=1
+MemoryMax=12M
+TimeoutStopSec=2
+
+[Install]
+WantedBy=multi-user.target

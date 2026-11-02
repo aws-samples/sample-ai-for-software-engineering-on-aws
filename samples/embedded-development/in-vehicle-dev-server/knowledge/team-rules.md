@@ -29,7 +29,8 @@
   --inline-suppr`, and clang-tidy 18 on the cross build's `compile_commands.json` with the checks `bugprone-*`,
   `cert-err33-c`, `cert-err34-c`, `cppcoreguidelines-init-variables`, `cppcoreguidelines-pro-type-member-init`,
   `clang-analyzer-*` and `performance-*`. `bugprone-unused-return-value` has its option `CheckedFunctions` set to the
-  check's default list with `::fcntl;::sd_notify` appended.
+  check's default list with `::fcntl;::sd_notify` appended. clang-tidy reports in the project's own headers too
+  (header filter on `src/`); the settings are in `reference-project/.clang-tidy`.
 - **§3.2** An inline suppression is allowed only for a finding whose justification was approved in triage, and it
   names the finding ID: `// cppcheck-suppress <check> ; F-nnn justified` or `// NOLINT(<check>) F-nnn justified`.
 
