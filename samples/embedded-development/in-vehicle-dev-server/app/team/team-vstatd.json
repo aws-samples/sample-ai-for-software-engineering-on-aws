@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "车载平台服务 · AI-DLC 团队",
+  "name": "AIDLC-Embedded团队",
   "orchestrator": "vstatd-team",
   "source": "${sample}/reference-project",
   "knowledge": {

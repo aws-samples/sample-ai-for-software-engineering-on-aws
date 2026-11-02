@@ -58,7 +58,7 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
   return (
     <header className="kt-top">
       <div className="kt-title">
-        {!inApp && <h1>车载平台服务 · AI-DLC 团队</h1>}
+        {!inApp && <h1>AIDLC-Embedded团队</h1>}
         {run && meta && (
           <>
             <span className="kt-run-title" title={run.requirement || run.title}>{run.delivery?.name || run.title}</span>

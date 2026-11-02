@@ -196,7 +196,7 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 > bench (step 12 of the [implementation plan](docs/kiro-crew-app.md#implementation-plan)), so nothing on this page about
 > it is measured yet.
 
-[`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (车载平台服务 · AI-DLC 团队), modelled on the
+[`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (AIDLC-Embedded团队), modelled on the
 [agent-team sample](../../agent-team-on-kiro-crew/). It takes the work item through AI-DLC with six roles, each a Kiro
 Crew session running one of four AI-DLC experts as a Kiro agent template (`embedded-developer-agent`,
 `embedded-architect-agent`, `embedded-quality-agent`, `embedded-architecture-reviewer-agent`). The team has no Kiro Crew
@@ -244,7 +244,7 @@ On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
    release and write the baseline once with `bench/cc1.sh replay --kind baseline --out ~/workplace/vstatd-team/baseline`
    (see [bench/README.md](bench/README.md)). Until the bench is ready, a run stops before its first bench action and the
    board says what is missing and the command for it.
-4. Open Kiro Crew → Apps → 车载平台服务 · AI-DLC 团队 → 团队看板, choose 新需求 (it is filled in with the work item) and
+4. Open Kiro Crew → Apps → AIDLC-Embedded团队 → 团队看板, choose 新需求 (it is filled in with the work item) and
    hand it to the team.
 5. At the triage gate, answer each question (its citations are shown); then approve build start.
 6. Approve each deploy and replay at the operator console: it shows the request and the build's digest. The board shows

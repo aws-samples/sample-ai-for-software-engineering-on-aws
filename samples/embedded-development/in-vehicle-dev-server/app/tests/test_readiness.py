@@ -85,7 +85,7 @@ def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatc
             r = await call(routes, "GET", "/readiness")
             assert r.status == 200 and time.monotonic() - t0 < 1.0  # doctor.sh is still running
             first = {i["key"]: i for i in r.body["items"]}
-            assert r.body["team"] == "车载平台服务 · AI-DLC 团队" and r.body["error"] == ""
+            assert r.body["team"] == "AIDLC-Embedded团队" and r.body["error"] == ""
             assert list(first) == ["knowledge", "image", "doctor", "target", "baseline", "console"]
             assert first["doctor"]["ok"] is None and first["doctor"]["running"] and first["doctor"]["detail"] == "正在跑"
             for _ in range(100):

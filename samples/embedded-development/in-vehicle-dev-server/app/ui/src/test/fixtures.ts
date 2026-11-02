@@ -560,7 +560,7 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
     mk('reviewer', '评审', 'reviewer', 'review', '评审', ['dev-fix', 'dev-refactor'], at ? 'done' : 'waiting', 'aidlc-architecture-reviewer-agent', { writable: [], summary: at ? '可以交付' : null }),
   ]
   run.edges = run.roles.flatMap((r) => r.depends_on.map((d) => [d, r.key] as [string, string]))
-  run.team = { name: '车载平台服务 · AI-DLC 团队', orchestrator: 'vstatd-team' }
+  run.team = { name: 'AIDLC-Embedded团队', orchestrator: 'vstatd-team' }
   run.title = '修复 vstatd 静态分析待办里标为 fix 的发现'
   run.requirement = '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。'
   run.knowledge = { source: { name: 'vstatd', present: true, items: 14, status: 'synced', files_total: 14, files_done: 14, path: '~/workplace/vstatd/knowledge' }, hits: [] }
@@ -616,7 +616,7 @@ const SAMPLE = '/Users/you/sample-ai-for-software-engineering-on-aws/samples/emb
 /** GET /readiness at *at*: the knowledge indexed and the build image there, doctor.sh failing, the target off, no baseline. */
 export function readinessOf(at: number = raw.at): Readiness {
   return {
-    at, team: '车载平台服务 · AI-DLC 团队', error: '',
+    at, team: 'AIDLC-Embedded团队', error: '',
     items: [
       { key: 'knowledge', label: '知识库来源「vstatd」', ok: true, detail: '14 份文档 · 已索引', command: '', needed: 'start', age_s: null, running: false },
       { key: 'image', label: '构建容器镜像 vstatd-build:amd64', ok: true, detail: '在本机', command: '', needed: 'checks', age_s: 12, running: false },

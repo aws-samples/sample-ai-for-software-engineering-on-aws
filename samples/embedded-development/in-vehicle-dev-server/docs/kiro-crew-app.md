@@ -251,7 +251,7 @@ replaces with that path (`"source": "${sample}/reference-project"`, `${sample}/c
 bench run from this folder, as their own READMEs describe, and the same files serve Kiro and Kiro Crew. As in the
 agent-team sample, the folder stays where it is after setup; after a move, `setup.sh` runs again.
 
-Names: the app `vstatd-team`, its board titled 「车载平台服务 · AI-DLC 团队」, run repositories under
+Names: the app `vstatd-team`, its board titled 「AIDLC-Embedded团队」, run repositories under
 `~/workplace/vstatd-team/runs/<run>/`, the knowledge copy under `~/workplace/vstatd/`.
 
 Left out of the copy: team routing and the standards index (one team; the rules are in the knowledge and enforced by

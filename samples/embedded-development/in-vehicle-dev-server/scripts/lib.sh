@@ -53,7 +53,7 @@ kb_state() {
 
 # The app, the team and their names in Kiro Crew and on disk. setup.sh creates them; cleanup.sh removes what it created.
 APP=vstatd-team
-APP_LABEL="车载平台服务 · AI-DLC 团队"
+APP_LABEL="AIDLC-Embedded团队"
 APP_DATA="$HOME/.kiro/crew/apps/$APP"           # the installed app; its data directory (runs, sessions) is data/
 RUNS="$HOME/workplace/$APP"                       # every run's repository, worktrees and results, and the baseline
 TEAM_HOME="$HOME/workplace/vstatd"                # the knowledge copy the knowledge source indexes

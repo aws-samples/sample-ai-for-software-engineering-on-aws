@@ -32,7 +32,7 @@ const TABS: [ViewKind, string, string][] = [
 export function AppBar({ view, projection, onView, onProjection }: { view: ViewKind; projection: boolean; onView: (v: ViewKind) => void; onProjection: () => void }) {
   return (
     <header className="kt-appbar" data-testid="kt-appbar">
-      <h1>车载平台服务 · AI-DLC 团队</h1>
+      <h1>AIDLC-Embedded团队</h1>
       <div className="kt-tabs" role="tablist" aria-label="视图">
         {TABS.map(([k, name, hint]) => (
           <button type="button" role="tab" key={k} aria-selected={view === k} title={hint} onClick={() => view !== k && onView(k)}>
