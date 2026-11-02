@@ -1,0 +1,65 @@
+{
+  "_comment": "Limits the checks apply. Each value cites its source in the knowledge; checks/test verifies that the source states it. No command-line option or environment variable changes them.",
+  "peak_rss_kib": {
+    "value": 8192,
+    "source": "[CC1-PN §3] Peak resident memory (RSS) during the recorded drive: 8 MiB"
+  },
+  "threads_at_end": {
+    "value": 4,
+    "source": "[CC1-PN §3] Threads at the end of the replay: at most 4"
+  },
+  "stripped_size_bytes": {
+    "value": 1572864,
+    "source": "[CC1-PN §3] Binary size, stripped: 1.5 MiB"
+  },
+  "log_time_window_ms": {
+    "value": 20,
+    "source": "[CC1-PN §6.3] t_ms differ by at most 20 ms"
+  },
+  "log_ignored_fields": {
+    "value": {
+      "SERVICE_START": [
+        "version"
+      ]
+    },
+    "source": "[CC1-PN §6.2] Ignored: the version field of SERVICE_START"
+  },
+  "cross_flags": {
+    "value": [
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-O2",
+      "-fstack-protector-strong",
+      "-D_FORTIFY_SOURCE=2"
+    ],
+    "source": "[TR §2.1]"
+  },
+  "cross_compiler": {
+    "value": "aarch64-linux-gnu-g++",
+    "source": "[CC1-PN §7.1]"
+  },
+  "cppcheck_version": {
+    "value": "Cppcheck 2.13",
+    "source": "[TR §3.1] cppcheck 2.13"
+  },
+  "clang_tidy_version": {
+    "value": "version 18.",
+    "source": "[TR §3.1] clang-tidy 18"
+  },
+  "repair_rounds": {
+    "value": {
+      "cross_build": 3,
+      "log_comparison": 2
+    },
+    "source": "[TR §5.1]"
+  },
+  "sysroot": {
+    "value": "/opt/cc1-sysroot",
+    "source": "[CC1-PN §7.2] the sysroot of the Buildroot build; reference-project/README.md: expected in /opt/cc1-sysroot"
+  },
+  "needed_library": {
+    "value": "libsystemd.so.0",
+    "source": "[CC1-PN §4.2] readiness is reported with sd_notify(\"READY=1\") from libsystemd"
+  }
+}

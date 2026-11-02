@@ -92,7 +92,8 @@ def locate(path, lineno, cache):
 def rel(path):
     p = pathlib.Path(path)
     parts = p.parts
-    return "/".join(parts[parts.index("src"):]) if "src" in parts else path
+    # The last "src" component: the project itself may sit under a directory called src.
+    return "/".join(parts[len(parts) - 1 - parts[::-1].index("src"):]) if "src" in parts else path
 
 
 def read_findings(folder, cache):
