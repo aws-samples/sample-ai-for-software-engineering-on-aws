@@ -2,9 +2,9 @@
 
 import asyncio
 
-from teamkit import mod, sh
+from teamkit import TARGET_TEMPLATE, mod, sh
 
-gitwork, constants = mod("gitwork"), mod("constants")
+gitwork = mod("gitwork")
 
 
 def write(wt, rel, text):
@@ -28,7 +28,7 @@ def test_globs():
 
 
 def test_the_requirement_replaces_only_its_section():
-    readme = (constants.TARGET_TEMPLATE / "README.md").read_text(encoding="utf-8")
+    readme = (TARGET_TEMPLATE / "README.md").read_text(encoding="utf-8")
     out = gitwork.with_requirement(readme, "做一个读书会报名小站。")
     assert out.startswith("# 活动报名小站\n\n## 需求\n\n做一个读书会报名小站。\n\n## 约束\n")
     assert "让主办方发布活动" not in out and out.endswith(readme[readme.index("## 约束"):])
@@ -39,10 +39,10 @@ def test_repo_worktrees_stats_leftovers_merge_and_conflict(tmp_path):
     async def go():
         root = tmp_path / "runs" / "r1"
         repo, run_wt, be, fe = root / "repo", root / "wt" / "_run", root / "wt" / "backend", root / "wt" / "frontend"
-        base = await gitwork.create_repo(constants.TARGET_TEMPLATE, repo, "做一个读书会报名小站", "读书会")
+        base = await gitwork.create_repo(TARGET_TEMPLATE, repo, "做一个读书会报名小站", "读书会")
         assert sh(repo, "log", "--format=%s").strip() == "需求：读书会" and "读书会报名小站" in (repo / "README.md").read_text()
         assert sh(repo, "config", "commit.gpgsign").strip() == "false"  # the agents' own commits never prompt
-        assert await gitwork.create_repo(constants.TARGET_TEMPLATE, repo, "x", "x") == base  # made already: kept
+        assert await gitwork.create_repo(TARGET_TEMPLATE, repo, "x", "x") == base  # made already: kept
         assert await gitwork.add_worktree(repo, run_wt, "team/r1/run", base) is True
         assert await gitwork.add_worktree(repo, run_wt, "team/r1/run", base) is False
         for wt, branch in ((be, "team/r1/backend"), (fe, "team/r1/frontend")):

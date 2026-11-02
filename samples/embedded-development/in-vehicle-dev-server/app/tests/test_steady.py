@@ -5,9 +5,9 @@ import asyncio
 from datetime import datetime
 
 import pytest
-from teamkit import FakeManager, make_deps, mod
+from teamkit import TARGET_TEMPLATE, FakeManager, make_deps, mod
 
-team_mod, constants = mod("team"), mod("constants")
+team_mod = mod("team")
 NOW = datetime(2026, 10, 20, 12, 0).timestamp()
 REQ = "双十一官方商城大促：挑 20 款家电打折加满减，活动页显示倒计时、划线价和到手价，运营在后台配好就能一键上线。"
 
@@ -26,7 +26,7 @@ def promo_team():
 
 
 def promo_run(tmp_path):
-    state = team_mod.new_state("r1020bbbb", REQ, promo_team(), "{brief}", tmp_path / "work", constants.TARGET_TEMPLATE, NOW - 3600)
+    state = team_mod.new_state("r1020bbbb", REQ, promo_team(), "{brief}", tmp_path / "work", TARGET_TEMPLATE, NOW - 3600)
     return team_mod.TeamRun(state, make_deps(tmp_path, FakeManager(), None, now=lambda: NOW))
 
 

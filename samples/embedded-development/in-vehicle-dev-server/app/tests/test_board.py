@@ -3,16 +3,17 @@
 import json
 import time
 
-from teamkit import FIXTURE, FakeManager, info, make_deps, mini_team, mod, richest, same_shape, ts_types
+from teamkit import (FIXTURE, TARGET_TEMPLATE, TEAM_FILE, FakeManager, info, make_deps, mini_team, mod, richest, same_shape,
+                     ts_types)
 
-board, team_mod, toollog, constants = mod("board"), mod("team"), mod("toollog"), mod("constants")
+board, team_mod, toollog = mod("board"), mod("team"), mod("toollog")
 NOW = 1_791_231_500.0
 
 
 def rich_run(tmp_path, mgr, tools, rid="r1006rich", started=NOW - 1500):
     """A run in the middle of things, filled in by hand: no git needed to check the shape."""
-    team = team_mod.load_team(constants.TEAM_FILE)
-    state = team_mod.new_state(rid, "活动报名小站", team, "{run}", tmp_path / "work", constants.TARGET_TEMPLATE, started)
+    team = team_mod.load_team(TEAM_FILE)
+    state = team_mod.new_state(rid, "活动报名小站", team, "{run}", tmp_path / "work", TARGET_TEMPLATE, started)
     state.update(status="fixing", base="5e1f0aa0c0ffee", seq=0)
     run = team_mod.TeamRun(state, make_deps(tmp_path, mgr, None, now=lambda: NOW))
     pm = run.lane("pm")
@@ -77,7 +78,7 @@ def test_board_has_exactly_the_keys_of_the_ts_contract_and_the_fixture(tmp_path)
     assert run["status"] in unions["RunStatus"]
     assert {ln["status"] for ln in run["roles"]} <= unions["LaneStatus"]
     assert {e["kind"] for e in run["events"]} <= unions["TeamEventKind"]
-    assert [ln["key"] for ln in run["roles"]] == [r["key"] for r in team_mod.load_team(constants.TEAM_FILE)["roles"]]
+    assert [ln["key"] for ln in run["roles"]] == [r["key"] for r in team_mod.load_team(TEAM_FILE)["roles"]]
     assert run["edges"] == ref["run"]["edges"]
 
 
@@ -120,7 +121,7 @@ def test_which_run_the_board_shows_and_the_runs_order(tmp_path):
 
 def test_a_fresh_run_before_setup_is_a_valid_board(tmp_path):
     team = mini_team()
-    state = team_mod.new_state("r1006fresh", "", team, "{run}", tmp_path, constants.TARGET_TEMPLATE, time.time())
+    state = team_mod.new_state("r1006fresh", "", team, "{run}", tmp_path, TARGET_TEMPLATE, time.time())
     run = team_mod.TeamRun(state, make_deps(tmp_path, FakeManager(), None))
     out = board.build({run.rid: run}, None, mgr=None, scrub=lambda s: s, now=time.time())["run"]
     types, _ = ts_types()

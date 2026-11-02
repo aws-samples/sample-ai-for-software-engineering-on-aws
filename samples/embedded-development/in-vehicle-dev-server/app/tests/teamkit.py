@@ -20,6 +20,10 @@ def mod(name: str) -> Any:
 
 constants, gitwork, team_mod, store_mod = mod("constants"), mod("gitwork"), mod("team"), mod("store")
 ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "tests" / "fixtures"  # a small web team and its project, for the orchestrator's own tests
+TEAM_FILE = FIXTURES / "team.json"
+TASK_TEMPLATE_FILE = FIXTURES / "task_template.md"
+TARGET_TEMPLATE = FIXTURES / "target-template"
 FIXTURE = ROOT / "ui" / "src" / "test" / "fixtures" / "board-running.json"
 TYPES_TS = ROOT / "ui" / "src" / "types.ts"
 
@@ -190,16 +194,16 @@ def default_tests() -> FakeTests:
 
 def make_run(tmp: Path, mgr: FakeManager, tests: Any = None, *, requirement: str = "", now: Callable[[], float] = time.time,
              team: dict[str, Any] | None = None, rid: str = "r1006test") -> Any:
-    team = team or team_mod.load_team(constants.TEAM_FILE)
+    team = team or team_mod.load_team(TEAM_FILE)
     deps = make_deps(tmp, mgr, tests or default_tests(), now=now)
-    state = team_mod.new_state(rid, requirement, team, constants.TASK_TEMPLATE_FILE.read_text(encoding="utf-8"),
-                               tmp / "work", constants.TARGET_TEMPLATE, now())
+    state = team_mod.new_state(rid, requirement, team, TASK_TEMPLATE_FILE.read_text(encoding="utf-8"),
+                               tmp / "work", TARGET_TEMPLATE, now())
     return team_mod.TeamRun(state, deps)
 
 
 def make_deps(tmp: Path, mgr: FakeManager, tests: Any, *, now: Callable[[], float] = time.time) -> Any:
     return team_mod.Deps(store=store_mod.Store(tmp / "data" / "runs"), manager=lambda: mgr, run_tests=tests,
-                         template=constants.TARGET_TEMPLATE, now=now)
+                         template=TARGET_TEMPLATE, now=now)
 
 
 def reload(tmp: Path, mgr: FakeManager, tests: Any, **kw: Any) -> Any:

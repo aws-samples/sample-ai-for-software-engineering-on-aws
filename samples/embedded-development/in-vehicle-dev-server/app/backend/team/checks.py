@@ -8,6 +8,7 @@ import contextlib
 import json
 import os
 import re
+import shlex
 import signal
 import tempfile
 import time
@@ -35,6 +36,78 @@ _DIRECTIVE_RE = re.compile(r"(?<!\\)\s#\s*(SKIP|TODO)\b.*$", re.I)
 _TEST_FILE_RE = re.compile(r"(\.test|[-_]test)\.[cm]?js$|^test([-_].*)?\.[cm]?js$")
 _ERROR_RE = re.compile(r"(Error|Cannot find|SyntaxError|not defined|Unexpected)")
 _SUMMARY_RE = re.compile(r"^(tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)\s")
+
+
+CHECK_NAME = re.compile(r"[a-z][a-z0-9-]{0,23}")
+CHECK_WHEN = ("before_bench", "after_bench", "release")  # before the bench actions, after the replay, before sign-off
+CHECK_ARGS = ("project", "triage", "run", "baseline")  # what a check is given besides --results (checks/README.md)
+DEFAULT_ROUNDS = 2  # repair rounds per check when the team file gives none (TR §5.1 names build 3, logdiff 2)
+DEFAULT_TIMEOUT_S = 1800  # one check, in its container
+BENCH_ACTIONS = ("deploy", "restart", "replay")
+
+
+def _words(x: Any) -> bool:
+    return isinstance(x, list) and bool(x) and all(isinstance(w, str) and w for w in x)
+
+
+def check_config(team: dict[str, Any], keys: list[str]) -> None:
+    """The team file's checks, check runner and bench commands (D11), filled in, or a ValueError saying what is wrong.
+    A check: ``name``, ``command``, ``args`` (of CHECK_ARGS), ``when`` (of CHECK_WHEN), ``owner`` (the role a failure
+    naming no file goes to; none for a release check: a person decides), ``max_rounds`` (DEFAULT_ROUNDS) and
+    ``timeout_s`` (DEFAULT_TIMEOUT_S)."""
+    runner = team.get("check_runner")
+    if runner is not None and not (isinstance(runner, dict) and _words(runner.get("docker"))
+                                   and isinstance(runner.get("image"), str) and runner["image"]):
+        raise ValueError("team.json：check_runner 要写成 {docker: [命令和参数], image: 镜像名}")
+    items = team.get("checks")
+    if items is not None and not isinstance(items, list):
+        raise ValueError("team.json：checks 要写成检查的列表")
+    if items and runner is None:
+        raise ValueError("team.json：有 checks 就要写 check_runner（检查在哪个容器里跑）")
+    seen: set[str] = set()
+    for c in items or []:
+        name = c.get("name") if isinstance(c, dict) else None
+        if not isinstance(name, str) or not CHECK_NAME.fullmatch(name) or name in seen:
+            raise ValueError(f"team.json：检查的 name 不对或重复了：{name!r}")
+        seen.add(name)
+        if not _words(c.get("command")):
+            raise ValueError(f"team.json：检查 {name} 的 command 要写成命令和参数的列表")
+        args = c.setdefault("args", [])
+        if not isinstance(args, list) or any(a not in CHECK_ARGS for a in args):
+            raise ValueError(f"team.json：检查 {name} 的 args 只能用 {'、'.join(CHECK_ARGS)}")
+        if c.get("when") not in CHECK_WHEN:
+            raise ValueError(f"team.json：检查 {name} 的 when 只能是 {'、'.join(CHECK_WHEN)}")
+        owner = c.get("owner")
+        if not (owner in keys or (owner is None and c["when"] == "release")):
+            raise ValueError(f"team.json：检查 {name} 的 owner 要是一个角色的 key（只有 release 的检查可以不写，交给人）")
+        rounds = c.setdefault("max_rounds", DEFAULT_ROUNDS)
+        if not isinstance(rounds, int) or isinstance(rounds, bool) or not 1 <= rounds <= 10:
+            raise ValueError(f"team.json：检查 {name} 的 max_rounds 要是 1 到 10 的整数")
+        timeout = c.setdefault("timeout_s", DEFAULT_TIMEOUT_S)
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+            raise ValueError(f"team.json：检查 {name} 的 timeout_s 要是正数（秒）")
+    bench = team.get("bench")
+    if bench is not None and not (isinstance(bench, dict) and set(bench) <= set(BENCH_ACTIONS)
+                                  and all(_words(v) for v in bench.values())):
+        raise ValueError(f"team.json：bench 要写成 {{{'、'.join(BENCH_ACTIONS)}: [命令和参数]}}")
+
+
+def docker_command(runner: dict[str, Any], mounts: list[tuple[str, bool]], cmd: list[str],
+                   workdir: str | None = None) -> list[str]:
+    """``docker run`` of the team's build container with each of *mounts* (path, writable) at the same path inside,
+    so that the paths in a result mean the same on both sides; git there accepts the host's repositories."""
+    out = list(runner["docker"])
+    for path, writable in mounts:
+        out += ["-v", f"{path}:{path}" + ("" if writable else ":ro")]
+    out += ["-e", "GIT_CONFIG_COUNT=1", "-e", "GIT_CONFIG_KEY_0=safe.directory", "-e", "GIT_CONFIG_VALUE_0=*"]
+    if workdir:
+        out += ["-w", workdir]
+    return out + [runner["image"], *cmd]
+
+
+def docker_prefix(runner: dict[str, Any] | None, mounts: list[tuple[str, bool]], workdir: str | None = None) -> str:
+    """The same as one shell line ending with the image, for a role's task ("" when the team has no build container)."""
+    return shlex.join(docker_command(runner, mounts, [], workdir)) if runner else ""
 
 
 class TestsUnavailable(RuntimeError):

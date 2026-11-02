@@ -66,7 +66,7 @@ class Deps:
     store: Store
     manager: Callable[[], Any]
     run_tests: Callable[[Path, dict[str, Any]], Awaitable[dict[str, Any]]]
-    template: Path
+    template: Path | None  # the project a team without a source starts from
     scrub: Callable[[str], str] = lambda s: s
     # the members on Crew's 「代理」 page of a workspace (None: not read yet, or not readable: nothing is held then)
     members: Callable[[str | None], set[str] | None] | None = None
@@ -113,8 +113,9 @@ def check_team(team: Any) -> dict[str, Any]:
         raise ValueError("team.json：ownership 要写明分工文件 file 和由谁写 from")
     if any(r.get("writable_from") for r in roles) and own is None:
         raise ValueError("team.json：有角色的目录由分工决定（writable_from），但没有 ownership")
-    if "starter" in team and not _app_folder(team["starter"]):
-        raise ValueError(f"team.json：starter 要写成 app 里的相对路径：{team['starter']}")
+    if team.get("source") is not None and not (isinstance(team["source"], str) and team["source"].strip()):
+        raise ValueError("team.json：source 要写成要改的项目目录（可以用 ${sample}/…）")
+    checks.check_config(team, keys)
     delivery_mod.check(team)
     return team
 
@@ -122,10 +123,6 @@ def check_team(team: Any) -> dict[str, Any]:
 def _app_rel(path: str) -> bool:
     """A path inside the target repo (no absolute path, no ``..``)."""
     return bool(path) and not path.startswith("/") and ".." not in Path(path).parts
-
-
-def _app_folder(name: Any) -> bool:
-    return isinstance(name, str) and bool(name) and not name.startswith(("/", "~")) and ".." not in name.split("/")
 
 
 def ok_glob(g: Any) -> bool:
@@ -401,11 +398,9 @@ class TeamRun:
         s = self.s
         try:
             source = s.get("source")
-            starter = self.team.get("starter")  # a folder of the app (starters/<name>/): the company template
-            template = Path(source) if source else APP_ROOT / starter if starter else self.d.template
+            template = Path(source) if source else self.d.template
             base = await gitwork.create_repo(template, Path(s["repo"]), s["requirement"], s["title"],
-                                             existing=bool(source),
-                                             keep_title=bool(starter and not source))
+                                             existing=bool(source))
             await gitwork.add_worktree(Path(s["repo"]), Path(s["run_wt"]), s["branch"], base)
         except Exception as exc:  # noqa: BLE001
             self._end("failed", f"运行失败：建仓库出错：{exc}")
@@ -1491,7 +1486,9 @@ class TeamRun:
                           (f"，没过的：{'；'.join(red[:8])}。没过的测试要算进结论。" if red else "，全绿。"))
         values = {"run": self.rid, "role": key, "title": role["title"], "branch": lane["branch"],
                   "worktree": lane["worktree"], "writable": self._writable(key), "brief": brief,
-                  "inputs": "、".join(f"`{p}`" for p in self._inputs(key)) or "无", "repo": s["repo"]}
+                  "inputs": "、".join(f"`{p}`" for p in self._inputs(key)) or "无", "repo": s["repo"],
+                  "build_env": checks.docker_prefix(self.team.get("check_runner"), [(lane["worktree"], False)],
+                                                    workdir=lane["worktree"])}
         text = s["task_template"].format_map(_Keep(values))
         notes = s.get("gate_notes") or {}
         if notes:  # what a person said when approving an earlier stage holds for everyone after it

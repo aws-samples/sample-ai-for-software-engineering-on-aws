@@ -5,8 +5,8 @@ from pathlib import Path
 
 import json
 
-from teamkit import (FIXTURE, FakeManager, act, default_tests, drive, finish, make_run, mini_team, mod, read, reload,
-                     richest, same_shape, sh, team_mod, ts_types)
+from teamkit import (FIXTURE, TARGET_TEMPLATE, TEAM_FILE, FakeManager, act, default_tests, drive, finish, make_run, mini_team,
+                     mod, read, reload, richest, same_shape, sh, team_mod, ts_types)
 
 TAG = "[vstatd-team run=r1006test role="
 
@@ -374,13 +374,13 @@ def test_a_reply_without_done_still_gets_a_summary():
 
 
 def test_the_team_routes_project_checks_to_ops_and_the_demo_test_script_takes_a_glob():
-    constants, checks, gitwork = mod("constants"), mod("checks"), mod("gitwork")
-    team = team_mod.load_team(constants.TEAM_FILE)
+    checks, gitwork = mod("checks"), mod("gitwork")
+    team = team_mod.load_team(TEAM_FILE)
     assert checks.owner_of("tests/ops-scripts.test.js", team) == "ops"
     assert checks.owner_of("tests/api-signup.test.js", team) == "backend"
     ops = next(r for r in team["roles"] if r["key"] == "ops")
     assert gitwork.matches("package.json", ops["writable"])
-    pkg = json.loads((constants.TARGET_TEMPLATE / "package.json").read_text(encoding="utf-8"))
+    pkg = json.loads((TARGET_TEMPLATE / "package.json").read_text(encoding="utf-8"))
     assert "tests/**/*.test.js" in pkg["scripts"]["test"]  # node 22+ does not take a directory there
 
 

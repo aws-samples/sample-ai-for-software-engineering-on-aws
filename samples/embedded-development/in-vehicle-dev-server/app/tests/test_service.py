@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from http_fakes import AppRoute, FakeWeb, call, owner_check
-from teamkit import FakeManager, act, default_tests, finish, mod
+from teamkit import TARGET_TEMPLATE, TEAM_FILE, FakeManager, act, default_tests, finish, mod
 
 service, handlers, toollog, constants, team_mod = mod("service"), mod("handlers"), mod("toollog"), mod("constants"), mod("team")
 NEW_ROUTES = [("GET", "/board"), ("GET", "/runs"), ("POST", "/runs"), ("POST", "/runs/r1006abcd/stop")]
@@ -17,7 +17,8 @@ NEW_ROUTES = [("GET", "/board"), ("GET", "/runs"), ("POST", "/runs"), ("POST", "
 
 def make(tmp_path, mgr, **kw):
     ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(tmp_path / "data"))
-    svc = service.Service(ctx, manager=mgr, work_root=tmp_path / "work", run_tests=default_tests(), **kw)
+    svc = service.Service(ctx, manager=mgr, work_root=tmp_path / "work", run_tests=default_tests(), team_file=TEAM_FILE,
+                          template=TARGET_TEMPLATE, **kw)
     return svc, handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check)
 
 
@@ -130,7 +131,6 @@ def sel_line(aid, op, kind="", reason=None, event="tool_invocation"):
 def test_the_demo_default_model_stays_opus():
     """A smoke run passes {"model"} to POST /runs; the team file itself keeps the demo default."""
     import json as _json
-    from backend.team.constants import TEAM_FILE
 
     team = _json.loads(TEAM_FILE.read_text(encoding="utf-8"))
     assert team["defaults"]["model"] == "claude-opus-5.5"  # the demo default is untouched

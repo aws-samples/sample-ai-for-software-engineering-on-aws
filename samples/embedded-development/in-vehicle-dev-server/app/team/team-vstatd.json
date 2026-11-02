@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "name": "车载平台服务 · AI-DLC 团队",
+  "orchestrator": "vstatd-team",
+  "source": "${sample}/reference-project",
+  "workspace": "vstatd",
+  "knowledge": {
+    "source": "vstatd",
+    "data_dir": "~/workplace/vstatd"
+  },
+  "task_template": "task_template-vstatd.md",
+  "ownership": {
+    "file": "docs/aidlc/work-split.json",
+    "from": "architect"
+  },
+  "test_owners": [],
+  "check_runner": {
+    "docker": ["docker", "run", "--rm", "--platform", "linux/amd64", "--security-opt", "seccomp=unconfined",
+               "-v", "cc1-sysroot:/opt/cc1-sysroot:ro"],
+    "image": "vstatd-build:amd64"
+  },
+  "checks": [
+    {"name": "build", "command": ["${sample}/checks/build.sh"], "args": ["project"], "when": "before_bench",
+     "owner": "dev-fix", "max_rounds": 3},
+    {"name": "static", "command": ["${sample}/checks/static.sh"], "args": ["project", "triage"], "when": "before_bench",
+     "owner": "dev-fix"},
+    {"name": "unit", "command": ["${sample}/checks/unit.sh"], "args": ["project", "triage"], "when": "before_bench",
+     "owner": "dev-fix"},
+    {"name": "size", "command": ["${sample}/checks/size.sh"], "args": ["project"], "when": "before_bench",
+     "owner": "dev-refactor"},
+    {"name": "trace", "command": ["${sample}/checks/trace.sh"], "args": ["project", "triage"], "when": "before_bench",
+     "owner": "dev-fix"},
+    {"name": "runtime-limits", "command": ["${sample}/checks/runtime-limits.sh"], "args": ["run", "baseline"],
+     "when": "after_bench", "owner": "dev-fix"},
+    {"name": "logdiff", "command": ["${sample}/checks/logdiff.sh"], "args": ["run", "baseline", "triage"],
+     "when": "after_bench", "owner": "dev-fix", "max_rounds": 2},
+    {"name": "release", "command": ["${sample}/checks/release.sh"], "args": ["project", "triage"], "when": "release"}
+  ],
+  "bench": {
+    "deploy": ["${sample}/bench/cc1.sh", "deploy", "{artifact}"],
+    "restart": ["${sample}/bench/cc1.sh", "restart"],
+    "replay": ["${sample}/bench/cc1.sh", "replay", "--kind", "run", "--out", "{run}"]
+  },
+  "defaults": {
+    "model": "claude-sonnet-5.5",
+    "max_fix_rounds": 2,
+    "max_review_rounds": 1,
+    "gate_discuss": true,
+    "max_discuss_rounds": 5
+  },
+  "roles": [
+    {
+      "key": "triage",
+      "title": "分诊",
+      "icon": "scope",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "inception",
+      "stage": "分诊 · 修、说明或延后",
+      "mission": "给本批每个发现定修、说明或延后",
+      "depends_on": [],
+      "writable": ["docs/aidlc/triage.json", "docs/aidlc/triage.md"],
+      "outputs": ["docs/aidlc/triage.json", "docs/aidlc/triage.md"],
+      "gate": "human",
+      "gate_label": "分诊",
+      "brief": "先在知识库查 TR §4（分诊规则）和待办里标了 fix 的 22 个发现（`findings-backlog.md`）。对每个发现读它指向的函数，定一个决定：fix（改代码；有可观察的后果就要单元测试，evidence 写 unit-test，否则写 static-analysis 或 build；behaviour 写它是否涉及 VSTATD-IF 描述的行为，涉及时 cites 和 facts 都要写）、justify（误报或无害，cites 写说明它的 VSTATD-IF 或 CC1-PN 的页和节）或 defer（reason 和 pick_up_when 都要写）。会改变 VSTATD-IF 行为的修法不能做，按 TR §4.2 延后。写 `docs/aidlc/triage.json`，格式见 `${sample}/checks/README.md` 的「The approved triage」一节和例子 `${sample}/checks/examples/triage.json`：`batch` 写本批的名字，`base` 写需求提交（`git rev-list --max-parents=0 HEAD`），不写 `approved`（人在分诊关卡批准后由 app 记下）；`allowed_log_differences` 只写你的修复或说明会让运行日志变的条目，`requirements` 按 TR §6 写。再写一页 `docs/aidlc/triage.md`：每个说明和延后一行理由和引用，与待办标注不同的决定单独列出，人在关卡上逐条看这些。"
+    },
+    {
+      "key": "architect",
+      "title": "架构师",
+      "icon": "architect",
+      "member": "aidlc-architect-agent",
+      "aidlc_agent": "aidlc-architect-agent",
+      "model": "claude-opus-5.5",
+      "phase": "inception",
+      "stage": "重构方案 · 分工",
+      "mission": "定 Service::run() 的拆分方案，按源文件给开发分工",
+      "depends_on": ["triage"],
+      "writable": ["docs/aidlc/refactor-plan.md", "docs/aidlc/work-split.json", "docs/aidlc/plan.json"],
+      "outputs": ["docs/aidlc/refactor-plan.md", "docs/aidlc/work-split.json", "docs/aidlc/plan.json"],
+      "gate": "human",
+      "gate_label": "开工",
+      "plan": "docs/aidlc/plan.json",
+      "brief": "读批准的 `docs/aidlc/triage.json`（人在关卡上的意见以人为准）和 `src/service.cpp` 的 `Service::run()`。写 `docs/aidlc/refactor-plan.md`：把信号表的处理从 `Service::run()` 拆出去的方案（新的函数或类、放在哪个文件、每一步怎么保证行为不变：同样的信号、值、超时和错误，按 VSTATD-IF 的哪几节），一页以内。再写分工文件 `docs/aidlc/work-split.json`，格式：`{\"roles\": {\"dev-fix\": [\"src/gateway_client.*\", \"src/frame_decoder.*\"], \"dev-refactor\": [\"src/service.*\"]}}`：只用 dev-fix 和 dev-refactor 这两个 key，值是它能改的源文件（不能给 `tests/`，不能给整个仓库）；每个文件只分给一个人，`Service::run()` 所在文件里的修复归重构开发；分诊里要修的每个发现所在的文件都要分出去。最后写 `docs/aidlc/plan.json`：`{\"tester\": \"…\", \"dev-fix\": \"…\", \"dev-refactor\": \"…\", \"reviewer\": \"…\"}`，每人一句话（40 字以内）这次做什么。只写文档，不改代码。"
+    },
+    {
+      "key": "tester",
+      "title": "测试",
+      "icon": "tester",
+      "member": "aidlc-quality-agent",
+      "aidlc_agent": "aidlc-quality-agent",
+      "phase": "construction",
+      "stage": "测试先行",
+      "mission": "开发动手之前，给要测的每个修复写一个先失败的测试",
+      "depends_on": ["architect"],
+      "writable": ["tests/**", "docs/aidlc/tests.md"],
+      "outputs": ["docs/aidlc/tests.md"],
+      "brief": "按 `docs/aidlc/triage.json`，给每个 decision 为 fix、evidence 为 unit-test 的发现写一个 GoogleTest 测试：测试名或测试体里写发现编号（`F-013`、`F013` 或 `F_013`），断言 VSTATD-IF 规定的正确行为，所以在现在的代码上它要失败（TR §4.1）；app 会在需求提交上跑这些测试，有一个通过就退回给你。不删、不改名已有的测试，不加 `DISABLED_` 或跳过。在 `tests/CMakeLists.txt` 里加上新文件。写 `docs/aidlc/tests.md`：每个发现一行，测试名和它在需求提交上为什么失败。"
+    },
+    {
+      "key": "dev-fix",
+      "title": "开发 · 修复",
+      "icon": "backend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "修复",
+      "mission": "按分诊修复和说明分给它的文件里的发现",
+      "depends_on": ["tester"],
+      "writable_from": "ownership",
+      "outputs": [],
+      "brief": "按 `docs/aidlc/triage.json` 处理分给你的文件里的发现：fix 的改代码，让测试的新测试通过；justify 的只在发现所在的函数里加一处 TR §3.2 形式的内联抑制（`// cppcheck-suppress <check> ; F-nnn justified` 或 `// NOLINT(<check>) F-nnn justified`）；defer 的不动。只改分诊里有的发现，别的代码不顺手改。"
+    },
+    {
+      "key": "dev-refactor",
+      "title": "开发 · 重构",
+      "icon": "frontend",
+      "member": "aidlc-developer-agent",
+      "aidlc_agent": "aidlc-developer-agent",
+      "phase": "construction",
+      "stage": "重构",
+      "mission": "按方案拆 Service::run()，行为不变",
+      "depends_on": ["tester"],
+      "writable_from": "ownership",
+      "outputs": [],
+      "brief": "按 `docs/aidlc/refactor-plan.md` 把信号表的处理从 `Service::run()` 拆出去，行为不变：同样的信号、值、超时和错误，日志一条不多一条不少。分诊里分给你的文件里的发现，按分诊的决定一起处理（同修复开发的规则）。"
+    },
+    {
+      "key": "reviewer",
+      "title": "评审",
+      "icon": "reviewer",
+      "member": "aidlc-architecture-reviewer-agent",
+      "aidlc_agent": "aidlc-architecture-reviewer-agent",
+      "model": "claude-opus-5.5",
+      "phase": "review",
+      "stage": "评审",
+      "mission": "独立、只读：最仔细看说明和重构保住的行为",
+      "depends_on": ["dev-fix", "dev-refactor"],
+      "writable": [],
+      "outputs": [],
+      "brief": "你没有参与开发，只看结果：读 `docs/aidlc/triage.json`、`docs/aidlc/refactor-plan.md` 和 `git diff`（命令见下）。最仔细看两件事：每个 justify 引的 VSTATD-IF 或 CC1-PN 那一页是否真的说明它是误报或无害（不成立就推翻它）；重构是否保住了 VSTATD-IF 规定的行为（超时、宽限期、错误、日志）。回复第一行写 `DONE: 可以交付` 或 `DONE: 要改：<一句话>`。下面每个要改的问题单独编号 F-1、F-2……（这是评审的编号，不是发现编号）：违反哪条（引用页和节）、文件和行、证据、怎么改、归谁（写一行 `打回：开发 · 修复` 这样的）；推翻的说明写明是哪个发现。"
+    }
+  ]
+}

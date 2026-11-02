@@ -14,10 +14,7 @@ TAG_PREFIX = "[vstatd-team "  # first line of every task this app spawns: [vstat
 WORK_ROOT = _Path.home() / "workplace" / "vstatd-team"
 
 APP_ROOT = _Path(__file__).resolve().parents[2]  # the app's folder: the installed copy or the dev checkout
-TEAM_FILE = APP_ROOT / "team" / "team.json"
-TEAM_DIR = APP_ROOT / "team"  # other team files (team-*.json) a run may name
-TASK_TEMPLATE_FILE = APP_ROOT / "team" / "task_template.md"
-TARGET_TEMPLATE = APP_ROOT / "demo" / "target-template"
+TEAM_FILE = APP_ROOT / "team" / "team-vstatd.json"  # the team a run gets; other team files (team-*.json) sit beside it
 
 TICK_S = 2.0  # every active run is moved forward this often
 EVENTS_KEPT = 200  # the board shows the latest events

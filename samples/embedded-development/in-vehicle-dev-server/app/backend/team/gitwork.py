@@ -121,17 +121,15 @@ async def merge_base(cwd: Path | str, a: str, b: str) -> str:
     return (await git(cwd, "merge-base", a, b, locks=False))[1].strip()
 
 
-async def create_repo(template: Path, repo: Path, requirement: str, title: str, existing: bool = False,
-                      keep_title: bool = False) -> str:
+async def create_repo(template: Path, repo: Path, requirement: str, title: str, existing: bool = False) -> str:
     """The run's repository from the template, or, when *existing*, from a
-    copy of an existing project the team takes over (its README title is kept); returns the base commit.
-    *keep_title*: a team's starter (a company template with the product's name) keeps its README title too."""
+    copy of an existing project the team takes over (its README title is kept); returns the base commit."""
     if (repo / ".git").exists():
         rc, out, _ = await git(repo, "rev-parse", "--verify", "-q", "HEAD", ok=None)
         if rc == 0:
             return out.strip()
     await asyncio.to_thread(_fresh_tree, template, repo, requirement,
-                            title if requirement and not existing and not keep_title else None)
+                            title if requirement and not existing else None)
     await git(repo, "init", "-q", "-b", "main")
     with open(repo / ".git" / "config", "a", encoding="utf-8") as fh:
         fh.write(REPO_CONFIG)

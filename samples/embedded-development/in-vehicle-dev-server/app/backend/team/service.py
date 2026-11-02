@@ -11,9 +11,9 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from . import board, checks, outputs
+from . import board, checks, outputs, paths
 from . import store as store_mod
-from .constants import APP_NAME, APP_ROOT, TARGET_TEMPLATE, TASK_TEMPLATE_FILE, TEAM_DIR, TEAM_FILE, TICK_S, WORK_ROOT
+from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
 from .sessions import SessionManager
 from .httpkit import AppError
@@ -34,8 +34,10 @@ class Service:
     def __init__(self, ctx: Any, *, manager: Any = None, work_root: Path | None = None, template: Path | None = None,
                  run_tests: Callable[..., Any] | None = None, tick_s: float = TICK_S,
                  now: Callable[[], float] = time.time, opener: Callable[[list[str]], Any] | None = None,
-                 sessions: Any = None) -> None:
-        """*manager*: the agent manager the runs use (a fake in tests); by default the role sessions."""
+                 sessions: Any = None, team_file: Path | None = None) -> None:
+        """*manager*: the agent manager the runs use (a fake in tests); by default the role sessions. *team_file*: the
+        team a run gets when it names none (team/team-vstatd.json); *template*: the project a team without a
+        ``source`` starts from."""
         self.ctx = ctx
         self.name = getattr(ctx, "name", APP_NAME) or APP_NAME
         self.log = getattr(ctx, "logger", None) or logging.getLogger(APP_NAME)
@@ -44,6 +46,7 @@ class Service:
         self.runs: dict[str, TeamRun] = {}
         self.work_root = Path(work_root) if work_root else WORK_ROOT
         self.tick_s = tick_s
+        self.team_file = Path(team_file) if team_file else TEAM_FILE
         self._opener = opener or _open_on_this_mac
         # every role's agent is a Kiro Crew chat session, opened through the gateway's chat API
         self.sessions = sessions or SessionManager(Gateway(self.name, APP_ROOT / ".app_secret"), app=self.name,
@@ -51,7 +54,7 @@ class Service:
                                                    scrub=self.scrub)
         self._agents = manager if manager is not None else self.sessions
         self._deps = Deps(store=Store(self.data_dir / "runs"), manager=self.manager,
-                          run_tests=run_tests or checks.run_tests, template=Path(template or TARGET_TEMPLATE),
+                          run_tests=run_tests or checks.run_tests, template=Path(template) if template else None,
                           scrub=self.scrub, now=now, log=self.log, members=self.member_names)
         self._loop: asyncio.Task[None] | None = None
         self._ticks: dict[str, asyncio.Task[None]] = {}
@@ -191,7 +194,8 @@ class Service:
                          team_name: str | None = None) -> str:
         """One run at a time: every run spends real credits. *model* (optional) replaces the team's default model
         for every role of this run that does not name its own. *source* (optional) is an existing project the team
-        takes over instead of the demo template; *team_name* (optional) is a ``team-*.json`` under team/."""
+        takes over instead of the team's own; *team_name* (optional) is a ``team-*.json`` beside the default team file.
+        The team file's ``${sample}`` is the scenario folder (paths.py)."""
         if not self.started:
             raise AppError("app 还没启动好，稍后再试", "not_started", 503)
         async with self._creating:
@@ -201,21 +205,24 @@ class Service:
             src = Path(source).expanduser() if source else None
             if src is not None and not src.is_dir():
                 raise AppError(f"接手的项目目录不存在：{source}", "bad_source")
-            team_file = TEAM_DIR / team_name if team_name else TEAM_FILE
+            team_dir = self.team_file.parent
+            team_file = team_dir / team_name if team_name else self.team_file
             try:
                 team = await asyncio.to_thread(load_team, team_file)
                 tmpl_name = team.get("task_template")  # a team file may bring its own task template (team/ 下的 .md)
                 if tmpl_name is not None and (not isinstance(tmpl_name, str) or not re.fullmatch(r"[\w-]+\.md", tmpl_name)):
                     raise ValueError(f"task_template 必须是 team/ 下的 .md 文件名：{tmpl_name}")
-                tmpl_file = TEAM_DIR / tmpl_name if tmpl_name else TASK_TEMPLATE_FILE
+                tmpl_file = team_dir / (tmpl_name or "task_template.md")
                 template = await asyncio.to_thread(tmpl_file.read_text, encoding="utf-8")
             except (OSError, ValueError) as exc:
                 raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+            if paths.SAMPLE_VAR in json.dumps(team, ensure_ascii=False):  # the scenario's folders, used in place (D12)
+                team = paths.expand(team, paths.sample_dir(self.data_dir))
             if src is None and isinstance(team.get("source"), str):  # the team works on the customer's own repository
                 src = Path(team["source"]).expanduser()
                 if not src.is_dir():
                     raise AppError(f"这个团队要改的项目不在这台电脑上：{team['source']}", "bad_source")
-            if team.get("needs_source") and src is None:
+            if (team.get("needs_source") or self._deps.template is None) and src is None:
                 raise AppError("这个团队要在一个已有的项目上做事：先指定项目目录（source）", "needs_source")
             if model:
                 team = {**team, "defaults": {**team.get("defaults", {}), "model": model}}
