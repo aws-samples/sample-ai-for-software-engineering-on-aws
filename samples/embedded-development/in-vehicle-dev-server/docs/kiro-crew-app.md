@@ -210,6 +210,23 @@ not depend on the agent-team sample's folder.
 `~/workplace/vstatd-team/runs/<run>/results/`, outside the worktrees so that they are never merged, but an agent's
 shell can write there too. The README lists it with the other two.
 
+### D13. Every commit after the triage's base cites a finding, the refactor included
+
+`trace.sh` judges every commit from the triage's `base` to `HEAD` and requires each to cite a finding (TR §7.2). Two
+things follow, and neither changes a check:
+
+- **The refactor is a triage entry.** No backlog finding covers the split of `Service::run()`, so the triage role
+  adds it under TR §4.4 as the next free ID (F-031 on the shipped backlog), with `added.found_by` naming the work
+  item, decision `fix`, evidence `build`, `behaviour: false`; the log comparison shows that behaviour is kept. TR §4.4
+  and `checks/README.md` say that a change the work item asks for is added this way.
+- **The app's own commits cite what they carry.** The triage's `base` is the run branch's head once the build-start
+  gate is approved and its decisions are committed; the roles commit their own work with the finding IDs (and, for a
+  fix that touches behaviour, a fact entry) in the message; the app's merge commit lists the finding and fact IDs of
+  the commits it merges.
+
+Alternatives considered: `trace.sh` accepting work-item IDs (a change to a check the agents cannot change); leaving
+the refactor out of this version.
+
 ## Implementation plan
 
 Each step ends with its verification; a step is done when that verification passes. Steps 1 to 11 run without the
