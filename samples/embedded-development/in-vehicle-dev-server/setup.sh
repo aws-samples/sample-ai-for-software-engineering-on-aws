@@ -32,7 +32,11 @@ docker info >/dev/null 2>&1 && ok "docker $(docker version --format '{{.Server.V
 node_ok && ok "Node $("$NODE_DIR/node" -v) (builds the board)" || { bad "Node 22 or newer is missing: install it from https://nodejs.org"; exit 1; }
 export PATH="$NODE_DIR:$PATH"
 crew_up || { bad "Kiro Crew is not running: open it, sign in, and run setup.sh again"; exit 1; }
-v="$("$KC" GET /api/version | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
+ver="$("$KC" GET /api/version 2>/dev/null)" || {
+  bad "Kiro Crew answers, but its API refused this shell as the dashboard owner: run setup.sh in your own terminal, not from an agent's shell"
+  exit 1
+}
+v="$(printf '%s' "$ver" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
 ok "Kiro Crew ${v:-?}"
 
 step 2/5 "Build the app and install it into Kiro Crew"
