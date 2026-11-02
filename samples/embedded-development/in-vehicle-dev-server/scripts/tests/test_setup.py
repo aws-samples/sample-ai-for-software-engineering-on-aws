@@ -140,7 +140,7 @@ def test_a_template_with_the_same_name_is_backed_up_once_and_put_back(home):
 
     gone = run_py(SCRIPTS / "templates.py", "remove", agents, backup, env=env).stdout.splitlines()
     assert sorted(gone) == ["- embedded-architect", "- embedded-architecture-reviewer", "< embedded-developer (put back)"]
-    assert sorted(p.name for p in agents.iterdir()) == ["other-agent.json", "embedded-developer.json", "embedded-quality.json"]
+    assert sorted(p.name for p in agents.iterdir()) == ["embedded-developer.json", "embedded-quality.json", "other-agent.json"]
     assert (agents / "embedded-developer.json").read_text() == theirs and not backup.exists()
 
 
