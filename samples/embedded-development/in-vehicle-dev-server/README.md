@@ -183,11 +183,108 @@ there.
 | Part | In Kiro (IDE or CLI) | In Kiro Crew |
 | --- | --- | --- |
 | `knowledge/` | Steering files | A knowledge source the agents search and cite |
-| `mcp/build`, `mcp/bench` | MCP configuration | MCP servers of a custom agent |
-| `checks/` | Hooks that block the next tool call on failure; a hook on raw target commands as defence in depth; the guardrails themselves are in the MCP servers | Run by a Kiro Crew app before each gate, as in the [agent-team sample](../../agent-team-on-kiro-crew/) |
+| `mcp/build`, `mcp/bench` | MCP configuration | Not used: the app runs the checks and the bench actions itself |
+| `checks/` | Hooks that block the next tool call on failure; a hook on raw target commands as defence in depth; the guardrails themselves are in the MCP servers | Run by the [Kiro Crew app](#the-kiro-crew-app) after each merge and before the bench, as in the [agent-team sample](../../agent-team-on-kiro-crew/) |
+| `bench/` | Through the `bench` MCP server | `bench/cc1.sh`, run by the app; each action approved at the operator console |
 | Roles (optional) | Custom agents | Team members |
 
 The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable on their own.
+
+## The Kiro Crew app
+
+> **Status: in development.** The app's own tests pass. It has not yet taken a delivery end to end with agents and the
+> bench (step 12 of the [implementation plan](docs/kiro-crew-app.md#implementation-plan)), so nothing on this page about
+> it is measured yet.
+
+[`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (车载平台服务 · AI-DLC 团队), modelled on the
+[agent-team sample](../../agent-team-on-kiro-crew/). It takes the work item through AI-DLC with six roles, each a Kiro
+Crew session running as one of four AI-DLC experts:
+
+| Role | Expert | What it does | Gate after it |
+| --- | --- | --- | --- |
+| Triage | `aidlc-developer-agent` | Fix, justify or defer for each finding, with citations; adds the refactor under TR §4.4 | Triage: a person answers a question for each justification, deferral and added entry |
+| Architect | `aidlc-architect-agent` | The refactor plan of `Service::run()` and the work split by source file | Build start |
+| Tester | `aidlc-quality-agent` | A unit test for each fix that needs one; the app requires that it fails on the base commit | — |
+| Developer: fixes | `aidlc-developer-agent` | The fixes, in the files the split gives it | — |
+| Developer: refactor | `aidlc-developer-agent` | The refactor, in the files the split gives it | — |
+| Reviewer | `aidlc-architecture-reviewer-agent` | Read only; looks hardest at the justifications and at the behaviour the refactor keeps | — |
+
+The app, not an agent, runs the checks of [checks/](checks/README.md) in the build container once every developer's work
+is merged, and again after each fix, and sends a failure to the developer who owns the file it names; BLOCKED, and a
+check out of its repair rounds, go to a person. When the checks pass and the reviewer lets the change through, the app
+runs `bench/doctor.sh`, then deploys and replays through `bench/cc1.sh`, each action waiting for a person at the
+operator console, and runs the checks after the bench. Before sign-off it reruns every check on the final commit in a
+new results directory and runs `release.sh`; the sign-off button is enabled only when `release.sh` passes, and the
+sign-off dialog shows the evidence page. The board's 评分卡 (scorecard) shows the figures of [How the sample is
+measured](#how-the-sample-is-measured) that the runs' records hold, and leaves a figure empty when no run is behind it.
+It leaves out the tool calls by permission class (they come from the MCP servers' audit log), how many log differences
+were real changes of behaviour and the defects found later (the app records neither). The decisions behind this are in
+[docs/kiro-crew-app.md](docs/kiro-crew-app.md).
+
+### Quick start
+
+On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
+
+1. Install the app, its knowledge source `vstatd` and the team's members: `bash setup.sh` in this folder. It asks once
+   whether the sessions the app opens may approve their own tool calls; read [Guardrails](#guardrails) first.
+   `bash setup.sh --dry-run` says what it would do and changes nothing. Keep this folder where it is: the app runs the
+   checks and the bench from it.
+2. Build the checks' build container and the bench once (setup.sh does not, and prints these commands):
+
+   ```bash
+   docker build --platform linux/amd64 -t vstatd-build:amd64 reference-project/tools/
+   bench/build-target.sh        # the target image and its sysroot (first build: about 40 min, bench/README.md)
+   bench/doctor.sh
+   ```
+
+3. Before the first run: open the operator console in a terminal of its own (`python3 bench/console.py`), set the
+   supply there (`v 13.5`, `k on`), start the target (`bench/cc1.sh start && bench/cc1.sh wait`), deploy the current
+   release and write the baseline once with `bench/cc1.sh replay --kind baseline --out ~/workplace/vstatd-team/baseline`
+   (see [bench/README.md](bench/README.md)). Until the bench is ready, a run stops before its first bench action and the
+   board says what is missing and the command for it.
+4. Open Kiro Crew → Apps → 车载平台服务 · AI-DLC 团队 → 团队看板, choose 新需求 (it is filled in with the work item) and
+   hand it to the team.
+5. At the triage gate, answer each question (its citations are shown); then approve build start.
+6. Approve each deploy and replay at the operator console: it shows the request and the build's digest. The board shows
+   the same request and the console command for it, but does not approve.
+7. After the independent rerun, read the evidence page in the sign-off dialog and sign off. 评分卡 shows the run's
+   figures.
+
+Cost: to be measured with the first delivery. A run uses Kiro Crew credits and creates no AWS resources.
+
+Remove it with `bash cleanup.sh` (`--dry-run` lists what it would remove). It removes only what setup.sh recorded in
+`.install-state.json` and puts back agent templates setup.sh replaced; it leaves the Docker images and volumes, the
+bench state and the baseline alone, and prints the commands that remove them.
+
+### Guardrails
+
+What the app enforces: a role after a human gate gets no session until a person approves; the app runs the checks
+itself, so an agent's word that they pass counts for nothing; a role's commits that do not cite a finding are sent back
+before they are merged; each bench action waits for a person at the operator console for that build's digest, behind the
+bench's physical gate, and goes to the action record; sign-off is possible only after `release.sh` passed on the
+independent rerun.
+
+What it does not enforce. If you agree during setup, the app sets **the sessions it opens** to auto-approve their tool
+calls, and the members' templates allow file reads and writes and shell commands. An agent's shell then has three paths
+around the bench's guardrails:
+
+1. It can reach the emulated target without the app or the console: `docker exec` into the bench's runner container,
+   whose volume `cc1-bench-secrets` holds the target's SSH key.
+2. It can write the bench state in `~/.cc1-bench`, including approval decisions.
+3. It can write the check results of a round under `~/workplace/vstatd-team/runs/<run>/results/`, which the app reads.
+
+So in this app the physical gate, the operator console and the action record show how the guardrails work; they are not
+a boundary against the agents. "Only `bench` can reach the target" holds only where the agents' shell has no Docker
+access and no write access to the bench state, such as Kiro Crew in a build-server container without a Docker socket
+([D2](docs/kiro-crew-app.md#d2-kiro-crew-runs-on-the-users-own-machine-agents-have-a-shell-sessions-auto-approve)). The
+target is emulated, so a bypass damages no hardware. The shell runs as your user, so it can also change files outside
+its worktree, this folder's checks included: write scopes are checked when a role's branch is merged, not while the
+agent works, and write-scope rules in an agent's own configuration did not stop writes in a test on one Mac (D2). Run
+the app on a machine and user account **without production credentials or customer data**. If you do not agree during
+setup, every tool call waits for your approval in Kiro Crew.
+
+The agents' sessions send their prompts, the code they read and the knowledge they look up to the model service that
+Kiro Crew uses; the scenario's data is synthetic.
 
 ## How the sample is measured
 
@@ -239,17 +336,21 @@ been dry-run once.
    [rehearsal/seed-checks/](rehearsal/seed-checks/).
 3. Bench emulation: a script that builds the emulated CC-1 image, the gateway socket and drive replay, the baseline
    log, the simulated supply, the operator console and a reset script. Also a `doctor` script that checks the host
-   before a session.
+   before a session. *Done* except the final baseline: [bench/](bench/README.md).
 4. Checks, each with a failing and a passing example; the release check and the evidence page generator.
    *Done:* [checks/](checks/README.md), with the triage format and the run directories the bench hands over (a
    proposed interface with item 3); the facilitators' runs on the reference project are in
    [rehearsal/check-examples/](rehearsal/check-examples/).
 5. MCP servers `build` and `bench`, with their guardrails, the audit log, a test for each guardrail and a smoke test
-   of both.
-6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin.
+   of both. They are for Kiro; the Kiro Crew app does not need them.
+6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
+   Kiro Crew app (item 8) needs neither the MCP servers nor this item's configurations.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
    Record the time and credits it used.
+8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its members' templates, `setup.sh` and `cleanup.sh`. *In
+   development:* steps 1 to 11 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan) are done; one
+   delivery end to end (step 12) is not.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page; `cleanup.sh` removes everything it created; every third-party tool is listed with its
@@ -263,7 +364,12 @@ identifiers; no `--trust-all-tools`.
 | `knowledge/` | Synthetic interface specification, CAN database, VSS mapping, platform notes, fact entries, team rules, findings backlog, consistency check |
 | `checks/` | The seven checks, the release check, the evidence page generator, their limits and their tests |
 | `mcp/` | `build` and `bench` servers and their guardrail tests |
-| `agents/` | Kiro and Kiro Crew configurations, the bypass hook, the permission probe test |
+| `agents/` | `kiro-crew/make_templates.py`, the Kiro Crew members' templates; to come (item 6): the Kiro configurations, the bypass hook, the permission probe test |
+| `app/` | The Kiro Crew app `vstatd-team`: orchestrator, board and scorecard ([app/README.md](app/README.md)) |
+| `vendor/` | The four AI-DLC expert definitions the members use, unmodified ([vendor/aidlc-workflows/SOURCE.md](vendor/aidlc-workflows/SOURCE.md)) |
+| `scripts/` | What `setup.sh` and `cleanup.sh` share: the install record, the templates, the team's install, and their tests |
+| `docs/` | Design notes of the Kiro Crew app ([docs/kiro-crew-app.md](docs/kiro-crew-app.md)) |
+| `setup.sh`, `cleanup.sh` | Install the Kiro Crew app into the local Kiro Crew; remove what setup recorded |
 | `reference-project/` | `vstatd`, its GoogleTest unit tests, CMake with the cross toolchain file, the build-environment Dockerfile, a stand-in sysroot script and the analyser scripts |
 | `bench/` | Emulated-target image build script, drive replay, baseline log, simulated supply, operator console, doctor script |
 | `rehearsal/` | One-day guide, scorecard, facilitator notes and seed checks; not copied into the agents' workspace |
@@ -272,8 +378,14 @@ identifiers; no `--trust-all-tools`.
 
 To be completed with the build: a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro
 or Kiro Crew. Third-party tools and their licences will be listed here, among them QEMU (GPL-2.0) and the emulated
-target's Linux image built by `setup.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed to the
-repository. They are used as tools and not redistributed.
+target's Linux image built by `bench/build-target.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed
+to the repository. They are used as tools and not redistributed. The bench's own tools are listed in
+[bench/README.md](bench/README.md#third-party-tools).
+
+The [Kiro Crew app](#the-kiro-crew-app) needs, besides the bench: a Mac (`setup.sh` installs into the Kiro Crew desktop
+app), Kiro Crew running and signed in, Docker, git, Python 3 and Node.js 22 or newer to build the board. Its manifest
+asks for Kiro Crew 0.8.0 or newer; it has not run a delivery end to end yet, so no Kiro Crew version is listed as
+tested.
 
 The reference project builds in the container of `reference-project/tools/Dockerfile`, based on the `ubuntu:24.04`
 image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own licence, recorded in
@@ -317,9 +429,13 @@ v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and
 
 ## Cost
 
-To be measured with the dry run. The sample creates no AWS resources; the cost is the model usage of Kiro or Kiro
-Crew for one batch (see [Kiro pricing](https://kiro.dev/pricing/)).
+To be measured with the dry run, and for the Kiro Crew app with its first delivery. The sample creates no AWS resources;
+the cost is the model usage of Kiro or Kiro Crew for one batch (see [Kiro pricing](https://kiro.dev/pricing/)).
 
 ## Cleanup
 
-`cleanup.sh` will remove the containers, the emulated target image and the run's working files.
+`bash cleanup.sh` removes what `setup.sh` recorded: the app with its data and run repositories, the members, the
+workspace, the knowledge source and its copy, and the agent templates it added; it puts back the templates it replaced.
+`--dry-run` lists them. It leaves the build container, the bench's images and volumes, the bench state
+(`~/.cc1-bench`) and the baseline, and prints the commands of [bench/README.md](bench/README.md#cleanup) that remove
+them.
