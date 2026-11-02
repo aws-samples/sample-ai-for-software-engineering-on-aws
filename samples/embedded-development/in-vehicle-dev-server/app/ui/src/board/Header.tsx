@@ -3,16 +3,17 @@
  * after a confirmation, 跟随, 投影), and the live counters: tests passed/total, the wall clock against
  * the serial estimate (what one agent doing everything would take) with the saving, roles done,
  * KiroCrew's sub-agent lanes, credits. Also the start form (here and in the empty state) and the
- * empty state itself: an introduction to the 8-role team.
+ * empty state itself: the work item, the flow from the backlog to sign-off, and what this Mac still needs (FlowStrip.tsx).
  */
 import { useState, type CSSProperties, type FormEvent } from 'react'
 import type { Board, Delivery, GateDecision, GateQuestion, RunDetail, TalkLine, TestWall } from '../types'
-import { AIDLC_AGENTS, FINISHED, expertsOf, officialOf, LIVE, WORKING, aidlcUse, fmtAgo, fmtClock, fmtCredits, fmtSpan, isRunActive, laneMeta, runMeta, saving } from './format'
+import { AIDLC_AGENTS, FINISHED, expertsOf, LIVE, WORKING, aidlcUse, fmtAgo, fmtClock, fmtCredits, fmtSpan, isRunActive, laneMeta, runMeta, saving } from './format'
 import { useChangeCount, useServerNow, useSinceSnapshot, useTween } from './hooks'
 import { groupByAc } from './TestWall'
 import { errorText } from './useBoard'
 import { RoleIcon } from './RoleIcon'
 import { MarkdownRenderer } from '@kirocrew/app-sdk/ui'
+import { FlowSteps, ReadinessPanel } from './FlowStrip'
 
 // ---------------------------------------------------------------------------------------------
 // the top bar
@@ -57,7 +58,7 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
   return (
     <header className="kt-top">
       <div className="kt-title">
-        {!inApp && <h1>AI-DLC 多 Agent 团队</h1>}
+        {!inApp && <h1>车载平台服务 · AI-DLC 团队</h1>}
         {run && meta && (
           <>
             <span className="kt-run-title" title={run.requirement || run.title}>{run.delivery?.name || run.title}</span>
@@ -368,9 +369,6 @@ export interface StartOptions {
 }
 export type StartFn = (requirement: string, opts?: StartOptions) => Promise<void>
 
-/** A one-sentence requirement for tests and the preview page. */
-export const DEMO_REQUIREMENT = '给山野咖啡做一个网上小店的 MVP：顾客能按分类逛商品、看详情、加购物车并下单。'
-
 /** The scenario's work item (README.md, "The scenario"): it fills the requirement box. */
 export const SCENARIOS: ReadonlyArray<{ label: string; hint: string; text: string }> = [
   { label: 'vstatd · 本批待办', hint: '修待办里标了 fix 的发现，拆分 Service::run()，行为不变', text: '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。' },
@@ -472,7 +470,7 @@ export function StopConfirm({ run, onConfirm, onCancel }: { run: RunDetail; onCo
   )
 }
 
-/** 交付标签 as the person confirms them at the gate of the role that proposed them (they count on the CTO view). */
+/** 交付标签 as the person confirms them at the gate of a role that proposes them (the vstatd team has none). */
 export type DeliveryPick = Pick<Delivery, 'name' | 'kind' | 'size' | 'line'>
 const DELIVERY_KINDS: Delivery['kind'][] = ['新应用', '新功能', '修复']
 const DELIVERY_SIZES: Delivery['size'][] = ['小', '中', '大']
@@ -484,13 +482,13 @@ const DELIVERY_LINES: Delivery['line'][] = ['电商', '移动应用', '客户关
  * overruling the review (a reason is required), sending it back is one more round as the review says. */
 /** The person's choice for each question of a gate, by question id (sent with 批准). */
 export type GateAnswers = Record<string, { choice: string; text: string }>
-/** 拦下的风险 sent with 退回: what the send-back keeps from going live, the amount in yuan (or none). */
+/** 拦下的风险 sent with 退回 at a gate whose team file asks for it (gate_revise_risk): what it keeps from going live, the amount in yuan (or none). */
 export type GateRisk = { what: string; amount: number | null }
 
 /** A gate: 批准 (with an answer for each question the role put to the person), 讨论 (it answers; the gate stays open),
  * or 退回. What was said in a 讨论 so far is shown in all three; at a writing role's gate, the stage's documents too. */
-export function GateDialog({ label, who = '', decision, preset, presetRisk, split, skips, report, onReport, overrule = false, delivery, questions = [], talk = [], outputs = [], onConfirm, onCancel }: {
-  label: string; who?: string; decision: GateDecision; preset?: string; presetRisk?: GateRisk | null; split?: { key: string; title: string; icon: string; assignment: string }[]
+export function GateDialog({ label, who = '', decision, preset, presetRisk, askRisk = false, split, skips, report, onReport, overrule = false, delivery, questions = [], talk = [], outputs = [], onConfirm, onCancel }: {
+  label: string; who?: string; decision: GateDecision; preset?: string; presetRisk?: GateRisk | null; askRisk?: boolean; split?: { key: string; title: string; icon: string; assignment: string }[]
   skips?: { key: string; title: string; why: string }[]; report?: string; onReport?: () => void; overrule?: boolean; delivery?: Delivery
   questions?: GateQuestion[]; talk?: TalkLine[]; outputs?: { key: string; title: string; icon: string; onOpen: () => void }[]
   onConfirm: (note: string, delivery?: DeliveryPick, answers?: GateAnswers, risk?: GateRisk) => Promise<void>; onCancel: () => void
@@ -507,7 +505,7 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, spli
   const back = !approve && !discuss
   const riskOut = (): GateRisk | undefined => {
     const what = risk.what.trim(), wan = Number(risk.wan)
-    return back && (what || wan > 0) ? { what, amount: wan > 0 ? Math.round(wan * 1e4) : null } : undefined
+    return back && askRisk && (what || wan > 0) ? { what, amount: wan > 0 ? Math.round(wan * 1e4) : null } : undefined
   }
   const answer = (id: string, a: Partial<{ choice: string; text: string }>) => setAnswers((x) => ({ ...x, [id]: { ...x[id], ...a } }))
   const confirm = async () => {
@@ -542,7 +540,7 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, spli
   const lead = discuss
     ? `写下你想问的或想商量的。${who || '它'}会回答，需要的话改自己的文档；关卡一直开着，讨论完再批准或退回。`
     : overrule ? (approve ? '审查还说要改，打回的轮数用完了。批准就是你推翻审查结论放行：写明理由，记在签字单上，然后部署。' : '按审查意见再改一轮：没写打回给谁时，打回审查点名的成员；你写的意见一起交给它们，和审查冲突时以你为准。改完审查再看一遍，然后回到这里。')
-      : report !== undefined ? (approve ? '批准后部署。你的意见会记在签字单上。' : '写明打回给谁、改什么（「打回：前端开发 #2」），改完审查会再看一遍，然后回到这里。')
+      : report !== undefined ? (approve ? '批准后部署。你的意见会记在签字单上。' : '写明打回给谁、改什么（「打回：开发 · 修复」），改完审查会再看一遍，然后回到这里。')
         : approve ? (asking ? '批准后，编排器按这份分工派下一阶段开工。下面每件事选一个答案（默认是它的建议），你的决定和意见会交给后面的每个 agent。' : '批准后，编排器按这份分工派下一阶段开工。有意见可以写在这里，会交给后面的每个 agent（可以不写）。')
           : '写下要改什么，它会按你的意见重写，再交给你批准。'
   return (
@@ -641,7 +639,7 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, spli
       )}
       {approve && pick && delivery && (
         <fieldset className="kt-gate-delivery" data-testid="kt-gate-delivery">
-          <legend title="签字放行后按这些标签计入 CTO 视图">交付标签{delivery.why ? `（提议：${delivery.why}）` : ''}</legend>
+          <legend title="签字放行后记在这次运行上">交付标签{delivery.why ? `（提议：${delivery.why}）` : ''}</legend>
           <input aria-label="交付名称" value={pick.name} maxLength={20} onChange={(e) => setPick({ ...pick, name: e.target.value })} />
           <select aria-label="类型" value={pick.kind} onChange={(e) => setPick({ ...pick, kind: e.target.value as Delivery['kind'] })}>
             {DELIVERY_KINDS.map((k) => <option key={k}>{k}</option>)}
@@ -654,16 +652,16 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, spli
           </select>
         </fieldset>
       )}
-      {back && (
+      {back && askRisk && (
         <fieldset className="kt-gate-delivery kt-gate-risk" data-testid="kt-gate-risk">
-          <legend title="计入 CTO 视图的「更稳」和签字单">拦下的风险（可选）</legend>
-          <input aria-label="拦下的风险" className="kt-gate-what" value={risk.what} maxLength={60} onChange={(e) => setRisk({ ...risk, what: e.target.value })} placeholder="例如：价保退差超过审批线" />
+          <legend title="记在签字单上">拦下的风险（可选）</legend>
+          <input aria-label="拦下的风险" className="kt-gate-what" value={risk.what} maxLength={60} onChange={(e) => setRisk({ ...risk, what: e.target.value })} placeholder="例如：一个会改变运行日志的修复" />
           <label>
             金额 <input aria-label="金额（万元）" className="kt-gate-amount" type="number" min={0} step={0.1} value={risk.wan} onChange={(e) => setRisk({ ...risk, wan: e.target.value })} placeholder="可不填" /> 万元
           </label>
         </fieldset>
       )}
-      <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={discuss ? '例如：第 2 题为什么建议 B？改成 A 会有什么影响？' : overrule && approve ? '例如：风险我担，价保退差按 28 万预留，活动结束后财务复核' : approve ? '例如：补充一条业务规则' : '例如：漏了一条验收标准'} autoFocus aria-label={discuss ? '讨论' : '意见'} />
+      <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={discuss ? '例如：F-008 为什么建议说明而不修？引的那一页怎么说？' : overrule && approve ? '例如：评审的意见我认，这一条下一批再处理' : approve ? '例如：重构分两步提交，每步都能单独构建' : '例如：F-013 要单元测试，不能只靠静态分析'} autoFocus aria-label={discuss ? '讨论' : '意见'} />
       <span className="kt-confirm-actions">
         {preset && note !== preset && !discuss && (
           <button type="button" className="kt-btn" onClick={() => { setNote(preset); if (back && presetRisk) setRisk({ what: presetRisk.what, wan: presetRisk.amount != null ? String(presetRisk.amount / 1e4) : '' }) }} title={preset}>
@@ -690,84 +688,17 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, spli
 // the empty state
 // ---------------------------------------------------------------------------------------------
 
-/** The AI-DLC 专家团队 (team/team-aidlc.json): AI-DLC 官方领域专家，按依赖从左到右；同一列的并行。 */
-const TEAM_INTRO: Array<{ phase: string; title: string; roles: Array<Array<{ key: string; title: string; does: string }>> }> = [
-  {
-    phase: '1 构思 Ideation',
-    title: '一句话需求 → 范围清单',
-    roles: [
-      [
-        { key: 'intent', title: '意图', does: '为谁、为什么、怎样算成功' },
-        { key: 'feasibility', title: '约束', does: '对照企业规范和上架要求' },
-      ],
-      [{ key: 'scope', title: '范围', does: '交给人批准' }],
-    ],
-  },
-  {
-    phase: '2 启动 Inception',
-    title: '读懂系统、定接口、分工，交给人批准',
-    roles: [
-      [{ key: 'architect', title: '架构师', does: '逆向工程、接口、谁改哪里' }],
-      [{ key: 'designer', title: '界面', does: '沿用现有风格' }],
-      [{ key: 'pm', title: '需求', does: '可验收的标准，汇总交给人批准' }],
-    ],
-  },
-  {
-    phase: '3 构建 Construction',
-    title: '先写检查，再写代码',
-    roles: [
-      [
-        { key: 'compliance', title: '合规与安全', does: '规范 → 检查，先红' },
-        { key: 'tester', title: '测试', does: '护栏：不许改坏' },
-      ],
-      [
-        { key: 'backend', title: '后端', does: '' },
-        { key: 'frontend', title: '网页', does: '' },
-        { key: 'mobile', title: '安卓', does: '' },
-        { key: 'ops', title: '运维', does: '' },
-      ],
-    ],
-  },
-  { phase: '✓ 评审关卡', title: '独立、只读，要改就打回', roles: [[{ key: 'reviewer', title: '评审', does: '最多打回两轮，然后交给人' }]] },
-]
-
 export function EmptyStart({ onStart }: { onStart: StartFn }) {
   return (
     <section className="kt-empty" data-testid="kt-empty" aria-label="还没有运行">
       <div className="kt-empty-hero">
-        <h2>做出来越来越便宜，好产品依然稀缺</h2>
+        <h2>vstatd 本批：修待办里的发现，拆分 Service::run()，行为不变</h2>
         <p>
-          AI 让一个好想法几天就能变成能演示的东西；但要交给整个公司用、要上架、要守住企业自己的规范，这一段才是难点。这支 agent 团队从一句话需求开始，按 AWS AI-DLC 的流程走：构思、启动、构建、评审关卡。每个角色都是 AI-DLC 定义的领域专家，在 Kiro Crew 上以独立的会话或子 agent 运行，只带自己需要的上下文；编排器是确定性的程序，按团队配置排程、派活、合入、跑检查、打回，不靠模型自觉。范围由人批准，检查由机器判定，交付由独立评审放行。
+          工作项：修复 vstatd 静态分析待办里标为 fix 的发现，把信号表的处理从 <code>Service::run()</code> 里拆出去，在录制的行驶数据上行为不变。六个 AI-DLC 角色各在一个 Kiro Crew 会话里做分诊、架构、测试、开发和评审；检查由 app 自己跑，agent 改不了它们；部署和回放这些台架动作，每个都要人在操作台上按构建摘要批准；最后发布负责人看证据页签字放行。
         </p>
-        <p className="kt-empty-punch">好产品不是一次生成出来的，是一道道关卡验收出来的。</p>
       </div>
-      <ol className="kt-team-intro is-phased" aria-label="团队，按 AI-DLC 阶段从左到右">
-        {TEAM_INTRO.map((ph) => (
-          <li key={ph.phase} className="kt-intro-phase">
-            <div className="kt-intro-phase-head">
-              <b>{ph.phase}</b>
-              <span>{ph.title}</span>
-            </div>
-            <div className="kt-intro-phase-body">
-              {ph.roles.map((stage, i) => (
-                <div key={i} className="kt-intro-stage">
-                  {stage.length > 1 && <span className="kt-intro-par">并行 ×{stage.length}</span>}
-                  {stage.map((r) => (
-                    <div key={r.key} className="kt-intro-role">
-                      <RoleIcon role={r.key} size={26} className="kt-intro-emoji" />
-                      <span className="kt-intro-name">
-                        <b>{r.title}</b>
-                        <small className="kt-intro-agent">agent</small>
-                      </span>
-                      <span className="kt-intro-does">{r.does}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </li>
-        ))}
-      </ol>
+      <FlowSteps />
+      <ReadinessPanel />
       <StartForm onStart={onStart} />
     </section>
   )
@@ -782,7 +713,6 @@ const EXPERT_STATE = {
   used: { label: '已调用', hint: '编排器已经派它干过活' },
   team: { label: '待命', hint: '这支团队有它的任务，还没轮到' },
   none: { label: '不参与', hint: '这支团队没有它的任务，这次不会被激活' },
-  absent: { label: '未入职', hint: '这支团队要它，但 Crew 的「代理」里还没有这位成员：在代理页从模板加上（没加时用同名模板顶上）' },
 } as const
 
 /** All 14 experts AWS AI-DLC defines, in four states: at work, called, on the team but not its turn yet, or not on
@@ -791,22 +721,16 @@ export function ExpertStrip({ run }: { run: RunDetail }) {
   const { team, used, busy } = aidlcUse(run.roles)
   const experts = expertsOf(run.roles)
   const custom = experts.filter((a) => a.custom).length
-  const members = run.crew_members ? new Set(run.crew_members) : null
   const of = (key: string) => run.roles.filter((l) => l.status !== 'skipped' && l.aidlc_agent.split(',').map((x) => x.trim()).includes(key))
-  // a member added to the team's 「代理」 page that no role here calls on: shown too, as on the team with nothing to do
-  // (a company's own copy of an official expert, like luming-architect-agent, is that expert: not an extra)
-  const extra = (run.crew_members ?? []).filter((m) => !experts.some((a) => a.key === m) && !officialOf(m) && !run.roles.some((l) => l.member === m))
   return (
     <section className="kt-experts" aria-label="AI-DLC 官方 14 位专家" data-testid="kt-experts">
       <span className="kt-experts-title">
-        AI-DLC 官方 14 位专家{custom + extra.length ? ` + 自定义 ${custom + extra.length} 位` : ''} · 这次用 {team.size} 位
+        AI-DLC 官方 14 位专家{custom ? ` + 自定义 ${custom} 位` : ''} · 这次用 {team.size} 位
       </span>
       <ul className="kt-experts-list">
         {experts.map((a) => {
           const lanes = of(a.key)
-          // a role whose Crew member is not on the 「代理」 page (not added yet): its session boots the template instead
-          const absent = members !== null && lanes.some((l) => l.member && !members.has(l.member))
-          const state = busy.has(a.key) ? 'busy' : used.has(a.key) ? 'used' : team.has(a.key) ? (absent ? 'absent' : 'team') : 'none'
+          const state = busy.has(a.key) ? 'busy' : used.has(a.key) ? 'used' : team.has(a.key) ? 'team' : 'none'
           const n = lanes.length
           const who = lanes.map((l) => l.title).join('、')
           return (
@@ -819,12 +743,6 @@ export function ExpertStrip({ run }: { run: RunDetail }) {
             </li>
           )
         })}
-        {extra.map((m) => (
-          <li key={m} className="kt-expert is-none is-custom is-joined" data-state="joined" title={`${m}：已加入团队（Crew「代理」里有），这次的需求没有它的任务`}>
-            <b>{m.replace(/-agent$/, '')}</b>
-            <small>已入职</small>
-          </li>
-        ))}
       </ul>
     </section>
   )

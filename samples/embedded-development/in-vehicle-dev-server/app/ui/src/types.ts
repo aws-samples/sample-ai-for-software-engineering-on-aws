@@ -104,6 +104,26 @@ export type BenchView = {
 }
 
 /** A request waiting at the operator console: the action and the digest the person approves. */
+/** `GET /readiness`: what a run of the default team needs (D10). ok null: the app cannot tell, or has not read it yet;
+ * needed: from which step on (start: from the first role, checks: from 测试先行, bench: from the first bench action). */
+export type Readiness = {
+  at: number
+  team: string
+  items: ReadinessItem[]
+  error: string // the scenario folder is not known (setup.sh has not run): no items
+}
+
+export type ReadinessItem = {
+  key: string // knowledge | image | doctor | target | baseline | console
+  label: string
+  ok: boolean | null
+  detail: string
+  command: string // what a person runs when it is not ready, '' when it is
+  needed: 'start' | 'checks' | 'bench'
+  age_s: number | null // how old the cached probe is
+  running: boolean // its probe is running now
+}
+
 export type BenchRequest = { id: string; action: string; digest: string; detail: string; requested_at: string; requested_by: string; expired: boolean }
 
 /** The run's Issue: its number, 需求 or 缺陷, who raised it and when (the run's start, unless its record says). */
@@ -204,6 +224,7 @@ export type Lane = {
   answers: GateAnswer[] // what the person decided, once they approved its gate
   talk: TalkLine[] // 讨论 at its gate: the person's words and the role's answers, oldest first
   can_discuss: boolean // its gate offers 讨论 (the team allows it, and its rounds are not used up)
+  tests_first: 'pending' | 'passed' | 'failed' | 'sent_back' | null // a test writer's tests run on the base commit, which must fail there (D6)
 }
 
 /** A question a gated role puts to the person (its questions file): options A/B…, its recommendation and why. The
@@ -259,6 +280,9 @@ export type TestWall = {
   failed: number
   total: number
   history: { at: number; passed: number; failed: number }[] // one point per test run
+  held: { checks: string[]; why: string } | null // a check a person decides: BLOCKED, misconfigured, or out of its repair rounds (D7)
+  round: number // the team file's checks: how many rounds before the bench were started
+  running: boolean // a round of checks is due or running on what is merged
 }
 
 export type Merge = {

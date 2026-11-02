@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { Board } from './types'
 import { apiCalls, apiError, setApiRoutes } from './test/stubs/app-sdk'
-import { clone, emptyBoard, multiRunBoard, runningBoard, setCase, withEvent } from './test/fixtures'
+import { clone, emptyBoard, multiRunBoard, readinessOf, runningBoard, setCase, withEvent } from './test/fixtures'
 import { TeamPage, mostActive } from './main'
 import { SCENARIOS } from './board/Header'
 
@@ -186,13 +186,31 @@ describe('the board', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
   })
 
-  test('no runs: an inviting start panel with the AI-DLC team and the start form', async () => {
+  test('no runs: the work item, the flow from 分诊 to 签字, what this Mac still needs, and the start form', async () => {
     const user = userEvent.setup()
-    setApiRoutes({ [BOARD]: () => emptyBoard(), 'POST /api/apps/vstatd-team/runs': () => ({ id: 'r1' }) })
+    setApiRoutes({ [BOARD]: () => emptyBoard(), 'GET /api/apps/vstatd-team/readiness': () => readinessOf(),
+      'POST /api/apps/vstatd-team/readiness/doctor': () => readinessOf(), 'POST /api/apps/vstatd-team/runs': () => ({ id: 'r1' }) })
     render(<TeamPage />)
     const empty = await screen.findByTestId('kt-empty')
-    expect(within(empty).getByRole('heading', { name: '做出来越来越便宜，好产品依然稀缺' })).toBeInTheDocument()
-    for (const t of ['意图', '约束', '范围', '架构师', '需求', '界面', '合规与安全', '测试', '后端', '网页', '安卓', '运维', '评审']) expect(within(empty).getByText(t)).toBeInTheDocument()
+    expect(within(empty).getByRole('heading', { name: 'vstatd 本批：修待办里的发现，拆分 Service::run()，行为不变' })).toBeInTheDocument()
+    const steps = within(empty).getByTestId('kt-flow-steps')
+    expect(within(steps).getAllByRole('listitem').map((li) => li.querySelector('b')?.textContent)).toEqual(
+      ['分诊', '关卡：分诊', '架构', '关卡：开工', '测试先行', '开发 ×2 并行', '上台架前检查', '评审', '台架：部署、回放', '台架后检查', '独立重跑', '签字放行'])
+    expect(steps.querySelector('[data-step="bench"]')).toHaveTextContent('台架+操作台')
+    expect(steps.querySelector('[data-step="tests-first"]')).toHaveTextContent('agent 角色app 自动')
+    expect(steps.querySelector('[data-step="gate-triage"]')).toHaveTextContent('人')
+    const items = await within(empty).findAllByTestId('kt-ready-item')
+    expect(items.map((i) => i.dataset.key)).toEqual(['knowledge', 'image', 'doctor', 'target', 'baseline', 'console'])
+    const item = (k: string) => items.find((i) => i.dataset.key === k)!
+    expect(item('image')).toHaveTextContent('✔构建容器镜像 vstatd-build:amd64测试先行起要在本机（12 秒前查的）')
+    expect(item('image').querySelector('code')).toBeNull()
+    expect(item('target')).toHaveTextContent('上台架才要')
+    expect(item('target').querySelector('code')).toHaveTextContent(/bench\/cc1\.sh start$/)
+    expect(item('console')).toHaveTextContent('?操作台上台架才要app 看不出操作台开着没有')
+    expect(within(empty).getByTestId('kt-ready')).toHaveTextContent('台架没准备好也能先开始')
+    expect(within(empty).queryByText(/好产品|意图|安卓/)).toBeNull()
+    await user.click(within(empty).getByRole('button', { name: '重跑 doctor.sh' }))
+    await waitFor(() => expect(apiCalls.some((c) => c.method === 'POST' && c.path === '/api/apps/vstatd-team/readiness/doctor')).toBe(true))
     expect(screen.queryAllByTestId('kt-lane')).toHaveLength(0)
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
     await user.clear(within(empty).getByLabelText('交给 agent 团队的需求'))

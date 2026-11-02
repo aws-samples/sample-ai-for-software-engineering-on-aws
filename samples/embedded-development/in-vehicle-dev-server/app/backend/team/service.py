@@ -11,7 +11,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from . import board, checks, outputs, paths, scorecard
+from . import bench as bench_mod
+from . import board, checks, outputs, paths, readiness, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -64,6 +65,7 @@ class Service:
         # every CREW_REFRESH_S by the pulse; None while never read (or the app may not read them)
         self.crew: dict[str, Any] = {"at": float("-inf"), "members": None, "knowledge": None, "error": ""}
         self._live_runs: set[str] = set()  # the runs seen going last pulse: one that has ended since keeps its roster
+        self.probes = readiness.Probes(self.data_dir / "readiness")  # 准备情况: the image and doctor.sh, cached
 
     def manager(self) -> Any:
         """The agent manager the runs, the board and 产出 use: the role sessions."""
@@ -107,6 +109,7 @@ class Service:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._loop, self._ticks = None, {}
+        await self.probes.stop()
         for run in self.runs.values():  # a check in the background removes its container
             run.cancel_tests()
         await self.sessions.gw.close() if hasattr(self.sessions.gw, "close") else None
@@ -415,6 +418,27 @@ class Service:
     async def scorecard(self) -> dict[str, Any]:
         """The rehearsal scorecard (D8), from the runs' records."""
         return await asyncio.to_thread(scorecard.build, [r.s for r in self.runs.values()], self.data_dir / "runs")
+
+    def _default_team(self) -> tuple[dict[str, Any], Path]:
+        """The team a new run gets, with the scenario's folder filled in (D12)."""
+        team, sample = load_team(self.team_file), paths.sample_dir(self.data_dir)
+        return paths.expand(team, sample), sample
+
+    async def readiness(self, doctor: bool = False) -> dict[str, Any]:
+        """准备情况 (D10): what the default team needs, from the cached probes; due probes start in the background
+        (*doctor*: doctor.sh again) and the answer never waits for them. The bench state is only read."""
+        now = time.time()
+        try:
+            team, sample = await asyncio.to_thread(self._default_team)
+        except AppError as exc:  # no scenario folder recorded: setup.sh has not run
+            return {"at": now, "team": "", "items": [], "error": str(exc)}
+        except (OSError, ValueError) as exc:
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+        self.probes.refresh(team, doctor=doctor)
+        state = await asyncio.to_thread(bench_mod.read_state)
+        kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
+        return {"at": now, "team": str(team.get("name") or ""), "error": "",
+                "items": readiness.items(team, self.probes, kb, state, sample, now)}
 
     def board(self, rid: str | None = None) -> dict[str, Any]:
         return board.build(self.runs, rid, mgr=self.manager(), scrub=self.scrub, now=time.time(), crew=self)

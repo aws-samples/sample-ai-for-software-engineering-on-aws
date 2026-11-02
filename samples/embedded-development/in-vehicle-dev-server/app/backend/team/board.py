@@ -70,7 +70,9 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "sign_block": run.sign_block(),
         "tests": {"at": t["at"], "command": t.get("command", ""), "cases": [_case(c) for c in t["cases"]],
                   "passed": t["passed"], "failed": t["failed"], "total": t["total"],
-                  "history": [{"at": h["at"], "passed": h["passed"], "failed": h["failed"]} for h in t["history"]]},
+                  "history": [{"at": h["at"], "passed": h["passed"], "failed": h["failed"]} for h in t["history"]],
+                  "held": dict(t["held"]) if t.get("held") else None, "round": int(t.get("round") or 0),
+                  "running": bool(s.get("needs_test"))},
         "merges": [{k: m.get(k) for k in ("role", "sha", "at", "status", "files", "note")} for m in s["merges"]],
         "events": [{**e, "data": e.get("data")} for e in run.events if not (e.get("kind") == "violation" and any(p in str(e.get("text", "")) for p in gitwork.HOST_PREFIXES))],
         "imported": dict(s["imported"]) if s.get("imported") else None,
@@ -219,6 +221,7 @@ def lane(run: TeamRun, key: str, *, mgr: Any, scrub: Callable[[str], str], now: 
         "answers": [{k: a[k] for k in ("id", "choice", "option", "text", "differs")} for a in (run.s.get("answers") or {}).get(key) or []],
         "talk": [{k: x.get(k) for k in ("who", "text", "at", "changed")} for x in (run.s.get("talks") or {}).get(key) or []],
         "can_discuss": role.get("gate") == "human" and run.discuss_allowed(key),
+        "tests_first": (ln.get("first") or {}).get("status"),
     }
 
 

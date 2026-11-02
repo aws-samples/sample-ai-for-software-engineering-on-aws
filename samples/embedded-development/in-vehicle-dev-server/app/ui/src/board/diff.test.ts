@@ -173,7 +173,7 @@ describe('eventItem', () => {
 })
 
 describe('structured event data wins over text parsing', () => {
-  const ctx = { roles: new Set(['pm', 'architect', 'backend']), tests: { at: null, command: '', cases: [], passed: 0, failed: 0, total: 0, history: [] } }
+  const ctx = { roles: new Set(['pm', 'architect', 'backend']), tests: { at: null, command: '', cases: [], passed: 0, failed: 0, total: 0, history: [], held: null, round: 0, running: false } }
   const ev = (over: Partial<TeamEvent>): TeamEvent => ({ seq: 1, at: 1, kind: 'handoff', role: null, text: '', from: null, to: null, data: null, ...over })
   it('handoff label comes from data.carry, and the backend wording parses too', () => {
     expect(eventItem(ev({ kind: 'handoff', from: 'pm', to: 'architect', text: '产品经理把 验收标准 交给架构师', data: { carry: '验收标准' } }), 'r', ctx)?.label).toBe('验收标准')

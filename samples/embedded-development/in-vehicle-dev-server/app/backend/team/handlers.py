@@ -31,6 +31,12 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     async def board(request: Any) -> Any:
         return kit.json(svc.board(request.query.get("run") or None))
 
+    async def ready(request: Any) -> Any:
+        return kit.json(await svc.readiness())
+
+    async def ready_doctor(request: Any) -> Any:
+        return kit.json(await svc.readiness(doctor=True))
+
     async def score(request: Any) -> Any:
         return kit.json(await svc.scorecard())
 
@@ -122,6 +128,8 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         AppRoute("GET", "/health", health),
         AppRoute("GET", "/board", kit.guarded(board)),
         AppRoute("GET", "/scorecard", kit.guarded(score)),
+        AppRoute("GET", "/readiness", kit.guarded(ready)),
+        AppRoute("POST", "/readiness/doctor", kit.guarded(ready_doctor)),
         AppRoute("GET", "/runs", kit.guarded(runs)),
         AppRoute("POST", "/runs", kit.guarded(create_run)),
         AppRoute("POST", "/sessions/cleanup", kit.guarded(cleanup_sessions)),

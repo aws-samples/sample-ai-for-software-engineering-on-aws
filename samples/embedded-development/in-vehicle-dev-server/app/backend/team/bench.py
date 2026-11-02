@@ -106,12 +106,21 @@ def missing(bench: dict[str, Any], doc: dict[str, Any], state: dict[str, Any]) -
     elif target.get("state") != "known":
         out.append({"why": f"台架目标状态是 {target.get('state')}：{target.get('why') or ''}", "command": "到操作台核对（reconcile）"})
     base = Path(bench["baseline"]).expanduser()
-    if not (base / "baseline-result.json").is_file():
-        cmd = argv(bench["replay"], {"run": str(base)})
-        if "--kind" in cmd[:-1]:
-            cmd[cmd.index("--kind") + 1] = "baseline"
-        out.append({"why": f"没有基线目录 {base}（baseline-result.json）", "command": "部署当前版本以后运行 " + shlex.join(cmd)})
+    if not has_baseline(bench):
+        out.append({"why": f"没有基线目录 {base}（baseline-result.json）", "command": baseline_command(bench)})
     return out
+
+
+def has_baseline(bench: dict[str, Any]) -> bool:
+    return (Path(bench["baseline"]).expanduser() / "baseline-result.json").is_file()
+
+
+def baseline_command(bench: dict[str, Any]) -> str:
+    """How the bench owner writes the baseline once: the replay command with ``--kind baseline`` into it."""
+    cmd = argv(bench["replay"], {"run": str(Path(bench["baseline"]).expanduser())})
+    if "--kind" in cmd[:-1]:
+        cmd[cmd.index("--kind") + 1] = "baseline"
+    return "部署当前版本以后运行 " + shlex.join(cmd)
 
 
 def outcome(rc: int | None, tail: str, target: dict[str, Any]) -> tuple[str, str]:

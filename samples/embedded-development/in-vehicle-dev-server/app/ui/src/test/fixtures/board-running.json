@@ -111,7 +111,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       },
       {
         "key": "architect",
@@ -200,7 +201,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       },
       {
         "key": "designer",
@@ -289,7 +291,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       },
       {
         "key": "tester",
@@ -383,7 +386,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       },
       {
         "key": "backend",
@@ -512,7 +516,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       },
       {
         "key": "frontend",
@@ -643,7 +648,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       },
       {
         "key": "ops",
@@ -739,7 +745,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       },
       {
         "key": "reviewer",
@@ -795,7 +802,8 @@
         "questions": [],
         "answers": [],
         "talk": [],
-        "can_discuss": false
+        "can_discuss": false,
+        "tests_first": null
       }
     ],
     "edges": [
@@ -1021,7 +1029,10 @@
           "passed": 6,
           "failed": 6
         }
-      ]
+      ],
+      "held": null,
+      "round": 0,
+      "running": false
     },
     "merges": [
       {

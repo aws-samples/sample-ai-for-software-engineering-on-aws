@@ -34,14 +34,21 @@ The scorecard (`GET /scorecard`) is computed from each run's `run.json`, `events
 directories and the bench's `actions.jsonl`; [backend/team/scorecard.py](backend/team/scorecard.py) says how each figure
 is taken (D8).
 
+With no run yet, the board shows the work item, the flow from triage to sign-off with who acts at each step, and a
+checklist from `GET /readiness`: the knowledge source, the build container image, `bench/doctor.sh`, the target, the
+baseline and the operator console (which the app cannot see), each with the command for it when it is not ready. The
+image and doctor.sh are probed in the background and cached (doctor.sh runs once by itself and again on
+`POST /readiness/doctor`); the bench state is only read. During a run, a strip above the team graph shows the same
+steps and what comes next (`ui/src/board/flow.ts`).
+
 ## Code map
 
 | Path | What it is |
 | --- | --- |
 | `app.json` | Kiro Crew app manifest |
-| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
-| `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `types.ts` (the contract with the backend) |
-| `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd`, `vstatd-triage`, `vstatd-release`, `?view=score`) |
+| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
+| `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `types.ts` (the contract with the backend) |
+| `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd` (the default), `vstatd-triage`, `vstatd-release`, `empty`, `?view=score`) |
 | `team/` | `team-vstatd.json` and its task template |
 | `scripts/dev-install.sh` | Builds the board and installs or updates the app in the local Kiro Crew; `scripts/kcapi.sh` calls Kiro Crew's local API as the dashboard owner |
 | `tests/` | Backend tests with a fake session manager, real git, and stand-in checks and bench; `tests/fixtures/` has a small web team that the orchestrator's own tests run |

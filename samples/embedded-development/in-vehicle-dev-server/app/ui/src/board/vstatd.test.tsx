@@ -11,6 +11,18 @@ const API = '/api/apps/vstatd-team'
 const serve = (b: Board) => setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
 
 describe('the vstatd board', () => {
+  test('the flow strip above the team graph: done steps checked, the bench step current, and what comes next', async () => {
+    const b = vstatdBoard('bench')
+    serve(b)
+    render(<TeamPage pollMs={60_000} />)
+    const flow = await screen.findByTestId('kt-flow')
+    expect(flow.compareDocumentPosition(screen.getByTestId('kt-graph')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const cells = Object.fromEntries([...flow.querySelectorAll<HTMLElement>('[data-step]')].map((c) => [c.dataset.step, c.dataset.state]))
+    expect(cells).toMatchObject({ triage: 'done', 'gate-start': 'done', review: 'done', bench: 'current', after: 'todo', signoff: 'todo' })
+    const req = b.run!.bench!.state.pending[0]
+    expect(within(flow).getByTestId('kt-flow-now')).toHaveTextContent(`现在：等你在操作台批准部署：${b.run!.bench!.console} approve ${req.id} --digest bc9372`)
+  })
+
   test('the check wall shows each check\'s verdict, evidence tier, owner and reasons', async () => {
     const b = vstatdBoard('bench')
     const cases = b.run!.tests.cases

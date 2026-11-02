@@ -121,18 +121,4 @@ describe('AI-DLC 官方 14 位专家', () => {
     expect(states.has('none')).toBe(true) // e.g. AWS 平台: no task on this team, shown greyed
     for (const li of items) expect(['干活中', '已调用', '待命', '不参与']).toContain(li.querySelector('small')?.textContent)
   })
-
-  test("a company's own copies of the official experts are those experts; only a truly new one is custom", async () => {
-    const { render: r, screen: s, within: w } = await import('@testing-library/react')
-    const { ExpertStrip } = await import('./Header')
-    const { officialOf } = await import('./format')
-    const { aidlcBoard } = await import('../test/fixtures')
-    expect([officialOf('luming-architect-agent'), officialOf('luming-motion-agent'), officialOf('aidlc-architect-agent')]).toEqual(['aidlc-architect-agent', '', 'aidlc-architect-agent'])
-    const run = { ...aidlcBoard(false).run!, crew_members: ['luming-architect-agent', 'luming-operations-agent', 'luming-recruit-agent'] }
-    r(<ExpertStrip run={run} />)
-    const strip = s.getByTestId('kt-experts')
-    const joined = w(strip).getAllByRole('listitem').filter((li) => li.getAttribute('data-state') === 'joined')
-    expect(joined.map((li) => li.querySelector('b')?.textContent)).toEqual(['luming-recruit']) // on the page, nothing to do this time
-    expect(strip.textContent).toContain('+ 自定义 1 位')
-  })
 })

@@ -11,10 +11,11 @@
  *   (frontend failed after two fix rounds), emptyBoard (no runs), multiRunBoard (three runs);
  * - vstatdBoard: the vstatd team (team-vstatd.json) at its triage gate (questions with citations), held at the bench
  *   (the check wall green, a deploy waiting at the operator console), or ended with the release check (the
- *   independent rerun, a check that differed, the evidence page).
+ *   independent rerun, a check that differed, the evidence page);
+ * - readinessOf: GET /readiness on a Mac with the build image but no bench yet.
  */
 import raw from './fixtures/board-running.json'
-import type { Board, FileChange, Lane, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase } from '../types'
+import type { Board, FileChange, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -415,7 +416,7 @@ export function startedBoard(): Board {
       credits: null,
     },
   })
-  r.tests = { at: null, command: 'node --test tests/', cases: [], passed: 0, failed: 0, total: 0, history: [] }
+  r.tests = { at: null, command: 'node --test tests/', cases: [], passed: 0, failed: 0, total: 0, history: [], held: null, round: 0, running: false }
   r.merges = []
   r.events = r.events.slice(0, 2)
   withEvent(b, { kind: 'tool', role: 'pm', text: '产品经理：Reading README.md', at: t0 + 6 })
@@ -553,7 +554,7 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
     mk('triage', '分诊', 'scope', 'inception', '分诊 · 修、说明或延后', [], 'merged', 'aidlc-developer-agent',
       { gate: at ? 'approved' : 'pending', gate_label: '分诊', writable: ['docs/aidlc/triage.json', 'docs/aidlc/triage.md'], questions: at ? [] : questions }),
     mk('architect', '架构师', 'architect', 'inception', '重构方案 · 分工', ['triage'], after('merged'), 'aidlc-architect-agent', { gate: at ? 'approved' : null, gate_label: '开工' }),
-    mk('tester', '测试', 'tester', 'construction', '测试先行', ['architect'], after('merged'), 'aidlc-quality-agent', { writable: ['tests/**'] }),
+    mk('tester', '测试', 'tester', 'construction', '测试先行', ['architect'], after('merged'), 'aidlc-quality-agent', { writable: ['tests/**'], tests_first: at ? 'passed' : null }),
     mk('dev-fix', '开发 · 修复', 'backend', 'construction', '修复', ['tester'], after('merged'), 'aidlc-developer-agent', { attempt: at ? 2 : 1, kinds: at ? ['work', 'fix'] : ['work'] }),
     mk('dev-refactor', '开发 · 重构', 'frontend', 'construction', '重构', ['tester'], after('merged'), 'aidlc-developer-agent'),
     mk('reviewer', '评审', 'reviewer', 'review', '评审', ['dev-fix', 'dev-refactor'], at ? 'done' : 'waiting', 'aidlc-architecture-reviewer-agent', { writable: [], summary: at ? '可以交付' : null }),
@@ -569,9 +570,11 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
     history: [{ at: t + 3000, passed: 0, failed: 3 }, { at: t + 4200, passed: 3, failed: 2 }, { at: t + 5400, passed: 5, failed: 0 }],
     cases: [CHECK('build', 'PASS', 'n/a', 'dev-fix', null, 212_000), CHECK('static', 'PASS', 'n/a', 'dev-fix', null, 98_000),
       CHECK('unit', 'PASS', 'unit test', 'dev-fix', null, 301_000), CHECK('size', 'PASS', 'n/a', 'dev-refactor', null, 4_000), CHECK('trace', 'PASS', 'n/a', 'dev-fix', null, 2_000)],
-  } : { at: null, command: 'build static unit size trace', cases: [], passed: 0, failed: 0, total: 0, history: [] }
+    held: null, round: 3, running: false,
+  } : { at: null, command: 'build static unit size trace', cases: [], passed: 0, failed: 0, total: 0, history: [], held: null, round: 0, running: false }
   const digest = 'bc93723c5a1f0e8d2b7c46e19a0d3f58c2e7b1a49d6f0c38e5b2a71d94c06e3f'
-  run.bench = at ? {
+  const benchState = { dir: '~/.cc1-bench', target: { state: 'off', why: '台架状态目录里没有目标状态（CC-1 没开机）' }, supply: null, pending: [], actions: [] }
+  run.bench = !at ? { step: null, running: null, held: null, doctor: null, artifact: null, run_dir: null, baseline: '~/workplace/vstatd-team/baseline', actions: [], state: benchState, console: null } : {
     step: stage === 'bench' ? 'deploy' : 'done', running: stage === 'bench' ? 'deploy' : null,
     held: null, doctor: { ok: true, rc: 0, at: t + 5460, fails: [], warns: ['memory: 4.3 GiB for Docker (6 GiB recommended)'], summary: 'doctor: ready' },
     artifact: `${run.repo.replace(/\/repo$/, '')}/results/7/artifacts/vstatd`, run_dir: `${run.repo.replace(/\/repo$/, '')}/bench/run-1`,
@@ -590,7 +593,7 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
       ],
     },
     console: 'python3 /Users/you/sample-ai-for-software-engineering-on-aws/samples/embedded-development/in-vehicle-dev-server/bench/console.py',
-  } : null
+  }
   run.release = stage === 'release' ? {
     at: t + 7200, head: '7c3e9a1f2b', results: `${run.repo.replace(/\/repo$/, '')}/results/rerun`,
     release: { verdict: 'PASS', summary: 'every check passed on 7c3e9a1', reasons: [] },
@@ -606,6 +609,26 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
   b.runs = [{ ...b.runs[0], title: run.title, status: run.status, roles_total: run.roles.length, roles_done: run.roles.filter((l) => l.status === 'merged' || l.status === 'done').length,
     tests: { passed: run.tests.passed, failed: run.tests.failed, total: run.tests.total } }]
   return b
+}
+
+const SAMPLE = '/Users/you/sample-ai-for-software-engineering-on-aws/samples/embedded-development/in-vehicle-dev-server'
+
+/** GET /readiness at *at*: the knowledge indexed and the build image there, doctor.sh failing, the target off, no baseline. */
+export function readinessOf(at: number = raw.at): Readiness {
+  return {
+    at, team: '车载平台服务 · AI-DLC 团队', error: '',
+    items: [
+      { key: 'knowledge', label: '知识库来源「vstatd」', ok: true, detail: '14 份文档 · 已索引', command: '', needed: 'start', age_s: null, running: false },
+      { key: 'image', label: '构建容器镜像 vstatd-build:amd64', ok: true, detail: '在本机', command: '', needed: 'checks', age_s: 12, running: false },
+      { key: 'doctor', label: '台架自检 bench/doctor.sh', ok: false, detail: '没通过：no target image in the volume cc1-images: run bench/build-target.sh（警告：the supply is not set: set it at the operator console (bench/console.py)）',
+        command: `${SAMPLE}/bench/build-target.sh`, needed: 'bench', age_s: 340, running: false },
+      { key: 'target', label: '台架上的目标 CC-1', ok: false, detail: 'off：台架状态目录里没有目标状态（CC-1 没开机）', command: `${SAMPLE}/bench/cc1.sh start`, needed: 'bench', age_s: null, running: false },
+      { key: 'baseline', label: '基线（baseline-result.json）', ok: false, detail: '~/workplace/vstatd-team/baseline',
+        command: `部署当前版本以后运行 ${SAMPLE}/bench/cc1.sh replay --kind baseline --out /Users/you/workplace/vstatd-team/baseline`, needed: 'bench', age_s: null, running: false },
+      { key: 'console', label: '操作台', ok: null, detail: 'app 看不出操作台开着没有：部署和回放要人在操作台上批准，它要在自己的终端里开着',
+        command: `python3 ${SAMPLE}/bench/console.py`, needed: 'bench', age_s: null, running: false },
+    ],
+  }
 }
 
 /** A scorecard (GET /scorecard) with *b*'s run, its figures as the backend would take them from such a run. */

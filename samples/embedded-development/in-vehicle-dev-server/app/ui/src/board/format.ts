@@ -47,7 +47,7 @@ export const LANE_META: Record<LaneStatus, StatusMeta> = {
   merged: { label: '已合并', tone: 'ok', icon: '✔', hint: '它的分支已经合进运行分支' },
   fixing: { label: '修复中', tone: 'fix', icon: '↻', hint: '测试没过被打回，正在修' },
   failed: { label: '失败', tone: 'bad', icon: '✕', hint: '这个角色失败了' },
-  skipped: { label: '跳过', tone: 'idle', icon: '–', hint: '这次不参与：未入职，或批准的分工里不要它（原因写在它的卡片上）' },
+  skipped: { label: '跳过', tone: 'idle', icon: '–', hint: '这次不参与：批准的分工里不要它（原因写在它的卡片上）' },
 }
 
 export const RUN_META: Record<RunStatus, { label: string; tone: Tone; active: boolean }> = {
@@ -297,13 +297,6 @@ export const CUSTOM_EXPERTS: Readonly<Record<string, string>> = { 'taoyuan-motio
 export const expertName = (key: string) => AIDLC_AGENTS.find((a) => a.key === key)?.name ?? CUSTOM_EXPERTS[key] ?? key
 
 /** The experts a run shows: the official 14, then the company's own its roles use. */
-/** The official expert a company's own copy of it stands for: a company's `acme-architect-agent` is AI-DLC's
- * `aidlc-architect-agent` with the company's working notes (example/agents/make_templates.py); "" for anything else. */
-export function officialOf(member: string): string {
-  const key = member.replace(/^[a-z0-9]+-(.+-agent)$/, 'aidlc-$1')
-  return AIDLC_AGENTS.some((a) => a.key === key) ? key : ''
-}
-
 export function expertsOf(roles: ReadonlyArray<Pick<Lane, 'aidlc_agent'>>): { key: string; name: string; custom: boolean }[] {
   const official = new Set(AIDLC_AGENTS.map((a) => a.key))
   const custom = [...new Set(roles.flatMap((l) => l.aidlc_agent.split(',').map((x) => x.trim())).filter((k) => k && !official.has(k)))]

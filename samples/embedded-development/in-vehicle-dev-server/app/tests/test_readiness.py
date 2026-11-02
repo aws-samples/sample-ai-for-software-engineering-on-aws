@@ -1,0 +1,142 @@
+"""GET /readiness (D10): the default team's checklist for the empty board, with a stand-in scenario folder, Docker and
+doctor.sh. The probes run in the background; a request never waits for them and the bench state is only read."""
+
+import asyncio
+import json
+import logging
+import sys
+import time
+from types import SimpleNamespace
+
+from http_fakes import AppRoute, FakeWeb, call, owner_check
+from teamkit import FakeManager, mod
+
+service, handlers, constants, paths = mod("service"), mod("handlers"), mod("constants"), mod("paths")
+
+DOCKER = f"""#!{sys.executable}
+import sys
+print("Error: No such image: " + sys.argv[-1], file=sys.stderr)
+sys.exit(1)
+"""
+
+DOCTOR = f"""#!{sys.executable}
+import os, sys, time
+open(os.environ["FAKE_DOCTOR_LOG"], "a").write("run\\n")
+time.sleep(float(os.environ.get("FAKE_DOCTOR_SLEEP", "0")))
+print("PASS  Docker 27, 6 CPUs")
+print("WARN  the supply is not set")
+print("FAIL  no target image in the volume cc1-images: run bench/build-target.sh")
+print("doctor: 1 problem(s)")
+sys.exit(1)
+"""
+
+
+def scenario(tmp_path, monkeypatch, sleep=0.0):
+    sample = tmp_path / "sample"
+    for d in ("checks", "reference-project", "bench"):
+        (sample / d).mkdir(parents=True)
+    for name, text in (("bench/doctor.sh", DOCTOR), ("docker", DOCKER)):
+        (sample / name).write_text(text, encoding="utf-8")
+        (sample / name).chmod(0o755)
+    (sample / "bench" / "console.py").write_text("", encoding="utf-8")
+    team = json.loads(constants.TEAM_FILE.read_text(encoding="utf-8"))
+    team["check_runner"]["docker"][0] = "${sample}/docker"
+    team["bench"]["baseline"] = str(tmp_path / "baseline")
+    team_file = tmp_path / "team" / "team-vstatd.json"
+    team_file.parent.mkdir()
+    team_file.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / paths.SAMPLE_FILE).write_text(json.dumps({"sample": str(sample)}), encoding="utf-8")
+    state = tmp_path / "bench-state"
+    (state / "requests").mkdir(parents=True)
+    (state / "target.json").write_text(json.dumps({"state": "off", "why": "never started"}), encoding="utf-8")
+    monkeypatch.setenv("CC1_BENCH_STATE", str(state))
+    monkeypatch.setenv("FAKE_DOCTOR_LOG", str(tmp_path / "doctor.log"))
+    monkeypatch.setenv("FAKE_DOCTOR_SLEEP", str(sleep))
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(data))
+    svc = service.Service(ctx, manager=FakeManager(), work_root=tmp_path / "work", tick_s=60, team_file=team_file)
+    return svc, handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check), sample, state
+
+
+def snapshot(d):
+    return sorted((str(p.relative_to(d)), p.read_bytes()) for p in d.rglob("*") if p.is_file())
+
+
+def test_readiness_is_owner_only(tmp_path, monkeypatch):
+    svc, routes, _, _ = scenario(tmp_path, monkeypatch)
+
+    async def go():
+        for method, path in (("GET", "/readiness"), ("POST", "/readiness/doctor")):
+            assert (await call(routes, method, path, user=None)).status == 401, path
+            r = await call(routes, method, path, owner=False)
+            assert (r.status, r.code) == (403, "owner_only"), path
+
+    asyncio.run(go())
+
+
+def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatch):
+    svc, routes, sample, state = scenario(tmp_path, monkeypatch, sleep=1.5)
+    before = snapshot(state)
+
+    async def go():
+        try:
+            t0 = time.monotonic()
+            r = await call(routes, "GET", "/readiness")
+            assert r.status == 200 and time.monotonic() - t0 < 1.0  # doctor.sh is still running
+            first = {i["key"]: i for i in r.body["items"]}
+            assert r.body["team"] == "车载平台服务 · AI-DLC 团队" and r.body["error"] == ""
+            assert list(first) == ["knowledge", "image", "doctor", "target", "baseline", "console"]
+            assert first["doctor"]["ok"] is None and first["doctor"]["running"] and first["doctor"]["detail"] == "正在跑"
+            for _ in range(100):
+                await asyncio.sleep(0.05)
+                items = {i["key"]: i for i in (await call(routes, "GET", "/readiness")).body["items"]}
+                if items["doctor"]["ok"] is not None and items["image"]["ok"] is not None:
+                    break
+            assert {k: i["needed"] for k, i in items.items()} == {"knowledge": "start", "image": "checks", "doctor": "bench",
+                                                                   "target": "bench", "baseline": "bench", "console": "bench"}
+            assert items["knowledge"]["ok"] is None  # Kiro Crew's sources not read yet
+            assert items["image"]["ok"] is False and items["image"]["detail"] == "镜像不在本机"
+            assert items["image"]["command"] == f"docker build --platform linux/amd64 -t vstatd-build:amd64 {sample}/reference-project/tools/"
+            assert items["doctor"]["ok"] is False and not items["doctor"]["running"] and items["doctor"]["age_s"] >= 0
+            assert "no target image" in items["doctor"]["detail"] and "the supply is not set" in items["doctor"]["detail"]
+            assert items["doctor"]["command"] == f"{sample}/bench/build-target.sh"
+            assert items["target"]["ok"] is False and items["target"]["command"] == f"{sample}/bench/cc1.sh start"
+            assert items["baseline"]["ok"] is False
+            assert items["baseline"]["command"].endswith(f"replay --kind baseline --out {tmp_path / 'baseline'}")
+            assert items["console"]["ok"] is None and items["console"]["command"] == f"python3 {sample}/bench/console.py"
+            assert (tmp_path / "doctor.log").read_text().count("run") == 1  # once by itself, not on every request
+
+            r = await call(routes, "POST", "/readiness/doctor")
+            assert r.status == 200 and {i["key"]: i for i in r.body["items"]}["doctor"]["running"]
+            for _ in range(100):
+                await asyncio.sleep(0.05)
+                if not svc.probes.running("doctor"):
+                    break
+            assert (tmp_path / "doctor.log").read_text().count("run") == 2
+
+            (tmp_path / "baseline").mkdir()
+            (tmp_path / "baseline" / "baseline-result.json").write_text("{}", encoding="utf-8")
+            (state / "target.json").write_text(json.dumps({"state": "known", "why": "booted"}), encoding="utf-8")
+            svc.crew["knowledge"] = [{"name": "vstatd", "item_count": 14, "sync_status": "synced"}]
+            items = {i["key"]: i for i in (await call(routes, "GET", "/readiness")).body["items"]}
+            assert items["baseline"]["ok"] and items["baseline"]["command"] == ""
+            assert items["target"]["ok"] and items["knowledge"]["ok"] and items["knowledge"]["detail"] == "14 份文档 · 已索引"
+            before_known = snapshot(state)
+        finally:
+            await svc.stop()
+        return before_known
+
+    known = asyncio.run(go())
+    assert snapshot(state) == known and before != known  # the app wrote nothing there; only the test did
+
+
+def test_without_a_scenario_folder_the_checklist_says_why(tmp_path, monkeypatch):
+    svc, routes, _, _ = scenario(tmp_path, monkeypatch)
+    (tmp_path / "data" / paths.SAMPLE_FILE).write_text(json.dumps({"sample": str(tmp_path / "moved")}), encoding="utf-8")
+
+    async def go():
+        r = await call(routes, "GET", "/readiness")
+        assert r.status == 200 and r.body["items"] == [] and "setup.sh" in r.body["error"]
+
+    asyncio.run(go())

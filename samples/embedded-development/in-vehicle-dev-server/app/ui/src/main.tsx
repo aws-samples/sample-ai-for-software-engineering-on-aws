@@ -1,9 +1,9 @@
 /**
- * vstatd-team page: the live mission control of the 8-role agent team.
+ * vstatd-team page: the live mission control of the vstatd team (team/team-vstatd.json).
  *
  * Polls GET /board every 2 s (board/useBoard.ts) and renders only that contract (types.ts): the
- * header with the live counters, the team graph (the hero, with the particle layer), the merge
- * conveyor, one lane per role, the test wall and the event feed. Each poll's snapshot is diffed
+ * header with the live counters, the flow strip (board/FlowStrip.tsx), the team graph (the hero,
+ * with the particle layer), the merge conveyor, one lane per role, the test wall and the event feed. Each poll's snapshot is diffed
  * against the previous one (board/diff.ts): new events become particles and node flashes, changed
  * test cases flip, changed lanes and new merges get a one-time highlight. The first snapshot is
  * history and never animates.
@@ -39,6 +39,7 @@ import { RoleIcon } from './board/RoleIcon'
 import { KnowledgePanel } from './board/Knowledge'
 import { SignOff } from './board/SignOff'
 import { BenchPanel } from './board/Bench'
+import { FlowStrip } from './board/FlowStrip'
 import { ReplayBar, useReplay } from './board/Replay'
 import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
@@ -53,11 +54,6 @@ interface Effects {
   merges: ReadonlySet<string>
   fresh: ReadonlySet<number>
   announce: string
-}
-
-/** 填入预设意见: the note the team file suggests for a gate (by its label); the person can still write their own. */
-const GATE_PRESETS: Record<string, string> = {
-  方案: '批准。补充一条：库存少于 5 件时，列表和详情页的商品显示「仅剩 N 件」。',
 }
 
 const NO_EFFECTS: Effects = { run: null, flips: {}, flashes: {}, bumps: {}, merges: new Set(), fresh: new Set(), announce: '' }
@@ -383,7 +379,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, returning = false, p
         {!board && loading && <p className="kt-loading">正在连接看板…</p>}
         {!projection && !inReplay && startOpen && run && <StartForm onStart={start} onCancel={() => setStartOpen(false)} />}
         {!projection && !inReplay && stopAsk && run && <StopConfirm run={run} onConfirm={stop} onCancel={() => setStopAsk(false)} />}
-        {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : (gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset) || GATE_PRESETS[gateLane?.gate_label || '']} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
+        {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} askRisk={!!gateLane?.gate_revise_risk} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
         {board && !run && board.runs.length === 0 && <EmptyStart onStart={start} />}
         {run && lay && (
           <>
@@ -391,6 +387,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, returning = false, p
             {run.roles.some((l) => l.phase) && <ExpertStrip run={run} />}
             <KnowledgePanel run={run} onRole={onRole} />
             {!isRunActive(run.status) && run.tests.total > 0 && <SignOff run={run} onSign={sign} />}
+            {run.bench && <FlowStrip run={run} />}
             <div className="kt-body">
               <div className="kt-col">
                 <TeamGraph key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} lay={lay} focus={focus} onRole={onRole} flashes={fx.flashes} reducedMotion={reducedMotion} feed={feed} onRetry={projection || inReplay || run.imported ? undefined : (k) => void retry(k)} onGate={inReplay ? undefined : (k, d) => setGateAsk({ role: k, decision: d })} quiet={projection} onOutputs={(k) => openOutputs(k)} phase={phase} onPhase={(p) => { setFocus(null); setPhase((x) => (x === p ? null : p)) }} />
