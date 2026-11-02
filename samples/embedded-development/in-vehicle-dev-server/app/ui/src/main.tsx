@@ -38,6 +38,7 @@ import { errorText, useBoard } from './board/useBoard'
 import { RoleIcon } from './board/RoleIcon'
 import { KnowledgePanel } from './board/Knowledge'
 import { SignOff } from './board/SignOff'
+import { BenchPanel } from './board/Bench'
 import { ReplayBar, useReplay } from './board/Replay'
 import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
@@ -94,7 +95,7 @@ export function mostActive(run: RunDetail): string | null {
 }
 
 /** Structure only: the graph is laid out again only when roles or edges change, never per poll. */
-const structureKey = (run: RunDetail) => `${run.roles.map((l) => `${l.key}${l.status === 'skipped' ? '-' : ''}<${l.depends_on.join(',')}`).join(';')}|${run.edges.map((e) => e.join('>')).join(';')}|${(run.roster ?? []).map((p) => p.key).join(',')}`
+const structureKey = (run: RunDetail) => `${run.roles.map((l) => `${l.key}${l.status === 'skipped' ? '-' : ''}<${l.depends_on.join(',')}`).join(';')}|${run.edges.map((e) => e.join('>')).join(';')}`
 
 type TeamPageProps = {
   pollMs?: number
@@ -184,7 +185,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, returning = false, p
   const lay = useMemo(() => {
     if (!run) return null
     const shown = visibleGraph(run.roles, run.edges) // a role sitting this run out is not in the flow
-    return layoutGraph(shown.roles, shown.edges, run.roster)
+    return layoutGraph(shown.roles, shown.edges)
   }, [structure])
   const liveClock: SnapshotClock = useMemo(() => ({ at: board?.at ?? Date.now() / 1000, receivedAt: receivedAt || Date.now() }), [board?.at, receivedAt])
   const clock = rp.clock ?? liveClock
@@ -401,6 +402,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, returning = false, p
               </div>
               <aside className="kt-side" aria-label="测试和事件">
                 <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} />
+                {run.bench && <BenchPanel bench={run.bench} />}
                 <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} />
               </aside>
             </div>

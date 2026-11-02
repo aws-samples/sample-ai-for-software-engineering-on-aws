@@ -73,9 +73,7 @@ describe('回放：一次跑完的运行按记录重放', () => {
     expect(at(80 - 79).credits).toBeNull()
   })
 
-  test('the deployment and the knowledge lookups show up when they happened', () => {
-    expect(lane(at(400), 'deploy').deployed).toBeNull()
-    expect(lane(at(458), 'deploy').deployed?.url).toBe('http://127.0.0.1:3300/')
+  test('the knowledge lookups show up when they happened', () => {
     expect(at(10).knowledge.hits).toHaveLength(0)
     expect(at(120).knowledge.hits.length).toBeGreaterThan(0)
   })

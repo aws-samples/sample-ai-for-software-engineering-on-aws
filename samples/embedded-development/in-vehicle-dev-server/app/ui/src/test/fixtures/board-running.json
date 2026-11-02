@@ -96,7 +96,6 @@
           "work"
         ],
         "session": null,
-        "deployed": null,
         "member": "aidlc-product-agent",
         "member_kind": "member",
         "assignment": "",
@@ -186,7 +185,6 @@
           "work"
         ],
         "session": null,
-        "deployed": null,
         "member": "",
         "member_kind": null,
         "assignment": "",
@@ -276,7 +274,6 @@
           "work"
         ],
         "session": null,
-        "deployed": null,
         "member": "",
         "member_kind": null,
         "assignment": "",
@@ -371,7 +368,6 @@
           "work"
         ],
         "session": null,
-        "deployed": null,
         "member": "",
         "member_kind": null,
         "assignment": "",
@@ -501,7 +497,6 @@
           "work"
         ],
         "session": "vstatd-team-r0101abcd-3-9f2c",
-        "deployed": null,
         "member": "",
         "member_kind": null,
         "assignment": "",
@@ -633,7 +628,6 @@
           "work"
         ],
         "session": null,
-        "deployed": null,
         "member": "",
         "member_kind": null,
         "assignment": "",
@@ -730,7 +724,6 @@
           "work"
         ],
         "session": null,
-        "deployed": null,
         "member": "",
         "member_kind": null,
         "assignment": "",
@@ -787,7 +780,6 @@
           "work"
         ],
         "session": null,
-        "deployed": null,
         "member": "",
         "member_kind": null,
         "assignment": "",
@@ -1450,30 +1442,6 @@
     },
     "review_rounds": 0,
     "gate_notes": {},
-    "standards": [
-      {
-        "id": "RULE",
-        "title": "年会抽奖规则",
-        "kind": "standard",
-        "owner": "人力资源部",
-        "doc": "21-年会抽奖规则.md",
-        "rules": [
-          "RULE-1",
-          "RULE-2"
-        ],
-        "why": "命中「抽奖」"
-      },
-      {
-        "id": "DATA-EMP",
-        "title": "员工花名册",
-        "kind": "data",
-        "owner": "人力资源部",
-        "doc": "data/员工花名册.md",
-        "rules": [],
-        "why": "命中「员工」"
-      }
-    ],
-    "roster": null,
     "imported": null,
     "knowledge": {
       "source": {

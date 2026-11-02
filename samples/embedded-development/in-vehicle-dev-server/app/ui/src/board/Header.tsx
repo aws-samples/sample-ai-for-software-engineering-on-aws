@@ -236,13 +236,14 @@ function GatesKpi({ run }: { run: RunDetail }) {
   )
 }
 
-/** The three layers this run stands on: Kiro Crew runs it, AI-DLC lends the experts, the company brings its rules. */
+/** The three layers this run stands on: Kiro Crew runs it, AI-DLC lends the experts, the checks judge the work. */
 function UsedKpi({ run }: { run: RunDetail }) {
   const used = new Set(
     run.roles.filter((l) => l.status !== 'skipped').flatMap((l) => l.aidlc_agent.split(',').map((s) => s.trim()).filter(Boolean)),
   ) // the team's: the graph's roster shows which of them are already called
   const company = run.tests.cases.filter((c) => c.file.startsWith('tests/enterprise/')).length
   const written = run.tests.cases.length - company
+  const checks = new Set(run.tests.cases.filter((c) => c.verdict).map((c) => c.ac ?? c.name)).size
   const agents = run.roles.filter((l) => l.attempt > 0 && l.status !== 'waiting' && l.status !== 'skipped').length
   return (
     <div className="kt-kpi kt-kpi-used">
@@ -260,7 +261,7 @@ function UsedKpi({ run }: { run: RunDetail }) {
         </span>
       </div>
       <div className="kt-used-row">
-        <b>企业规范</b> {run.standards.length ? `适用 ${run.standards.filter((s) => s.kind === 'standard').length} 份 · ` : ''}公司检查 {company} 项 · 团队写的 {written} 项
+        <b>检查</b> {checks ? `场景的检查 ${checks} 项，app 自己跑` : `公司检查 ${company} 项 · 团队写的 ${written} 项`}
       </div>
     </div>
   )
@@ -370,9 +371,9 @@ export type StartFn = (requirement: string, opts?: StartOptions) => Promise<void
 /** A one-sentence requirement for tests and the preview page. */
 export const DEMO_REQUIREMENT = '给山野咖啡做一个网上小店的 MVP：顾客能按分类逛商品、看详情、加购物车并下单。'
 
-/** Ready-made requirements at the example company 桃源科技 (fictitious): one fills the requirement box. */
+/** The scenario's work item (README.md, "The scenario"): it fills the requirement box. */
 export const SCENARIOS: ReadonlyArray<{ label: string; hint: string; text: string }> = [
-  { label: '双十一 · 家电大促', hint: '桃源科技官方商城，从活动模板开工，上线要人批', text: '双十一官方商城大促：挑 20 款家电打折加满减，活动页显示倒计时、划线价和到手价，运营在后台配好就能一键上线。' },
+  { label: 'vstatd · 本批待办', hint: '修待办里标了 fix 的发现，拆分 Service::run()，行为不变', text: '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。' },
 ]
 
 export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: () => void }) {
@@ -405,7 +406,7 @@ export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: 
         ))}
       </div>
       <label htmlFor="kt-req">交给 agent 团队的需求</label>
-      <p className="kt-dim kt-req-hint">写一句话就行：团队先把它整理成范围、验收标准和分工，你在关卡上批准后才往下做。</p>
+      <p className="kt-dim kt-req-hint">团队先分诊待办里的发现（修、说明或延后）、定重构方案和分工，你在分诊和开工两个关卡批准后才往下做。</p>
       <textarea id="kt-req" value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder={SCENARIOS[0].text} />
       <details className="kt-start-more" open={!!source}>
       <summary>高级选项</summary>
@@ -425,7 +426,7 @@ export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: 
             取消
           </button>
         )}
-        <span className="kt-dim">按 AI-DLC 的阶段推进：需求和分工由你批准，交付前过公司检查和独立审查</span>
+        <span className="kt-dim">检查由 app 自己跑，台架上的每个动作在操作台批准，最后你按证据页签字</span>
       </div>
       {err && (
         <p className="kt-error" role="alert">
@@ -568,6 +569,11 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, spli
                 <legend>
                   <b>决定 {q.id}</b> {q.q}
                 </legend>
+                {q.cites && q.cites.length > 0 && (
+                  <span className="kt-gate-cites" data-testid="kt-gate-cites">
+                    引用的规范：{q.cites.map((c) => <code key={c}>{c}</code>)}
+                  </span>
+                )}
                 {q.options.map((o) => (
                   <label key={o.key} className={a.choice === o.key ? 'is-picked' : undefined}>
                     <input type="radio" name={`q-${q.id}`} checked={a.choice === o.key} onChange={() => answer(q.id, { choice: o.key })} />

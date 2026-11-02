@@ -27,7 +27,6 @@ interface RoleState {
   summary: string | null
   spans: { a: number; b: number | null }[]
   gate: 'pending' | 'discussing' | 'approved' | null
-  deployed: { url: string; at: number } | null
   lastTool: string
   lastAt: number | null
 }
@@ -48,7 +47,7 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
   const outAt = new Set(events.filter((e) => e.kind === 'skipped' && e.role).map((e) => e.role as string))
   for (const l of run.roles) {
     st.set(l.key, { status: l.status === 'skipped' && !outAt.has(l.key) ? 'skipped' : 'waiting', attempts: 0, doing: l.assignment, summary: null,
-      spans: [], gate: null, deployed: null, lastTool: '', lastAt: null })
+      spans: [], gate: null, lastTool: '', lastAt: null })
   }
   const close = (s: RoleState, at: number) => {
     const open = s.spans[s.spans.length - 1]
@@ -123,9 +122,6 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
         } else if (to && to.status !== 'waiting') to.status = 'fixing'
         break
       }
-      case 'deployed':
-        if (s) s.deployed = { url: String((e.data as { url?: string } | null)?.url ?? ''), at: e.at }
-        break
       case 'tests': {
         lastTests = e
         const d = e.data as { passed?: number; total?: number } | null
@@ -159,7 +155,6 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
       started_at: s.spans[0]?.a ?? null,
       done_at: finished ? s.spans[s.spans.length - 1]?.b ?? null : null,
       gate: l.gate_label ? s.gate : l.gate,
-      deployed: s.deployed,
       credits: over ? l.credits : null,
       files: s.status === 'merged' ? l.files : [],
       lines: s.status === 'merged' ? l.lines : { added: 0, removed: 0 },

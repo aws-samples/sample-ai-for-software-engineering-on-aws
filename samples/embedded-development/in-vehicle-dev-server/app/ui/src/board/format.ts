@@ -79,8 +79,6 @@ export const EVENT_META: Record<TeamEventKind, { icon: string; label: string; to
   skipped: { icon: '–', label: '跳过', tone: 'idle' },
   gate: { icon: '✋', label: '等人批准', tone: 'approve' },
   approved: { icon: '👍', label: '人批准', tone: 'ok' },
-  deployed: { icon: '🚀', label: '部署', tone: 'ok' },
-  standards: { icon: '📚', label: '命中规范', tone: 'info' },
   signoff: { icon: '✍️', label: '签字放行', tone: 'approve' },
   plan: { icon: '🗂️', label: '分工提案', tone: 'handoff' },
   member: { icon: '⏸', label: '缺成员', tone: 'warn' },

@@ -1,9 +1,8 @@
 /**
- * 知识库和公司规范: the left shift on the board. Which company standards (and which knowledge-base data) the
- * requirement touched, matched by keywords like 组队 (deterministic, with why); the team's Kiro Crew knowledge source
- * and its state; and what the roles looked up there, live: their 查知识库 calls and their reads of the data files.
+ * 知识库: the left shift on the board. The team's Kiro Crew knowledge source and its state, and what the roles looked
+ * up there, live: their 查知识库 calls and their reads of the knowledge files.
  */
-import type { Lane, RunDetail, Standard } from '../types'
+import type { Lane, RunDetail } from '../types'
 import { fmtAgo } from './format'
 import { useServerNow } from './hooks'
 import { RoleIcon } from './RoleIcon'
@@ -12,41 +11,26 @@ function sourceText(run: RunDetail): string {
   const s = run.knowledge.source
   if (!s) return ''
   if (s.present === null) return '读取中…'
-  if (!s.present) return `还没挂上：在 Crew 侧栏「知识库 → 来源」里加 ${s.path || '~/workplace/taoyuan/knowledge'}`
+  if (!s.present) return `还没挂上：在 Crew 侧栏「知识库 → 来源」里加 ${s.path || '~/workplace/vstatd/knowledge'}`
   const sync = s.status === 'synced' ? '已同步' : s.files_total ? `正在索引 ${s.files_done ?? 0}/${s.files_total}` : s.status || '索引中'
   return `${s.items ?? 0} 份文档 · ${sync}`
-}
-
-function Chip({ s }: { s: Standard }) {
-  const rules = s.rules.length ? `${s.rules[0]}${s.rules.length > 1 ? `～${s.rules[s.rules.length - 1].split('-')[1]}` : ''}` : ''
-  return (
-    <li className={`kt-kb-chip is-${s.kind}`} title={`${s.owner ? `${s.owner}定的` : ''}${s.doc ? ` · 知识库里的 ${s.doc}` : ''}；${s.why}`}>
-      <b>{s.kind === 'data' ? '数据' : '规范'}《{s.title}》</b>
-      {rules && <span className="kt-mono">{rules}</span>}
-    </li>
-  )
 }
 
 export function KnowledgePanel({ run, onRole }: { run: RunDetail; onRole?: (key: string) => void }) {
   const now = useServerNow()
   const src = run.knowledge.source
-  if (!src && run.standards.length === 0) return null
+  if (!src) return null
   const byKey = new Map<string, Lane>(run.roles.map((l) => [l.key, l]))
   const hits = [...run.knowledge.hits].reverse()
   const searches = run.knowledge.hits.filter((h) => h.kind === 'search').length
   const reads = run.knowledge.hits.length - searches
   return (
-    <section className="kt-kb" aria-label="知识库和公司规范" data-testid="kt-kb">
+    <section className="kt-kb" aria-label="知识库" data-testid="kt-kb">
       <div className="kt-kb-col">
         <p className="kt-kb-head">
           <b><RoleIcon role="book" size={16} /> 知识库{src ? `「${src.name}」` : ''}</b>
           <span className={`kt-dim${src && src.present === false ? ' kt-warn' : ''}`}>{sourceText(run)}</span>
         </p>
-        <ul className="kt-kb-chips" aria-label="适用的公司规范和数据">
-          {run.standards.map((s) => (
-            <Chip key={s.id} s={s} />
-          ))}
-        </ul>
       </div>
       <div className="kt-kb-col is-hits">
         <p className="kt-kb-head">

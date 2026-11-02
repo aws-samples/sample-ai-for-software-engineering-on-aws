@@ -264,7 +264,7 @@ def new_state(rid: str, requirement: str, team: dict[str, Any], task_template: s
         "requirement": requirement or "", "source": str(source) if source else None,
         "status": "starting", "started_at": now, "ended_at": None, "repo": str(root / "repo"), "base": None,
         "branch": f"team/{rid}/run", "run_wt": str(root / "wt" / "_run"), "team": team, "task_template": task_template,
-        "seq": 0, "needs_test": False, "lanes": {r["key"]: _lane() for r in team["roles"]}, "merges": [], "standards": [],
+        "seq": 0, "needs_test": False, "lanes": {r["key"]: _lane() for r in team["roles"]}, "merges": [],
         "tests": {"at": None, "head": None, "command": " ".join(team.get("test_command") or []), "cases": [],
                   "passed": 0, "failed": 0, "total": 0, "history": []},
     }

@@ -4,6 +4,10 @@
  * (diff.ts); hovering or focusing a cell shows its name, file, owner and the first line of the failure
  * in the inspector line under the wall. The sparkline is the run's history: passed over time, one point
  * per test run of the run branch.
+ *
+ * A team file's checks (D7, D11) make it the check wall instead: one row per check and owner, with the check's own
+ * verdict (PASS, FAIL, BLOCKED, or USAGE for a misconfigured one), the tier its evidence came from, whom it goes back to
+ * (BLOCKED: a person) and its reasons.
  */
 import { useState } from 'react'
 import type { Lane, TestCase, TestWall as Wall } from '../types'
@@ -56,16 +60,21 @@ export function TestWall({ tests, roles, focus, onRole, flips }: TestWallProps) 
   const byOwner = new Map<string, number>()
   for (const c of failing) byOwner.set(c.owner ?? '', (byOwner.get(c.owner ?? '') ?? 0) + 1)
   const green = tests.total > 0 && tests.failed === 0
+  const checked = tests.cases.some((c) => c.verdict)
   return (
-    <section className={`kt-card kt-wall${green ? ' is-green' : ''}`} data-testid="kt-wall" aria-label="测试墙">
+    <section className={`kt-card kt-wall${green ? ' is-green' : ''}`} data-testid="kt-wall" aria-label={checked ? '检查墙' : '测试墙'}>
       <header className="kt-card-head">
-        <h2>测试墙</h2>
+        <h2>{checked ? '检查墙' : '测试墙'}</h2>
         <span className={`kt-wall-score${green ? ' tone-ok' : tests.failed ? ' tone-bad' : ''}`}>
           {tests.passed}/{tests.total}
         </span>
-        <span className="kt-wall-src" title={`编排器每次合并后自己在运行分支上跑：${tests.command}（不信 agent 自报）`}>
-          公司下发 {tests.cases.filter((c) => c.file.startsWith('tests/enterprise/')).length} · 团队按验收标准写 {tests.cases.filter((c) => !c.file.startsWith('tests/enterprise/')).length}
-        </span>
+        {checked ? (
+          <span className="kt-wall-src" title={`app 在构建容器里自己跑：${tests.command}（不信 agent 自报）`}>台架之前的检查，app 自己跑</span>
+        ) : (
+          <span className="kt-wall-src" title={`编排器每次合并后自己在运行分支上跑：${tests.command}（不信 agent 自报）`}>
+            公司下发 {tests.cases.filter((c) => c.file.startsWith('tests/enterprise/')).length} · 团队按验收标准写 {tests.cases.filter((c) => !c.file.startsWith('tests/enterprise/')).length}
+          </span>
+        )}
         <TestedAt at={tests.at} />
       </header>
       {tests.history.length > 0 && (
@@ -74,7 +83,28 @@ export function TestWall({ tests, roles, focus, onRole, flips }: TestWallProps) 
           <Sparkline history={tests.history} total={tests.total} />
         </div>
       )}
-      {tests.cases.length === 0 ? (
+      {checked ? (
+        <ol className="kt-checks" data-testid="kt-checks">
+          {tests.cases.map((c) => {
+            const owner = c.owner ? byRole.get(c.owner) : undefined
+            return (
+              <li key={`${c.id}-${flips[c.id] ?? 0}`} className={`kt-check is-${c.status}${flips[c.id] ? ' is-flip' : ''}${focus ? (c.owner === focus ? ' is-hot' : ' is-dim') : ''}`}
+                data-testid="kt-check" data-case={c.id} data-status={c.status}>
+                <span className={`kt-check-verdict is-${c.status}`}>{c.verdict}</span>
+                <b className="kt-mono">{c.ac ?? c.name}</b>
+                {c.tier && c.tier !== 'n/a' && <span className="kt-dim">证据：{c.tier}</span>}
+                {owner ? (
+                  <button type="button" className="kt-check-owner" onClick={() => onRole(owner.key)}>
+                    <RoleIcon role={owner.icon || owner.key} size={13} /> 归{owner.title}
+                  </button>
+                ) : c.status !== 'pass' ? <span className="kt-warn">交给人决定</span> : null}
+                {c.ms !== null && <span className="kt-dim">{Math.round(c.ms / 1000)} 秒</span>}
+                {c.message && <p className="kt-check-why kt-mono">{c.message}</p>}
+              </li>
+            )
+          })}
+        </ol>
+      ) : tests.cases.length === 0 ? (
         <p className="kt-dim kt-wall-empty">{tests.at ? '这次测试没有用例' : '还没有测试：测试角色先写测试（一开始应该全红），合并以后 app 自己跑'}</p>
       ) : (
         <div className="kt-wall-grid">
@@ -122,7 +152,7 @@ export function TestWall({ tests, roles, focus, onRole, flips }: TestWallProps) 
           ))}
         </div>
       )}
-      {tests.cases.length > 0 && (
+      {tests.cases.length > 0 && !checked && (
       <div className={`kt-wall-inspect${current ? ` is-${current.status}` : ''}`} data-testid="kt-inspect">
         {current ? (
           <>

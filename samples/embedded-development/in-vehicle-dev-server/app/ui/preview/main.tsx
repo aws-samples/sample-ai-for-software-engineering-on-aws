@@ -3,7 +3,9 @@
  * against the stubbed SDK (src/test/stubs, the same ones vitest uses) and the fixtures of
  * src/test/fixtures.ts. Built by `npm run preview:build` into preview-dist/index.html (one file).
  *
- *   ?fixture=running|finished|started|trouble|failed|empty|multi   the snapshot the stub serves
+ *   ?fixture=running|finished|started|trouble|failed|empty|multi   the snapshot the stub serves (the web team of the tests)
+ *   ?fixture=vstatd|vstatd-triage|vstatd-release                     the vstatd team: at the bench, at its triage gate, at sign-off
+ *   ?view=score        the 评分卡, from the run of vstatd-release
  *   ?simulate=1        play scenario() forward, one snapshot every 3.2 s (?stepMs=…); ?step=n freezes it
  *   ?mode=light        the kiro-light theme (default kiro-dark)
  *   ?fixture=gate      a real run rebuilt at a moment: the IM run r1012307c at its 安全 gate (&t=<秒> for another moment)
@@ -14,7 +16,7 @@ import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from '../src/main'
 import { setApiRoutes } from '../src/test/stubs/app-sdk'
-import { FIXTURES, asRun, clone, multiRunBoard, scenario, shiftTimes, startedBoard, type FixtureName } from '../src/test/fixtures'
+import { FIXTURES, asRun, clone, multiRunBoard, scenario, scorecardOf, shiftTimes, startedBoard, vstatdBoard, type FixtureName } from '../src/test/fixtures'
 import type { Board, RunDetail, TeamEvent } from '../src/types'
 import realRun from '../src/test/fixtures/replay-im.json'
 import { replayAt, replaySpan } from '../src/board/timeline'
@@ -60,6 +62,7 @@ function snapshot(run: string | null): Board {
 
 setApiRoutes({
   'GET /api/apps/vstatd-team/board*': (_body, path) => snapshot(new URL(path, location.origin).searchParams.get('run')),
+  'GET /api/apps/vstatd-team/scorecard': () => scorecardOf(vstatdBoard('release')),
   'POST /api/apps/vstatd-team/runs': (body) => {
     const requirement = (body as { requirement?: string } | null)?.requirement?.trim()
     const title = requirement ? requirement.split('\n')[0].slice(0, 24) : '活动报名小站'

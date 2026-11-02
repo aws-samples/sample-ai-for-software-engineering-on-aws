@@ -8,10 +8,13 @@
  *   and tests flipping green, frontend undoing its violation, ops merged, a bounce, frontend's second
  *   round, 12/12, the handoffs to the reviewer, the review, done); finishedBoard is its last step;
  * - startedBoard (just started), troubleBoard (stalled, awaiting approval, queued), failedBoard
- *   (frontend failed after two fix rounds), emptyBoard (no runs), multiRunBoard (three runs).
+ *   (frontend failed after two fix rounds), emptyBoard (no runs), multiRunBoard (three runs);
+ * - vstatdBoard: the vstatd team (team-vstatd.json) at its triage gate (questions with citations), held at the bench
+ *   (the check wall green, a deploy waiting at the operator console), or ended with the release check (the
+ *   independent rerun, a check that differed, the evidence page).
  */
 import raw from './fixtures/board-running.json'
-import type { Board, FileChange, Lane, RunDetail, TeamEvent, TeamEventKind, TestCase } from '../types'
+import type { Board, FileChange, Lane, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -524,6 +527,101 @@ export function aidlcBoard(gatePending = false): Board {
   return b
 }
 
+const CHECK = (name: string, verdict: 'PASS' | 'FAIL' | 'BLOCKED', tier: string, owner: string | null, message: string | null, ms: number): TestCase => ({
+  id: name, ac: name, name: `${name}.sh`, file: '', status: verdict === 'PASS' ? 'pass' : verdict === 'FAIL' ? 'fail' : 'blocked', verdict, tier, owner, ms, message,
+})
+
+/** The vstatd team (team-vstatd.json): at its triage gate, held at the bench, or ended with the release check. */
+export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Board {
+  const b = runningBoard()
+  const run = b.run!
+  const t = run.started_at
+  const tpl = run.roles.find((r) => r.key === 'backend')!
+  const at = (stage === 'triage' ? 0 : stage === 'bench' ? 1 : 2)
+  const mk = (key: string, title: string, icon: string, phase: string, stage_: string, deps: string[], status: Lane['status'], member: string, extra: Partial<Lane> = {}): Lane => ({
+    ...clone(tpl), key, title, icon, phase, stage: stage_, depends_on: deps, status, gate: null, gate_label: '', kinds: ['work'], attempt: 1,
+    aidlc_agent: member, member, writable: [`src/${key}.*`], violations: [], mission: '', summary: null, agent: null, owns_tests: [], questions: [], answers: [], ...extra,
+  })
+  const after = (s: Lane['status']): Lane['status'] => (at ? s : 'waiting')
+  const questions = [
+    { id: 'F-008', q: 'F-008 分诊建议说明为误报或无害、不修（待办标的是 fix）：src/supervisor.cpp › Supervisor::check', options: [{ key: 'A', text: '同意说明（评审还会复核引用）' }, { key: 'B', text: '不同意：本批修复（退回分诊补齐证据和行为）' }],
+      recommend: 'A', why: '条件实现宽限期，分析器看不到回调里设的标志', cites: ['[VSTATD-IF p.7 §4.2]'], decision: 'justify' },
+    { id: 'F-021', q: 'F-021 分诊建议延后（待办标的是 fix）：src/ipc_server.cpp › IpcServer::accept', options: [{ key: 'A', text: '同意延后' }, { key: 'B', text: '不同意：本批修复（退回分诊补齐证据和行为）' }],
+      recommend: 'A', why: '改法要动 IPC 的行为；什么时候再处理：下一批', cites: [], decision: 'defer' },
+  ]
+  run.roles = [
+    mk('triage', '分诊', 'scope', 'inception', '分诊 · 修、说明或延后', [], 'merged', 'aidlc-developer-agent',
+      { gate: at ? 'approved' : 'pending', gate_label: '分诊', writable: ['docs/aidlc/triage.json', 'docs/aidlc/triage.md'], questions: at ? [] : questions }),
+    mk('architect', '架构师', 'architect', 'inception', '重构方案 · 分工', ['triage'], after('merged'), 'aidlc-architect-agent', { gate: at ? 'approved' : null, gate_label: '开工' }),
+    mk('tester', '测试', 'tester', 'construction', '测试先行', ['architect'], after('merged'), 'aidlc-quality-agent', { writable: ['tests/**'] }),
+    mk('dev-fix', '开发 · 修复', 'backend', 'construction', '修复', ['tester'], after('merged'), 'aidlc-developer-agent', { attempt: at ? 2 : 1, kinds: at ? ['work', 'fix'] : ['work'] }),
+    mk('dev-refactor', '开发 · 重构', 'frontend', 'construction', '重构', ['tester'], after('merged'), 'aidlc-developer-agent'),
+    mk('reviewer', '评审', 'reviewer', 'review', '评审', ['dev-fix', 'dev-refactor'], at ? 'done' : 'waiting', 'aidlc-architecture-reviewer-agent', { writable: [], summary: at ? '可以交付' : null }),
+  ]
+  run.edges = run.roles.flatMap((r) => r.depends_on.map((d) => [d, r.key] as [string, string]))
+  run.team = { name: '车载平台服务 · AI-DLC 团队', orchestrator: 'vstatd-team' }
+  run.title = '修复 vstatd 静态分析待办里标为 fix 的发现'
+  run.requirement = '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。'
+  run.knowledge = { source: { name: 'vstatd', present: true, items: 14, status: 'synced', files_total: 14, files_done: 14, path: '~/workplace/vstatd/knowledge' }, hits: [] }
+  run.merges = []
+  run.tests = at ? {
+    at: t + 5400, command: 'build static unit size trace', passed: 5, failed: 0, total: 5,
+    history: [{ at: t + 3000, passed: 0, failed: 3 }, { at: t + 4200, passed: 3, failed: 2 }, { at: t + 5400, passed: 5, failed: 0 }],
+    cases: [CHECK('build', 'PASS', 'n/a', 'dev-fix', null, 212_000), CHECK('static', 'PASS', 'n/a', 'dev-fix', null, 98_000),
+      CHECK('unit', 'PASS', 'unit test', 'dev-fix', null, 301_000), CHECK('size', 'PASS', 'n/a', 'dev-refactor', null, 4_000), CHECK('trace', 'PASS', 'n/a', 'dev-fix', null, 2_000)],
+  } : { at: null, command: 'build static unit size trace', cases: [], passed: 0, failed: 0, total: 0, history: [] }
+  const digest = 'bc93723c5a1f0e8d2b7c46e19a0d3f58c2e7b1a49d6f0c38e5b2a71d94c06e3f'
+  run.bench = at ? {
+    step: stage === 'bench' ? 'deploy' : 'done', running: stage === 'bench' ? 'deploy' : null,
+    held: null, doctor: { ok: true, rc: 0, at: t + 5460, fails: [], warns: ['memory: 4.3 GiB for Docker (6 GiB recommended)'], summary: 'doctor: ready' },
+    artifact: `${run.repo.replace(/\/repo$/, '')}/results/7/artifacts/vstatd`, run_dir: `${run.repo.replace(/\/repo$/, '')}/bench/run-1`,
+    baseline: '~/workplace/vstatd-team/baseline',
+    actions: stage === 'bench' ? [] : [{ action: 'deploy', at: t + 5600, outcome: 'ok', why: '', rc: 0 }, { action: 'replay', at: t + 5800, outcome: 'ok', why: '', rc: 0 }],
+    state: {
+      dir: '~/.cc1-bench', target: { state: 'known', why: 'booted from the pristine image' }, supply: { voltage_v: 13.5, kl15: 'on', set_by: '李工' },
+      pending: stage === 'bench' ? [{ id: '20261102T101500-deploy-3fa1', action: 'deploy', digest, detail: 'vstatd 133240 bytes', requested_at: '2026-11-02T10:15:00Z', requested_by: `vstatd-team ${run.id}`, expired: false }] : [],
+      actions: [
+        { at: '2026-11-02T10:12:03Z', event: 'supply', voltage_v: 13.5, kl15: 'on', by: '李工' },
+        { at: '2026-11-02T10:14:40Z', event: 'target', state: 'known', why: 'booted from the pristine image' },
+        { at: '2026-11-02T10:15:00Z', event: 'gate', action: 'deploy', digest, passed: true, why: '' },
+        { at: '2026-11-02T10:15:00Z', event: 'request', id: '20261102T101500-deploy-3fa1', action: 'deploy', digest, requested_by: `vstatd-team ${run.id}` },
+        ...(stage === 'release' ? [{ at: '2026-11-02T10:16:12Z', event: 'decision', id: '20261102T101500-deploy-3fa1', verdict: 'approved', action: 'deploy', digest, by: '李工', reason: '' },
+          { at: '2026-11-02T10:17:40Z', event: 'action', id: '20261102T101500-deploy-3fa1', action: 'deploy', digest, result: 'ok', detail: 'installed' }] : []),
+      ],
+    },
+    console: 'python3 /Users/you/sample-ai-for-software-engineering-on-aws/samples/embedded-development/in-vehicle-dev-server/bench/console.py',
+  } : null
+  run.release = stage === 'release' ? {
+    at: t + 7200, head: '7c3e9a1f2b', results: `${run.repo.replace(/\/repo$/, '')}/results/rerun`,
+    release: { verdict: 'PASS', summary: 'every check passed on 7c3e9a1', reasons: [] },
+    checks: ['build', 'static', 'unit', 'size', 'trace', 'runtime-limits', 'logdiff'].map((name) => ({ name, verdict: 'PASS' as const, tier: ['runtime-limits', 'logdiff'].includes(name) ? 'emulation' : name === 'unit' ? 'unit test' : 'n/a', summary: '', reasons: [] })),
+    differs: [{ name: 'unit', was: 'FAIL', now: 'PASS' }],
+    evidence: '# Evidence page: vstatd 本批\n\n| Check | Verdict | Tier |\n| --- | --- | --- |\n| build | PASS | n/a |\n| logdiff | PASS | emulation |\n\nA commit message an agent wrote: <script>alert(1)</script>\n',
+  } : null
+  if (stage === 'release') {
+    Object.assign(run, { status: 'done', ended_at: t + 7300, sign_block: '', signoff: null })
+  } else {
+    Object.assign(run, { status: at ? 'running' : 'gating', ended_at: null, sign_block: '运行结束以后才能签字' })
+  }
+  b.runs = [{ ...b.runs[0], title: run.title, status: run.status, roles_total: run.roles.length, roles_done: run.roles.filter((l) => l.status === 'merged' || l.status === 'done').length,
+    tests: { passed: run.tests.passed, failed: run.tests.failed, total: run.tests.total } }]
+  return b
+}
+
+/** A scorecard (GET /scorecard) with *b*'s run, its figures as the backend would take them from such a run. */
+export function scorecardOf(b: Board): Scorecard {
+  const r = b.run!
+  const row: ScoreRun = {
+    id: r.id, title: r.title, status: r.status, started_at: r.started_at, signed: !!r.signoff,
+    findings: { fixed: 17, justified: 2, deferred: 3 }, overturned: { ids: ['F-021'], by_person: ['F-021'], by_reviewer: [] },
+    times: { triage_s: 1800, first_pass_s: 5400, signoff_s: r.signoff ? r.signoff.at - r.started_at : null },
+    build_rounds: 1, caught: { build: 1, static: 1, unit: 1, size: 0, trace: 0 }, logdiff: { differences: 2, unexplained: 0 },
+    bench: { approved: 2, refused: 0, reconciled: 0 }, rerun_differs: r.release ? r.release.differs.map((d) => d.name) : null,
+  }
+  return { runs: [row], total: { runs: 1, findings: row.findings, overturned: 1, build_rounds: 1, caught: row.caught, logdiff: row.logdiff,
+    bench: row.bench, rerun_differs: row.rerun_differs?.length ?? null } }
+}
+
 export const FIXTURES = {
   running: runningBoard,
   aidlc: () => aidlcBoard(),
@@ -534,6 +632,9 @@ export const FIXTURES = {
   failed: failedBoard,
   empty: () => emptyBoard(),
   multi: () => multiRunBoard(),
+  vstatd: () => vstatdBoard('bench'),
+  'vstatd-triage': () => vstatdBoard('triage'),
+  'vstatd-release': () => vstatdBoard('release'),
 } as const
 
 export type FixtureName = keyof typeof FIXTURES

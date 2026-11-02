@@ -157,6 +157,9 @@ def test_a_deploy_waits_for_the_console_then_the_replay_feeds_the_checks_after_t
         req = view["state"]["pending"][0]
         assert req["action"] == "deploy" and req["digest"].startswith("bc93723c") and not req["expired"]
         assert req["requested_by"] == "vstatd-team r1102bench"
+        assert view["console"] is None  # no operator console beside cc1.sh: the board says nothing about one
+        (tmp_path / "console.py").write_text("", encoding="utf-8")
+        assert rig.view()["console"] == f"python3 {tmp_path / 'console.py'}"
         t0 = time.monotonic()
         await run.tick()
         assert time.monotonic() - t0 < 0.5 and not run.ended  # the tick is not held while the person decides

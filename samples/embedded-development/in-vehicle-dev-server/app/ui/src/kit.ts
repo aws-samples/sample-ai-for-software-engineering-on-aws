@@ -32,7 +32,7 @@ ${KPI} { position: relative; overflow: hidden; padding: var(--kit-pad-kpi); }
   background: radial-gradient(90% 70% at 100% 0%, color-mix(in srgb, var(--text) 4%, transparent), transparent 70%); }
 ${BLOCK} { padding: var(--kit-pad-block); margin: 0; }
 .kt-kpis, .cto-cards { gap: var(--kit-gap-row); align-items: stretch; }
-.cto-kcard, .kt-kb-chip, .cto-cell, .cto-lane { border-radius: var(--kit-r-cell); }
+.cto-kcard, .cto-cell, .cto-lane { border-radius: var(--kit-r-cell); }
 
 .kt-kpi-label, .cto-eyebrow { font-size: .93em; font-weight: 650; color: var(--muted); letter-spacing: .04em; }
 .kt-kpi-big, .cto-value { font-size: 2.85em; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--text-strong); text-shadow: none; }

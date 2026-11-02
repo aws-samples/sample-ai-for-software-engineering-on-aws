@@ -88,9 +88,8 @@ const phaseOf = (p?: string) => (p === 'review' ? 'construction' : p)
 /** The team list under the orchestrator (TeamGraph's Roster): the same sizes here, so the graph is tall enough for it. */
 export const ROSTER = { top: 26, title: 16, group: 17, row: 16, gap: 3 }
 
-/** Its groups (one per expert definition) and members. With the company's whole team (*roster*): everyone on it, in
- * its order, the ones this run does not use included (drawn grey, no node); without: the run's roles only. */
-export function rosterGroups(roles: ReadonlyArray<RoleLike>, roster?: ReadonlyArray<{ key: string; member: string }> | null): { key: string; keys: string[] }[] {
+/** Its groups (one per expert definition) and members: the run's roles that take part. */
+export function rosterGroups(roles: ReadonlyArray<RoleLike>): { key: string; keys: string[] }[] {
   const groups: { key: string; keys: string[] }[] = []
   const add = (group: string, key: string) => {
     const g = groups.find((x) => x.key === group)
@@ -98,11 +97,6 @@ export function rosterGroups(roles: ReadonlyArray<RoleLike>, roster?: ReadonlyAr
     else groups.push({ key: group, keys: [key] })
   }
   const groupOf = (r: RoleLike) => (r.aidlc_agent ?? '').split(',')[0]?.trim() || r.key
-  if (roster?.length) {
-    for (const p of roster) add(p.member || p.key, p.key)
-    for (const r of roles) if (r.status !== 'skipped' && !roster.some((p) => p.key === r.key)) add(groupOf(r), r.key)
-    return groups
-  }
   for (const r of roles) if (r.status !== 'skipped') add(groupOf(r), r.key)
   return groups
 }
@@ -303,7 +297,7 @@ const OFFICIAL = PHASES.filter((p) => p.key !== 'review')
  * drawn smaller, rather than nodes on top of each other. */
 const MIN_STEP = NODE_W + 28
 
-export function layoutGraph(roles: RoleLike[], edgeList: EdgeList, roster?: ReadonlyArray<{ key: string; member: string }> | null): GraphLayout {
+export function layoutGraph(roles: RoleLike[], edgeList: EdgeList): GraphLayout {
   const stageOf = stagesOf(roles, edgeList)
   const phased = phaseRank(roles) !== null
   const count = Math.max(1, ...roles.map((r) => (stageOf.get(r.key) ?? 0) + 1))
@@ -325,7 +319,7 @@ export function layoutGraph(roles: RoleLike[], edgeList: EdgeList, roster?: Read
   const right = W - margin
   const step = count > 1 ? (right - left) / (count - 1) : 0
   // tall enough for the roles, and (a phased team) for the team list under the orchestrator
-  const groups = phased ? rosterGroups(roles, roster) : []
+  const groups = phased ? rosterGroups(roles) : []
   const rosterBottom = TOP + ORCH_BOX.h - 6 + ROSTER.top + ROSTER.title +
     groups.reduce((h, g) => h + ROSTER.group + g.keys.length * ROSTER.row + ROSTER.gap, 0)
   const railY = Math.max(TOP + (maxRows - 1) * ROW_GAP + NODE_H + 58, phased ? rosterBottom + 40 : 0)

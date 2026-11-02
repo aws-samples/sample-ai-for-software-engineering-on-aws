@@ -60,8 +60,6 @@ export type RunDetail = {
   review_rounds: number // times a 要改 review sent work back
   gate_notes: Record<string, string> // what a person said when approving a gate, by role
   gate_discuss: boolean // the team offers 讨论 at its gates
-  standards: Standard[] // 命中规范: the company standards and data the requirement touches, by keywords
-  roster?: RosterPerson[] | null // the company's whole team this run drew from, as it was when the run began (null: older runs)
   imported?: { from: string; exported_at?: number } | null // 导入: recorded on another Mac; its code and sessions stayed there
   knowledge: { source: KnowledgeSource | null; hits: KnowledgeHit[] } // the team's knowledge source and what roles looked up
   crew_members: string[] | null // the team's members on Kiro Crew's 「代理」 page now (its workspace's), null while not read yet
@@ -102,6 +100,7 @@ export type BenchView = {
   baseline: string
   actions: { action: string; at: number; outcome: 'ok' | 'refused' | 'timeout' | 'unknown' | 'failed'; why: string; rc: number | null }[]
   state: { dir: string; target: Record<string, unknown>; supply: Record<string, unknown> | null; pending: BenchRequest[]; actions: Record<string, unknown>[] }
+  console: string | null // the command that opens the operator console (python3 …/bench/console.py), null when there is none
 }
 
 /** A request waiting at the operator console: the action and the digest the person approves. */
@@ -142,17 +141,6 @@ export type Delivery = {
 export type Risk = { what: string; amount: number | null; gate: string; role: string | null; at: number }
 
 export type SignOff = { by: string; note: string; at: number; tests: string }
-
-/** One company standard (or knowledge-base data set) a requirement touches, and why. */
-export type Standard = {
-  id: string // 'RULE' | 'PII' | 'DATA-EMP' ...
-  title: string // 年会抽奖规则
-  kind: 'standard' | 'data'
-  owner: string // who sets it: 人力资源部
-  doc: string // its document in the knowledge source
-  rules: string[] // RULE-1 ...
-  why: string // 命中「抽奖」
-}
 
 /** A knowledge source of Kiro Crew (「知识库 → 来源」). */
 export type KnowledgeSource = {
@@ -203,7 +191,6 @@ export type Lane = {
   gate_revise_risk: { what: string; amount: number | null } | null // …and the risk that send-back keeps from going live
   kinds: string[] // every attempt's kind, oldest first: 'work' | 'fix' | 'conflict' | 'review' | 'revise' | 'discuss'
   session: string | null // the Kiro Crew chat session it works in, null before it opened
-  deployed: { url: string; at: number } | null // 部署执行: where the app started the service a deploy role configured
   icon: string // which drawing stands for it ('frontend', 'tester' ...): the team file's, else its key
   assignment: string // what the orchestrator assigned this member in this run (the team plan), e.g. '抽奖接口和开奖记录'
   doing: string // what it is on right now: the assignment, or what it was sent back for ('修 RULE-2'、'解决合入冲突')
@@ -219,8 +206,9 @@ export type Lane = {
   can_discuss: boolean // its gate offers 讨论 (the team allows it, and its rounds are not used up)
 }
 
-/** A question a gated role puts to the person (its questions file): options A/B…, its recommendation and why. */
-export type GateQuestion = { id: string; q: string; options: { key: string; text: string }[]; recommend: string; why: string }
+/** A question a gated role puts to the person (its questions file): options A/B…, its recommendation and why. The
+ * triage gate's (D4) also carry the finding's proposed decision and the specification pages it cites. */
+export type GateQuestion = { id: string; q: string; options: { key: string; text: string }[]; recommend: string; why: string; cites?: string[]; decision?: string }
 
 /** The person's answer: an option's key, or 'other' with their own words (text); differs: not what the role recommended. */
 export type GateAnswer = { id: string; choice: string; option: string; text: string; differs: boolean }
@@ -301,8 +289,6 @@ export type TeamEventKind =
   | 'skipped' // a role this project does not need
   | 'gate' // a role's output waits for a person (from role -> to 'person')
   | 'approved' // the person approved it (from 'person' -> to role)
-  | 'deployed' // 部署执行: the app started the deploy role's service on this Mac and it answered
-  | 'standards' // 命中规范: the company standards and data the requirement touches
   | 'signoff' // 签字放行: a person signed for the release
   | 'plan' // 分工提案: the gated role proposed who does what; it holds once a person approves the gate
   | 'member' // a required role is held for its Crew member (and starts once a person adds it)
@@ -383,13 +369,6 @@ export type FileView = {
   text: string
 }
 
-/** One post on the company's team (team/roster-*.json): who could take part in a run. */
-export interface RosterPerson {
-  key: string
-  title: string
-  member: string
-  icon: string
-}
 
 /**
  * `GET /scorecard` (D8): the rehearsal scorecard, from the runs' records only (backend/team/scorecard.py says how each

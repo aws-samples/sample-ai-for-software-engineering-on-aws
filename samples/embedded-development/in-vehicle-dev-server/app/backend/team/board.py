@@ -4,6 +4,7 @@ about their agents right now (cheap attribute reads), so the live parts stay liv
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 from typing import Any, Callable
 
@@ -72,8 +73,6 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
                   "history": [{"at": h["at"], "passed": h["passed"], "failed": h["failed"]} for h in t["history"]]},
         "merges": [{k: m.get(k) for k in ("role", "sha", "at", "status", "files", "note")} for m in s["merges"]],
         "events": [{**e, "data": e.get("data")} for e in run.events if not (e.get("kind") == "violation" and any(p in str(e.get("text", "")) for p in gitwork.HOST_PREFIXES))],
-        "standards": list(s.get("standards") or []),
-        "roster": [dict(x) for x in s["roster"]] if s.get("roster") else None,
         "imported": dict(s["imported"]) if s.get("imported") else None,
         "signoff": dict(s["signoff"]) if s.get("signoff") else None,
         "risks": [{k: r.get(k) for k in ("what", "amount", "gate", "role", "at")} for r in s.get("risks") or [] if isinstance(r, dict)],
@@ -110,14 +109,17 @@ def release_view(run: TeamRun) -> dict[str, Any] | None:
 
 
 def bench_view(run: TeamRun) -> dict[str, Any] | None:
-    """BenchView: the run's bench step and the bench state, read now (read only)."""
+    """BenchView: the run's bench step and the bench state, read now (read only); *console*: how a person opens the
+    operator console, when the bench beside the deploy command has one (bench/console.py)."""
     spec = run.team.get("bench")
     if not spec:
         return None
     b = run.s.get("bench") or {}
+    console = Path(spec["deploy"][0]).with_name("console.py")
     return {"step": b.get("step"), "running": b.get("running"), "held": b.get("held"), "doctor": b.get("doctor"),
             "artifact": b.get("artifact"), "run_dir": b.get("run_dir"), "baseline": str(spec["baseline"]),
-            "actions": list(b.get("actions") or []), "state": bench_mod.read_state()}
+            "actions": list(b.get("actions") or []), "state": bench_mod.read_state(),
+            "console": shlex.join(["python3", str(console)]) if console.is_file() else None}
 
 
 def crew_members(run: TeamRun, crew: Any) -> list[str] | None:
@@ -210,7 +212,6 @@ def lane(run: TeamRun, key: str, *, mgr: Any, scrub: Callable[[str], str], now: 
         "assignment": run.assignment(key),
         "doing": str((att or {}).get("label") or run.assignment(key)),
         "member": role.get("member") or "", "member_kind": _member_kind(atts, mgr),
-        "deployed": dict(ln["deployed"]) if ln.get("deployed") else None,
         "optional": bool(role.get("optional")), "overrule": bool(ln.get("overrule")),
         "awaiting_member": str(ln.get("awaiting_member") or "") or None,
         "delivery_gate": bool(role.get("delivery")),

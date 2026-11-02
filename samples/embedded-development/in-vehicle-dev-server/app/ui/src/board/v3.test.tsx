@@ -20,13 +20,11 @@ function doneBoard(signed = false): Board {
   return b
 }
 
-describe('V3：知识库、适用规范、签字单', () => {
-  test('the board shows the standards the requirement touched and what the roles looked up', async () => {
+describe('V3：知识库、签字单', () => {
+  test('the board shows the knowledge source and what the roles looked up', async () => {
     setApiRoutes({ [`GET ${API}/board*`]: () => clone(runningBoard()) })
     render(<TeamPage pollMs={60_000} />)
     const kb = await screen.findByTestId('kt-kb')
-    expect(within(kb).getByText(/《年会抽奖规则》/)).toBeTruthy()
-    expect(within(kb).getByText(/数据《员工花名册》/)).toBeTruthy()
     expect(within(kb).getByText('查知识库「年会抽奖规则 RULE-1」')).toBeTruthy()
     expect(within(kb).getByText('读数据 employees.json')).toBeTruthy()
     expect(within(kb).getByText(/9 份文档 · 已同步/)).toBeTruthy()
@@ -159,26 +157,6 @@ test('a team that skips an official phase still reads 0 to 4: the skipped one is
   const pm = lay.phases.find((p) => p.key === 'inception')!
   expect(grey.x2 <= pm.x1 && grey.x2 - grey.x1 < 100).toBe(true)
   expect(lay.nodes.get('pm')!.x - 92).toBeGreaterThan(grey.x2) // the column made room for it
-})
-
-test('the roster lists the whole company team: the picked in green, the rest grey and without a node', async () => {
-  const b = phasedBoard()
-  const roles = b.run!.roles.map((l) => ({ key: l.key, title: l.title, member: l.aidlc_agent.split(',')[0], icon: l.key }))
-  b.run!.roster = [...roles, { key: 'backend2', title: '后端开发 #2', member: 'aidlc-developer-agent', icon: 'backend' },
-    { key: 'compliance', title: '合规审查', member: 'aidlc-compliance-agent', icon: 'compliance' }]
-  setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
-  const { container } = render(<TeamPage pollMs={60_000} />)
-  const roster = await screen.findByTestId('kt-roster')
-  expect(within(roster).getByText(`团队 ${roles.length + 2} 人 · 这次 ${roles.length} 位`)).toBeTruthy()
-  const bench = [...roster.querySelectorAll('[data-state="bench"] > text')].map((t) => t.textContent)
-  expect(bench).toEqual(['后端开发 #2', '合规审查'])
-  expect(roster.querySelectorAll('.kt-roster-item').length).toBe(roles.length + 2)
-  expect(container.querySelector('.kt-node[data-role="backend2"]')).toBeNull() // not picked: not in the workflow
-  expect(container.querySelector('.kt-node[data-role="compliance"]')).toBeNull()
-  // the graph is tall enough for everyone on the list
-  const lay = layoutGraph(b.run!.roles, b.run!.edges, b.run!.roster)
-  const without = layoutGraph(b.run!.roles, b.run!.edges)
-  expect(lay.rail.y).toBeGreaterThanOrEqual(without.rail.y)
 })
 
 test('a run imported from another Mac says so and offers nothing that needs its code', async () => {

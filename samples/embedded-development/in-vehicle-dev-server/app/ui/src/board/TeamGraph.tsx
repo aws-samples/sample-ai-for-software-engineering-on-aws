@@ -335,23 +335,21 @@ function Commands({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
   )
 }
 
-/** Under the orchestrator: the company's team and who of it the orchestrator picked, the way a person staffs one: each
- * expert definition, then the posts it fills (开发 → 后端开发 #1、#2、前端开发 #1、#2). The picked are green (lit while
- * at work); the rest of the team is grey and gets no node: this requirement does not need them. Runs without the
- * company's team (older ones) list their own roles only. The 14 experts themselves are in the strip above the graph. */
+/** Under the orchestrator: the team's roles by the expert definition each uses (开发 → 修复、重构), green once called
+ * (lit while at work); a role that sits the run out is grey and gets no node. The 14 experts themselves are in the strip
+ * above the graph. */
 function Roster({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
   const o = lay.orch!
   const top = o.y + ORCH_BOX.h / 2 + ROSTER.top
   const w = ORCH_BOX.w + 12
   const byKey = new Map(run.roles.map((l) => [l.key, l]))
-  const people = new Map((run.roster ?? []).map((p) => [p.key, p]))
-  const groups = rosterGroups(run.roles, run.roster)
+  const groups = rosterGroups(run.roles)
   const picked = run.roles.filter((l) => l.status !== 'skipped').length
   let y = ROSTER.title
   return (
     <g className="kt-roster" transform={`translate(${o.x},${top})`} data-testid="kt-roster">
       <text className="kt-roster-title" y={0} textAnchor="middle">
-        {run.roster?.length ? `团队 ${run.roster.length} 人 · 这次 ${picked} 位` : `团队 · ${picked} 人`}
+        {`团队 · ${picked} 人`}
       </text>
       {groups.map((g) => {
         const head = y
@@ -361,7 +359,7 @@ function Roster({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
           const at = y
           y += ROSTER.row
           if (!l || l.status === 'skipped') {
-            const title = l?.title ?? people.get(key)?.title ?? key
+            const title = l?.title ?? key
             return (
               <g key={key} className="kt-roster-item is-bench" transform={`translate(0,${at})`} data-state="bench">
                 <title>{`${title}：${l?.status === 'skipped' && l.summary ? `${l.summary}，` : '这次的需求用不到这个岗位，'}不进工作流`}</title>
@@ -508,7 +506,7 @@ function subLine(lane: Lane, lanes: Lane[]) {
     case 'done':
       return lane.writable.length ? '完成 · 待合并' : `完成 · ${fmtClock(lane.active_s)}`
     case 'merged':
-      return lane.deployed ? `已部署 · :${lane.deployed.url.split(':').pop()?.replace(/\/$/, '')}` : `已合并 · ${fmtClock(lane.active_s)}`
+      return `已合并 · ${fmtClock(lane.active_s)}`
     case 'failed':
       return '✕ 失败'
     default:
