@@ -135,6 +135,7 @@ export function TestWall({ tests, roles, focus, onRole, flips }: TestWallProps) 
                 <RoleIcon role={byRole.get(current.owner)?.icon || current.owner} size={13} /> 归{byRole.get(current.owner)!.title}
               </span>
             )}
+            {current.verdict && <span className="kt-dim">{current.verdict}{current.tier && current.tier !== 'n/a' ? ` · 证据：${current.tier}` : ''}</span>}
             {current.ms !== null && <span className="kt-dim">{current.ms} ms</span>}
             {current.message && <span className="kt-fail-msg kt-mono">{current.message}</span>}
           </>

@@ -224,10 +224,12 @@ export type TestCase = {
   ac: string | null // 'AC-3' parsed from the test name, if any
   name: string
   file: string
-  status: 'pass' | 'fail' | 'skip'
-  owner: string | null // the role that must make it pass (team.json test_owners)
+  status: 'pass' | 'fail' | 'skip' | 'blocked' // blocked: the check could not judge, or is misconfigured: a person decides
+  owner: string | null // the role that must make it pass (team.json test_owners; a check: by file, else its owner)
   ms: number | null
   message: string | null // first line of the failure
+  verdict?: 'PASS' | 'FAIL' | 'BLOCKED' | 'USAGE' | null // a team file check's own verdict (its exit status)
+  tier?: string | null // the tier of a check's evidence: 'unit test', 'emulation', 'real target' (checks/README.md)
 }
 
 export type TestWall = {

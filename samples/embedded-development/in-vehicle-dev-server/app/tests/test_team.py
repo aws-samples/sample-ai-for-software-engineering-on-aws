@@ -5,8 +5,8 @@ from pathlib import Path
 
 import json
 
-from teamkit import (FIXTURE, TARGET_TEMPLATE, TEAM_FILE, FakeManager, act, default_tests, drive, finish, make_run, mini_team,
-                     mod, read, reload, richest, same_shape, sh, team_mod, ts_types)
+from teamkit import (FIXTURE, FakeManager, act, default_tests, drive, finish, make_run, mini_team, mod, read, reload,
+                     richest, same_shape, sh, team_mod, ts_types)
 
 TAG = "[vstatd-team run=r1006test role="
 
@@ -371,17 +371,6 @@ def test_a_reply_without_done_still_gets_a_summary():
     assert team_mod.gist("## 结果\n\n**后端做完了**：接口都通了\n- 细节") == "后端做完了：接口都通了"
     assert team_mod.gist("```\n|a|b|\n```\n") is None and team_mod.gist("") is None
     assert team_mod.gist("x" * 130).endswith("…")
-
-
-def test_the_team_routes_project_checks_to_ops_and_the_demo_test_script_takes_a_glob():
-    checks, gitwork = mod("checks"), mod("gitwork")
-    team = team_mod.load_team(TEAM_FILE)
-    assert checks.owner_of("tests/ops-scripts.test.js", team) == "ops"
-    assert checks.owner_of("tests/api-signup.test.js", team) == "backend"
-    ops = next(r for r in team["roles"] if r["key"] == "ops")
-    assert gitwork.matches("package.json", ops["writable"])
-    pkg = json.loads((TARGET_TEMPLATE / "package.json").read_text(encoding="utf-8"))
-    assert "tests/**/*.test.js" in pkg["scripts"]["test"]  # node 22+ does not take a directory there
 
 
 def qa_team() -> dict:

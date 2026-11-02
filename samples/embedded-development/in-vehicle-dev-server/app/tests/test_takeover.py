@@ -4,15 +4,7 @@ import asyncio
 
 from teamkit import OUTPUTS, FakeManager, act, default_tests, drive, finish, make_run, mini_team, mod, sh
 
-gitwork, checks, constants = mod("gitwork"), mod("checks"), mod("constants")
-
-
-def test_case_ids_of_the_four_groups_sort_by_group_then_number():
-    ids = ["STORE-2", "AC-10", "SEC-1", None, "COMP-3", "AC-2", "STORE-1"]
-    assert sorted(ids, key=checks.case_order) == ["AC-2", "AC-10", "SEC-1", "COMP-3", "STORE-1", "STORE-2", None]
-    assert checks.AC_RE.match("STORE-7 账号可在 App 外删除").group(1) == "STORE-7"
-    assert checks.AC_RE.match("SEC-1 日志里没有手机号明文").group(1) == "SEC-1"
-    assert checks.AC_RE.match("XYZ-1 别的前缀") is None
+gitwork = mod("gitwork")
 
 
 def test_an_existing_project_keeps_its_title_and_is_committed_as_taken_over(tmp_path):

@@ -54,7 +54,7 @@ class Service:
                                                    scrub=self.scrub)
         self._agents = manager if manager is not None else self.sessions
         self._deps = Deps(store=Store(self.data_dir / "runs"), manager=self.manager,
-                          run_tests=run_tests or checks.run_tests, template=Path(template) if template else None,
+                          run_tests=run_tests or checks.run_checks, template=Path(template) if template else None,
                           scrub=self.scrub, now=now, log=self.log, members=self.member_names)
         self._loop: asyncio.Task[None] | None = None
         self._ticks: dict[str, asyncio.Task[None]] = {}
@@ -107,6 +107,8 @@ class Service:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._loop, self._ticks = None, {}
+        for run in self.runs.values():  # a check in the background removes its container
+            run.cancel_tests()
         await self.sessions.gw.close() if hasattr(self.sessions.gw, "close") else None
 
     async def _forever(self) -> None:

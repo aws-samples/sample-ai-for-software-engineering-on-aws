@@ -868,7 +868,9 @@
           "status": "pass",
           "owner": "frontend",
           "ms": 23,
-          "message": null
+          "message": null,
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-events.test.js#AC-2",
@@ -878,7 +880,9 @@
           "status": "pass",
           "owner": "backend",
           "ms": 12,
-          "message": null
+          "message": null,
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-events.test.js#AC-3",
@@ -888,7 +892,9 @@
           "status": "pass",
           "owner": "backend",
           "ms": 28,
-          "message": null
+          "message": null,
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-signup.test.js#AC-4",
@@ -898,7 +904,9 @@
           "status": "pass",
           "owner": "backend",
           "ms": 44,
-          "message": null
+          "message": null,
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-signup.test.js#AC-5",
@@ -908,7 +916,9 @@
           "status": "pass",
           "owner": "backend",
           "ms": 6,
-          "message": null
+          "message": null,
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-signup.test.js#AC-6",
@@ -918,7 +928,9 @@
           "status": "fail",
           "owner": "backend",
           "ms": 7,
-          "message": "expected 409, got 201"
+          "message": "expected 409, got 201",
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-signup.test.js#AC-7",
@@ -928,7 +940,9 @@
           "status": "fail",
           "owner": "backend",
           "ms": 55,
-          "message": "expected 409, got 201"
+          "message": "expected 409, got 201",
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "web-render.test.js#AC-8",
@@ -938,7 +952,9 @@
           "status": "fail",
           "owner": "frontend",
           "ms": 37,
-          "message": "no element .error-msg"
+          "message": "no element .error-msg",
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-events.test.js#AC-9",
@@ -948,7 +964,9 @@
           "status": "pass",
           "owner": "backend",
           "ms": 9,
-          "message": null
+          "message": null,
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "api-events.test.js#AC-10",
@@ -958,7 +976,9 @@
           "status": "fail",
           "owner": "backend",
           "ms": 26,
-          "message": "order mismatch at index 0"
+          "message": "order mismatch at index 0",
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "web-render.test.js#AC-11",
@@ -968,7 +988,9 @@
           "status": "fail",
           "owner": "frontend",
           "ms": 40,
-          "message": "form wider than 375px"
+          "message": "form wider than 375px",
+          "verdict": null,
+          "tier": null
         },
         {
           "id": "web-render.test.js#AC-12",
@@ -978,7 +1000,9 @@
           "status": "fail",
           "owner": "frontend",
           "ms": 6,
-          "message": "count did not change"
+          "message": "count did not change",
+          "verdict": null,
+          "tier": null
         }
       ],
       "passed": 6,

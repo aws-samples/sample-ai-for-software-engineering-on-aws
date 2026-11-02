@@ -112,7 +112,20 @@ developer, reviewer).
 - **Repair rounds are bounded per check,** as the scenario says: three for a failing cross build, two for a failing
   log comparison. After that the unit stops and a person decides.
 
-Not yet checked: whether every check's `details` carries the file paths the adapter needs.
+Checked on 2026-11-02 in `checks/lib/`: the file paths are in `reasons`, not in `details`, so the adapter takes
+them from there and keeps the paths that are files of the judged project:
+
+- `build`: compiler errors, flag problems and hidden code start with `src/<file>[:<line>]`. A link error or a
+  missing libsystemd names no file.
+- `static`: new findings, findings still reported and suppression problems give `<file>:<line>`. A finding that is
+  gone against its triage, and triage problems, give only the finding ID.
+- `unit`: only sanitizer reports name a file; a path into the check's copy of the tree (`…/work/unit/tree/src/…`)
+  is taken relative to it. Failing tests, missing tests for a fix and base tests that no longer run name none.
+- `size`, `trace` (commits, not files), `runtime-limits`, `logdiff` and `release` name no file.
+
+A reason that names no file goes to the check's default owner. On the reference project as shipped, `build` FAILs
+on `src/main.cpp:12:10` (the toolchain seed) and goes to the owner of `src/main.cpp`; `static` is BLOCKED by the
+same header.
 
 Alternatives considered: sending every failure to every developer who changed code; one fixed owner per check.
 
@@ -237,7 +250,8 @@ bench images; step 12 needs them.
 
 ## Not yet verified
 
-- Whether every check's `details` carries the file paths the adapter needs (D7).
+- Whether the build container's ThreadSanitizer reports give the absolute path of the check's copy, as the adapter
+  expects, or a relative one (D7); both are handled, neither has been seen in a run of the adapter.
 - How long a full check run, the independent rerun (D9) and the Buildroot image build (D10) take on a Mac.
 - Whether write-scope rules in an agent's own configuration are enforced on a machine whose user-level
   `permissions.yaml` does not allow everything (D2).

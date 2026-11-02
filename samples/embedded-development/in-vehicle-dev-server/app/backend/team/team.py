@@ -48,7 +48,8 @@ REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 v
 _DONE_RE = re.compile(r"(?<![A-Za-z])DONE\s*[:：]\s*(.*)$", re.M)  # also mid-line: KiroCrew joins messages with no break
 REVIEW_KEEP = 12_000  # characters of a 要改 review a bounced role is given
 TALK_KEEP = 2_000  # characters of a role's answer in a 讨论 at its gate, kept for the gate card
-DECISIONS_FILE = "docs/aidlc/decisions.md"  # what people decided at the gates, written into the run branch by the app
+DECISIONS_FILE = "docs/aidlc/decisions.md"
+TRIAGE_FILE = "triage.json"  # the approved triage, beside the run's repository (runs/<run>/), out of the agents' worktrees  # what people decided at the gates, written into the run branch by the app
 # A review names who fixes what: its own `打回：` line (role keys or titles), else every 归X it writes.
 _BOUNCE_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*打回[*_`]*\s*[:：]\s*(.+)$", re.M)  # a list item too
 _OWNER_RE = re.compile(r"归([^）)，,；;。\n]{1,40})")
@@ -65,7 +66,7 @@ class Deps:
 
     store: Store
     manager: Callable[[], Any]
-    run_tests: Callable[[Path, dict[str, Any]], Awaitable[dict[str, Any]]]
+    run_tests: Callable[..., Awaitable[dict[str, Any]]]  # (run worktree, team[, head, results, triage]) → test wall
     template: Path | None  # the project a team without a source starts from
     scrub: Callable[[str], str] = lambda s: s
     # the members on Crew's 「代理」 page of a workspace (None: not read yet, or not readable: nothing is held then)
@@ -310,12 +311,16 @@ class TeamRun:
         self._lock = asyncio.Lock()
         self._save_lock = asyncio.Lock()
         self._head: str | None = None  # the run branch head, known within one tick
+        self._tests: tuple[str, asyncio.Task[dict[str, Any]]] | None = None  # (head, the test run in the background)
         self.errors = 0
 
     @property
     def impl(self) -> list[str]:
-        """The roles that make the tests pass (they get bounced); the ownership file may name them during the run."""
+        """The roles that make the tests pass (they get bounced); the ownership file may name them during the run. With
+        the team file's checks: the checks' owners and the roles the work split gives files to."""
         owners = {o.get("role") for o in self.team.get("test_owners", [])}
+        owners |= {c.get("owner") for c in self.team.get("checks") or []}
+        owners |= {k for k in self.order if self.roles[k].get("writable_from")}
         return [k for k in self.order if k in owners and self.lane(k)["status"] != "skipped"]
 
     @property
@@ -481,7 +486,7 @@ class TeamRun:
         # a person, and the latest test run has settled: green, or nothing left to send back (a bounced role is fixing,
         # not merged). A role beside it (the tester, when the team says the review does not wait for it) goes on.
         before = self._before(key)
-        return not self.s["needs_test"] and all(self._settled(k) for k in self.order
+        return not self.s["needs_test"] and not self.s["tests"].get("held") and all(self._settled(k) for k in self.order
                                                 if self.roles[k]["writable"] and k in before)
 
     async def _start(self, key: str, kind: str, mgr: Any, *, failing: list[dict[str, Any]] | None = None,
@@ -848,20 +853,37 @@ class TeamRun:
         await self._start(key, "conflict", self.d.manager(), conflicts=res["conflicts"] or [res["note"]])
 
     async def _test_and_bounce(self, mgr: Any) -> None:
-        """The app's own test run on the run branch; failing cases go back to the role that owns them."""
+        """The app's own test run on the run branch, in the background (the tick goes on while it runs, and looks
+        again next time); failing cases go back to the role that owns them. The team file's checks judge the whole
+        batch: they start once every implementing role is in."""
         s, t = self.s, self.s["tests"]
         run_wt = Path(s["run_wt"])
         head = await self.run_head()
+        checked = bool(self.team.get("checks"))
+        if checked and not all((self.lane(k).get("merged_sha") and self.lane(k)["status"] not in ACTIVE)
+                               or self.lane(k)["status"] == "failed" for k in self.impl):
+            return
         if head != t.get("head"):  # this exact head was tested before a restart: its result stands
+            if self._tests is not None and self._tests[0] != head:  # merged meanwhile: that run judges an old head
+                self.cancel_tests()
+            if self._tests is None:
+                self._tests = (head, asyncio.create_task(self._run_tests(run_wt, head)))
+                await asyncio.sleep(0)  # one that needs no waiting is done at once
+            if not self._tests[1].done():
+                return
+            task, self._tests = self._tests[1], None
             try:
-                wall = await self.d.run_tests(run_wt, self._tested_team())
+                wall = task.result()
             except checks.TestsUnavailable as exc:  # without tests nothing can be checked: stop spending credits
                 await self.stop(status="failed", text=f"运行失败：app 跑不了测试：{exc}")
                 return
             finally:
-                await gitwork.reset_clean(run_wt)  # what the tests left behind must not get in a merge's way
+                if not checked:
+                    await gitwork.reset_clean(run_wt)  # what the tests left behind must not get in a merge's way
             t.update({k: wall[k] for k in ("at", "cases", "passed", "failed", "total")}, head=head,
                      command=wall.get("command") or t.get("command", ""))
+            if checked:
+                t.update(checks=wall["checks"], results=wall["results"])
             t["history"] = (t.get("history", []) + [{"at": wall["at"], "passed": wall["passed"], "failed": wall["failed"]}])[-60:]
             note = ""
             if t["total"] and not t["failed"]:
@@ -872,6 +894,9 @@ class TeamRun:
             self.emit("tests", f"测试 {t['passed']}/{t['total']}{note}", data={"passed": t["passed"], "total": t["total"],
                       "cases": [[c["id"], c["status"]] for c in t["cases"]][:400]})
         s["needs_test"] = False
+        if checked:
+            await self._check_bounce(mgr)
+            return
         # A test of one role often needs another's work: nobody is sent back until every implementing role is in.
         if not all(self.lane(k).get("merged_sha") or self.lane(k)["status"] == "failed" for k in self.impl):
             return
@@ -886,6 +911,55 @@ class TeamRun:
                       data={"cases": [c["ac"] or c["name"] for c in failing][:24]})
             await self._start(key, "fix", mgr, failing=failing)
         await self._test_writer_bounce(mgr)
+
+    def _run_tests(self, run_wt: Path, head: str) -> Awaitable[dict[str, Any]]:
+        """One test run of *head*; the team file's checks get a results directory of their own per round, outside the
+        worktrees, and the approved triage (kept beside the repository)."""
+        if not self.team.get("checks"):
+            return self.d.run_tests(run_wt, self._tested_team())
+        t, root = self.s["tests"], Path(self.s["repo"]).parent
+        t["round"] = int(t.get("round") or 0) + 1
+        return self.d.run_tests(run_wt, self._tested_team(), head=head, results=root / "results" / str(t["round"]),
+                                triage=root / TRIAGE_FILE)
+
+    def cancel_tests(self) -> None:
+        """Stop the test run in the background (its checks remove their containers)."""
+        if self._tests is not None:
+            self._tests[1].cancel()
+            self._tests = None
+
+    async def _check_bounce(self, mgr: Any) -> None:
+        """A round of the team file's checks: each failure back to the role it was attributed to, one fix round per
+        failing check; a check that could not judge, a misconfigured one, or one out of its rounds stops the run for a
+        person (D7). A check that could not judge because another failed (no build to measure) waits for that fix."""
+        t = self.s["tests"]
+        spec = {c["name"]: c for c in self.team["checks"]}
+        rows = t.get("checks") or []
+        failing = [r for r in rows if r["verdict"] == "FAIL"]
+        rounds = t.setdefault("rounds", {})
+        held: list[tuple[dict[str, Any], str]] = [(r, "检查配置错误") for r in rows if r["verdict"] == "USAGE"]
+        if not failing:
+            held += [(r, "没法判定") for r in rows if r["verdict"] == "BLOCKED"]
+        for r in failing:
+            if rounds.get(r["name"], 0) >= spec[r["name"]]["max_rounds"]:
+                held.append((r, f"修了 {rounds.get(r['name'], 0)} 轮仍不过"))
+            elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck") for o in r["owners"]):
+                held.append((r, "没过，负责的角色没法再改"))
+        owners = {o for r in failing for o in r["owners"]}
+        if held:
+            why = "；".join(f"{r['name']} {what}：{(r['reasons'] or [r['summary']])[0]}" for r, what in held)[:300]
+            t["held"] = {"checks": [r["name"] for r, _ in held], "why": why}
+            self.emit("failed", f"检查要人决定：{why}", data={"checks": t["held"]["checks"]})
+            return
+        t["held"] = None
+        for r in failing:
+            rounds[r["name"]] = rounds.get(r["name"], 0) + 1
+        for key in [k for k in self.order if k in owners]:
+            cases = [c for c in t["cases"] if c.get("owner") == key and c["status"] == "fail"]
+            names = "、".join(c["ac"] for c in cases)
+            self.emit("bounce", f"检查 {names} 没过，打回{self.title(key)}", role=key, frm="tests", to=key,
+                      data={"cases": [c["ac"] for c in cases]})
+            await self._start(key, "fix", mgr, failing=cases)
 
     def _gave_up(self, key: str) -> bool:
         """The implementing role will not fix more: its last round changed nothing, or it has no rounds left."""
@@ -1387,6 +1461,10 @@ class TeamRun:
         busy = self.s["needs_test"] or any(lane["status"] in ACTIVE for lane in lanes)
         gating = any(lane.get("gate") == "pending" for lane in lanes)
         if not busy and not gating and not any(self.lane(k)["status"] == "waiting" and self._ready(k) for k in self.order):
+            held = self.s["tests"].get("held")
+            if held:
+                self._end("failed", f"运行停下，交给人决定：{held['why']}")
+                return
             failed = [self.title(k) for k in self.order if self.lane(k)["status"] == "failed"]
             if failed:
                 self._end("failed", f"运行失败：{'、'.join(failed)}没做完，后面的角色没法开工")
@@ -1420,9 +1498,10 @@ class TeamRun:
         self.emit("failed", text, role=key)
 
     async def stop(self, *, status: str = "stopped", text: str = "运行已停止") -> bool:
-        """Cancel every live agent of the run; it ends as *status*."""
+        """Cancel every live agent of the run, and its test run; it ends as *status*."""
         if self.ended:
             return False
+        self.cancel_tests()
         now, mgr, ids = self.d.now(), self.d.manager(), []
         for key in self.order:
             lane = self.lane(key)
@@ -1548,8 +1627,10 @@ class TeamRun:
         lines += [f"- {c['name']}（{c['file']}）：{c.get('message') or '失败'}" for c in failing[:15]]
         if caught_up:
             lines += ["", "app 已经把你的分支快进到运行分支的最新提交：测试和别的角色的代码都在你的工作目录里了。"]
+        tail = (f"每个检查的完整结果在 `{s['tests'].get('results')}/<检查>.json` 和 `<检查>.log`；检查由 app 重跑，你不能改它们。"
+                if self.team.get("checks") else f"可以自己跑 `node --test {files}` 看结果。")
         lines += ["", f"在你的工作目录 {lane['worktree']}（分支 {lane['branch']}）里把它们修好。你只能改：{self._writable(key)}；"
-                  "测试和别的目录不归你，看可以，改不行。", f"可以自己跑 `node --test {files}` 看结果。"]
+                  "测试和别的目录不归你，看可以，改不行。", tail]
         return "\n".join(lines + self._closing(key))
 
     def _with_context(self, key: str, task: str) -> str:

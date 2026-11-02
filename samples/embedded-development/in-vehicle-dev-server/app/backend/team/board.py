@@ -132,7 +132,7 @@ def knowledge_hits(run: TeamRun, mgr: Any, scrub: Callable[[str], str], data_dir
 
 
 def _case(c: dict[str, Any]) -> dict[str, Any]:
-    return {k: c.get(k) for k in ("id", "ac", "name", "file", "status", "owner", "ms", "message")}
+    return {k: c.get(k) for k in ("id", "ac", "name", "file", "status", "owner", "ms", "message", "verdict", "tier")}
 
 
 def _duration(att: dict[str, Any], live: dict[str, Any] | None, now: float) -> float:

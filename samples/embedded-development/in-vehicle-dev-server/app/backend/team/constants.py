@@ -1,9 +1,7 @@
 """Names and paths shared by every module."""
 
-import glob as _glob
 import os as _os
 import shutil as _shutil
-import subprocess as _subprocess
 from pathlib import Path as _Path
 
 APP_NAME = "vstatd-team"
@@ -31,27 +29,9 @@ def _binary(env: str, preferred: tuple[str, ...], name: str) -> str:
     return _shutil.which(name, path=path) or name
 
 
-def _node() -> str:
-    """The test runner's node: ``$KIROCREW_TEAM_NODE``, else the first candidate that is node 22 or newer (the test
-    run passes ``--test-force-exit``, which an older node rejects: every file would read "跑不起来")."""
-    if _os.environ.get("KIROCREW_TEAM_NODE"):
-        return _os.environ["KIROCREW_TEAM_NODE"]
-    nvm = sorted(_glob.glob(_os.path.expanduser("~/.nvm/versions/node/v*/bin/node")),
-                 key=lambda p: [int(x) for x in p.split("/v")[-1].split("/")[0].split(".") if x.isdigit()], reverse=True)
-    found = [p for p in ("/opt/homebrew/bin/node", _shutil.which("node") or "", "/usr/local/bin/node", *nvm)
-             if p and _os.access(p, _os.X_OK)]
-    for path in found:
-        try:
-            out = _subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5).stdout
-        except (OSError, _subprocess.SubprocessError):
-            continue
-        if out.startswith("v") and out[1:].split(".")[0].isdigit() and int(out[1:].split(".")[0]) >= 22:
-            return path
-    return found[0] if found else "node"
-
-
-NODE_BIN = _node()
 # The real git before macOS's /usr/bin/git, an xcrun shim that costs ~30 ms per call.
 GIT_BIN = _binary("KIROCREW_TEAM_GIT", ("/opt/homebrew/bin/git", "/usr/local/bin/git",
                                          "/Library/Developer/CommandLineTools/usr/bin/git",
                                          "/Applications/Xcode.app/Contents/Developer/usr/bin/git"), "git")
+DOCKER_BIN = _binary("KIROCREW_TEAM_DOCKER", ("/usr/local/bin/docker", "/opt/homebrew/bin/docker",
+                                               "/Applications/Docker.app/Contents/Resources/bin/docker"), "docker")

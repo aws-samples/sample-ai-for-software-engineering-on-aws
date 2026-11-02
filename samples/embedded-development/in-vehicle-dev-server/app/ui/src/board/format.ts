@@ -90,6 +90,7 @@ export const CASE_META: Record<TestCase['status'], { label: string; glyph: strin
   pass: { label: '通过', glyph: '✓' },
   fail: { label: '失败', glyph: '✕' },
   skip: { label: '跳过', glyph: '–' },
+  blocked: { label: '没法判定，交给人', glyph: '!' },
 }
 
 /** The meaning of a lane's status: a role that writes nothing (the reviewer) has nothing to merge, so

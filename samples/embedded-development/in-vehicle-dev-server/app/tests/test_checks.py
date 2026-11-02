@@ -1,266 +1,294 @@
-"""The app's own test run: the TAP parser on real node v25 output, and a real node run on a tiny repo."""
+"""The check adapter (D7, D11) with stand-in checks: small scripts that keep the protocol of checks/README.md (exit
+status 0 PASS, 1 FAIL, 2 usage error, 3 BLOCKED; ``<results>/<check>.json``), run through a stand-in ``docker`` that
+drops its options and runs the command."""
 
 import asyncio
-import os
+import json
+import sys
+import time
 from pathlib import Path
 
-import pytest
+from teamkit import FakeManager, act, finish, make_run, mod, sh
 
-from teamkit import mod
+checks, team_mod, gitwork = mod("checks"), mod("team"), mod("gitwork")
 
-checks, constants = mod("checks"), mod("constants")
-TEAM = {"test_command": ["node", "--test", "tests/"],
-        "test_owners": [{"glob": "tests/api-*", "role": "backend"}, {"glob": "tests/web-*", "role": "frontend"}]}
-
-# node v25.2.1 --test --test-reporter=tap, captured (stack lines trimmed)
-SIGNUP = """TAP version 13
-# Subtest: AC-4: 姓名不能为空
-ok 1 - AC-4: 姓名不能为空
-  ---
-  duration_ms: 0.368625
-  type: 'test'
-  ...
-# Subtest: AC-6: 名额满了不能报名
-not ok 2 - AC-6: 名额满了不能报名
-  ---
-  duration_ms: 7.405583
-  type: 'test'
-  location: '/private/tmp/kctap/tests/api-signup.test.js:5:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    expected 409, got 201
-
-    201 !== 409
-
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: 409
-  actual: 201
-  operator: 'strictEqual'
-  stack: |-
-    TestContext.<anonymous> (file:///private/tmp/kctap/tests/api-signup.test.js:5:39)
-  ...
-# Subtest: AC-7: 同一邮箱不能重复报名
-    # Subtest: first signup ok
-    ok 1 - first signup ok
-      ---
-      duration_ms: 0.089125
-      type: 'test'
-      ...
-    # Subtest: second signup 409
-    not ok 2 - second signup 409
-      ---
-      duration_ms: 0.576083
-      type: 'test'
-      failureType: 'testCodeFailure'
-      error: |-
-        Expected values to be strictly deep-equal:
-        + actual - expected
-      code: 'ERR_ASSERTION'
-      expected:
-        a: 2
-      actual:
-        a: 1
-      ...
-    1..2
-not ok 3 - AC-7: 同一邮箱不能重复报名
-  ---
-  duration_ms: 1.223875
-  type: 'suite'
-  failureType: 'subtestsFailed'
-  error: '1 subtest failed'
-  code: 'ERR_TEST_FAILURE'
-  ...
-# Subtest: AC-8: skipped one
-ok 4 - AC-8: skipped one # SKIP not yet
-  ---
-  duration_ms: 0.066417
-  type: 'test'
-  ...
-# Subtest: AC-9: todo one
-not ok 5 - AC-9: todo one # TODO
-  ---
-  duration_ms: 0.051583
-  type: 'test'
-  error: 'boom'
-  ...
-# Subtest: no ac name here
-not ok 6 - no ac name here
-  ---
-  duration_ms: 0.096584
-  type: 'test'
-  error: "Cannot read properties of undefined (reading 'x')"
-  code: 'ERR_TEST_FAILURE'
-  ...
-1..6
-# tests 7
-# pass 2
-# fail 3
+FAKE_DOCKER = """#!/usr/bin/env python3
+import os, sys
+a = sys.argv[1:]
+if a[0] == "rm":
+    sys.exit(0)
+with open(os.environ["FAKE_DOCKER_LOG"], "a") as f:
+    f.write(" ".join(a) + "\\n")
+i = a.index("stand-in-image")
+os.execv(a[i + 1], a[i + 1:])
 """
 
-EVENTS = """TAP version 13
-# ok 99 - fake line from a test
-# Subtest: 活动接口
-    # Subtest: AC-2: 活动有名称、时间、地点、剩余名额
-    ok 1 - AC-2: 活动有名称、时间、地点、剩余名额
-      ---
-      duration_ms: 0.532166
-      type: 'test'
-      ...
-    # Subtest: AC-10: 名单按报名时间排序
-    not ok 2 - AC-10: 名单按报名时间排序
-      ---
-      duration_ms: 0.794166
-      failureType: 'testCodeFailure'
-      error: |-
-        order mismatch at index 0
-        + actual - expected
-      ...
-    1..2
-not ok 1 - 活动接口
-  ---
-  duration_ms: 1.744291
-  type: 'suite'
-  failureType: 'subtestsFailed'
-  error: '1 subtest failed'
-  ...
-# Subtest: AC-3: 活动详情
-    # Subtest: 详情 200
-    ok 1 - 详情 200
-      ---
-      duration_ms: 0.05975
-      ...
-    # Subtest: 不存在 404
-    not ok 2 - 不存在 404
-      ---
-      duration_ms: 0.130208
-      error: |-
-        Expected values to be strictly equal:
-
-        200 !== 404
-      ...
-    1..2
-not ok 2 - AC-3: 活动详情
-  ---
-  duration_ms: 0.854125
-  failureType: 'subtestsFailed'
-  error: '1 subtest failed'
-  ...
-1..2
+STAND_IN = """#!{python}
+import json, sys, time
+a = sys.argv[1:]
+res = a[a.index("--results") + 1]
+time.sleep({sleep})
+spec = json.load(open("{spec}"))
+if spec.get("write", True):
+    json.dump({{"check": "{name}", "verdict": spec.get("verdict"), "reasons": spec.get("reasons", []), "tier": spec.get("tier"),
+               "summary": spec.get("summary", ""), "args": a}}, open(res + "/{name}.json", "w"))
+sys.exit(spec["rc"])
 """
 
-LOAD_FAILURE = """TAP version 13
-# node:internal/modules/esm/resolve:274
-#     throw new ERR_MODULE_NOT_FOUND(
-#           ^
-# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/kctap/frontend/app.js' imported from /private/tmp/kctap/tests/web-broken.test.js
-#     at finalizeResolution (node:internal/modules/esm/resolve:274:11)
-# Node.js v25.2.1
-# Subtest: tests/web-broken.test.js
-not ok 1 - tests/web-broken.test.js
-  ---
-  duration_ms: 54.728708
-  type: 'test'
-  failureType: 'testCodeFailure'
-  exitCode: 1
-  signal: ~
-  error: 'test failed'
-  code: 'ERR_TEST_FAILURE'
-  ...
-1..1
-# tests 1
-# fail 1
-"""
+VERDICT = {0: "PASS", 1: "FAIL", 2: "USAGE", 3: "BLOCKED"}
 
 
-def by_name(cases):
-    return {c["name"]: c for c in cases}
+class Bench:
+    """A scenario folder with stand-in checks whose outcome a test sets (``set(name, rc, reasons)``)."""
+
+    def __init__(self, tmp: Path, monkeypatch) -> None:
+        self.dir = tmp / "sample"
+        (self.dir / "checks").mkdir(parents=True)
+        docker = tmp / "docker"
+        docker.write_text(FAKE_DOCKER, encoding="utf-8")
+        docker.chmod(0o755)
+        self.log = tmp / "docker.log"
+        monkeypatch.setenv("FAKE_DOCKER_LOG", str(self.log))
+        self.runner = {"docker": [str(docker), "run", "--rm"], "image": "stand-in-image"}
+
+    def check(self, name: str, *, owner: str | None, args=("project",), rounds: int = 2, sleep: float = 0.0,
+              when: str = "before_bench", timeout: float = 30) -> dict:
+        spec = self.dir / "checks" / f"{name}.spec.json"
+        script = self.dir / "checks" / f"{name}.sh"
+        script.write_text(STAND_IN.format(python=sys.executable, sleep=sleep, spec=spec, name=name), encoding="utf-8")
+        script.chmod(0o755)
+        self.set(name, 0)
+        return {"name": name, "command": [str(script)], "args": list(args), "when": when, "owner": owner,
+                "max_rounds": rounds, "timeout_s": timeout}
+
+    def set(self, name: str, rc: int, reasons=(), verdict: str | None = None, write: bool = True, tier=None) -> None:
+        (self.dir / "checks" / f"{name}.spec.json").write_text(json.dumps(
+            {"rc": rc, "verdict": verdict or VERDICT.get(rc), "reasons": list(reasons), "write": write, "tier": tier}),
+            encoding="utf-8")
 
 
-def test_tap_cases_statuses_durations_and_first_message_lines():
-    results, comments = checks.parse_tap(SIGNUP)
-    cases = by_name(checks.to_cases(results, "tests/api-signup.test.js", "backend"))
-    assert list(cases) == ["AC-4: 姓名不能为空", "AC-6: 名额满了不能报名", "AC-7: 同一邮箱不能重复报名", "AC-8: skipped one",
-                           "AC-9: todo one", "no ac name here"]
-    assert cases["AC-4: 姓名不能为空"]["status"] == "pass" and cases["AC-4: 姓名不能为空"]["ms"] == 0
-    six = cases["AC-6: 名额满了不能报名"]
-    assert (six["status"], six["ac"], six["ms"], six["message"], six["owner"]) == ("fail", "AC-6", 7, "expected 409, got 201", "backend")
-    assert cases["AC-7: 同一邮箱不能重复报名"]["message"] == "second signup 409: Expected values to be strictly deep-equal:"
-    assert cases["AC-8: skipped one"]["status"] == "skip" and cases["AC-9: todo one"]["status"] == "skip"
-    other = cases["no ac name here"]
-    assert other["ac"] is None and other["message"] == "Cannot read properties of undefined (reading 'x')"
-    assert comments == ["tests 7", "pass 2", "fail 3"]
+def team_of(bench: Bench, *checks_: dict) -> dict:
+    role = lambda key, deps, writable: {"key": key, "title": key, "depends_on": deps, "writable": writable,  # noqa: E731
+                                        "brief": f"{key}的活"}
+    return team_mod.check_team({
+        "roles": [role("dev", [], ["src/a.*"]), role("dev2", [], ["src/b.*"]), role("reviewer", ["dev", "dev2"], [])],
+        "defaults": {"max_fix_rounds": 9}, "check_runner": bench.runner, "checks": list(checks_)})
 
 
-def test_tap_nesting_picks_the_ac_level_and_ignores_test_output():
-    results, comments = checks.parse_tap(EVENTS)
-    cases = by_name(checks.to_cases(results, "tests/api-events.test.js", None))
-    assert list(cases) == ["AC-2: 活动有名称、时间、地点、剩余名额", "AC-10: 名单按报名时间排序", "AC-3: 活动详情"]
-    assert cases["AC-10: 名单按报名时间排序"]["message"] == "order mismatch at index 0"
-    assert cases["AC-3: 活动详情"]["message"] == "不存在 404: Expected values to be strictly equal:"
-    assert comments[0] == "ok 99 - fake line from a test"
+def repo(tmp: Path) -> tuple[Path, str]:
+    """A run branch worktree (wt/_run) with src/a.cpp and src/b.cpp committed."""
+    async def go():
+        src = tmp / "src-tree"
+        (src / "src").mkdir(parents=True)
+        (src / "src" / "a.cpp").write_text("int a;\n", encoding="utf-8")
+        (src / "src" / "b.cpp").write_text("int b;\n", encoding="utf-8")
+        r = tmp / "runs" / "r1" / "repo"
+        base = await gitwork.create_repo(src, r, "", "x", existing=True)
+        wt = tmp / "runs" / "r1" / "wt" / "_run"
+        await gitwork.add_worktree(r, wt, "team/r1/run", base)
+        return wt, base
+    return asyncio.run(go())
 
 
-def test_a_file_that_cannot_load_is_one_failing_case_with_the_reason(tmp_path, monkeypatch):
-    async def fake_run(node, wt, rel, timeout):
-        return 1, LOAD_FAILURE.replace("/private/tmp/kctap", str(wt)), "", False
-
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "tests" / "web-broken.test.js").write_text("import '../frontend/app.js'\n")
-    monkeypatch.setattr(checks, "run_file", fake_run)
-    wall = asyncio.run(checks.run_tests(tmp_path, TEAM))
-    [case] = wall["cases"]
-    assert case["id"] == "web-broken.test.js#web-broken.test.js 跑不起来" and case["owner"] == "frontend"
-    assert case["message"].startswith("Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'frontend/app.js'")
-    assert (wall["passed"], wall["failed"], wall["total"]) == (0, 1, 1)
+def run_round(bench, team, wt, head, n=1, **kw):
+    return asyncio.run(checks.run_checks(wt, team, head=head, results=wt.parents[1] / "results" / str(n), **kw))
 
 
-def test_test_files_and_owners(tmp_path):
-    for rel in ("tests/api-signup.test.js", "tests/web-render.test.mjs", "tests/helpers/server.js", "tests/sub/x_test.js",
-                "tests/node_modules/y.test.js", "tests/README.md", "src/z.test.js"):
-        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / rel).write_text("")
-    assert checks.test_files(tmp_path) == ["tests/api-signup.test.js", "tests/sub/x_test.js", "tests/web-render.test.mjs"]
-    assert checks.owner_of("tests/api-signup.test.js", TEAM) == "backend"
-    assert checks.owner_of("tests/sub/x_test.js", TEAM) is None
+def test_each_exit_status_is_the_verdict_and_the_result_file_must_agree(tmp_path, monkeypatch):
+    bench = Bench(tmp_path, monkeypatch)
+    names = ["pass", "fail", "usage", "blocked", "liar", "silent", "crash"]
+    team = team_of(bench, *[bench.check(n, owner="dev") for n in names])
+    bench.set("fail", 1, ["no path here"])
+    bench.set("usage", 2, write=False)
+    bench.set("blocked", 3, ["the triage is not approved"], tier="unit test")
+    bench.set("liar", 0, verdict="FAIL")  # exit 0, but its result says FAIL
+    bench.set("silent", 1, write=False)  # no result file
+    bench.set("crash", 139, write=False)
+    wt, head = repo(tmp_path)
+    wall = run_round(bench, team, wt, head)
+    got = {r["name"]: r["verdict"] for r in wall["checks"]}
+    assert got == {"pass": "PASS", "fail": "FAIL", "usage": "USAGE", "blocked": "BLOCKED", "liar": "BLOCKED",
+                   "silent": "BLOCKED", "crash": "BLOCKED"}
+    rows = {r["name"]: r for r in wall["checks"]}
+    assert rows["usage"]["reasons"] == ["检查配置错误（退出码 2）"]
+    assert rows["liar"]["reasons"] == ["退出码是 PASS，结果文件 liar.json 说 FAIL：对不上"]
+    assert rows["crash"]["reasons"] == ["检查没跑起来（退出码 139）"]
+    cases = {c["id"]: c for c in wall["cases"]}
+    assert (cases["pass"]["status"], cases["pass"]["owner"]) == ("pass", "dev")
+    assert (cases["fail"]["status"], cases["fail"]["owner"], cases["fail"]["message"]) == ("fail", "dev", "no path here")
+    assert (cases["blocked"]["status"], cases["blocked"]["verdict"], cases["blocked"]["owner"]) == ("blocked", "BLOCKED", None)
+    assert cases["blocked"]["tier"] == "unit test" and cases["usage"]["owner"] is None  # a person, not a role
+    assert (wall["passed"], wall["failed"], wall["total"], wall["head"]) == (1, 6, 7, head)
+    assert set(cases["fail"]) == {"id", "ac", "name", "file", "status", "owner", "ms", "message", "verdict", "tier"}
 
 
-@pytest.mark.skipif(not os.access(constants.NODE_BIN, os.X_OK), reason="node is not installed")
-def test_real_node_run_one_file_at_a_time_with_ids_owners_and_a_timeout(tmp_path):
-    (tmp_path / "package.json").write_text('{"type": "module"}\n')
-    tests = tmp_path / "tests"
-    tests.mkdir()
-    (tests / "api-signup.test.js").write_text(
-        "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
-        "test('AC-6: 名额满了不能报名', () => { assert.equal(201, 409, 'expected 409, got 201'); });\n"
-        "test('AC-4: 姓名不能为空', () => {});\n"
-        "test('AC-4: 姓名不能为空（空格）', () => {});\n"
-        "setInterval(() => {}, 1000);  // an open handle: --test-force-exit still ends the file\n")
-    (tests / "web-render.test.js").write_text(
-        "import { test } from 'node:test';\ntest('AC-1: 首页', async () => { await new Promise(r => setTimeout(r, 20000)); });\n")
-    wall = asyncio.run(checks.run_tests(tmp_path, TEAM, timeout=1))
-    ids = [c["id"] for c in wall["cases"]]
-    assert ids == ["api-signup.test.js#AC-4", "api-signup.test.js#AC-4#2", "api-signup.test.js#AC-6", "web-render.test.js#web-render.test.js 超时"]
-    six = wall["cases"][2]
-    assert (six["status"], six["owner"], six["message"], six["file"]) == ("fail", "backend", "expected 409, got 201", "tests/api-signup.test.js")
-    assert wall["cases"][3]["owner"] == "frontend" and wall["cases"][3]["message"] == "超过 1 秒没跑完"
-    assert (wall["passed"], wall["failed"], wall["total"], wall["command"]) == (2, 2, 4, "node --test tests/")
+def test_a_check_gets_its_arguments_its_results_dir_and_a_snapshot_at_the_head(tmp_path, monkeypatch):
+    bench = Bench(tmp_path, monkeypatch)
+    team = team_of(bench, bench.check("static", owner="dev", args=["project", "triage"]),
+                   bench.check("logdiff", owner="dev", args=["run", "baseline", "triage"], when="after_bench"))
+    wt, head = repo(tmp_path)
+    triage = tmp_path / "runs" / "r1" / "triage.json"
+    sh(wt, "commit", "-q", "--allow-empty", "-m", "later")  # the run branch moved on: the round judges *head*
+    wall = run_round(bench, team, wt, head, n=4, triage=triage)
+    assert [r["name"] for r in wall["checks"]] == ["static"]  # the phase's checks only
+    results = tmp_path / "runs" / "r1" / "results" / "4"
+    args = json.loads((results / "static.json").read_text())["args"]
+    project = tmp_path / "runs" / "r1" / "wt" / "_checks"
+    assert args == ["--results", str(results), "--project", str(project), "--triage", str(triage)]
+    assert sh(project, "rev-parse", "HEAD").strip() == head and sh(wt, "rev-parse", "HEAD").strip() != head
+    line = bench.log.read_text().splitlines()[-1]
+    root = tmp_path / "runs" / "r1"
+    assert f"-v {bench.dir}:{bench.dir}:ro -v {root}:{root} " in line and "-e GIT_CONFIG_VALUE_0=*" in line
+    assert "--name vstatd-check-" in line
+    after = run_round(bench, team, wt, head, n=5, phase="after_bench", triage=triage)
+    assert after["checks"][0]["verdict"] == "USAGE" and after["checks"][0]["reasons"] == ["没有 --run（logdiff 要它）"]
 
 
-@pytest.mark.skipif(not os.access(constants.NODE_BIN, os.X_OK), reason="node is not installed")
-def test_the_files_of_a_role_that_sits_the_run_out_are_not_run(tmp_path):
-    (tmp_path / "package.json").write_text('{"type": "module"}\n')
-    tests = tmp_path / "tests"
-    tests.mkdir()
-    (tests / "api-signup.test.js").write_text("import { test } from 'node:test';\ntest('AC-4: 姓名不能为空', () => {});\n")
-    (tests / "web-render.test.js").write_text(
-        "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\ntest('AC-1: 首页', () => { assert.fail('没有动效'); });\n")
-    wall = asyncio.run(checks.run_tests(tmp_path, {**TEAM, "skip_owners": ["frontend"]}))
-    assert [c["id"] for c in wall["cases"]] == ["api-signup.test.js#AC-4"] and (wall["passed"], wall["total"]) == (1, 1)
+def test_a_failure_goes_to_the_owner_of_the_file_it_names_else_to_the_checks_default_owner(tmp_path, monkeypatch):
+    bench = Bench(tmp_path, monkeypatch)
+    team = team_of(bench, bench.check("build", owner="dev2"))
+    wt, head = repo(tmp_path)
+    project = wt.parent / "_checks"
+    bench.set("build", 1, ["src/a.cpp:12:10: fatal error: systemd/sd-daemon.h: No such file or directory",
+                           f"tsan: SUMMARY: ThreadSanitizer: data race {wt.parents[1]}/results/1/work/unit/tree/src/b.cpp:90 in X",
+                           "collect2: error: ld returned 1 exit status", "src/gone.cpp:3: not in the project"])
+    wall = run_round(bench, team, wt, head)
+    assert checks.files_named(wall["checks"][0]["reasons"], project) == ["src/a.cpp", "src/b.cpp"]
+    cases = {c["id"]: c for c in wall["cases"]}
+    assert set(cases) == {"build#dev", "build#dev2"} and wall["checks"][0]["owners"] == ["dev", "dev2"]
+    assert cases["build#dev"]["file"] == "src/a.cpp" and "sd-daemon.h" in cases["build#dev"]["message"]
+    assert cases["build#dev2"]["message"].count("；") == 2  # the race in its file, and the two that name no file of the project
 
 
-def test_a_missing_node_is_not_a_test_failure_to_send_back(tmp_path):
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "tests" / "api-x.test.js").write_text("")
-    with pytest.raises(checks.TestsUnavailable, match="跑不了 node"):
-        asyncio.run(checks.run_tests(Path(tmp_path), TEAM, node=str(tmp_path / "no-node")))
+def test_a_check_that_hangs_is_blocked_and_its_container_removed(tmp_path, monkeypatch):
+    bench = Bench(tmp_path, monkeypatch)
+    team = team_of(bench, bench.check("unit", owner="dev", sleep=5, timeout=0.5))
+    wt, head = repo(tmp_path)
+    t0 = time.monotonic()
+    wall = run_round(bench, team, wt, head)
+    assert time.monotonic() - t0 < 4
+    assert wall["checks"][0]["verdict"] == "BLOCKED" and wall["checks"][0]["reasons"] == ["超过 0.5 秒没跑完"]
+
+
+# --- in the orchestrator ------------------------------------------------------------------------------------------ #
+
+def make(tmp_path, monkeypatch, *specs):
+    bench = Bench(tmp_path, monkeypatch)
+    team = team_of(bench, *[bench.check(**s) for s in specs])
+    mgr = FakeManager()
+    run = make_run(tmp_path, mgr, checks.run_checks, team=team)
+    return bench, mgr, run
+
+
+def work(a, role):
+    if role == "dev":
+        act(a, {"src/a.cpp": f"// {a.id}\n"})
+    elif role == "dev2":
+        act(a, {"src/b.cpp": f"// {a.id}\n"})
+    finish(a, "可以交付" if role == "reviewer" else "做了")
+
+
+async def until(run, mgr, cond, timeout=20.0):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        await run.tick()
+        if cond():
+            return
+        for a in mgr.live():
+            work(a, mgr.role_of(a))
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"{run.s['status']}: {[e['text'] for e in run.events][-5:]}")
+
+
+def test_the_tick_is_not_held_while_the_checks_run(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev", "sleep": 1.5})
+
+    async def go():
+        await until(run, mgr, lambda: run._tests is not None)
+        t0 = time.monotonic()
+        await run.tick()
+        assert time.monotonic() - t0 < 0.5 and run._tests is not None and run.s["needs_test"]  # still running
+        assert run.lane("reviewer")["status"] == "waiting"
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["status"] == "done" and run.s["tests"]["checks"][0]["verdict"] == "PASS"
+        assert run.s["tests"]["results"] == str(Path(run.s["repo"]).parent / "results" / "1")
+
+    asyncio.run(go())
+
+
+def test_a_failure_goes_back_to_its_owner_until_the_check_is_out_of_rounds_then_to_a_person(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev2", "rounds": 2})
+    bench.set("build", 1, ["src/a.cpp:3:1: error: expected ';'"])
+
+    async def go():
+        await until(run, mgr, lambda: run.ended)
+        fixes = [a.task for a in mgr.agents.values() if mgr.role_of(a) == "dev" and " attempt=" in a.task.split("\n")[0]]
+        assert len(fixes) == 2 and "build.sh（src/a.cpp）：src/a.cpp:3:1: error: expected ';'" in fixes[0]
+        assert "/results/1/<检查>.json" in fixes[0] and "node --test" not in fixes[0]
+        assert run.s["tests"]["rounds"] == {"build": 2} and not any(mgr.role_of(a) == "dev2" and " attempt=" in a.task for a in mgr.agents.values())
+        assert run.s["status"] == "failed" and run.lane("reviewer")["status"] == "waiting"
+        assert run.events[-1]["text"].startswith("运行停下，交给人决定：build 修了 2 轮仍不过：src/a.cpp:3:1")
+        assert run.sign_block().startswith("运行失败了")
+
+    asyncio.run(go())
+
+
+def test_blocked_goes_to_a_person_not_to_a_role_unless_another_check_failed_first(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev"}, {"name": "size", "owner": "dev2"})
+    bench.set("build", 1, ["collect2: error: ld returned 1 exit status"])
+    bench.set("size", 3, ["no result of checks/build.sh in the results directory"])
+
+    async def go():
+        await until(run, mgr, lambda: run.s["tests"].get("rounds"))
+        assert run.s["tests"]["rounds"] == {"build": 1} and not run.s["tests"].get("held")  # the failure goes back first
+        assert run.lane("dev")["status"] in ("fixing", "queued") and run.lane("dev2")["status"] == "merged"
+        bench.set("build", 0)
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["status"] == "failed" and run.s["tests"]["held"]["checks"] == ["size"]
+        assert [a for a in mgr.agents.values() if mgr.role_of(a) == "dev2" and " attempt=" in a.task] == []
+        assert "size 没法判定：no result of checks/build.sh" in run.events[-1]["text"]
+
+    asyncio.run(go())
+
+
+def test_a_misconfigured_check_stops_the_run_for_a_person(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev"}, {"name": "static", "owner": "dev"})
+    bench.set("build", 1, ["src/a.cpp:1: error"])
+    bench.set("static", 2, write=False)
+
+    async def go():
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["tests"]["held"]["checks"] == ["static"] and not run.s["tests"]["rounds"]
+        assert "static 检查配置错误" in run.events[-1]["text"]
+
+    asyncio.run(go())
+
+
+def test_a_merge_while_the_checks_run_starts_them_again_on_the_new_head(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev", "sleep": 1.0})
+
+    async def go():
+        await until(run, mgr, lambda: run._tests is not None)
+        old = run._tests[1]
+        sh(Path(run.s["run_wt"]), "commit", "-q", "--allow-empty", "-m", "[run] moved")
+        run._head = None
+        await run.tick()
+        assert old.cancelled() or old.done()
+        assert run._tests is not None and run._tests[0] == sh(Path(run.s["run_wt"]), "rev-parse", "HEAD").strip()
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["tests"]["round"] == 2
+
+    asyncio.run(go())
+
+
+def test_stopping_the_run_cancels_its_checks(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev", "sleep": 5})
+
+    async def go():
+        await until(run, mgr, lambda: run._tests is not None)
+        task = run._tests[1]
+        assert await run.stop()
+        await asyncio.sleep(0.1)
+        assert task.cancelled() and run._tests is None
+
+    asyncio.run(go())
