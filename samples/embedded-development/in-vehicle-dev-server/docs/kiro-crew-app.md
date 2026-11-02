@@ -209,6 +209,14 @@ checks on that run directory. A refusal, a timeout at the console, a target left
 middle of an action holds the run; 重试 carries on from that step. A failing after-bench check goes to its owner as
 in D7; the reviewer looks again, and the bench starts over with the new build.
 
+How (step 10): `setup.sh` checks Docker, git, Python, Node 22 and Kiro Crew, builds the board and installs the app
+with `app/scripts/dev-install.sh`, writes `sample.json` into the app's data directory, and runs
+`scripts/install-team.sh` (knowledge copy, the four templates, the workspace `vstatd`, its members, the knowledge source
+`vstatd`); it ends with the commands for the build container (`vstatd-build:amd64`, the image the team file's check
+runner names) and the bench. The app's data directory is `~/.kiro/crew/apps/<app>/data/`: on this machine the
+installed agent-team app keeps its `runs/` and `sessions.json` there (2026-11-02). `setup.sh --dry-run` changes
+nothing. Neither script has been run against a real Kiro Crew yet.
+
 Alternatives considered: one `setup.sh` that builds everything; published prebuilt images.
 
 ### D11. A team's own project plugs in through the team file
@@ -312,6 +320,12 @@ bench images; step 12 needs them.
     build took. *Verify:* `release.sh` passes on the rerun and the scorecard shows the run.
 
 ## Not yet verified
+
+- Whether this sample and the agent-team sample can be installed side by side. Both use the member and template names
+  `aidlc-developer-agent`, `aidlc-architect-agent`, `aidlc-quality-agent` and `aidlc-architecture-reviewer-agent`.
+  `setup.sh` backs up and replaces a template with the same name (cleanup puts it back), and keeps a member that
+  exists in another workspace; the app looks for the team's members in the workspace `vstatd` and holds a role whose
+  member is not there.
 
 - Whether the build container's ThreadSanitizer reports give the absolute path of the check's copy, as the adapter
   expects, or a relative one (D7); both are handled, neither has been seen in a run of the adapter.
