@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from . import bench as bench_mod
 from . import checks, gitwork
 from . import delivery as delivery_mod
 from . import triage as triage_mod
@@ -321,6 +322,7 @@ class TeamRun:
         self._head: str | None = None  # the run branch head, known within one tick
         self._tests: tuple[str, asyncio.Task[dict[str, Any]]] | None = None  # (head, the test run in the background)
         self._first: tuple[str, asyncio.Task[dict[str, Any]]] | None = None  # (head, the tester's tests on the base)
+        self._bench: asyncio.Task[Any] | None = None  # the bench step in the background (doctor, deploy, replay, checks)
         self.errors = 0
 
     @property
@@ -412,6 +414,8 @@ class TeamRun:
             await self._test_and_bounce(mgr)
         if not self.ended:
             await self._tests_first()
+        if not self.ended:
+            await self._bench_step(mgr)
         if not self.ended:
             self._settle()
 
@@ -761,6 +765,14 @@ class TeamRun:
         failed later is sent back with what is failing now, or its merge is tried again."""
         async with self._lock:
             failed = [k for k in self.order if self.lane(k)["status"] == "failed"]
+            bench = self.s.get("bench") or {}
+            if not keys and not failed and self.ended and bench.get("held"):  # a person dealt with the bench: carry on
+                self._resume()
+                bench["held"] = None
+                self.emit("run", f"重试：台架从「{bench['step']}」接着做" + (f"（{note}）" if note else ""))
+                self._settle()
+                await self.save()
+                return ["bench"]
             if not keys and not failed and self.ended:  # it ended on a 要改 review: the person sends that back
                 rev = next((k for k in self.order if not self.roles[k]["writable"] and self.lane(k)["status"] == "done"), None)
                 last = self.lane(rev)["attempts"][-1] if rev and self.lane(rev)["attempts"] else {}
@@ -986,6 +998,9 @@ class TeamRun:
         if self._first is not None:
             self._first[1].cancel()
             self._first = None
+        if self._bench is not None:  # cc1.sh killed mid-action leaves the target unknown, for a person (bench/README.md)
+            self._bench.cancel()
+            self._bench = None
 
     def _approved_triage(self) -> dict[str, Any] | None:
         """The approved triage beside the run's repository (None: none yet, or the team has no triage)."""
@@ -1035,6 +1050,112 @@ class TeamRun:
         self.emit("bounce", f"测试先行没过，打回{self.title(key)}：{why}", role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
 
+    def _finale_due(self) -> bool:
+        """Every role is in, the reviewer let it through, and the latest round of the checks before the bench passed
+        on what is merged: the bench actions come next (D3), then the checks after them."""
+        t = self.s["tests"]
+        return (bool(self.team.get("bench")) and not self.ended and not self.s["needs_test"]
+                and all(self._settled(k) for k in self.order)
+                and not any(self.lane(k)["status"] in ACTIVE for k in self.order)
+                and t["total"] > 0 and not t["failed"] and not t.get("held"))
+
+    async def _bench_step(self, mgr: Any) -> None:
+        """The bench, for the build the checks passed: doctor.sh and what the bench needs (D10), deploy, replay, then
+        the checks after the bench on the run directory and the baseline, each in the background. Each bench action
+        waits for a person at the operator console (D3); whatever stops one goes to a person (``held``)."""
+        if not self._finale_due():
+            return
+        t, root = self.s["tests"], Path(self.s["repo"]).parent
+        b = self.s.get("bench")
+        if b is None or b["head"] != t["head"]:  # a new build: the bench starts over with it
+            n = int((b or {}).get("n") or 0) + 1
+            b = self.s["bench"] = {"head": t["head"], "n": n, "step": "doctor", "running": None, "held": None,
+                                   "doctor": (b or {}).get("doctor"), "actions": list((b or {}).get("actions") or []),
+                                   "artifact": str(Path(t["results"]) / bench_mod.ARTIFACT),
+                                   "run_dir": str(root / "bench" / f"run-{n}"), "after": None}
+            self.emit("bench", f"检查都过了，评审放行：上台架（第 {n} 次），先跑 doctor.sh")
+        if b["held"] or b["step"] == "done":
+            return
+        if self._bench is None:
+            if b["running"]:  # it was going when the app stopped: what it did on the bench is a person's to check
+                b["running"] = None
+                self._bench_hold(f"app 重启时台架上的「{b['step']}」还没做完：到操作台看动作记录、核对目标状态，再重试")
+                return
+            if b["step"] == "deploy" and not Path(b["artifact"]).is_file():
+                self._bench_hold(f"没有要部署的构建 {b['artifact']}（build.sh 的产物）")
+                return
+            b["running"] = b["step"]
+            self._bench = asyncio.create_task(self._bench_task(b))
+            await self.save()
+            await asyncio.sleep(0)
+        if not self._bench.done():
+            return
+        task, self._bench = self._bench, None
+        b["running"] = None
+        try:
+            res = task.result()
+        except checks.TestsUnavailable as exc:
+            await self.stop(status="failed", text=f"运行失败：app 跑不了台架之后的检查：{exc}")
+            return
+        await self._bench_done(b, res, mgr)
+
+    def _bench_task(self, b: dict[str, Any]) -> Awaitable[Any]:
+        spec, root, step = self.team["bench"], Path(self.s["repo"]).parent, b["step"]
+        log = root / "bench" / f"{step}-{b['n']}.log"
+        if step == "doctor":
+            return bench_mod.doctor(spec["doctor"], log)
+        if step == "after":
+            return self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), head=b["head"],
+                                    results=root / "results" / f"after-{b['n']}", phase="after_bench",
+                                    triage=root / TRIAGE_FILE, run=Path(b["run_dir"]),
+                                    baseline=Path(spec["baseline"]).expanduser())
+        cmd = bench_mod.argv(spec[step], {"artifact": b["artifact"], "run": b["run_dir"]})
+        return bench_mod.run(cmd, log, bench_mod.ACTION_TIMEOUT_S, env={"CC1_REQUESTER": f"{APP_NAME} {self.rid}"})
+
+    async def _bench_done(self, b: dict[str, Any], res: Any, mgr: Any) -> None:
+        step = b["step"]
+        if step == "doctor":
+            b["doctor"] = res
+            gaps = bench_mod.missing(self.team["bench"], res, bench_mod.read_state())
+            if gaps:
+                self._bench_hold("台架没准备好：" + "；".join(g["why"] for g in gaps), [g["command"] for g in gaps if g["command"]])
+                return
+            b["step"] = "deploy"
+            self.emit("bench", f"台架就绪，部署 {Path(b['artifact']).name}：等人在操作台上批准这个构建")
+        elif step in ("deploy", "replay"):
+            rc, tail = res
+            kind, why = bench_mod.outcome(rc, tail, bench_mod.read_state()["target"])
+            if kind == "ok" and step == "replay" and not (Path(b["run_dir"]) / "run-result.json").is_file():
+                kind, why = "failed", f"回放结束了，但运行目录 {b['run_dir']} 里没有 run-result.json"
+            b["actions"].append({"action": step, "at": self.d.now(), "outcome": kind, "why": why, "rc": rc})
+            if kind != "ok":
+                self._bench_hold(f"{'部署' if step == 'deploy' else '回放'}没做成（{kind}）：{why}")
+                return
+            b["step"] = "replay" if step == "deploy" else "after"
+            self.emit("bench", "部署好了，回放录制的行驶数据：等人在操作台上批准" if step == "deploy"
+                      else f"回放完了，跑台架之后的检查（{b['run_dir']}）")
+        elif step == "after":
+            b["after"] = {k: res[k] for k in ("at", "passed", "failed", "total", "checks", "results")}
+            self.emit("tests", f"台架之后的检查 {res['passed']}/{res['total']}", data={"checks": [[r["name"], r["verdict"]] for r in res["checks"]]})
+            if not res["failed"]:
+                b["step"] = "done"
+                return
+            res["cases"] = [{**c, "results": res["results"]} for c in res["cases"]]
+            await self._check_bounce(mgr, res)
+            if res.get("held"):
+                b["after"]["held"] = res["held"]
+                self._bench_hold(f"台架之后的检查要人决定：{res['held']['why']}")
+                return
+            for k in self.order:  # the fix changes what the reviewer let through: it looks again before the bench
+                if not self.roles[k]["writable"] and self.lane(k)["status"] == "done":
+                    self.lane(k).update(status="waiting", passed=False)
+
+    def _bench_hold(self, why: str, commands: list[str] | None = None) -> None:
+        """The bench waits for a person: the reason, and the commands they run for it (D10). No automatic retry."""
+        b = self.s["bench"]
+        b["held"] = {"step": b["step"], "why": " ".join(why.split())[:400], "commands": commands or [], "at": self.d.now()}
+        self.emit("failed", f"台架要人处理：{b['held']['why']}", data={"commands": b["held"]["commands"]})
+
     def _first_review(self, res: dict[str, Any]) -> str:
         return "\n".join([f"app 在需求提交 `{res['base'][:12]}` 的代码上跑了你的新测试（构建容器里、和 unit.sh 一样构建，"
                           "不带消毒器）。TR §4.1 要求测试在修复之前失败，这些不满足：", ""]
@@ -1042,15 +1163,16 @@ class TeamRun:
                          + ["", "改测试：断言 VSTATD-IF 规定的正确行为，让它在需求提交上失败、修好以后通过；测试名或测试体里写发现编号。"
                             f"每次跑的结果在 `{res['results']}`。"])
 
-    async def _check_bounce(self, mgr: Any) -> None:
-        """A round of the team file's checks: each failure back to the role it was attributed to, one fix round per
-        failing check; a check that could not judge, a misconfigured one, or one out of its rounds stops the run for a
-        person (D7). A check that could not judge because another failed (no build to measure) waits for that fix."""
-        t = self.s["tests"]
+    async def _check_bounce(self, mgr: Any, wall: dict[str, Any] | None = None) -> None:
+        """A round of the team file's checks (the test wall, or *wall*: the checks after the bench): each failure back
+        to the role it was attributed to, one fix round per failing check; a check that could not judge, a
+        misconfigured one, or one out of its rounds stops the run for a person (D7). A check that could not judge
+        because another failed (no build to measure) waits for that fix."""
+        t = wall if wall is not None else self.s["tests"]
         spec = {c["name"]: c for c in self.team["checks"]}
         rows = t.get("checks") or []
         failing = [r for r in rows if r["verdict"] == "FAIL"]
-        rounds = t.setdefault("rounds", {})
+        rounds = self.s["tests"].setdefault("rounds", {})
         held: list[tuple[dict[str, Any], str]] = [(r, "检查配置错误") for r in rows if r["verdict"] == "USAGE"]
         if not failing:
             held += [(r, "没法判定") for r in rows if r["verdict"] == "BLOCKED"]
@@ -1133,6 +1255,8 @@ class TeamRun:
             s["verdict"] = f"审查说{first[:30]}" if first else "审查没有给结论"
             if lane.get("gate") == "pending" or any(self.lane(k)["status"] not in ("merged", "done", "skipped") for k in self._after(key)):
                 return  # a person's gate, or a role after the review: _settle ends the run once they are done
+            if self.team.get("bench"):
+                return  # the bench actions and the checks after them come next (_bench_step); _settle ends the run
             red = int(s["tests"].get("failed") or 0)
             if red:  # done, but not green: said as it is, the person decides
                 self._end("done", f"运行结束：审查说{summary[:20] or '没有结论'}，但测试还有 {red} 项没过，交给人决定")
@@ -1662,11 +1786,13 @@ class TeamRun:
     def _settle(self) -> None:
         """End a run nothing can move any more; else name what it is doing."""
         lanes = [self.lane(k) for k in self.order]
+        bench = self.s.get("bench") or {}
         busy = (self.s["needs_test"] or any(lane["status"] in ACTIVE for lane in lanes)
-                or any((lane.get("first") or {}).get("status") == "pending" for lane in lanes))
+                or any((lane.get("first") or {}).get("status") == "pending" for lane in lanes)
+                or (self._finale_due() and bench.get("step") != "done" and not bench.get("held")))
         gating = any(lane.get("gate") == "pending" for lane in lanes)
         if not busy and not gating and not any(self.lane(k)["status"] == "waiting" and self._ready(k) for k in self.order):
-            held = self.s["tests"].get("held")
+            held = self.s["tests"].get("held") or bench.get("held")
             if held:
                 self._end("failed", f"运行停下，交给人决定：{held['why']}")
                 return
@@ -1833,7 +1959,8 @@ class TeamRun:
         lines += [f"- {c['name']}（{c['file']}）：{c.get('message') or '失败'}" for c in failing[:15]]
         if caught_up:
             lines += ["", "app 已经把你的分支快进到运行分支的最新提交：测试和别的角色的代码都在你的工作目录里了。"]
-        tail = (f"每个检查的完整结果在 `{s['tests'].get('results')}/<检查>.json` 和 `<检查>.log`；检查由 app 重跑，你不能改它们。"
+        results = failing[0].get("results") if failing else None  # a check after the bench: its own results directory
+        tail = (f"每个检查的完整结果在 `{results or s['tests'].get('results')}/<检查>.json` 和 `<检查>.log`；检查由 app 重跑，你不能改它们。"
                 if self.team.get("checks") else f"可以自己跑 `node --test {files}` 看结果。")
         lines += ["", f"在你的工作目录 {lane['worktree']}（分支 {lane['branch']}）里把它们修好。你只能改：{self._writable(key)}；"
                   "测试和别的目录不归你，看可以，改不行。", tail]

@@ -49,7 +49,9 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     assert all(c["command"] == [f"${{sample}}/checks/{n}.sh"] for n, c in checks.items())
     assert {n for n, c in checks.items() if "triage" in c["args"]} == {"static", "unit", "trace", "logdiff", "release"}
     assert checks["logdiff"]["args"] == ["run", "baseline", "triage"]
-    assert set(t["bench"]) == {"deploy", "restart", "replay"} and t["bench"]["deploy"][0] == "${sample}/bench/cc1.sh"
+    assert set(t["bench"]) == {"deploy", "restart", "replay", "doctor", "build", "start", "baseline"}
+    assert t["bench"]["deploy"] == ["${sample}/bench/cc1.sh", "deploy", "{artifact}"]
+    assert t["bench"]["doctor"] == ["${sample}/bench/doctor.sh"] and t["bench"]["baseline"] == "~/workplace/vstatd-team/baseline"
     assert t["check_runner"]["image"] == "vstatd-build:amd64"
     assert (constants.TEAM_FILE.parent / t["task_template"]).is_file()
 
@@ -63,6 +65,7 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     (lambda t: t["checks"][0].update(max_rounds=0), "max_rounds 要是 1 到 10 的整数"),
     (lambda t: t.pop("check_runner"), "有 checks 就要写 check_runner"),
     (lambda t: t["bench"].update(flash=["x"]), "bench 要写成"),
+    (lambda t: t["bench"].pop("doctor"), "bench 要写成"),
     (lambda t: t.update(source=""), "source 要写成要改的项目目录"),
     (lambda t: t["roles"][0]["triage"].update(file="/abs/triage.json"), "triage 要写成"),
     (lambda t: t["roles"][1].update(triage={"file": "docs/x.json", "knowledge": "/k"}, gate=None), "triage 要写成"),

@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from . import bench as bench_mod
 from . import gitwork
 from .sessions import agent_fields, find_agent
 from .team import ACTIVE, TeamRun, clean_risk, live_status
@@ -84,7 +85,19 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "delivery": {**run.delivery(), "confirmed": bool(s.get("delivery"))},
         "issue": run.issue(),
         "pr": run.pr(),
+        "bench": bench_view(run),
     }
+
+
+def bench_view(run: TeamRun) -> dict[str, Any] | None:
+    """BenchView: the run's bench step and the bench state, read now (read only)."""
+    spec = run.team.get("bench")
+    if not spec:
+        return None
+    b = run.s.get("bench") or {}
+    return {"step": b.get("step"), "running": b.get("running"), "held": b.get("held"), "doctor": b.get("doctor"),
+            "artifact": b.get("artifact"), "run_dir": b.get("run_dir"), "baseline": str(spec["baseline"]),
+            "actions": list(b.get("actions") or []), "state": bench_mod.read_state()}
 
 
 def crew_members(run: TeamRun, crew: Any) -> list[str] | None:

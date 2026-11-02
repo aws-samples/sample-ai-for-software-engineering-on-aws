@@ -35,6 +35,7 @@ CHECK_ARGS = ("project", "triage", "run", "baseline")  # what a check is given b
 DEFAULT_ROUNDS = 2  # repair rounds per check when the team file gives none (TR §5.1 names build 3, logdiff 2)
 DEFAULT_TIMEOUT_S = 1800  # one check, in its container
 BENCH_ACTIONS = ("deploy", "restart", "replay")
+BENCH_TOOLS = ("doctor", "build", "start")  # the app runs doctor; build and start are the bench owner's, shown on the board
 
 
 def _words(x: Any) -> bool:
@@ -78,9 +79,14 @@ def check_config(team: dict[str, Any], keys: list[str]) -> None:
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
             raise ValueError(f"team.json：检查 {name} 的 timeout_s 要是正数（秒）")
     bench = team.get("bench")
-    if bench is not None and not (isinstance(bench, dict) and set(bench) <= set(BENCH_ACTIONS)
-                                  and all(_words(v) for v in bench.values())):
-        raise ValueError(f"team.json：bench 要写成 {{{'、'.join(BENCH_ACTIONS)}: [命令和参数]}}")
+    if bench is not None and not (isinstance(bench, dict) and set(bench) <= {*BENCH_ACTIONS, *BENCH_TOOLS, "baseline"}
+                                  and all(k in bench for k in ("deploy", "replay", "doctor", "baseline"))
+                                  and all(_words(v) for k, v in bench.items() if k != "baseline")
+                                  and isinstance(bench["baseline"], str) and bench["baseline"]):
+        raise ValueError(f"team.json：bench 要写成 {{{'、'.join(BENCH_ACTIONS + BENCH_TOOLS)}: [命令和参数], baseline: 基线目录}}"
+                         "（deploy、replay、doctor 和 baseline 必须有）")
+    if bench is not None and not items:
+        raise ValueError("team.json：有 bench 就要有 checks（台架之后的检查）")
 
 
 def docker_command(runner: dict[str, Any], mounts: list[tuple[str, bool]], cmd: list[str],

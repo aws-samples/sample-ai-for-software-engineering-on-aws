@@ -179,6 +179,17 @@ stops before the first bench action, with the reason on the board.
 Why: the Buildroot build of the target image takes long (not yet measured), and the images are not published because
 the target's Linux image is used as a tool and not redistributed.
 
+How (step 6): the team file's `bench` has, besides deploy, restart and replay, `doctor` (run by the app),
+`build` and `start` (the bench owner's commands, shown on the board, never run by the app) and `baseline`, the
+baseline directory; for `vstatd` it is `~/workplace/vstatd-team/baseline`, written once by the bench owner with
+`cc1.sh replay --kind baseline`, since the bench ships no baseline yet. When the before-bench checks pass on what is
+merged and the reviewer has let it through, the app runs `doctor.sh`; it holds the run for a person when doctor
+fails, the target is off or not known, or the baseline is missing, with the command for each. Then deploy (the
+artifact of `build.sh` from that round's results), replay into `runs/<run>/bench/run-<n>/`, and the after-bench
+checks on that run directory. A refusal, a timeout at the console, a target left unknown, or an app restart in the
+middle of an action holds the run; 重试 carries on from that step. A failing after-bench check goes to its owner as
+in D7; the reviewer looks again, and the bench starts over with the new build.
+
 Alternatives considered: one `setup.sh` that builds everything; published prebuilt images.
 
 ### D11. A team's own project plugs in through the team file

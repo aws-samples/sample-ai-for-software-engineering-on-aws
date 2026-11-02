@@ -74,7 +74,25 @@ export type RunDetail = {
   delivery: Delivery // 交付标签: what the CTO view counts this run as, once a person signs it off
   issue: Issue // the requirement as the organisation tracks it
   pr: PullRequest | null // the run branch into main: open once the run delivered, merged when a person signs it off
+  bench: BenchView | null // the bench actions of a team with a bench (D3, D10); null for a team without one
 }
+
+/** The bench: the app's step there, what holds it for a person (and the commands they run), doctor.sh's result, the
+ * app's own bench actions, and the bench state as the bench writes it (read only). */
+export type BenchView = {
+  step: 'doctor' | 'deploy' | 'replay' | 'after' | 'done' | null
+  running: string | null // the step running in the background
+  held: { step: string; why: string; commands: string[]; at: number } | null
+  doctor: { ok: boolean; rc: number | null; at: number; fails: string[]; warns: string[]; summary: string } | null
+  artifact: string | null // the build deployed: build.sh's stripped vstatd
+  run_dir: string | null // where the replay writes the run directory
+  baseline: string
+  actions: { action: string; at: number; outcome: 'ok' | 'refused' | 'timeout' | 'unknown' | 'failed'; why: string; rc: number | null }[]
+  state: { dir: string; target: Record<string, unknown>; supply: Record<string, unknown> | null; pending: BenchRequest[]; actions: Record<string, unknown>[] }
+}
+
+/** A request waiting at the operator console: the action and the digest the person approves. */
+export type BenchRequest = { id: string; action: string; digest: string; detail: string; requested_at: string; requested_by: string; expired: boolean }
 
 /** The run's Issue: its number, 需求 or 缺陷, who raised it and when (the run's start, unless its record says). */
 export type Issue = { id: string; kind: '需求' | '缺陷'; reporter: string; created_at: number }
@@ -253,6 +271,7 @@ export type Merge = {
 
 export type TeamEventKind =
   | 'run' // run started / finished / stopped
+  | 'bench' // the app's step on the bench (doctor, deploy, replay, the checks after it)
   | 'handoff' // an upstream role's output unblocked a downstream role (from -> to)
   | 'spawned' // a role's agent was started
   | 'tool' // a role's agent made a tool call (last_tool changed)

@@ -39,7 +39,11 @@
   "bench": {
     "deploy": ["${sample}/bench/cc1.sh", "deploy", "{artifact}"],
     "restart": ["${sample}/bench/cc1.sh", "restart"],
-    "replay": ["${sample}/bench/cc1.sh", "replay", "--kind", "run", "--out", "{run}"]
+    "replay": ["${sample}/bench/cc1.sh", "replay", "--kind", "run", "--out", "{run}"],
+    "doctor": ["${sample}/bench/doctor.sh"],
+    "build": ["${sample}/bench/build-target.sh"],
+    "start": ["${sample}/bench/cc1.sh", "start"],
+    "baseline": "~/workplace/vstatd-team/baseline"
   },
   "defaults": {
     "model": "claude-sonnet-5.5",
