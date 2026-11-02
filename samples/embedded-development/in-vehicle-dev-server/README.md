@@ -59,9 +59,9 @@ All names, code and data in this scenario are synthetic.
 - **Work item:** *Fix the static analysis findings in `vstatd` marked "fix" in the backlog, and split the signal table
   handling out of the 900-line `Service::run()`. No change in behaviour: same signals, same values, same timeouts and
   same errors on the recorded drive; memory on the target within the limit.* The backlog holds about 30 synthetic
-  findings of common kinds: null dereference on an error path, resource leak, uninitialised member, integer overflow
-  in a scaling, unchecked return value. A data race on a shared map is seeded too; ThreadSanitizer in the unit tests
-  finds it, not the static analysers.
+  findings of common kinds: null dereference on an error path, resource leak, uninitialised member, implicit widening
+  in a scaling, unchecked return value. A data race on the shared signal table is seeded too; ThreadSanitizer in the
+  unit tests finds it, not the static analysers.
 - **Seeded difficulties** for the rehearsal, each caught by a check rather than by luck:
   - one "obvious" fix changes a timeout's behaviour, and only the log comparison shows it;
   - one finding is a false positive that the specification explains, so the right answer is a justification, not a
@@ -76,13 +76,20 @@ All names, code and data in this scenario are synthetic.
 - `knowledge/vstatd-interface.md` (with a rendered PDF): the synthetic interface specification, with numbered pages
   and sections: signals, their scaling and timeouts, the IPC protocol, error behaviour. A fact extraction step turns it
   into `knowledge/facts/`, one entry per signal, timeout and error rule, each with its page and section, for example
-  `[VSTATD-IF p.7 §3.2]`.
+  `[VSTATD-IF p.7 §4.1]`.
+- `knowledge/cc1-gateway.dbc` and `knowledge/vss-mapping.yaml`: the CAN database in DBC format, and the mapping from
+  each CAN signal to the path `vstatd` publishes it under. The paths are names from the COVESA Vehicle Signal
+  Specification (VSS), so that a team can map them onto its own signal catalogue and CAN databases.
 - `knowledge/cc1-platform-notes.md`: the target's cores, memory limit, start-up order, log format, and the log
   comparison's settings (timing tolerance, ignored fields).
 - `knowledge/team-rules.md`: the team's C++ rules, cross-build flags, resource limits, the triage policy (fix,
   justify, defer) and the definition of done.
-- A check confirms that every change and every justification cites a finding and, where it touches behaviour, a fact
-  entry.
+- `knowledge/findings-backlog.md`: the static analysis findings on the current release.
+- `knowledge/tools/check_knowledge.py` keeps these files consistent: citations, PDF pages, the DBC, the mapping and
+  the facts. A separate check confirms that every change and every justification cites a finding and, where it
+  touches behaviour, a fact entry.
+
+What the knowledge contains is described in [knowledge/README.md](knowledge/README.md).
 
 ### 2. AI-DLC phases and gates
 
@@ -104,7 +111,7 @@ Checks are command-line scripts with pass or fail. The build server runs them; t
 | --- | --- | --- |
 | `checks/build.sh` | Before deploy | Cross build succeeds with `-Wall -Wextra -Werror` and the team's flags |
 | `checks/static.sh` | Before deploy | Static analysis (cppcheck and clang-tidy with the team's rule set): every finding in the batch is fixed or has an approved justification, and there are no new findings |
-| `checks/unit.sh` | Before deploy | Unit tests pass on the build server, including a new test for each fix; ThreadSanitizer reports no data race |
+| `checks/unit.sh` | Before deploy | Unit tests pass on the build server, including a new test for each fix with an observable effect; ThreadSanitizer, AddressSanitizer and UndefinedBehaviorSanitizer report nothing |
 | `checks/size.sh` | Before deploy | Binary size within the limit in the platform notes |
 | `checks/trace.sh` | Before deploy | Every change and justification cites a finding, and a fact entry where it touches behaviour |
 | `checks/runtime-limits.sh` | After deploy | Peak memory of `vstatd` during the replay within the limit. CPU is reported only relative to the baseline on the same emulator, because emulated CPU time says little about the real SoC. Both are labelled as emulation results |
@@ -222,8 +229,9 @@ measured.
 Each item is a pull request. The sample becomes available when all of them are merged and the rehearsal guide has
 been dry-run once.
 
-1. Synthetic interface specification and platform notes (Markdown and rendered PDF), fact entries, team rules and the
-   findings backlog.
+1. Synthetic interface specification and platform notes (Markdown and rendered PDF), CAN database and VSS mapping,
+   fact entries, team rules and the findings backlog, with a consistency check; facilitator notes on the seeded
+   difficulties. *Done:* [knowledge/](knowledge/), [rehearsal/facilitator-notes.md](rehearsal/facilitator-notes.md).
 2. `vstatd` reference project: the service, its unit tests, CMake with the cross toolchain file, and the seeded
    findings and difficulties.
 3. Bench emulation: a script that builds the emulated CC-1 image, the gateway socket and drive replay, the baseline
@@ -246,13 +254,13 @@ identifiers; no `--trust-all-tools`.
 
 | Folder | Contents |
 | --- | --- |
-| `knowledge/` | Synthetic interface specification, platform notes, fact entries, team rules, findings backlog |
+| `knowledge/` | Synthetic interface specification, CAN database, VSS mapping, platform notes, fact entries, team rules, findings backlog, consistency check |
 | `checks/` | The seven checks, the release check and the evidence page generator |
 | `mcp/` | `build` and `bench` servers and their guardrail tests |
 | `agents/` | Kiro and Kiro Crew configurations, the bypass hook, the permission probe test |
 | `reference-project/` | `vstatd`, its tests, the cross toolchain file |
 | `bench/` | Emulated-target image build script, drive replay, baseline log, simulated supply, operator console, doctor script |
-| `rehearsal/` | One-day guide and scorecard |
+| `rehearsal/` | One-day guide, scorecard and facilitator notes; not copied into the agents' workspace |
 
 ## Prerequisites
 
@@ -261,7 +269,9 @@ or Kiro Crew. Third-party tools and their licences will be listed here, among th
 cross toolchain (GPL-3.0 with the GCC runtime library exception; glibc LGPL-2.1), QEMU (GPL-2.0), the emulated
 target's Linux image built by `setup.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed to the
 repository, GoogleTest (BSD-3-Clause), cppcheck (GPL-3.0) and clang-tidy (Apache-2.0 with LLVM exception). They are
-used as tools and not redistributed.
+used as tools and not redistributed. The knowledge uses signal names from the COVESA Vehicle Signal Specification
+v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and PyYAML (MIT); see
+[knowledge/README.md](knowledge/README.md#third-party-references).
 
 ## Cost
 

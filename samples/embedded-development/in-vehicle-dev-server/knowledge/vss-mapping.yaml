@@ -1,0 +1,229 @@
+# vstatd signal paths (COVESA VSS v6.1 names) to the CAN signals in cc1-gateway.dbc.
+# Synthetic, written for this sample. VSS is used for names only; no VSS files are copied.
+vss_release: v6.1
+dbc: cc1-gateway.dbc
+source: '[VSTATD-IF p.4–5 §3.1]'
+signals:
+  Vehicle.LowVoltageSystemState:
+    dbc_message: VCU_PowerState
+    dbc_signal: LvSystemState
+    vss_type: sensor
+    vss_datatype: string
+    map:
+      0: UNDEFINED
+      1: LOCK
+      2: 'OFF'
+      3: ACC
+      4: 'ON'
+      5: START
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.LowVoltageBattery.CurrentVoltage:
+    dbc_message: VCU_PowerState
+    dbc_signal: LvBatteryVoltage
+    vss_type: sensor
+    vss_datatype: float
+    vss_unit: V
+    log_deadband: 0.1
+    log_deadband_raw: 5
+  Vehicle.Speed:
+    dbc_message: VCU_Speed
+    dbc_signal: VehicleSpeed
+    vss_type: sensor
+    vss_datatype: float
+    vss_unit: km/h
+    log_deadband: 0.5
+    log_deadband_raw: 50
+  Vehicle.Powertrain.Transmission.CurrentGear:
+    dbc_message: VCU_Gear
+    dbc_signal: CurrentGear
+    vss_type: sensor
+    vss_datatype: int8
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Powertrain.Transmission.SelectedGear:
+    dbc_message: VCU_Gear
+    dbc_signal: SelectedGear
+    vss_type: actuator
+    vss_datatype: int8
+    allowed_raw:
+    - -1
+    - 0
+    - 126
+    - 127
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Chassis.ParkingBrake.IsEngaged:
+    dbc_message: VCU_Gear
+    dbc_signal: ParkingBrakeEngaged
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.TraveledDistance:
+    dbc_message: VCU_Odometer
+    dbc_signal: TraveledDistance
+    vss_type: sensor
+    vss_datatype: uint32
+    vss_unit: m
+    log_deadband: 100
+    log_deadband_raw: 1
+  Vehicle.Powertrain.TractionBattery.StateOfCharge.Displayed:
+    dbc_message: BMS_Status
+    dbc_signal: SocDisplayed
+    vss_type: sensor
+    vss_datatype: float
+    vss_unit: percent
+    log_deadband: 0.5
+    log_deadband_raw: 1
+  Vehicle.Powertrain.Range:
+    dbc_message: BMS_Status
+    dbc_signal: RemainingRange
+    vss_type: sensor
+    vss_datatype: uint32
+    vss_unit: m
+    log_deadband: 1000
+    log_deadband_raw: 100
+  Vehicle.Powertrain.TractionBattery.Charging.IsCharging:
+    dbc_message: BMS_Status
+    dbc_signal: IsCharging
+    vss_type: sensor
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Body.Lights.Beam.Low.IsOn:
+    dbc_message: BCM_Lights
+    dbc_signal: LowBeamOn
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Body.Lights.Beam.High.IsOn:
+    dbc_message: BCM_Lights
+    dbc_signal: HighBeamOn
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Body.Lights.DirectionIndicator.Left.IsSignaling:
+    dbc_message: BCM_Lights
+    dbc_signal: IndicatorLeft
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Body.Lights.DirectionIndicator.Right.IsSignaling:
+    dbc_message: BCM_Lights
+    dbc_signal: IndicatorRight
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Body.Lights.Hazard.IsSignaling:
+    dbc_message: BCM_Lights
+    dbc_signal: HazardOn
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Cabin.Door.Row1.DriverSide.IsOpen:
+    dbc_message: BCM_Closures
+    dbc_signal: DriverDoorOpen
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Cabin.Door.Row1.PassengerSide.IsOpen:
+    dbc_message: BCM_Closures
+    dbc_signal: PassengerDoorOpen
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Body.Trunk.Rear.IsOpen:
+    dbc_message: BCM_Closures
+    dbc_signal: TrunkOpen
+    vss_type: actuator
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Cabin.Seat.Row1.DriverSide.IsBelted:
+    dbc_message: BCM_Closures
+    dbc_signal: DriverBelted
+    vss_type: sensor
+    vss_datatype: boolean
+    map:
+      0: false
+      1: true
+    log_deadband: any change
+    log_deadband_raw: 1
+  Vehicle.Chassis.Axle.Row1.Wheel.Left.Tire.Pressure:
+    dbc_message: TPMS_Pressures
+    dbc_signal: TirePressureFL
+    vss_type: sensor
+    vss_datatype: uint16
+    vss_unit: kPa
+    log_deadband: 4
+    log_deadband_raw: 2
+  Vehicle.Chassis.Axle.Row1.Wheel.Right.Tire.Pressure:
+    dbc_message: TPMS_Pressures
+    dbc_signal: TirePressureFR
+    vss_type: sensor
+    vss_datatype: uint16
+    vss_unit: kPa
+    log_deadband: 4
+    log_deadband_raw: 2
+  Vehicle.Chassis.Axle.Row2.Wheel.Left.Tire.Pressure:
+    dbc_message: TPMS_Pressures
+    dbc_signal: TirePressureRL
+    vss_type: sensor
+    vss_datatype: uint16
+    vss_unit: kPa
+    log_deadband: 4
+    log_deadband_raw: 2
+  Vehicle.Chassis.Axle.Row2.Wheel.Right.Tire.Pressure:
+    dbc_message: TPMS_Pressures
+    dbc_signal: TirePressureRR
+    vss_type: sensor
+    vss_datatype: uint16
+    vss_unit: kPa
+    log_deadband: 4
+    log_deadband_raw: 2
+  Vehicle.Exterior.AirTemperature:
+    dbc_message: BCM_Exterior
+    dbc_signal: ExteriorAirTemp
+    vss_type: sensor
+    vss_datatype: float
+    vss_unit: Celsius
+    log_deadband: 0.5
+    log_deadband_raw: 1
