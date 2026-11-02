@@ -59,6 +59,6 @@ RUNS="$HOME/workplace/$APP"                       # every run's repository, work
 TEAM_HOME="$HOME/workplace/vstatd"                # the knowledge copy the knowledge source indexes
 WORKSPACE=vstatd                                  # the Kiro Crew workspace of the team's members
 KNOWLEDGE=vstatd                                  # the Kiro Crew knowledge source (the team file names it)
-MEMBERS=(aidlc-developer-agent aidlc-architect-agent aidlc-quality-agent aidlc-architecture-reviewer-agent)
+MEMBERS=(vstatd-developer vstatd-architect vstatd-quality vstatd-architecture-reviewer)
 AGENTS="$HOME/.kiro/agents"
 BACKUP="$AGENTS/.vstatd-team-sample-backup"       # templates setup replaced, put back by cleanup.sh

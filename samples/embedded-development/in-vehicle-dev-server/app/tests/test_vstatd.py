@@ -26,9 +26,9 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     roles = {r["key"]: r for r in t["roles"]}
     assert list(roles) == ["triage", "architect", "tester", "dev-fix", "dev-refactor", "reviewer"]
     assert {k: r["member"] for k, r in roles.items()} == {
-        "triage": "aidlc-developer-agent", "architect": "aidlc-architect-agent", "tester": "aidlc-quality-agent",
-        "dev-fix": "aidlc-developer-agent", "dev-refactor": "aidlc-developer-agent",
-        "reviewer": "aidlc-architecture-reviewer-agent"}
+        "triage": "vstatd-developer", "architect": "vstatd-architect", "tester": "vstatd-quality",
+        "dev-fix": "vstatd-developer", "dev-refactor": "vstatd-developer",
+        "reviewer": "vstatd-architecture-reviewer"}
     assert [k for k, r in roles.items() if r.get("gate") == "human"] == ["triage", "architect"]
     assert {r["phase"] for r in t["roles"]} == {"inception", "construction", "review"}
     assert roles["reviewer"]["writable"] == [] and set(roles["reviewer"]["depends_on"]) == {"dev-fix", "dev-refactor"}

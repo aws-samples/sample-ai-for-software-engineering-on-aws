@@ -14,12 +14,15 @@ from pathlib import Path
 
 KNOWLEDGE = "vstatd"
 
-# display name, one line in Chinese (what Kiro Crew's Teammates page shows)
+# member name → the AI-DLC expert it runs as, display name, one line in Chinese (what Kiro Crew's Teammates page
+# shows). The members have their own names so that they do not clash with the agent-team sample's members, which
+# carry the experts' names.
 TEAM = {
-    "aidlc-developer-agent": ("开发", "AI-DLC 开发专家：分诊、修复和重构 vstatd"),
-    "aidlc-architect-agent": ("架构", "AI-DLC 架构专家：重构方案和按源文件分工"),
-    "aidlc-quality-agent": ("质量", "AI-DLC 质量专家：测试先行，先失败的单元测试"),
-    "aidlc-architecture-reviewer-agent": ("架构评审", "AI-DLC 架构评审：独立、只读，复核说明和保住的行为"),
+    "vstatd-developer": ("aidlc-developer-agent", "开发", "AI-DLC 开发专家：分诊、修复和重构 vstatd"),
+    "vstatd-architect": ("aidlc-architect-agent", "架构", "AI-DLC 架构专家：重构方案和按源文件分工"),
+    "vstatd-quality": ("aidlc-quality-agent", "质量", "AI-DLC 质量专家：测试先行，先失败的单元测试"),
+    "vstatd-architecture-reviewer": ("aidlc-architecture-reviewer-agent", "架构评审",
+                                     "AI-DLC 架构评审：独立、只读，复核说明和保住的行为"),
 }
 
 CREW = f"""
@@ -59,9 +62,9 @@ def template(name: str, display: str, desc: str, prompt: str, kirocrew: str) -> 
 def build(official: Path, out: Path, kirocrew: str) -> list[Path]:
     out.mkdir(parents=True, exist_ok=True)
     written = []
-    for name, (display, desc) in TEAM.items():
+    for name, (expert, display, desc) in TEAM.items():
         path = out / f"{name}.json"
-        t = template(name, display, desc, official_prompt(official, name), kirocrew)
+        t = template(name, display, desc, official_prompt(official, expert), kirocrew)
         path.write_text(json.dumps(t, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         written.append(path)
     return written

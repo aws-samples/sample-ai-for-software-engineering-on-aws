@@ -94,7 +94,7 @@ code base, but every change here would have to keep an available sample green); 
 
 ### D6. Six roles, tests first
 
-| Role | Member | Gate after it | Writes |
+| Role | Expert | Gate after it | Writes |
 | --- | --- | --- | --- |
 | Triage | `aidlc-developer-agent` | Triage (D4) | `triage.json` and the gate's questions |
 | Architect | `aidlc-architect-agent` | Build start | The refactor plan of `Service::run()` and the work split by source file |
@@ -104,6 +104,11 @@ code base, but every change here would have to keep an available sample green); 
 | Reviewer | `aidlc-architecture-reviewer-agent` | — | Nothing (read-only); looks hardest at justifications and at behaviour kept by the refactor |
 
 No role deploys: the app runs the bench actions (D3), and the release owner signs off.
+
+The members and their templates are named `vstatd-developer`, `vstatd-architect`, `vstatd-quality` and
+`vstatd-architecture-reviewer`, each built from the expert's definition. The agent-team sample's members carry the
+experts' own names; with the same names, installing this sample would replace that sample's templates, and a member
+already in its workspace would leave the role here without a member.
 
 Why tests first: TR §4.1 asks that a test fails before its fix, which `unit.sh` cannot see. With the tester's tests
 written first, the app can run them on the base commit and require that they fail before the developers start.
@@ -320,12 +325,6 @@ bench images; step 12 needs them.
     build took. *Verify:* `release.sh` passes on the rerun and the scorecard shows the run.
 
 ## Not yet verified
-
-- Whether this sample and the agent-team sample can be installed side by side. Both use the member and template names
-  `aidlc-developer-agent`, `aidlc-architect-agent`, `aidlc-quality-agent` and `aidlc-architecture-reviewer-agent`.
-  `setup.sh` backs up and replaces a template with the same name (cleanup puts it back), and keeps a member that
-  exists in another workspace; the app looks for the team's members in the workspace `vstatd` and holds a role whose
-  member is not there.
 
 - Whether the build container's ThreadSanitizer reports give the absolute path of the check's copy, as the adapter
   expects, or a relative one (D7); both are handled, neither has been seen in a run of the adapter.
