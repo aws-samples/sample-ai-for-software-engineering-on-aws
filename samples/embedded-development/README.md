@@ -75,7 +75,7 @@ may skip Ideation. A reference mapping, to adapt to the scenario:
 | Construction | Code or model changes and tests; build with the cross toolchain; tests in simulation or a twin; back-to-back comparison where code is generated from models | The checks in block 3 decide |
 | Operation | Deploy or flash through guarded tools; validation on an emulator, a bench or a device, labelled by tier; sign-off from one evidence page | Each irreversible hardware action; the engineer who owns the release signs off |
 
-Hardware steps proposed for an embedded AI-DLC plugin named `hw`. A plugin cannot override or remove anything in a
+Hardware steps of the embedded AI-DLC plugin [`hw`](aidlc-plugin/hw/). A plugin cannot override or remove anything in a
 core stage; it adds new stages, and steps and inputs to core stages. In AI-DLC Workflows 2.11.2, Initialization is
 run by AI-DLC itself and a plugin's stages come after the core stages of their phase, so the steps that must come
 earlier are added to a core stage at the right place:
@@ -86,9 +86,12 @@ earlier are added to a core stage at the right place:
 | `hw-knowledge` | Inception | Added to `requirements-analysis`, before the analysis; the requirements cite the fact entries | Datasheets, specifications and interface files turned into fact entries with page and section |
 | `hw-verification-planning` | Inception | New stage, after the core Inception stages | Evidence tier per requirement, requirements that need a real target, coverage and back-to-back tolerances |
 | `hw-model-design` | Construction | Added to `code-generation`, before generation, for units built from a model | Model changes made by the agent in the modelling tool through its MCP server, with model-in-the-loop tests |
-| `hw-simulation-verification` | Construction | New stage at the end of Construction, after `build-and-test`. Not a rewrite of `build-and-test`, which is unchanged apart from an added step: the cross build and the checks before hardware | Simulator and twin runs on the build server, with no deploy to a target; back-to-back comparison of generated code with the model |
+| `hw-simulation-verification` | Construction | New stage at the end of Construction, after `build-and-test`. Not a rewrite of `build-and-test`, which is unchanged apart from added steps: the cross build and the checks before hardware | Simulator and twin runs on the build server, with no deploy to a target; back-to-back comparison of generated code with the model |
 | `hw-bench-deployment` | Operation | New stage. Not a rewrite of `deployment-execution`, which deploys through a CD pipeline and is unchanged | Deploys and flashes to an emulated or real target only through guarded tools, approved for a build digest at an operator console, refused outside safe physical conditions; the checks that need the target, such as a log comparison with a baseline |
 | `hw-evidence-signoff` | Operation | New stage | One evidence page with every result labelled by tier, signed off by the release owner |
+
+The plugin also keeps limits that need a tier above `build-and-test` out of the measurable targets of
+`nfr-requirements` and `nfr-design`, which `build-and-test` would otherwise have to verify.
 
 The five phases and the human gates are what every embedded sample shares. The hardware steps are a reference: a
 sample may use only some of them, and may add steps of its own.
