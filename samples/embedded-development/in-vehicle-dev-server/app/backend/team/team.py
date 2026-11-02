@@ -20,6 +20,7 @@ import json
 import logging
 import re
 import secrets
+import shutil
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -1104,6 +1105,8 @@ class TeamRun:
         log = root / "bench" / f"{step}-{b['n']}.log"
         if step == "doctor":
             return bench_mod.doctor(spec["doctor"], log)
+        if step == "rerun":
+            return self._rerun(b)
         if step == "after":
             return self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), head=b["head"],
                                     results=root / "results" / f"after-{b['n']}", phase="after_bench",
@@ -1138,7 +1141,11 @@ class TeamRun:
             b["after"] = {k: res[k] for k in ("at", "passed", "failed", "total", "checks", "results")}
             self.emit("tests", f"台架之后的检查 {res['passed']}/{res['total']}", data={"checks": [[r["name"], r["verdict"]] for r in res["checks"]]})
             if not res["failed"]:
-                b["step"] = "done"
+                if any(c["when"] == "release" for c in self.team["checks"]):
+                    b["step"] = "rerun"
+                    self.emit("bench", "台架之后的检查都过了：在新的结果目录里从头重跑全部检查，再跑 release.sh")
+                else:
+                    b["step"] = "done"
                 return
             res["cases"] = [{**c, "results": res["results"]} for c in res["cases"]]
             await self._check_bounce(mgr, res)
@@ -1149,6 +1156,46 @@ class TeamRun:
             for k in self.order:  # the fix changes what the reviewer let through: it looks again before the bench
                 if not self.roles[k]["writable"] and self.lane(k)["status"] == "done":
                     self.lane(k).update(status="waiting", passed=False)
+
+        elif step == "rerun":
+            rerun = self.s["rerun"] = res
+            self.emit("tests", f"独立重跑：release.sh {rerun['release']['verdict']}" + (
+                f"，和上一轮结果不同的检查：{'、'.join(d['name'] for d in rerun['differs'])}" if rerun["differs"] else ""),
+                data={"checks": [[r["name"], r["verdict"]] for r in rerun["checks"]], "differs": rerun["differs"]})
+            if rerun["release"]["verdict"] != "PASS":
+                self._bench_hold("独立重跑后 release.sh 没通过：" + "；".join(rerun["release"]["reasons"][:3] or [rerun["release"]["summary"]]))
+                return
+            b["step"] = "done"
+
+    async def _rerun(self, b: dict[str, Any]) -> dict[str, Any]:
+        """D9: every check again on the final commit, in a new results directory (each check builds from ``git archive``
+        into ``<results>/work``, so nothing of an earlier round is used), on the run directory of the last replay
+        (release.sh asks that the after-bench checks judged the build it checked: a fresh replay would need another
+        deploy); then release.sh on it all and the evidence page. Which checks' verdict differs from the run's last."""
+        root, spec = Path(self.s["repo"]).parent, self.team["bench"]
+        results = root / "results" / "rerun"
+        await asyncio.to_thread(shutil.rmtree, results, True)
+        results.mkdir(parents=True)
+        common = {"head": b["head"], "results": results, "triage": root / TRIAGE_FILE, "run": Path(b["run_dir"]),
+                  "baseline": Path(spec["baseline"]).expanduser()}
+        rows = []
+        for phase in ("before_bench", "after_bench"):
+            rows += (await self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), phase=phase, **common))["checks"]
+        limits = {c["name"]: c["max_rounds"] for c in self.team["checks"]}
+        (results / "repair-rounds.json").write_text(json.dumps(  # TR §5.2: the limits in use, with the run
+            {"rounds": self.s["tests"].get("rounds") or {}, "limits": limits}, ensure_ascii=False) + "\n", encoding="utf-8")
+        release = (await self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), phase="release", **common))["checks"]
+        page = None
+        if self.team.get("evidence_page"):
+            page = await checks.evidence_page(self.team["evidence_page"], self.team, results, root / TRIAGE_FILE)
+        last = {r["name"]: r["verdict"] for r in (self.s["tests"].get("checks") or []) + ((b.get("after") or {}).get("checks") or [])}
+        now = {r["name"]: r["verdict"] for r in rows}
+        rel = release[0] if release else {"verdict": "BLOCKED", "reasons": ["团队配置里没有 release 检查"], "summary": ""}
+        return {"at": self.d.now(), "head": b["head"], "results": str(results),
+                "checks": [{k: r[k] for k in ("name", "verdict", "tier", "summary", "reasons")} for r in rows],
+                "differs": [{"name": n, "was": last.get(n), "now": now.get(n)} for n in dict.fromkeys([*last, *now])
+                            if last.get(n) != now.get(n)],
+                "release": {k: rel[k] for k in ("verdict", "summary", "reasons")}, "evidence": str(page) if page else None}
 
     def _bench_hold(self, why: str, commands: list[str] | None = None) -> None:
         """The bench waits for a person: the reason, and the commands they run for it (D10). No automatic retry."""
@@ -1701,14 +1748,20 @@ class TeamRun:
 
     def sign_block(self) -> str:
         """Why this run cannot be signed off ("" when it can): 签字放行 is a person taking responsibility for what the
-        team delivered, so a run that failed or was stopped has nothing to sign."""
+        team delivered, so a run that failed or was stopped has nothing to sign; with a release check, only a
+        release.sh that passed on the independent rerun can be signed (D9)."""
         s = self.s
         if not self.ended:
             return "运行结束以后才能签字"
+        release = (s.get("rerun") or {}).get("release")
+        if release and release["verdict"] != "PASS":  # D9: sign-off only on a release.sh that passed on the rerun
+            return "独立重跑后 release.sh 没通过，不能签字放行：" + ((release["reasons"] or [release["summary"]])[0])[:120]
         if s["status"] == "failed":
             return "运行失败了，没有交付，不能签字放行（可以重试失败的角色）"
         if s["status"] == "stopped":
             return "运行停下了，没有交付，不能签字放行"
+        if any(c["when"] == "release" for c in self.team.get("checks") or []) and not release:
+            return "还没有独立重跑和 release.sh 的结果，不能签字放行"
         return ""
 
     def _planner(self) -> str:

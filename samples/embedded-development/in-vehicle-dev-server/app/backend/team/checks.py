@@ -78,6 +78,9 @@ def check_config(team: dict[str, Any], keys: list[str]) -> None:
         timeout = c.setdefault("timeout_s", DEFAULT_TIMEOUT_S)
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
             raise ValueError(f"team.json：检查 {name} 的 timeout_s 要是正数（秒）")
+    page = team.get("evidence_page")
+    if page is not None and not _words(page):
+        raise ValueError("team.json：evidence_page 要写成命令和参数的列表（checks/evidence-page.sh）")
     bench = team.get("bench")
     if bench is not None and not (isinstance(bench, dict) and set(bench) <= {*BENCH_ACTIONS, *BENCH_TOOLS, "baseline"}
                                   and all(k in bench for k in ("deploy", "replay", "doctor", "baseline"))
@@ -380,3 +383,15 @@ async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: st
                 reasons.append(f"{fid}：测试 {n} 在需求提交 {base[:12]} 上通过了，它要先失败（TR §4.1）")
     out.update(ok=not reasons, reasons=reasons, failed=sorted(n for n in names if ran.get(n)))
     return out
+
+
+async def evidence_page(cmd: list[str], team: dict[str, Any], results: Path, triage: Path) -> Path | None:
+    """checks/evidence-page.sh in the build container: ``<results>/evidence.md`` once written (exit 0), else None."""
+    results = Path(results)
+    sample = Path(cmd[0]).resolve().parents[1]
+    container = f"vstatd-evidence-{uuid.uuid4().hex[:12]}"
+    argv = docker_command(team["check_runner"], [(str(sample), False), (str(results.parents[1]), True)],
+                          [*cmd, "--results", str(results), "--triage", str(triage)], name=container)
+    rc, _ = await _exec(argv, results / "evidence-page.run.log", DEFAULT_TIMEOUT_S, container)
+    page = results / "evidence.md"
+    return page if rc == 0 and page.is_file() else None

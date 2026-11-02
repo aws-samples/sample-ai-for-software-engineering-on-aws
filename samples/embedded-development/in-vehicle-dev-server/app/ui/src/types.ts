@@ -75,12 +75,25 @@ export type RunDetail = {
   issue: Issue // the requirement as the organisation tracks it
   pr: PullRequest | null // the run branch into main: open once the run delivered, merged when a person signs it off
   bench: BenchView | null // the bench actions of a team with a bench (D3, D10); null for a team without one
+  release: ReleaseView | null // the independent rerun and release.sh (D9); null before it ran
+}
+
+/** The independent rerun of every check on the final commit (D9): release.sh's verdict (sign-off needs PASS), the
+ * checks whose verdict differs from the run's last result, and the evidence page (Markdown) for the sign-off dialog. */
+export type ReleaseView = {
+  at: number
+  head: string
+  results: string
+  release: { verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'USAGE'; summary: string; reasons: string[] }
+  checks: { name: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'USAGE'; tier: string | null; summary: string; reasons: string[] }[]
+  differs: { name: string; was: string | null; now: string | null }[]
+  evidence: string | null
 }
 
 /** The bench: the app's step there, what holds it for a person (and the commands they run), doctor.sh's result, the
  * app's own bench actions, and the bench state as the bench writes it (read only). */
 export type BenchView = {
-  step: 'doctor' | 'deploy' | 'replay' | 'after' | 'done' | null
+  step: 'doctor' | 'deploy' | 'replay' | 'after' | 'rerun' | 'done' | null
   running: string | null // the step running in the background
   held: { step: string; why: string; commands: string[]; at: number } | null
   doctor: { ok: boolean; rc: number | null; at: number; fails: string[]; warns: string[]; summary: string } | null

@@ -36,6 +36,7 @@
      "when": "after_bench", "owner": "dev-fix", "max_rounds": 2},
     {"name": "release", "command": ["${sample}/checks/release.sh"], "args": ["project", "triage"], "when": "release"}
   ],
+  "evidence_page": ["${sample}/checks/evidence-page.sh"],
   "bench": {
     "deploy": ["${sample}/bench/cc1.sh", "deploy", "{artifact}"],
     "restart": ["${sample}/bench/cc1.sh", "restart"],

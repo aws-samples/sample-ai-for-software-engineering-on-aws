@@ -76,8 +76,18 @@ json.dump({{"check": "build", "verdict": "PASS", "reasons": [], "summary": "vsta
 """
 
 
+EVIDENCE = """#!{python}
+import json, os, sys
+a = sys.argv[1:]
+res = a[a.index("--results") + 1]
+got = sorted(n[:-5] for n in os.listdir(res) if n.endswith(".json") and n != "repair-rounds.json")
+open(res + "/evidence.md", "w").write("# Evidence page: vstatd\\n\\n" + ", ".join(got) + "\\n")
+"""
+
+
 class Rig:
-    def __init__(self, tmp: Path, monkeypatch, *, cc1=None, doctor="ok", target="known", baseline=True) -> None:
+    def __init__(self, tmp: Path, monkeypatch, *, cc1=None, doctor="ok", target="known", baseline=True,
+                 release=False) -> None:
         self.bench = Bench(tmp, monkeypatch)
         self.state = tmp / "bench-state"
         self.state.mkdir()
@@ -92,7 +102,7 @@ class Rig:
         for k, v in (("CC1_BENCH_STATE", self.state), ("FAKE_CC1", self.spec), ("FAKE_CC1_LOG", self.log)):
             monkeypatch.setenv(k, str(v))
         scripts = {}
-        for name, text in (("cc1.sh", CC1), ("doctor.sh", DOCTOR), ("build-check.sh", BUILD)):
+        for name, text in (("cc1.sh", CC1), ("doctor.sh", DOCTOR), ("build-check.sh", BUILD), ("evidence-page.sh", EVIDENCE)):
             p = tmp / name
             p.write_text(text.format(python=sys.executable), encoding="utf-8")
             p.chmod(0o755)
@@ -101,12 +111,15 @@ class Rig:
         build["command"] = [scripts["build-check.sh"]]
         logdiff = self.bench.check("logdiff", owner="dev", args=["run", "baseline", "triage"], when="after_bench")
         limits = self.bench.check("runtime-limits", owner="dev", args=["run", "baseline"], when="after_bench")
+        more = [self.bench.check("unit", owner="dev"),
+                self.bench.check("release", owner=None, args=["project", "triage"], when="release")] if release else []
         role = lambda key, deps, writable: {"key": key, "title": key, "depends_on": deps, "writable": writable,  # noqa: E731
                                             "brief": f"{key}的活"}
         cc1 = scripts["cc1.sh"]
         team = team_mod.check_team({
             "roles": [role("dev", [], ["src/a.*"]), role("reviewer", ["dev"], [])], "defaults": {"max_fix_rounds": 9},
-            "check_runner": self.bench.runner, "checks": [build, logdiff, limits],
+            "check_runner": self.bench.runner, "checks": [build, *more[:1], logdiff, limits, *more[1:]],
+            **({"evidence_page": [scripts["evidence-page.sh"]]} if release else {}),
             "bench": {"deploy": [cc1, "deploy", "{artifact}"], "replay": [cc1, "replay", "--kind", "run", "--out", "{run}"],
                       "doctor": [scripts["doctor.sh"]], "build": ["/s/bench/build-target.sh"], "start": [cc1, "start"],
                       "baseline": str(self.baseline)}})

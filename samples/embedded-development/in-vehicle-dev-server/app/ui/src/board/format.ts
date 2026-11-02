@@ -84,6 +84,7 @@ export const EVENT_META: Record<TeamEventKind, { icon: string; label: string; to
   plan: { icon: '🗂️', label: '分工提案', tone: 'handoff' },
   member: { icon: '⏸', label: '缺成员', tone: 'warn' },
   talk: { icon: '💬', label: '讨论', tone: 'approve' },
+  bench: { icon: '🔌', label: '台架', tone: 'info' },
 }
 
 export const CASE_META: Record<TestCase['status'], { label: string; glyph: string }> = {

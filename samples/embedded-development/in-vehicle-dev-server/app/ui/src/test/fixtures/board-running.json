@@ -1531,6 +1531,7 @@
     },
     "pr": null,
     "bench": null,
+    "release": null,
     "gate_discuss": false
   }
 }

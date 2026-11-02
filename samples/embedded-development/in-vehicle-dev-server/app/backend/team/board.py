@@ -86,7 +86,27 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "issue": run.issue(),
         "pr": run.pr(),
         "bench": bench_view(run),
+        "release": release_view(run),
     }
+
+
+EVIDENCE_SHOWN = 200_000  # characters of the evidence page the sign-off dialog gets
+
+
+def release_view(run: TeamRun) -> dict[str, Any] | None:
+    """ReleaseView: the independent rerun (D9), release.sh's verdict, the checks whose verdict changed on the rerun,
+    and the evidence page for the sign-off dialog (None before the rerun)."""
+    r = run.s.get("rerun")
+    if not r:
+        return None
+    evidence = None
+    if r.get("evidence"):
+        try:
+            evidence = Path(r["evidence"]).read_text(encoding="utf-8", errors="replace")[:EVIDENCE_SHOWN]
+        except OSError:
+            evidence = None
+    return {"at": r["at"], "head": r["head"], "results": r["results"], "release": dict(r["release"]),
+            "checks": [dict(c) for c in r["checks"]], "differs": [dict(d) for d in r["differs"]], "evidence": evidence}
 
 
 def bench_view(run: TeamRun) -> dict[str, Any] | None:

@@ -166,6 +166,16 @@ differs from the run's last result are counted on the scorecard. The sign-off bu
 Why: the rerun has to be independent of any earlier cache or state; a new directory with no cache, run by the check
 scripts and not by an agent, gives that without a manual step.
 
+How (step 7): the rerun goes into `runs/<run>/results/rerun/`, emptied first. Every check removes and rebuilds its own
+`<results>/work/<check>/` from `git archive HEAD` and none uses a compiler cache (checked in `checks/lib/`), so a new
+results directory is a clean build. The rerun judges the commit the bench deployed, and `logdiff` and `runtime-limits`
+judge the run directory of the last replay: `checks/README.md` does not ask for a fresh replay, and `release.sh`
+requires that the after-deploy checks judged the build it checked, which another replay would only give after another
+deploy approval. The app writes `repair-rounds.json` (rounds used and limits, TR §5.2) into the rerun's results, runs
+`release.sh` there, then `evidence-page.sh`. Checks whose verdict differs from the run's last round are recorded with
+the rerun for the scorecard. A failing `release.sh` holds the run for a person; 重试 reruns everything. The board's
+`release` carries `release.sh`'s verdict, the differing checks and the evidence page's text.
+
 Alternatives considered: a person reruns the checks and hands the results to the app; no rerun.
 
 ### D10. Setup installs the app; the bench images are built by a separate command
