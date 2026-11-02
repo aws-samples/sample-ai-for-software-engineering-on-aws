@@ -29,6 +29,15 @@ def install(built: Path, agents: Path, backup: Path, dry: bool = False) -> list:
     out = []
     if not dry:
         agents.mkdir(parents=True, exist_ok=True)
+    # a template an earlier setup wrote under a name the team no longer uses goes (it stays in the record, which
+    # cleanup reads with every file optional); one setup backed up, and so did not write first, stays
+    names = {f.stem for f in built.glob("*.json")}
+    for name in _listed("templates"):
+        if name not in names and name not in _listed("backed_up") and (agents / f"{name}.json").exists():
+            out.append(f"- {name} (no longer used by the team)")
+            if not dry:
+                for p in (agents / f"{name}.json", agents / f"{name}.lock"):
+                    p.unlink(missing_ok=True)
     for f in sorted(built.glob("*.json")):
         name, dst = f.stem, agents / f.name
         if not dst.exists():

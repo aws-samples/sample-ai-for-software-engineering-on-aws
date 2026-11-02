@@ -60,8 +60,9 @@ for m in "${MEMBERS[@]}"; do
     continue
   fi
   if [ "$DRY" = 1 ]; then would "add $m"; continue; fi
-  desc="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["description"])' "$AGENTS/$m.json")"
-  post /api/agents "$(body name="$m" kiro_agent="$m" workspace="$WORKSPACE" display_name="${desc%% · *}" description="$desc")"
+  tpl="$m-agent"   # the member's template (agents/kiro-crew/make_templates.py): a member may not be named like one
+  desc="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["description"])' "$AGENTS/$tpl.json")"
+  post /api/agents "$(body name="$m" kiro_agent="$tpl" workspace="$WORKSPACE" display_name="${desc%% · *}" description="$desc")"
   state add members "$m"
   echo "   + $m"
 done

@@ -17,6 +17,10 @@ KNOWLEDGE = "vstatd"
 # member name → the AI-DLC expert it runs as, display name, one line in Chinese (what Kiro Crew's Teammates page
 # shows). Names and display names are this team's own: Kiro Crew keeps both unique, and the agent-team sample's
 # members carry the experts' names and the display names 开发, 架构, 质量 and 架构评审.
+#
+# A member's template has a name of its own, <member>-agent: Kiro Crew refuses a member named like any template in
+# ~/.kiro/agents/ (code template_name_in_use), because it keeps the member's own copy of the template under the
+# member's name.
 TEAM = {
     "embedded-developer": ("aidlc-developer-agent", "Embedded 开发", "AI-DLC 开发专家：分诊、修复和重构 vstatd"),
     "embedded-architect": ("aidlc-architect-agent", "Embedded 架构", "AI-DLC 架构专家：重构方案和按源文件分工"),
@@ -59,10 +63,15 @@ def template(name: str, display: str, desc: str, prompt: str, kirocrew: str) -> 
     }
 
 
+def template_name(member: str) -> str:
+    return f"{member}-agent"
+
+
 def build(official: Path, out: Path, kirocrew: str) -> list[Path]:
     out.mkdir(parents=True, exist_ok=True)
     written = []
-    for name, (expert, display, desc) in TEAM.items():
+    for member, (expert, display, desc) in TEAM.items():
+        name = template_name(member)
         path = out / f"{name}.json"
         t = template(name, display, desc, official_prompt(official, expert), kirocrew)
         path.write_text(json.dumps(t, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -81,10 +81,10 @@ def test_the_templates_are_the_four_experts_with_the_vstatd_note(tmp_path):
     r = run_py(SAMPLE / "agents" / "kiro-crew" / "make_templates.py", SAMPLE / "vendor" / "aidlc-workflows" / "agents",
                out, "/opt/kirocrew")
     assert r.returncode == 0 and r.stdout.startswith("4 templates")
-    assert sorted(p.stem for p in out.glob("*.json")) == sorted(MEMBERS)
+    assert sorted(p.stem for p in out.glob("*.json")) == sorted(f"{m}-agent" for m in MEMBERS)  # not a member's name
     for name in MEMBERS:
-        t = json.loads((out / f"{name}.json").read_text(encoding="utf-8"))
-        assert t["name"] == name and " · AI-DLC " in t["description"]
+        t = json.loads((out / f"{name}-agent.json").read_text(encoding="utf-8"))
+        assert t["name"] == f"{name}-agent" and t["description"].startswith("Embedded ") and " · AI-DLC " in t["description"]
         assert t["tools"] == t["allowedTools"] == ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"]
         assert t["mcpServers"] == {"kirocrew-core": {"command": "/opt/kirocrew", "args": ["mcp-core"]}}
         official = (SAMPLE / "vendor" / "aidlc-workflows" / "agents" / f"{EXPERTS[name]}.md").read_text(encoding="utf-8")
@@ -112,36 +112,54 @@ def test_a_template_with_the_same_name_is_backed_up_once_and_put_back(home):
                built, "/opt/kirocrew")
     assert r.returncode == 0
     agents.mkdir(parents=True)
-    theirs = '{"name": "embedded-developer", "prompt": "another sample\'s"}\n'
-    (agents / "embedded-developer.json").write_text(theirs, encoding="utf-8")  # e.g. one a person wrote
-    same = (built / "embedded-quality.json").read_text(encoding="utf-8")
-    (agents / "embedded-quality.json").write_text(same, encoding="utf-8")  # already there, identical: not setup's
+    theirs = '{"name": "embedded-developer-agent", "prompt": "another sample\'s"}\n'
+    (agents / "embedded-developer-agent.json").write_text(theirs, encoding="utf-8")  # e.g. one a person wrote
+    same = (built / "embedded-quality-agent.json").read_text(encoding="utf-8")
+    (agents / "embedded-quality-agent.json").write_text(same, encoding="utf-8")  # already there, identical: not setup's
     (agents / "other-agent.json").write_text("{}\n", encoding="utf-8")
 
     plan = run_py(SCRIPTS / "templates.py", "plan", built, agents, backup, env=env)
     assert plan.returncode == 0 and not backup.exists() and not home["state"].exists()  # a plan changes nothing
-    assert (agents / "embedded-developer.json").read_text() == theirs
+    assert (agents / "embedded-developer-agent.json").read_text() == theirs
     first = run_py(SCRIPTS / "templates.py", "install", built, agents, backup, env=env).stdout.splitlines()
     assert plan.stdout.splitlines() == first
-    assert "= embedded-quality (unchanged)" in first and "+ embedded-architect" in first
-    assert any(ln.startswith("~ embedded-developer: exists with other content, backed up") for ln in first)
-    assert (backup / "embedded-developer.json").read_text() == theirs
-    assert (agents / "embedded-developer.json").read_text() == (built / "embedded-developer.json").read_text()
+    assert "= embedded-quality-agent (unchanged)" in first and "+ embedded-architect-agent" in first
+    assert any(ln.startswith("~ embedded-developer-agent: exists with other content, backed up") for ln in first)
+    assert (backup / "embedded-developer-agent.json").read_text() == theirs
+    assert (agents / "embedded-developer-agent.json").read_text() == (built / "embedded-developer-agent.json").read_text()
     state = json.loads(home["state"].read_text())
-    assert sorted(state["templates"]) == ["embedded-architect", "embedded-architecture-reviewer"]
-    assert state["backed_up"] == ["embedded-developer"]
+    assert sorted(state["templates"]) == ["embedded-architect-agent", "embedded-architecture-reviewer-agent"]
+    assert state["backed_up"] == ["embedded-developer-agent"]
 
     again = run_py(SCRIPTS / "templates.py", "install", built, agents, backup, env=env).stdout.splitlines()
     assert all(ln.endswith("(unchanged)") for ln in again) and json.loads(home["state"].read_text()) == state
-    (agents / "embedded-developer.json").write_text('{"edited": true}\n', encoding="utf-8")
-    assert "~ embedded-developer (updated)" in run_py(SCRIPTS / "templates.py", "install", built, agents, backup,
+    (agents / "embedded-developer-agent.json").write_text('{"edited": true}\n', encoding="utf-8")
+    assert "~ embedded-developer-agent (updated)" in run_py(SCRIPTS / "templates.py", "install", built, agents, backup,
                                                          env=env).stdout  # the backup of theirs is kept, not this
-    assert (backup / "embedded-developer.json").read_text() == theirs
+    assert (backup / "embedded-developer-agent.json").read_text() == theirs
 
     gone = run_py(SCRIPTS / "templates.py", "remove", agents, backup, env=env).stdout.splitlines()
-    assert sorted(gone) == ["- embedded-architect", "- embedded-architecture-reviewer", "< embedded-developer (put back)"]
-    assert sorted(p.name for p in agents.iterdir()) == ["embedded-developer.json", "embedded-quality.json", "other-agent.json"]
-    assert (agents / "embedded-developer.json").read_text() == theirs and not backup.exists()
+    assert sorted(gone) == ["- embedded-architect-agent", "- embedded-architecture-reviewer-agent", "< embedded-developer-agent (put back)"]
+    assert sorted(p.name for p in agents.iterdir()) == ["embedded-developer-agent.json", "embedded-quality-agent.json", "other-agent.json"]
+    assert (agents / "embedded-developer-agent.json").read_text() == theirs and not backup.exists()
+
+
+def test_a_template_an_earlier_setup_wrote_under_an_old_name_goes(home):
+    env, tmp = home["env"], home["tmp"]
+    built, agents, backup = tmp / "built", home["home"] / ".kiro" / "agents", home["home"] / ".kiro" / "agents" / ".bk"
+    assert run_py(SAMPLE / "agents" / "kiro-crew" / "make_templates.py", SAMPLE / "vendor" / "aidlc-workflows" / "agents",
+                  built, "/opt/kirocrew").returncode == 0
+    agents.mkdir(parents=True)
+    for old in ("embedded-developer", "vstatd-quality"):  # names earlier versions of setup used, recorded as its own
+        (agents / f"{old}.json").write_text("{}\n", encoding="utf-8")
+        run_py(SCRIPTS / "state.py", "add", "templates", old, env=env)
+    (agents / "embedded-quality.json").write_text("{}\n", encoding="utf-8")  # not recorded: not setup's, stays
+    plan = run_py(SCRIPTS / "templates.py", "plan", built, agents, backup, env=env).stdout.splitlines()
+    assert "- embedded-developer (no longer used by the team)" in plan and (agents / "embedded-developer.json").exists()
+    out = run_py(SCRIPTS / "templates.py", "install", built, agents, backup, env=env).stdout.splitlines()
+    assert out == plan and "- vstatd-quality (no longer used by the team)" in out
+    assert not (agents / "embedded-developer.json").exists() and not (agents / "vstatd-quality.json").exists()
+    assert (agents / "embedded-quality.json").exists() and (agents / "embedded-developer-agent.json").exists()
 
 
 @pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
