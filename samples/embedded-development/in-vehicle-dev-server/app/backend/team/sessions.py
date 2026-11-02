@@ -9,7 +9,9 @@ carry what ``agent_fields`` below reads. Tests pass a fake with the same surface
 
 A role may name the Crew member it is (``member``, e.g. ``aidlc-product-agent`` of the 「代理」 page): its session boots
 that member's template (prompt, tools, model). A member that is not there (deleted, not added yet) falls back to the
-template file of the same name, else to Crew's default agent; ``agent_kind`` says which it got.
+template file of the same name, else to Crew's default agent; ``agent_kind`` says which it got. A role that names a
+``template`` instead (the vstatd team) asks for a member of that name first too: Kiro Crew refuses a member named like a
+template, so its session boots the template.
 
 What a session takes (checked by ``scripts/probe-sessions.py``): ``POST /api/chat/slots`` in the run's folder, then
 its project directory set to the role's worktree (the agent's cwd), then ``trust`` for that one slot (the app holds

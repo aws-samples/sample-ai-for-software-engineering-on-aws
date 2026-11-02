@@ -105,12 +105,12 @@ code base, but every change here would have to keep an available sample green); 
 
 No role deploys: the app runs the bench actions (D3), and the release owner signs off.
 
-The members are named `embedded-developer`, `embedded-architect`, `embedded-quality` and
-`embedded-architecture-reviewer`, shown as 「Embedded 开发」, 「Embedded 架构」, 「Embedded 质量」 and 「Embedded 架构评审」; their
-templates are `<member>-agent`, each built from the expert's definition. Kiro Crew 0.12 keeps a member's name and
-display name unique, and refuses a member named like any template in `~/.kiro/agents/` (`template_name_in_use`). The agent-team sample's members carry the
-experts' own names; with the same names, installing this sample would replace that sample's templates, and a member
-already in its workspace would leave the role here without a member.
+The roles run as Kiro agent templates, not as Kiro Crew members: `embedded-developer-agent`,
+`embedded-architect-agent`, `embedded-quality-agent` and `embedded-architecture-reviewer-agent` (descriptions 「Embedded
+开发」 and so on), each built from the expert's definition; a role's session boots its template. Kiro Crew 0.12 builds a
+new member from its own worker and refuses one built from a template (`mate_template_unsupported`), and refuses a member
+named like any template (`template_name_in_use`). The agent-team sample's templates carry the experts' own names, so the
+two samples install side by side.
 
 Why tests first: TR §4.1 asks that a test fails before its fix, which `unit.sh` cannot see. With the tester's tests
 written first, the app can run them on the base commit and require that they fail before the developers start.
@@ -196,7 +196,7 @@ Alternatives considered: a person reruns the checks and hands the results to the
 
 ### D10. Setup installs the app; the bench images are built by a separate command
 
-`setup.sh` installs the app, the knowledge source and the members, in about the time the agent-team setup takes. The
+`setup.sh` installs the app, the knowledge source and the agent templates, in about the time the agent-team setup takes. The
 build environment, the CC-1 image and sysroot, and the QEMU runner are built by a separate command. The board shows
 the result of `bench/doctor.sh` and, while the bench is not ready, what is missing and the command that builds it.
 Until then a run goes on with triage, architecture, tests, development and the checks that do not need the bench; it
@@ -218,7 +218,7 @@ in D7; the reviewer looks again, and the bench starts over with the new build.
 
 How (step 10): `setup.sh` checks Docker, git, Python, Node 22 and Kiro Crew, builds the board and installs the app
 with `app/scripts/dev-install.sh`, writes `sample.json` into the app's data directory, and runs
-`scripts/install-team.sh` (knowledge copy, the four templates, the workspace `vstatd`, its members, the knowledge source
+`scripts/install-team.sh` (knowledge copy, the four templates, the knowledge source
 `vstatd`); it ends with the commands for the build container (`vstatd-build:amd64`, the image the team file's check
 runner names) and the bench. The app's data directory is `~/.kiro/crew/apps/<app>/data/`: on this machine the
 installed agent-team app keeps its `runs/` and `sessions.json` there (2026-11-02). `setup.sh --dry-run` changes

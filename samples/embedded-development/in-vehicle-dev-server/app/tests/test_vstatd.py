@@ -25,10 +25,11 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     t = team_mod.load_team(constants.TEAM_FILE)
     roles = {r["key"]: r for r in t["roles"]}
     assert list(roles) == ["triage", "architect", "tester", "dev-fix", "dev-refactor", "reviewer"]
-    assert {k: r["member"] for k, r in roles.items()} == {
-        "triage": "embedded-developer", "architect": "embedded-architect", "tester": "embedded-quality",
-        "dev-fix": "embedded-developer", "dev-refactor": "embedded-developer",
-        "reviewer": "embedded-architecture-reviewer"}
+    assert {k: r["template"] for k, r in roles.items()} == {
+        "triage": "embedded-developer-agent", "architect": "embedded-architect-agent", "tester": "embedded-quality-agent",
+        "dev-fix": "embedded-developer-agent", "dev-refactor": "embedded-developer-agent",
+        "reviewer": "embedded-architecture-reviewer-agent"}
+    assert not any(r.get("member") for r in roles.values())  # no Crew members (D6): the sessions run the templates
     assert [k for k, r in roles.items() if r.get("gate") == "human"] == ["triage", "architect"]
     assert {r["phase"] for r in t["roles"]} == {"inception", "construction", "review"}
     assert roles["reviewer"]["writable"] == [] and set(roles["reviewer"]["depends_on"]) == {"dev-fix", "dev-refactor"}
@@ -38,7 +39,7 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     assert "docs/aidlc/triage.json" in roles["triage"]["writable"]
     assert roles["triage"]["triage"] == {"file": "docs/aidlc/triage.json", "knowledge": "${sample}/knowledge"}
     assert all(g.startswith("docs/aidlc/") for k in ("triage", "architect") for g in roles[k]["writable"])
-    assert t["source"] == "${sample}/reference-project" and t["workspace"] == "vstatd"
+    assert t["source"] == "${sample}/reference-project" and "workspace" not in t
     assert t["knowledge"] == {"source": "vstatd", "data_dir": "~/workplace/vstatd"}
     checks = {c["name"]: c for c in t["checks"]}
     assert list(checks) == ["build", "static", "unit", "size", "trace", "runtime-limits", "logdiff", "release"]

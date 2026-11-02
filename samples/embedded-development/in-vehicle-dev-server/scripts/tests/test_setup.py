@@ -164,25 +164,23 @@ def test_a_template_an_earlier_setup_wrote_under_an_old_name_goes(home):
 
 @pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
 def test_setup_dry_run_says_what_it_would_do_and_writes_nothing(home):
-    crew(home, agents=[{"name": "embedded-developer", "workspace": "taoyuan"}])
+    crew(home)
     r = subprocess.run(["bash", str(SAMPLE / "setup.sh"), "--dry-run"], capture_output=True, text=True, env=home["env"])
     assert r.returncode == 0, r.stdout + r.stderr
     out = r.stdout
     assert "Kiro Crew 0.12.0-test" in out and "would build the board and install the app vstatd-team" in out
     assert "would record this folder in" in out and "data/sample.json" in out
-    assert "would create it (folder" in out
-    assert "! embedded-developer exists in the workspace taoyuan" in out and "would add embedded-quality" in out
-    assert "+ embedded-architect" in out and "would add it (" in out
+    assert "+ embedded-architect-agent" in out and "would add it (" in out
+    assert "workspace" not in out.split("[3/5]")[1].split("[4/5]")[0] and "members" not in out  # no members (D6)
     assert "docker build --platform linux/amd64 -t vstatd-build:amd64 reference-project/tools/" in out
     assert "bench/build-target.sh" in out and "Dry run: nothing was changed." in out
     assert {c[0] for c in calls(home)} == {"GET"}  # read only
     assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and not (home["home"] / "workplace").exists()
 
-    crew(home, apps={"name": "vstatd-team"}, workspaces=[{"name": "vstatd"}], sources=[{"name": "vstatd"}],
-         agents=[{"name": m, "workspace": "vstatd"} for m in MEMBERS])
+    crew(home, apps={"name": "vstatd-team"}, sources=[{"name": "vstatd"}])
     again = subprocess.run(["bash", str(SAMPLE / "setup.sh"), "--dry-run"], capture_output=True, text=True, env=home["env"]).stdout
     assert "would update the app vstatd-team in place" in again
-    assert again.count(" exists\n") == 2 + len(MEMBERS)  # the workspace, the knowledge source, the members
+    assert again.count(" exists\n") == 1  # the knowledge source
 
 
 def test_cleanup_dry_run_lists_exactly_what_setup_recorded(home):

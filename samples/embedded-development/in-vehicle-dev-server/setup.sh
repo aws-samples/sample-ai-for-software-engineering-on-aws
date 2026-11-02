@@ -73,7 +73,7 @@ else
   ok "scenario folder recorded for the app: $ROOT"
 fi
 
-step 3/5 "The team: knowledge, members and their templates"
+step 3/5 "The team: knowledge and agent templates"
 TEAM_ARGS=""; [ "$DRY" = 1 ] && TEAM_ARGS=--dry-run
 if ! bash "$ROOT/scripts/install-team.sh" ${TEAM_ARGS:+"$TEAM_ARGS"} 2>&1 | sed 's/^/     /'; then
   bad "the team is not installed"; exit 1

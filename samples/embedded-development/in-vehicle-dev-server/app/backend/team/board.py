@@ -211,7 +211,7 @@ def lane(run: TeamRun, key: str, *, mgr: Any, scrub: Callable[[str], str], now: 
         "icon": str(role.get("icon") or key),
         "assignment": run.assignment(key),
         "doing": str((att or {}).get("label") or run.assignment(key)),
-        "member": role.get("member") or "", "member_kind": _member_kind(atts, mgr),
+        "member": role.get("member") or role.get("template") or "", "member_kind": _member_kind(atts, mgr),
         "optional": bool(role.get("optional")), "overrule": bool(ln.get("overrule")),
         "awaiting_member": str(ln.get("awaiting_member") or "") or None,
         "delivery_gate": bool(role.get("delivery")),

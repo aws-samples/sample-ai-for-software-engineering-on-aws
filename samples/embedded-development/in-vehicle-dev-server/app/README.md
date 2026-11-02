@@ -1,8 +1,8 @@
 # vstatd-team: the Kiro Crew app
 
 The app takes the scenario's work item through an agent team defined by a team file
-([team/team-vstatd.json](team/team-vstatd.json)). Every role is a Kiro Crew chat session running as a Kiro Crew
-member, working in its own git worktree and branch. The app dispatches the roles by their dependencies, merges their
+([team/team-vstatd.json](team/team-vstatd.json)). Every role is a Kiro Crew chat session running a Kiro agent
+template, working in its own git worktree and branch. The app dispatches the roles by their dependencies, merges their
 work, runs the scenario's checks itself, sends failures back to the role that owns the file, stops at human gates, runs
 the bench actions through `bench/cc1.sh` (each one approved at the operator console), reruns every check before
 sign-off, and draws all of it on a live board. A finished run can be replayed and signed off.
@@ -55,7 +55,7 @@ Team level:
 | `roles` | The roles; a role comes after the roles it depends on |
 | `source` / `needs_source` | The project the team changes (`${sample}/reference-project`) / a project folder must be given |
 | `knowledge` `{source, data_dir}` | The Kiro Crew knowledge source name (`vstatd`); where its files are on disk |
-| `workspace` | The Kiro Crew workspace of the members; a role whose member is not there is held |
+| `workspace` | The Kiro Crew workspace of the members; a role whose member is not there is held (the vstatd team has none) |
 | `task_template` | Task template in `team/` |
 | `ownership` `{file, from}` | The work split file and the role that writes it; roles with `writable_from` get their write scope from it |
 | `check_runner` `{docker, image}` | The build container the checks run in: the `docker run` command line and the image |
@@ -71,7 +71,7 @@ Role level:
 | Key | Meaning |
 | --- | --- |
 | `key`, `title`, `icon`, `phase`, `stage`, `mission` | Name and place on the board (`phase` is the AI-DLC phase) |
-| `member`, `aidlc_agent` | The Kiro Crew member the session runs as; the AI-DLC expert it stands for |
+| `member` or `template`, `aidlc_agent` | The Kiro Crew member the session runs as, or the Kiro agent template it runs without a member (the vstatd team); the AI-DLC expert it stands for |
 | `depends_on`, `writable`, `writable_from`, `outputs` | Whom it waits for; paths it may write (`!` excludes), or `ownership` for the work split's; outputs handed downstream |
 | `brief` | The task |
 | `gate: "human"`, `gate_label` | A human gate after this role and its label |

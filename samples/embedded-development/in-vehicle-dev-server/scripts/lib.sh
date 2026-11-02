@@ -57,8 +57,10 @@ APP_LABEL="车载平台服务 · AI-DLC 团队"
 APP_DATA="$HOME/.kiro/crew/apps/$APP"           # the installed app; its data directory (runs, sessions) is data/
 RUNS="$HOME/workplace/$APP"                       # every run's repository, worktrees and results, and the baseline
 TEAM_HOME="$HOME/workplace/vstatd"                # the knowledge copy the knowledge source indexes
-WORKSPACE=vstatd                                  # the Kiro Crew workspace of the team's members
+WORKSPACE=vstatd                                  # a Kiro Crew workspace an earlier setup created; cleanup.sh removes it
 KNOWLEDGE=vstatd                                  # the Kiro Crew knowledge source (the team file names it)
-MEMBERS=(embedded-developer embedded-architect embedded-quality embedded-architecture-reviewer)
+# The team's agent templates (agents/kiro-crew/make_templates.py). The roles' sessions run them directly, with no Kiro
+# Crew member: Kiro Crew 0.12 builds a new member from its own worker, not from a template (mate_template_unsupported).
+TEMPLATES=(embedded-developer-agent embedded-architect-agent embedded-quality-agent embedded-architecture-reviewer-agent)
 AGENTS="$HOME/.kiro/agents"
 BACKUP="$AGENTS/.vstatd-team-sample-backup"       # templates setup replaced, put back by cleanup.sh

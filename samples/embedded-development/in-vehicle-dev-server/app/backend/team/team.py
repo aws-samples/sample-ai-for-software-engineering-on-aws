@@ -119,6 +119,12 @@ def check_team(team: Any) -> dict[str, Any]:
             r["writable"] = [PENDING_GLOB]
         if r.get("member") is not None and not (isinstance(r["member"], str) and re.fullmatch(r"[A-Za-z0-9][\w.-]{0,63}", r["member"])):
             raise ValueError(f"team.json：{r['key']} 的 member 要是 Crew 成员的名字")
+        # template: a Kiro agent template of ~/.kiro/agents the role's session runs, without a Crew member (Kiro
+        # Crew 0.12 builds a new member from its own worker, not from a template)
+        if r.get("template") is not None and not (isinstance(r["template"], str) and re.fullmatch(r"[A-Za-z0-9][\w.-]{0,63}", r["template"])):
+            raise ValueError(f"team.json：{r['key']} 的 template 要是 ~/.kiro/agents 里模板的名字")
+        if r.get("member") and r.get("template"):
+            raise ValueError(f"team.json：{r['key']} 只能写 member 或 template 其中一个")
     own = team.get("ownership")
     if own is not None and (not isinstance(own, dict) or own.get("from") not in keys or not isinstance(own.get("file"), str)):
         raise ValueError("team.json：ownership 要写明分工文件 file 和由谁写 from")
@@ -632,7 +638,7 @@ class TeamRun:
         task = att["task"] if att["kind"] == "work" else self._with_context(key, att["task"])
         return mgr.spawn_session(task, parent_session_key=self.parent, cwd=lane["worktree"], model=model,
                                  title=f"{self.title(key)} agent", folder=f"{self.s['title'][:24]} · {self.rid}",
-                                 agent=role.get("member") or "")
+                                 agent=role.get("member") or role.get("template") or "")
 
     async def _refresh(self, key: str, att: dict[str, Any], f: dict[str, Any]) -> None:
         lane, now = self.lane(key), self.d.now()

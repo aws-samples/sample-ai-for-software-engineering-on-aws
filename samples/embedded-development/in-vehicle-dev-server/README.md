@@ -198,8 +198,9 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 
 [`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (车载平台服务 · AI-DLC 团队), modelled on the
 [agent-team sample](../../agent-team-on-kiro-crew/). It takes the work item through AI-DLC with six roles, each a Kiro
-Crew session running as one of four AI-DLC experts. The members are named `embedded-developer`, `embedded-architect`,
-`embedded-quality` and `embedded-architecture-reviewer`, so that this sample installs beside the agent-team sample:
+Crew session running one of four AI-DLC experts as a Kiro agent template (`embedded-developer-agent`,
+`embedded-architect-agent`, `embedded-quality-agent`, `embedded-architecture-reviewer-agent`). The team has no Kiro Crew
+members: Kiro Crew 0.12 builds a member from its own worker, not from a template:
 
 | Role | Expert | What it does | Gate after it |
 | --- | --- | --- | --- |
@@ -226,7 +227,7 @@ were real changes of behaviour and the defects found later (the app records neit
 
 On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
 
-1. Install the app, its knowledge source `vstatd` and the team's members: `bash setup.sh` in this folder. It asks once
+1. Install the app, its knowledge source `vstatd` and the team's agent templates: `bash setup.sh` in this folder. It asks once
    whether the sessions the app opens may approve their own tool calls; read [Guardrails](#guardrails) first.
    `bash setup.sh --dry-run` says what it would do and changes nothing. Keep this folder where it is: the app runs the
    checks and the bench from it.
@@ -266,7 +267,7 @@ bench's physical gate, and goes to the action record; sign-off is possible only 
 independent rerun.
 
 What it does not enforce. If you agree during setup, the app sets **the sessions it opens** to auto-approve their tool
-calls, and the members' templates allow file reads and writes and shell commands. An agent's shell then has three paths
+calls, and the roles' templates allow file reads and writes and shell commands. An agent's shell then has three paths
 around the bench's guardrails:
 
 1. It can reach the emulated target without the app or the console: `docker exec` into the bench's runner container,
@@ -349,7 +350,7 @@ been dry-run once.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
    Record the time and credits it used.
-8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its members' templates, `setup.sh` and `cleanup.sh`. *In
+8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its roles' templates, `setup.sh` and `cleanup.sh`. *In
    development:* steps 1 to 11 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan) are done; one
    delivery end to end (step 12) is not.
 
@@ -365,9 +366,9 @@ identifiers; no `--trust-all-tools`.
 | `knowledge/` | Synthetic interface specification, CAN database, VSS mapping, platform notes, fact entries, team rules, findings backlog, consistency check |
 | `checks/` | The seven checks, the release check, the evidence page generator, their limits and their tests |
 | `mcp/` | `build` and `bench` servers and their guardrail tests |
-| `agents/` | `kiro-crew/make_templates.py`, the Kiro Crew members' templates; to come (item 6): the Kiro configurations, the bypass hook, the permission probe test |
+| `agents/` | `kiro-crew/make_templates.py`, the roles' Kiro agent templates; to come (item 6): the Kiro configurations, the bypass hook, the permission probe test |
 | `app/` | The Kiro Crew app `vstatd-team`: orchestrator, board and scorecard ([app/README.md](app/README.md)) |
-| `vendor/` | The four AI-DLC expert definitions the members use, unmodified ([vendor/aidlc-workflows/SOURCE.md](vendor/aidlc-workflows/SOURCE.md)) |
+| `vendor/` | The four AI-DLC expert definitions the templates use, unmodified ([vendor/aidlc-workflows/SOURCE.md](vendor/aidlc-workflows/SOURCE.md)) |
 | `scripts/` | What `setup.sh` and `cleanup.sh` share: the install record, the templates, the team's install, and their tests |
 | `docs/` | Design notes of the Kiro Crew app ([docs/kiro-crew-app.md](docs/kiro-crew-app.md)) |
 | `setup.sh`, `cleanup.sh` | Install the Kiro Crew app into the local Kiro Crew; remove what setup recorded |
@@ -435,8 +436,8 @@ the cost is the model usage of Kiro or Kiro Crew for one batch (see [Kiro pricin
 
 ## Cleanup
 
-`bash cleanup.sh` removes what `setup.sh` recorded: the app with its data and run repositories, the members, the
-workspace, the knowledge source and its copy, and the agent templates it added; it puts back the templates it replaced.
+`bash cleanup.sh` removes what `setup.sh` recorded: the app with its data and run repositories, any members and
+workspace an earlier setup created, the knowledge source and its copy, and the agent templates it added; it puts back the templates it replaced.
 `--dry-run` lists them. It leaves the build container, the bench's images and volumes, the bench state
 (`~/.cc1-bench`) and the baseline, and prints the commands of [bench/README.md](bench/README.md#cleanup) that remove
 them.
