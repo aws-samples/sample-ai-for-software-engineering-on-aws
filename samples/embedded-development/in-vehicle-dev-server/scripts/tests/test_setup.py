@@ -14,8 +14,8 @@ import pytest
 
 SAMPLE = Path(__file__).resolve().parents[2]
 SCRIPTS = SAMPLE / "scripts"
-EXPERTS = {"vstatd-developer": "aidlc-developer-agent", "vstatd-architect": "aidlc-architect-agent",
-           "vstatd-quality": "aidlc-quality-agent", "vstatd-architecture-reviewer": "aidlc-architecture-reviewer-agent"}
+EXPERTS = {"embedded-developer": "aidlc-developer-agent", "embedded-architect": "aidlc-architect-agent",
+           "embedded-quality": "aidlc-quality-agent", "embedded-architecture-reviewer": "aidlc-architecture-reviewer-agent"}
 MEMBERS = list(EXPERTS)
 
 KCAPI = """#!/usr/bin/env python3
@@ -112,49 +112,49 @@ def test_a_template_with_the_same_name_is_backed_up_once_and_put_back(home):
                built, "/opt/kirocrew")
     assert r.returncode == 0
     agents.mkdir(parents=True)
-    theirs = '{"name": "vstatd-developer", "prompt": "another sample\'s"}\n'
-    (agents / "vstatd-developer.json").write_text(theirs, encoding="utf-8")  # e.g. one a person wrote
-    same = (built / "vstatd-quality.json").read_text(encoding="utf-8")
-    (agents / "vstatd-quality.json").write_text(same, encoding="utf-8")  # already there, identical: not setup's
+    theirs = '{"name": "embedded-developer", "prompt": "another sample\'s"}\n'
+    (agents / "embedded-developer.json").write_text(theirs, encoding="utf-8")  # e.g. one a person wrote
+    same = (built / "embedded-quality.json").read_text(encoding="utf-8")
+    (agents / "embedded-quality.json").write_text(same, encoding="utf-8")  # already there, identical: not setup's
     (agents / "other-agent.json").write_text("{}\n", encoding="utf-8")
 
     plan = run_py(SCRIPTS / "templates.py", "plan", built, agents, backup, env=env)
     assert plan.returncode == 0 and not backup.exists() and not home["state"].exists()  # a plan changes nothing
-    assert (agents / "vstatd-developer.json").read_text() == theirs
+    assert (agents / "embedded-developer.json").read_text() == theirs
     first = run_py(SCRIPTS / "templates.py", "install", built, agents, backup, env=env).stdout.splitlines()
     assert plan.stdout.splitlines() == first
-    assert "= vstatd-quality (unchanged)" in first and "+ vstatd-architect" in first
-    assert any(ln.startswith("~ vstatd-developer: exists with other content, backed up") for ln in first)
-    assert (backup / "vstatd-developer.json").read_text() == theirs
-    assert (agents / "vstatd-developer.json").read_text() == (built / "vstatd-developer.json").read_text()
+    assert "= embedded-quality (unchanged)" in first and "+ embedded-architect" in first
+    assert any(ln.startswith("~ embedded-developer: exists with other content, backed up") for ln in first)
+    assert (backup / "embedded-developer.json").read_text() == theirs
+    assert (agents / "embedded-developer.json").read_text() == (built / "embedded-developer.json").read_text()
     state = json.loads(home["state"].read_text())
-    assert sorted(state["templates"]) == ["vstatd-architect", "vstatd-architecture-reviewer"]
-    assert state["backed_up"] == ["vstatd-developer"]
+    assert sorted(state["templates"]) == ["embedded-architect", "embedded-architecture-reviewer"]
+    assert state["backed_up"] == ["embedded-developer"]
 
     again = run_py(SCRIPTS / "templates.py", "install", built, agents, backup, env=env).stdout.splitlines()
     assert all(ln.endswith("(unchanged)") for ln in again) and json.loads(home["state"].read_text()) == state
-    (agents / "vstatd-developer.json").write_text('{"edited": true}\n', encoding="utf-8")
-    assert "~ vstatd-developer (updated)" in run_py(SCRIPTS / "templates.py", "install", built, agents, backup,
+    (agents / "embedded-developer.json").write_text('{"edited": true}\n', encoding="utf-8")
+    assert "~ embedded-developer (updated)" in run_py(SCRIPTS / "templates.py", "install", built, agents, backup,
                                                          env=env).stdout  # the backup of theirs is kept, not this
-    assert (backup / "vstatd-developer.json").read_text() == theirs
+    assert (backup / "embedded-developer.json").read_text() == theirs
 
     gone = run_py(SCRIPTS / "templates.py", "remove", agents, backup, env=env).stdout.splitlines()
-    assert sorted(gone) == ["- vstatd-architect", "- vstatd-architecture-reviewer", "< vstatd-developer (put back)"]
-    assert sorted(p.name for p in agents.iterdir()) == ["other-agent.json", "vstatd-developer.json", "vstatd-quality.json"]
-    assert (agents / "vstatd-developer.json").read_text() == theirs and not backup.exists()
+    assert sorted(gone) == ["- embedded-architect", "- embedded-architecture-reviewer", "< embedded-developer (put back)"]
+    assert sorted(p.name for p in agents.iterdir()) == ["other-agent.json", "embedded-developer.json", "embedded-quality.json"]
+    assert (agents / "embedded-developer.json").read_text() == theirs and not backup.exists()
 
 
 @pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
 def test_setup_dry_run_says_what_it_would_do_and_writes_nothing(home):
-    crew(home, agents=[{"name": "vstatd-developer", "workspace": "taoyuan"}])
+    crew(home, agents=[{"name": "embedded-developer", "workspace": "taoyuan"}])
     r = subprocess.run(["bash", str(SAMPLE / "setup.sh"), "--dry-run"], capture_output=True, text=True, env=home["env"])
     assert r.returncode == 0, r.stdout + r.stderr
     out = r.stdout
     assert "Kiro Crew 0.12.0-test" in out and "would build the board and install the app vstatd-team" in out
     assert "would record this folder in" in out and "data/sample.json" in out
     assert "would create it (folder" in out
-    assert "! vstatd-developer exists in the workspace taoyuan" in out and "would add vstatd-quality" in out
-    assert "+ vstatd-architect" in out and "would add it (" in out
+    assert "! embedded-developer exists in the workspace taoyuan" in out and "would add embedded-quality" in out
+    assert "+ embedded-architect" in out and "would add it (" in out
     assert "docker build --platform linux/amd64 -t vstatd-build:amd64 reference-project/tools/" in out
     assert "bench/build-target.sh" in out and "Dry run: nothing was changed." in out
     assert {c[0] for c in calls(home)} == {"GET"}  # read only
@@ -173,15 +173,15 @@ def test_cleanup_dry_run_lists_exactly_what_setup_recorded(home):
     first = subprocess.run(sh, capture_output=True, text=True, env=env)
     assert first.returncode == 0 and "nothing: setup.sh has recorded nothing in this folder" in first.stdout
     assert "docker volume rm cc1-images" in first.stdout and "rm -rf ~/.cc1-bench" in first.stdout
-    for key, value in (("created", "workspace"), ("created", "team_home"), ("members", "vstatd-quality"),
-                       ("templates", "vstatd-architect"), ("backed_up", "vstatd-developer")):
+    for key, value in (("created", "workspace"), ("created", "team_home"), ("members", "embedded-quality"),
+                       ("templates", "embedded-architect"), ("backed_up", "embedded-developer")):
         run_py(SCRIPTS / "state.py", "add", key, value, env=env)
     out = subprocess.run(sh, capture_output=True, text=True, env=env).stdout
     listed = [ln.strip() for ln in out.split("This removes what setup.sh created here:")[1].split("(dry run")[0].splitlines() if ln.strip().startswith("- ")]
     home_ = env["HOME"]
-    assert listed == ["- 1 Kiro Crew members: vstatd-quality", "- the Kiro Crew workspace vstatd",
-                      f"- 1 agent templates in {home_}/.kiro/agents/: vstatd-architect",
-                      "- and puts back 1 agent templates it replaced: vstatd-developer",
+    assert listed == ["- 1 Kiro Crew members: embedded-quality", "- the Kiro Crew workspace vstatd",
+                      f"- 1 agent templates in {home_}/.kiro/agents/: embedded-architect",
+                      "- and puts back 1 agent templates it replaced: embedded-developer",
                       f"- {home_}/workplace/vstatd (the knowledge copy)"]
     assert "the app vstatd-team" not in out and "(dry run: nothing removed)" in out
     assert calls(home) == []  # a dry run asks Kiro Crew nothing

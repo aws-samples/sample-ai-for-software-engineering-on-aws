@@ -198,8 +198,8 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 
 [`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (车载平台服务 · AI-DLC 团队), modelled on the
 [agent-team sample](../../agent-team-on-kiro-crew/). It takes the work item through AI-DLC with six roles, each a Kiro
-Crew session running as one of four AI-DLC experts. The members are named `vstatd-developer`, `vstatd-architect`,
-`vstatd-quality` and `vstatd-architecture-reviewer`, so that this sample installs beside the agent-team sample:
+Crew session running as one of four AI-DLC experts. The members are named `embedded-developer`, `embedded-architect`,
+`embedded-quality` and `embedded-architecture-reviewer`, so that this sample installs beside the agent-team sample:
 
 | Role | Expert | What it does | Gate after it |
 | --- | --- | --- | --- |

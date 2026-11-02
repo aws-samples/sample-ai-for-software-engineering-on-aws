@@ -105,8 +105,9 @@ code base, but every change here would have to keep an available sample green); 
 
 No role deploys: the app runs the bench actions (D3), and the release owner signs off.
 
-The members and their templates are named `vstatd-developer`, `vstatd-architect`, `vstatd-quality` and
-`vstatd-architecture-reviewer`, each built from the expert's definition. The agent-team sample's members carry the
+The members and their templates are named `embedded-developer`, `embedded-architect`, `embedded-quality` and
+`embedded-architecture-reviewer`, shown as 「Embedded 开发」, 「Embedded 架构」, 「Embedded 质量」 and 「Embedded 架构评审」, each
+built from the expert's definition. Kiro Crew keeps both the name and the display name of a member unique. The agent-team sample's members carry the
 experts' own names; with the same names, installing this sample would replace that sample's templates, and a member
 already in its workspace would leave the role here without a member.
 
