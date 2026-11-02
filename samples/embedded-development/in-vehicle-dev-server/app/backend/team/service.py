@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from . import board, checks, outputs, paths
+from . import board, checks, outputs, paths, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -411,6 +411,10 @@ class Service:
         except Exception as exc:  # noqa: BLE001
             raise AppError(f"清理会话失败：{exc}"[:300], "cleanup_failed", 502)
         return {"ok": True, **done, "kept_runs": sorted(r.rid for r in self.runs.values() if not r.ended or r.s.get("signoff"))}
+
+    async def scorecard(self) -> dict[str, Any]:
+        """The rehearsal scorecard (D8), from the runs' records."""
+        return await asyncio.to_thread(scorecard.build, [r.s for r in self.runs.values()], self.data_dir / "runs")
 
     def board(self, rid: str | None = None) -> dict[str, Any]:
         return board.build(self.runs, rid, mgr=self.manager(), scrub=self.scrub, now=time.time(), crew=self)

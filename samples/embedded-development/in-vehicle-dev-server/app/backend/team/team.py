@@ -1373,8 +1373,10 @@ class TeamRun:
                         said = "\n".join(f"- {a['id']}「{a['q']}」：" + (f"其他：{a['text']}" if a["choice"] == "other" else
                                          f"{a['choice']}. {a['option']}" + (f"（补充：{a['text']}）" if a["text"] else ""))
                                          for a in changed)
+                        asked = {q["id"]: q for q in (self.s.get("questions") or {}).get(key) or []}
                         self.emit("bounce", f"人在{label}关卡改了 {len(changed)} 条决定，退回{self.title(key)}照着改", role=key,
-                                  frm="person", to=key, data={"answers": [a["id"] for a in changed]})
+                                  frm="person", to=key, data={"answers": [a["id"] for a in changed], "justified": [
+                                      a["id"] for a in changed if asked.get(a["id"], {}).get("decision") == "justify"]})
                         await self._start(key, "revise", self.d.manager(), review=(
                             f"人在{label}关卡上不同意这些建议，按人的决定改 `{role['triage']['file']}` 和分诊文档（改成修复的补 evidence、"
                             "behaviour，涉及行为的补 cites 和 facts；不加入的删掉那一条），再提交：\n" + said

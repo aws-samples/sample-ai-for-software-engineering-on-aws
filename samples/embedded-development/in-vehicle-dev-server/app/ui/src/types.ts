@@ -390,3 +390,47 @@ export interface RosterPerson {
   member: string
   icon: string
 }
+
+/**
+ * `GET /scorecard` (D8): the rehearsal scorecard, from the runs' records only (backend/team/scorecard.py says how each
+ * figure is taken). null: no run behind the figure, shown empty, never as 0.
+ */
+export type Scorecard = {
+  runs: ScoreRun[] // the runs on the board's list, newest first
+  total: ScoreTotal // summed over the runs
+}
+
+export type ScoreRun = {
+  id: string
+  title: string
+  status: RunStatus
+  started_at: number
+  signed: boolean
+  findings: ScoreFindings | null // the approved triage's decisions; the entries it added (TR §4.4) left out
+  overturned: ScoreOverturned | null // justifications a person or the reviewer overturned
+  times: ScoreTimes
+  build_rounds: number | null // fix rounds for a failing build check
+  caught: Record<string, number> | null // check → rounds before the bench in which it FAILed
+  logdiff: ScoreLogdiff | null // over the replays on the bench
+  bench: ScoreBench | null // the console's decisions on the run's requests, and reconciles after them
+  rerun_differs: string[] | null // checks whose verdict differed on the independent rerun
+}
+
+export type ScoreFindings = { fixed: number; justified: number; deferred: number }
+export type ScoreOverturned = { ids: string[]; by_person: string[]; by_reviewer: string[] }
+/** Seconds since the run started. */
+export type ScoreTimes = { triage_s: number | null; first_pass_s: number | null; signoff_s: number | null }
+export type ScoreLogdiff = { differences: number; unexplained: number }
+export type ScoreBench = { approved: number; refused: number; reconciled: number }
+
+/** Sums over the runs (of the figures that exist); times are per run only. */
+export type ScoreTotal = {
+  runs: number
+  findings: ScoreFindings | null
+  overturned: number | null
+  build_rounds: number | null
+  caught: Record<string, number> | null
+  logdiff: ScoreLogdiff | null
+  bench: ScoreBench | null
+  rerun_differs: number | null
+}

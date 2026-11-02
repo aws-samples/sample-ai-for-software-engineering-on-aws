@@ -166,7 +166,7 @@ def questions(t: dict[str, Any], rows: dict[str, dict[str, str]]) -> list[dict[s
         else:
             continue
         out.append({"id": fid, "q": _clip(q, 160), "options": [{"key": k, "text": x} for k, x in zip("AB", opts)],
-                    "recommend": AGREE, "why": why, "cites": [str(c) for c in f.get("cites") or []]})
+                    "recommend": AGREE, "why": why, "cites": [str(c) for c in f.get("cites") or []], "decision": decision})
     return out
 
 

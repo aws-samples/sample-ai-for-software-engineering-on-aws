@@ -31,6 +31,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     async def board(request: Any) -> Any:
         return kit.json(svc.board(request.query.get("run") or None))
 
+    async def score(request: Any) -> Any:
+        return kit.json(await svc.scorecard())
+
     async def runs(request: Any) -> Any:
         return kit.json({"runs": svc.cards()})
 
@@ -118,6 +121,7 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     return [
         AppRoute("GET", "/health", health),
         AppRoute("GET", "/board", kit.guarded(board)),
+        AppRoute("GET", "/scorecard", kit.guarded(score)),
         AppRoute("GET", "/runs", kit.guarded(runs)),
         AppRoute("POST", "/runs", kit.guarded(create_run)),
         AppRoute("POST", "/sessions/cleanup", kit.guarded(cleanup_sessions)),

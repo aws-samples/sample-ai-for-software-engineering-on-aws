@@ -42,6 +42,7 @@ import { ReplayBar, useReplay } from './board/Replay'
 import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
 import { parseView, searchOf, type BoardEntry, type View } from './nav'
+import { ScorecardView } from './scorecard/ScorecardView'
 
 interface Effects {
   run: string | null
@@ -441,7 +442,13 @@ function FocusBar({ run, focus, onClear }: { run: RunDetail; focus: string; onCl
   )
 }
 
-/** The app: its bar, then the board, as the URL says (nav.ts). A move to another view is a history entry made through
+function entryOf(v: View & { n: number; returning?: boolean }): BoardEntry {
+  if (v.kind !== 'board') return {}
+  const { kind: _k, n: _n, returning: _r, ...entry } = v
+  return entry
+}
+
+/** The app: its bar, then the board or the 评分卡, as the URL says (nav.ts). A move to another view is a history entry made through
  * the host's router (useNavigate), so Kiro Crew's ← → (and ⌘←), like the browser's back and forward, step between
  * views, and every entry can be linked to; a change inside a view (the run picked on the board) rewrites the current
  * entry. Each entry also keeps how far the page was scrolled (`ktScroll` in its state): back or forward puts the page
@@ -564,12 +571,13 @@ export default function VstatdTeamApp({ pollMs }: { pollMs?: number } = {}) {
   }, [])
   const onProjection = useCallback((on: boolean) => void project(on), [project])
   const onPick = useCallback((rid: string) => replace({ kind: 'board', run: rid }), [replace])
-  const { kind: _k, n, returning, ...entry } = view
+  const { n, returning } = view
   return (
     <div ref={rootRef} className={`kt-app${projection ? ' is-projection' : ''}`} data-testid="kt-app">
       <style>{APP_CSS}</style>
       <AppBar view={view.kind} projection={projection} onView={(k) => go({ kind: k })} onProjection={() => onProjection(!projection)} />
-      <TeamPage key={n} pollMs={pollMs} entry={entry} returning={returning} onPick={onPick} projection={projection} onProjection={onProjection} />
+      {view.kind === 'score' ? <ScorecardView key={n} />
+        : <TeamPage key={n} pollMs={pollMs} entry={entryOf(view)} returning={returning} onPick={onPick} projection={projection} onProjection={onProjection} />}
     </div>
   )
 }

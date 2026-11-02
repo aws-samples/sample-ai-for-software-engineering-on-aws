@@ -11,13 +11,14 @@
  *     &replay=<speed>                        …its replay, playing at that speed
  *     &focus=signoff|tests|cost|lanes        …its 签字单, its 测试墙, its counters, its lanes (each member's use)
  *   ?view=board&new=promo                    the 新需求 form
+ *   ?view=score                              评分卡 (scorecard/ScorecardView.tsx)
  */
 
 export type BoardFocus = 'signoff' | 'tests' | 'cost' | 'lanes'
 export type BoardEntry = {
   run?: string; gate?: string; role?: string; phase?: string; at?: number; replay?: number; focus?: BoardFocus; new?: 'promo'
 }
-export type View = { kind: 'board' } & BoardEntry
+export type View = ({ kind: 'board' } & BoardEntry) | { kind: 'score' }
 
 const RID = /^r[0-9a-z]{4,12}$/
 const ROLE = /^[a-z][a-z0-9-]{0,23}$/
@@ -30,8 +31,9 @@ const seconds = (x: string | null) => {
 
 export function parseView(search: string): View {
   const q = new URLSearchParams(search)
+  if (q.get('view') === 'score') return { kind: 'score' }
   const run = q.get('run') ?? ''
-  const v: View = { kind: 'board' }
+  const v: { kind: 'board' } & BoardEntry = { kind: 'board' }
   if (RID.test(run)) v.run = run
   if (v.run) {
     for (const k of ['gate', 'role'] as const) {
@@ -53,7 +55,8 @@ export function parseView(search: string): View {
 
 export function searchOf(v: View): string {
   const q = new URLSearchParams()
-  q.set('view', 'board')
+  q.set('view', v.kind)
+  if (v.kind === 'score') return `?${q.toString()}`
   for (const k of ['run', 'phase', 'gate', 'role', 'at', 'replay', 'focus', 'new'] as const) {
     const x = v[k]
     if (x !== undefined) q.set(k, String(x))

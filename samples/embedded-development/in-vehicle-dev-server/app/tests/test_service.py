@@ -12,7 +12,7 @@ from http_fakes import AppRoute, FakeWeb, call, owner_check
 from teamkit import TARGET_TEMPLATE, TEAM_FILE, FakeManager, act, default_tests, finish, mod
 
 service, handlers, toollog, constants, team_mod = mod("service"), mod("handlers"), mod("toollog"), mod("constants"), mod("team")
-NEW_ROUTES = [("GET", "/board"), ("GET", "/runs"), ("POST", "/runs"), ("POST", "/runs/r1006abcd/stop")]
+NEW_ROUTES = [("GET", "/board"), ("GET", "/scorecard"), ("GET", "/runs"), ("POST", "/runs"), ("POST", "/runs/r1006abcd/stop")]
 
 
 def make(tmp_path, mgr, **kw):

@@ -1,10 +1,11 @@
 /**
- * The app bar the views share: the app's name, the views as tabs — 团队看板 (how the run went) — and 投影. It stays where it is when the view changes, and 投影 belongs to the
+ * The app bar the views share: the app's name, the views as tabs — 团队看板 (how the run went), 评分卡 (the measured
+ * figures over the runs) — and 投影. It stays where it is when the view changes, and 投影 belongs to the
  * app, not to a view: full screen goes on, the person moves between views, it stays on. Each view's own controls
  * (the run, 回放, 新需求 … on the board) sit in the row below.
  */
 
-export type ViewKind = 'board'
+export type ViewKind = 'board' | 'score'
 
 export const APP_CSS = `
 .kt-app { display: flex; flex-direction: column; min-height: 100%; color: var(--text); font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); }
@@ -25,6 +26,7 @@ export const APP_CSS = `
 
 const TABS: [ViewKind, string, string][] = [
   ['board', '团队看板', '多 agent 团队怎么交付：角色、关卡、检查、签字'],
+  ['score', '评分卡', '量出来的数：分诊、检查、台架、独立重跑，按次和合计'],
 ]
 
 export function AppBar({ view, projection, onView, onProjection }: { view: ViewKind; projection: boolean; onView: (v: ViewKind) => void; onProjection: () => void }) {

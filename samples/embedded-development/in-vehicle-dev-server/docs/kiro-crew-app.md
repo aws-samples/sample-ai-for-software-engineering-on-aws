@@ -151,6 +151,15 @@ the CTO view are reused.
 The scorecard's "tool calls by permission class" comes from the audit log of the `build` and `bench` MCP servers. In
 this app the agents use no such server (D2, D3), so the view leaves that figure out rather than showing zero.
 
+How (step 8): `GET /scorecard` reads each run's `run.json`, `events.jsonl`, approved triage and results directories,
+and the bench's `actions.jsonl` (entries tied to the run by the requester the app passes to `cc1.sh`). A
+justification counts as overturned when a person answers other than A to its question at the triage gate (the
+send-back event names it) or a reviewer's 要改 reply names a finding the approved triage justifies. Findings leave
+out the entries the triage added (the refactor, D13). Times are wall clock from the run's start and are not summed
+over runs. Log differences are `logdiff`'s over the after-bench rounds, with how many no approved difference
+explained; whether a difference was a real change of behaviour is not recorded by the app, so that figure is left
+out. Reconciles count for the run whose request came last before them.
+
 Why: the scenario publishes measured numbers only, and reports no productivity figures until a rehearsal has produced
 them.
 

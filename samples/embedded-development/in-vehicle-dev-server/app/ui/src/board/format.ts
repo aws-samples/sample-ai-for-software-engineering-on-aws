@@ -13,6 +13,7 @@ const enc = encodeURIComponent
 export const paths = {
   board: (run?: string | null) => `${BASE}/board${run ? `?run=${enc(run)}` : ''}`,
   runs: () => `${BASE}/runs`,
+  scorecard: () => `${BASE}/scorecard`,
   stop: (run: string) => `${BASE}/runs/${enc(run)}/stop`,
   role: (run: string, role: string) => `${BASE}/runs/${enc(run)}/roles/${enc(role)}`,
   file: (run: string, role: string, path: string, view: 'content' | 'diff') =>

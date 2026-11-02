@@ -52,6 +52,7 @@ def test_the_questions_are_the_justifications_deferrals_disagreements_and_added_
     assert set(qs) == set(FIX_LABELLED) - {"F-003", "F-018"} | {"F-031"}
     j = qs["F-008"]
     assert j["cites"] == ["[VSTATD-IF p.7 §4.2]"] and j["recommend"] == "A" and "（待办标的是 fix）" in j["q"]
+    assert j["decision"] == "justify" and qs["F-021"]["decision"] == "defer"
     assert "src/supervisor.cpp › Supervisor::check" in j["q"] and j["why"].startswith("条件实现宽限期")
     assert [o["key"] for o in j["options"]] == ["A", "B"] and j["options"][1]["text"].startswith("不同意：本批修复")
     assert "什么时候再处理：本批交付以后" in qs["F-021"]["why"] and qs["F-021"]["cites"] == []
@@ -134,9 +135,12 @@ def test_the_triage_gate_and_a_history_that_trace_sh_passes(tmp_path):
         assert len(qs) == 21 and qs[[q["id"] for q in qs].index("F-008")]["cites"] == ["[VSTATD-IF p.7 §4.2]"]
         assert [r["id"] for r in run.s["triage_listed"]] == ["F-003", "F-018"]
 
-        # the person does not take the deferral of F-021: it goes back to the triage role, no triage is approved
-        assert await run.gate("triage", "approve", answers={"F-021": {"choice": "B"}}, by="李工")
+        # the person takes neither the deferral of F-021 nor the justification of F-008: back to the triage role, no
+        # triage is approved; the send-back names the justification overturned (the scorecard counts it)
+        assert await run.gate("triage", "approve", answers={"F-021": {"choice": "B"}, "F-008": {"choice": "B"}}, by="李工")
         assert run.lane("triage").get("gate") is None and run._approved_triage() is None
+        sent = [e for e in run.events if e["kind"] == "bounce"][-1]["data"]
+        assert sorted(sent["answers"]) == ["F-008", "F-021"] and sent["justified"] == ["F-008"]
         assert "F-021「" in run.lane("triage")["attempts"][-1]["task"] and "B. 不同意：本批修复" in run.lane("triage")["attempts"][-1]["task"]
         f021 = next(f for f in t["findings"] if f["id"] == "F-021")
         f021.clear()
