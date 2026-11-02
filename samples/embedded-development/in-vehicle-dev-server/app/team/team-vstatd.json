@@ -63,7 +63,8 @@
       "outputs": ["docs/aidlc/triage.json", "docs/aidlc/triage.md"],
       "gate": "human",
       "gate_label": "分诊",
-      "brief": "先在知识库查 TR §4（分诊规则）和待办里标了 fix 的 22 个发现（`findings-backlog.md`）。对每个发现读它指向的函数，定一个决定：fix（改代码；有可观察的后果就要单元测试，evidence 写 unit-test，否则写 static-analysis 或 build；behaviour 写它是否涉及 VSTATD-IF 描述的行为，涉及时 cites 和 facts 都要写）、justify（误报或无害，cites 写说明它的 VSTATD-IF 或 CC1-PN 的页和节）或 defer（reason 和 pick_up_when 都要写）。会改变 VSTATD-IF 行为的修法不能做，按 TR §4.2 延后。写 `docs/aidlc/triage.json`，格式见 `${sample}/checks/README.md` 的「The approved triage」一节和例子 `${sample}/checks/examples/triage.json`：`batch` 写本批的名字，`base` 写需求提交（`git rev-list --max-parents=0 HEAD`），不写 `approved`（人在分诊关卡批准后由 app 记下）；`allowed_log_differences` 只写你的修复或说明会让运行日志变的条目，`requirements` 按 TR §6 写。再写一页 `docs/aidlc/triage.md`：每个说明和延后一行理由和引用，与待办标注不同的决定单独列出，人在关卡上逐条看这些。"
+      "triage": {"file": "docs/aidlc/triage.json", "knowledge": "${sample}/knowledge"},
+      "brief": "先在知识库查 TR §4（分诊规则）和待办里标了 fix 的 22 个发现（`findings-backlog.md`）。对每个发现读它指向的函数，定一个决定：fix（改代码；有可观察的后果就要单元测试，evidence 写 unit-test，否则写 static-analysis 或 build；behaviour 写它是否涉及 VSTATD-IF 描述的行为，涉及时 cites 和 facts 都要写）、justify（误报或无害，cites 写说明它的 VSTATD-IF 或 CC1-PN 的页和节）或 defer（reason 和 pick_up_when 都要写）。会改变 VSTATD-IF 行为的修法不能做，按 TR §4.2 延后。写 `docs/aidlc/triage.json`，格式见 `${sample}/checks/README.md` 的「The approved triage」一节和例子 `${sample}/checks/examples/triage.json`：再按 TR §4.4 把本批的重构加成一条：编号用待办之后的下一个空号（现在的待办是 F-031），`added` 写 `{\"found_by\": \"工作项：拆分 Service::run()\", \"tool\": \"work item\", \"location\": \"src/service.cpp › Service::run\"}`，decision 写 fix，evidence 写 build，behaviour 写 false（行为不变由台架回放的日志对比证明），这样重构的提交也能引用它。`batch` 写本批的名字，`base` 先写需求提交（`git rev-list --max-parents=0 HEAD`；开工关卡批准后 app 改成那时运行分支的提交），不写 `approved`（人在分诊关卡批准后由 app 记下）；`allowed_log_differences` 只写你的修复或说明会让运行日志变的条目，`requirements` 按 TR §6 写。app 按同样的格式检查 triage.json，不合格式的退回给你。再写一页 `docs/aidlc/triage.md`：每个发现一行（决定、证据、理由和引用），与待办标注不同的决定单独列出。人在关卡上逐条决定说明、延后和新加的条目（app 从 triage.json 生成这些问题），修复照这一页批准。"
     },
     {
       "key": "architect",
@@ -95,7 +96,7 @@
       "depends_on": ["architect"],
       "writable": ["tests/**", "docs/aidlc/tests.md"],
       "outputs": ["docs/aidlc/tests.md"],
-      "brief": "按 `docs/aidlc/triage.json`，给每个 decision 为 fix、evidence 为 unit-test 的发现写一个 GoogleTest 测试：测试名或测试体里写发现编号（`F-013`、`F013` 或 `F_013`），断言 VSTATD-IF 规定的正确行为，所以在现在的代码上它要失败（TR §4.1）；app 会在需求提交上跑这些测试，有一个通过就退回给你。不删、不改名已有的测试，不加 `DISABLED_` 或跳过。在 `tests/CMakeLists.txt` 里加上新文件。写 `docs/aidlc/tests.md`：每个发现一行，测试名和它在需求提交上为什么失败。"
+      "brief": "按 `docs/aidlc/triage.json`，给每个 decision 为 fix、evidence 为 unit-test 的发现写一个 GoogleTest 测试：测试名或测试体里写发现编号（`F-013`、`F013` 或 `F_013`），断言 VSTATD-IF 规定的正确行为，所以在现在的代码上它要失败（TR §4.1）；app 会在分诊的 base 提交（开工时的运行分支）上跑这些测试，有一个通过就退回给你。不删、不改名已有的测试，不加 `DISABLED_` 或跳过。在 `tests/CMakeLists.txt` 里加上新文件。写 `docs/aidlc/tests.md`：每个发现一行，测试名和它在需求提交上为什么失败。"
     },
     {
       "key": "dev-fix",

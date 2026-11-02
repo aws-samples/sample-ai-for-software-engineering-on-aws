@@ -73,6 +73,15 @@ counts the justifications a reviewer overturned. Thirty questions would be appro
 Alternatives considered: a question for every finding in the backlog; no questions, the triage file approved as a
 whole.
 
+How an answer is applied (step 5): each question's option A takes the proposal as it is. When every answer is A, the
+app writes the triage with `approved: {by, at}` and its record `triage.json.sha256` beside the run's repository. An
+answer that changes a decision (another option, or the person's own words) sends the triage back to the triage role
+with the person's decisions, and the gate comes again: a fix needs its evidence and behaviour, and a deferral its
+condition, which only the role that read the code can give. Before the gate, the app checks `triage.json` by the rules
+of `checks/lib/common.py` (mirrored, not imported) and sends a malformed one back. Since every finding labelled
+`later` is refused by those rules, "a proposal that differs from the backlog" is in practice a justification or a
+deferral of a finding labelled `fix`; its question says so.
+
 ### D5. The app is a copy of the agent-team app, kept in this scenario's folder
 
 The app lives in `app/` of this scenario, with its own name, setup and cleanup, and is changed there. The agent-team
@@ -223,6 +232,13 @@ things follow, and neither changes a check:
   gate is approved and its decisions are committed; the roles commit their own work with the finding IDs (and, for a
   fix that touches behaviour, a fact entry) in the message; the app's merge commit lists the finding and fact IDs of
   the commits it merges.
+
+How (step 5): the build-start gate is the last human gate of the team file. From the base on, the app does not commit
+a role's leftovers: a role with uncommitted work, or a commit that `trace.sh` would refuse (no finding, a finding the
+triage defers, a behaviour fix without one of its fact entries), is sent back before its merge, in a round of its own.
+Carrying the IDs of the role's other commits into an app commit was not chosen: it would tie files to findings the role
+never tied them to, and `trace.sh` would pass on that guess. The merge commit ends with `Findings: …` and, when the
+merged commits cite fact entries, `Facts: …`.
 
 Alternatives considered: `trace.sh` accepting work-item IDs (a change to a check the agents cannot change); leaving
 the refactor out of this version.

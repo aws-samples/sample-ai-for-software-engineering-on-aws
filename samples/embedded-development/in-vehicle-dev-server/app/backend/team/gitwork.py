@@ -238,10 +238,15 @@ async def committed_paths(wt: Path, fork: str) -> list[str]:
     return [p for p in paths if not is_host_path(p)]
 
 
+async def uncommitted(wt: Path, globs: list[str]) -> list[str]:
+    """What the agent left uncommitted inside its writable globs."""
+    _, out, _ = await git(wt, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
+    return [rec[3:] for rec in _split0(out) if len(rec) > 3 and not is_host_path(rec[3:]) and matches(rec[3:], globs)][:500]
+
+
 async def commit_leftovers(wt: Path, globs: list[str], role: str) -> tuple[list[str], str | None]:
     """Commit what the agent left uncommitted, but only inside its writable globs; (paths, new head) or ([], None)."""
-    _, out, _ = await git(wt, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
-    mine = [rec[3:] for rec in _split0(out) if len(rec) > 3 and not is_host_path(rec[3:]) and matches(rec[3:], globs)][:500]
+    mine = await uncommitted(wt, globs)
     if not mine:
         return [], None
     await git(wt, "add", "-A", "--", *mine)

@@ -36,6 +36,7 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     assert t["ownership"] == {"file": "docs/aidlc/work-split.json", "from": "architect"}
     assert all(roles[k]["writable"] == [team_mod.PENDING_GLOB] for k in ("dev-fix", "dev-refactor"))  # from the split
     assert "docs/aidlc/triage.json" in roles["triage"]["writable"]
+    assert roles["triage"]["triage"] == {"file": "docs/aidlc/triage.json", "knowledge": "${sample}/knowledge"}
     assert all(g.startswith("docs/aidlc/") for k in ("triage", "architect") for g in roles[k]["writable"])
     assert t["source"] == "${sample}/reference-project" and t["workspace"] == "vstatd"
     assert t["knowledge"] == {"source": "vstatd", "data_dir": "~/workplace/vstatd"}
@@ -63,6 +64,8 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     (lambda t: t.pop("check_runner"), "有 checks 就要写 check_runner"),
     (lambda t: t["bench"].update(flash=["x"]), "bench 要写成"),
     (lambda t: t.update(source=""), "source 要写成要改的项目目录"),
+    (lambda t: t["roles"][0]["triage"].update(file="/abs/triage.json"), "triage 要写成"),
+    (lambda t: t["roles"][1].update(triage={"file": "docs/x.json", "knowledge": "/k"}, gate=None), "triage 要写成"),
 ])
 def test_the_team_check_names_what_is_wrong(change, message):
     t = raw_team()

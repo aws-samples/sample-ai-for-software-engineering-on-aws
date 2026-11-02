@@ -28,6 +28,7 @@ from typing import Any, Awaitable, Callable
 
 from . import checks, gitwork
 from . import delivery as delivery_mod
+from . import triage as triage_mod
 from .constants import APP_NAME, APP_ROOT, EVENTS_KEPT, TAG_PREFIX
 from .store import Store
 from .sessions import agent_fields, cancel, cancel_parent, find_agent, find_by_tag, first_line
@@ -46,6 +47,9 @@ TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?o
 ERRORS_TO_FAIL = 30  # this many failing ticks in a row (about a minute) end the run
 REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 view
 _DONE_RE = re.compile(r"(?<![A-Za-z])DONE\s*[:：]\s*(.*)$", re.M)  # also mid-line: KiroCrew joins messages with no break
+TRACE_RULE = ("每个提交说明都写它对应的发现编号（`F-003`）；修的发现在分诊里 behaviour 为 true 时，再写它的事实条目之一（如 "
+              "`SUP-GRACE`）。只写分诊里定为修复或说明的发现。没提交的改动提交掉；要改已有提交的说明，"
+              "`git reset --soft $(git merge-base HEAD {branch})` 以后按发现重新提交。")
 REVIEW_KEEP = 12_000  # characters of a 要改 review a bounced role is given
 TALK_KEEP = 2_000  # characters of a role's answer in a 讨论 at its gate, kept for the gate card
 DECISIONS_FILE = "docs/aidlc/decisions.md"  # what people decided at the gates, written into the run branch by the app
@@ -101,6 +105,10 @@ def check_team(team: Any) -> dict[str, Any]:
             raise ValueError(f"team.json：{r['key']} 的 gate 只能是 human")
         if r.get("gate_revise_risk") is not None and clean_risk(r["gate_revise_risk"]) is None:
             raise ValueError(f"team.json：{r['key']} 的 gate_revise_risk 要写成 {{what, amount}}（amount 以元计）")
+        tri = r.get("triage")
+        if tri is not None and not (r.get("gate") == "human" and isinstance(tri, dict) and _app_rel(str(tri.get("file") or ""))
+                                    and isinstance(tri.get("knowledge"), str) and tri["knowledge"]):
+            raise ValueError(f"team.json：{r['key']} 的 triage 要写成 {{file: 仓库里的相对路径, knowledge: 知识库目录}}，而且它要有人的关卡")
         if r.get("questions") is not None and not (r.get("gate") == "human" and isinstance(r["questions"], str) and _app_rel(r["questions"])):
             raise ValueError(f"team.json：{r['key']} 的 questions 要写成仓库里的相对路径，而且它要有人的关卡")
         if not isinstance(r.get("optional", False), bool):
@@ -325,6 +333,11 @@ class TeamRun:
         return [k for k in self.order if k in owners and self.lane(k)["status"] != "skipped"]
 
     @property
+    def _build_start(self) -> str | None:
+        """The build-start gate: the last of the team's human gates (D13)."""
+        return next((k for k in reversed(self.order) if self.roles[k].get("gate") == "human"), None)
+
+    @property
     def test_writers(self) -> list[str]:
         return [k for k in self.order if any(g.startswith("tests/") for g in self.roles[k]["writable"])]
 
@@ -537,6 +550,8 @@ class TeamRun:
         elif kind == "review":
             caught_up = await self._catch_up(key)
             task, label = self._review_task(key, n, review, caught_up), "按评审意见改"
+        elif kind == "trace":  # its commits do not cite their findings: it commits again, its worktree as it is
+            task, label = self._revise_task(key, n, review, False), "补写提交说明"
         elif kind == "revise":  # never merged yet (a wrong ownership file): it redoes its own branch as it is
             caught_up = await self._catch_up(key) if lane.get("merged_sha") else False
             task, label = self._revise_task(key, n, review, caught_up), "按意见重写"
@@ -794,7 +809,13 @@ class TeamRun:
         """Commit its leftovers, record what it changed, merge it into the run branch."""
         s, lane, role = self.s, self.lane(key), self.roles[key]
         wt = Path(lane["worktree"])
-        paths, sha = await gitwork.commit_leftovers(wt, role["writable"], key)
+        if self._traced():  # from the triage's base on, every commit cites its findings: the role commits its own work
+            left = await gitwork.uncommitted(wt, role["writable"])
+            if left:
+                await self._trace_back(key, f"这些改动没有提交：{'、'.join(left[:12])}。检查只看提交了的代码，app 也不替你提交"
+                                       "（app 的提交写不出它对应哪个发现）。")
+                return
+        paths, sha = await gitwork.commit_leftovers(wt, role["writable"], key) if not self._traced() else ([], None)
         if paths:
             lane.setdefault("seen_commits", []).append(sha)
             self.emit("committed", f"app 替{self.title(key)}提交了 {len(paths)} 个文件", role=key)
@@ -824,7 +845,28 @@ class TeamRun:
                 await self._start(key, "revise", self.d.manager(), review=f"你写的分工文件 `{own['file']}` 用不了：{err}。"
                                   "按任务说明里的格式改好它（只改这个文件也行），再提交。")
                 return
-        res = await gitwork.merge(Path(s["run_wt"]), lane["branch"], f"[run] 合入{self.title(key)}（第 {lane['attempt']} 轮）")
+        tri = role.get("triage")
+        if tri and lane.get("gate") != "approved":
+            err = self._triage_problems(key)
+            if err:  # a triage the checks would refuse goes back before it reaches the gate
+                if lane["attempt"] >= self.max_attempts(key):
+                    self._fail_lane(key, f"分诊文件 {tri['file']} 不合格式，修改的轮数用完了：{err[0]}")
+                    return
+                self.emit("bounce", f"分诊文件不合格式，退回{self.title(key)}：{err[0]}", role=key, frm="run", to=key)
+                await self._start(key, "revise", self.d.manager(), review=f"你写的 `{tri['file']}` 不合 checks/README.md 的格式，"
+                                  "检查会拒绝它：\n" + "\n".join(f"- {e}" for e in err[:20]) + "\n\n改好再提交。")
+                return
+        message = f"[run] 合入{self.title(key)}（第 {lane['attempt']} 轮）"
+        if self._traced():
+            messages = await self._unmerged_messages(key)
+            bad = [f"{sha[:12]}「{msg.strip().splitlines()[0][:60] if msg.strip() else ''}」：{why}"
+                   for sha, msg in messages for why in [triage_mod.commit_problem(msg, self._approved_triage() or {})] if why]
+            if bad:
+                await self._trace_back(key, "这些提交的说明 checks/trace.sh 不会通过（TR §7.2）：\n" + "\n".join(f"- {b}" for b in bad[:12]))
+                return
+            tail = triage_mod.trailer([m for _, m in messages], self._approved_triage() or {})
+            message += f"\n\n{tail}" if tail else ""
+        res = await gitwork.merge(Path(s["run_wt"]), lane["branch"], message)
         self._head = None
         now = self.d.now()
         sha = lane["commits"][-1]["sha"] if lane["commits"] else lane["fork"][:7]
@@ -848,6 +890,8 @@ class TeamRun:
                     self._read_delivery(key, role["delivery"])
                 if role.get("questions"):
                     self._read_questions(key, role["questions"])
+                if role.get("triage"):
+                    self._triage_questions(key)
                 if att["kind"] == "discuss":  # it answered and changed its documents: the person looks again
                     self._discussed(key, att, changed=True)
                 else:
@@ -1125,13 +1169,14 @@ class TeamRun:
             f"{self.title(k)} {'、'.join(g)}" for k, g in assigned.items()), data={"roles": assigned})
 
     async def gate(self, key: str, decision: str, note: str = "", delivery: Any = None, answers: Any = None,
-                   risk: Any = None) -> bool:
+                   risk: Any = None, by: str = "") -> bool:
         """A person's answer at a gate: approve (the roles after it start), send it back with what to change, or 讨论
         (it answers, and changes its documents if it has to; the gate stays). *delivery*: the 交付标签 as the person
         confirms them when approving the gate of the role that proposes them (fields left out keep the proposal's).
         *answers*: the person's choice for each question the role put to them (``{id: {"choice": "A", "text": ""}}``;
         a question left out takes the role's recommendation). *risk*: with 退回, what the send-back kept from going live
-        (``{what, amount}``, amount in yuan): kept on the run and on the 签字单."""
+        (``{what, amount}``, amount in yuan): kept on the run and on the 签字单. *by*: who approves (the approved
+        triage records it)."""
         async with self._lock:
             lane, role = self.lane(key), self.roles.get(key) or {}
             if self.ended or role.get("gate") != "human" or lane.get("gate") != "pending":
@@ -1150,6 +1195,22 @@ class TeamRun:
             if decision == "approve":
                 if lane.get("overrule") and not note.strip():
                     return False  # overruling a review that still says 要改 takes a reason
+                if role.get("triage"):
+                    changed = await self._approve_triage(key, self._answers_for(key, answers), by.strip() or "负责人")
+                    if changed:  # not as proposed: the triage role writes the person's decisions in, the gate comes again
+                        lane["gate"] = None
+                        said = "\n".join(f"- {a['id']}「{a['q']}」：" + (f"其他：{a['text']}" if a["choice"] == "other" else
+                                         f"{a['choice']}. {a['option']}" + (f"（补充：{a['text']}）" if a["text"] else ""))
+                                         for a in changed)
+                        self.emit("bounce", f"人在{label}关卡改了 {len(changed)} 条决定，退回{self.title(key)}照着改", role=key,
+                                  frm="person", to=key, data={"answers": [a["id"] for a in changed]})
+                        await self._start(key, "revise", self.d.manager(), review=(
+                            f"人在{label}关卡上不同意这些建议，按人的决定改 `{role['triage']['file']}` 和分诊文档（改成修复的补 evidence、"
+                            "behaviour，涉及行为的补 cites 和 facts；不加入的删掉那一条），再提交：\n" + said
+                            + (f"\n\n人的意见：{note}" if note else "")))
+                        self._settle()
+                        await self.save()
+                        return True
                 lane.update(gate="approved", gate_note=note or None)
                 if note:
                     self.s.setdefault("gate_notes", {})[key] = note
@@ -1179,6 +1240,8 @@ class TeamRun:
                             self._sit_out(k, f"这次用不到：{why}", f"这次用不到（{self.title(key)}提议，人在{label}关卡批准）：{why}")
                 if self.s.get("gate_notes") or self.s.get("answers"):
                     await self._record_decisions()
+                if self.s.get("triage") and not self._traced() and key == self._build_start:
+                    await self._set_base()
             elif not role["writable"] and lane.get("overrule") and (review_targets(note, self.team["roles"])
                                                                      or review_targets(self.overrule_review(key), self.team["roles"])):
                 # the review still says 要改: one more round as it says, with what the person adds (the person's note wins)
@@ -1283,6 +1346,77 @@ class TeamRun:
         self.s.setdefault("questions", {})[key] = out
         if out:
             self.emit("plan", f"{self.title(key)}列出 {len(out)} 件要人决定的事", role=key, data={"questions": len(out)})
+
+    def _read_triage(self, key: str, where: Path) -> tuple[dict[str, Any] | None, list[str]]:
+        tri = self.roles[key]["triage"]
+        try:
+            data = json.loads((where / tri["file"]).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None, [f"没有 {tri['file']}"]
+        except (OSError, ValueError) as exc:
+            return None, [f"{tri['file']} 读不了或不是 JSON：{exc}"[:200]]
+        return data, triage_mod.problems(data, Path(tri["knowledge"]))
+
+    def _triage_problems(self, key: str) -> list[str]:
+        return self._read_triage(key, Path(self.lane(key)["worktree"]))[1]
+
+    def _triage_questions(self, key: str) -> None:
+        """The triage gate's questions (D4), from the merged triage and the backlog; the rest is in its document."""
+        data, _ = self._read_triage(key, Path(self.s["run_wt"]))
+        rows = triage_mod.backlog(Path(self.roles[key]["triage"]["knowledge"]))
+        out = triage_mod.questions(data, rows)
+        self.s.setdefault("questions", {})[key] = out
+        self.s["triage_listed"] = triage_mod.listed(data, rows)
+        self.emit("plan", f"{self.title(key)}的分诊：{len(out)} 件要人决定，{len(self.s['triage_listed'])} 条照分诊做（见分诊文档）",
+                  role=key, data={"questions": len(out)})
+
+    async def _approve_triage(self, key: str, picked: list[dict[str, Any]], by: str) -> list[dict[str, Any]]:
+        """The person's answers at the triage gate: those that take a proposal as it is (A) leave it; the others
+        (another decision, or the person's own words) are the triage role's to write in, since a decision needs the
+        fields only the role can give (a fix's evidence and behaviour, a deferral's condition): returned, and the
+        triage goes back. All A: the triage is written with ``approved`` beside the repository, with its record."""
+        changed = [a for a in picked if a["choice"] != triage_mod.AGREE]
+        if changed:
+            return changed
+        data, _ = self._read_triage(key, Path(self.s["run_wt"]))
+        data = {k: v for k, v in data.items() if k != "approved"}
+        data["approved"] = {"by": by, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.d.now()))}
+        path = Path(self.s["repo"]).parent / TRIAGE_FILE
+        digest = await asyncio.to_thread(triage_mod.write, path, data)
+        self.s["triage"] = {"path": str(path), "sha256": digest, "base": data["base"], "base_set": False,
+                            "approved": data["approved"]}
+        self.emit("plan", f"分诊批准（{by}），记在 {TRIAGE_FILE}（sha256 {digest[:12]}）", role=key)
+        return []
+
+    async def _set_base(self) -> None:
+        """D13: the triage's base is the run branch once the build-start gate is approved and its decisions committed:
+        every commit after it is a role's work or the app's merge of it, and cites a finding."""
+        tri = self.s.get("triage")
+        path = Path(tri["path"])
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self._head = None
+        data["base"] = await self.run_head()
+        tri.update(base=data["base"], sha256=await asyncio.to_thread(triage_mod.write, path, data), base_set=True)
+        self.emit("plan", f"分诊的 base 定为开工时的运行分支 {data['base'][:12]}：之后每个提交都要写发现编号")
+
+    def _traced(self) -> bool:
+        return bool((self.s.get("triage") or {}).get("base_set"))
+
+    async def _unmerged_messages(self, key: str) -> list[tuple[str, str]]:
+        """(sha, message) of each commit of *key*'s branch not yet on the run branch, oldest first."""
+        _, out, _ = await gitwork.git(Path(self.s["run_wt"]), "log", "--reverse", "--format=%H%x1f%B%x1e",
+                                      f"HEAD..{self.lane(key)['branch']}", locks=False)
+        return [tuple(rec.strip("\n").split("\x1f", 1)) for rec in out.split("\x1e") if "\x1f" in rec]
+
+    async def _trace_back(self, key: str, why: str) -> None:
+        """A role's work that checks/trace.sh would refuse goes back before it is merged (its worktree as it is)."""
+        lane = self.lane(key)
+        if lane["attempt"] >= self.max_attempts(key):
+            self._fail_lane(key, f"提交没写清对应的发现，修改的轮数用完了：{why}", keep_merged=bool(lane.get("merged_sha")))
+            return
+        self.emit("bounce", f"{self.title(key)}的提交没写清对应的发现，退回", role=key, frm="run", to=key)
+        await self._start(key, "trace", self.d.manager(), review=why + "\n\n" + TRACE_RULE.format(
+            branch=self.s["branch"]))
 
     def _answers_for(self, key: str, answers: Any) -> list[dict[str, Any]]:
         """The person's choices for the questions *key* put to them; one left out (or not one of its options) takes the
@@ -1676,7 +1810,8 @@ class TeamRun:
 
     def _closing(self, key: str) -> list[str]:
         lane = self.lane(key)
-        return ["", "做完以后：", f"1. 在 {lane['worktree']} 里 `git add` 你改过的文件，提交到 {lane['branch']}，提交说明以 `[{key}]` 开头。",
+        cite = "，写上对应的发现编号（涉及行为的修复再写事实条目）" if any(r.get("triage") for r in self.team["roles"]) else ""
+        return ["", "做完以后：", f"1. 在 {lane['worktree']} 里 `git add` 你改过的文件，提交到 {lane['branch']}，提交说明以 `[{key}]` 开头{cite}。",
                 "2. 最后一条回复的第一行写 `DONE: ` 加一句话总结。", "3. 不要 push，不要动别的分支，不要改 git 配置。"]
 
     def _fix_task(self, key: str, n: int, failing: list[dict[str, Any]], caught_up: bool = False, said: str = "") -> str:

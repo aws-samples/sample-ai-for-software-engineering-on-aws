@@ -7,9 +7,9 @@
 知识库：Kiro Crew 的知识库来源「vstatd」，用知识库搜索查；同样的文件也在 `~/workplace/vstatd/`：接口规范 VSTATD-IF（`vstatd-interface.md`）、平台说明 CC1-PN（`cc1-platform-notes.md`）、团队规则 TR（`team-rules.md`）、静态分析待办（`findings-backlog.md`）和事实条目（`facts/*.yaml`）。引用写成 `[VSTATD-IF p.7 §4.1]`（VSTATD-IF 要写页码）、`[CC1-PN §3]`、`[TR §4.1]`，节必须存在，页码必须对。知识库里没有的数据和规则不要编，写明「知识库里没有」，交给人定。
 
 团队规则要点：
-- TR §4：每个发现一个决定（fix、justify、defer）；不能改变 VSTATD-IF 描述的行为（§4.2）；本批中检查新发现的缺陷按 §4.4 从 F-031 起编号加入。
+- TR §4：每个发现一个决定（fix、justify、defer）；不能改变 VSTATD-IF 描述的行为（§4.2）；本批中检查新发现的缺陷，和工作项要的、没有发现对应的改动（本批的重构），按 §4.4 从 F-031 起编号加入。
 - TR §3.2：内联抑制只用于批准了说明的发现，形式是 `// cppcheck-suppress <check> ; F-nnn justified` 或 `// NOLINT(<check>) F-nnn justified`；别的屏蔽分析器或编译告警的写法都算不通过。
-- TR §7.2：每个提交说明都写上它对应的发现编号 F-nnn；涉及行为的修复还要写分诊里它的事实条目。检查会逐个提交核对。
+- TR §7.2：每个提交说明都写上它对应的发现编号 F-nnn（重构写分诊给它的编号）；涉及行为的修复还要写分诊里它的事实条目。app 合入前逐个提交核对，没写的退回给你；没提交的改动 app 不替你提交，也退回给你。
 
 检查由 app 跑，你不能改，也不用自己跑全套：build、static、unit、size、trace 在部署前跑，runtime-limits 和 logdiff 在台架回放后跑，结果不过就按文件退回给负责那个文件的人。它们只看提交了的代码：没提交的改动检查看不到。
 
@@ -31,6 +31,6 @@
 你的任务：{brief}
 
 做完以后：
-1. 在 {worktree} 里 `git add` 你改过的文件，提交到 {branch}，提交说明以 `[{role}]` 开头，写上对应的发现编号。
+1. 在 {worktree} 里 `git add` 你改过的文件，提交到 {branch}，每个提交说明以 `[{role}]` 开头，写上对应的发现编号（涉及行为的修复再写事实条目）。
 2. 最后一条回复的第一行写 `DONE: ` 加一句话总结。
 3. 不要 push，不要动别的分支，不要改 git 配置。
