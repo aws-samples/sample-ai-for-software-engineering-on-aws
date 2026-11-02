@@ -1,0 +1,4 @@
+# Code owners are requested for review automatically when a pull request changes their paths.
+# Each owner needs write access to the repository.
+
+/samples/embedded-development/ @glayyiyi
