@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "delivery_defaults": {"kind": "新应用", "size": "中", "line": "电商"},
+  "test_command": [
+    "npm",
+    "test"
+  ],
+  "roles": [
+    {
+      "key": "pm",
+      "title": "产品经理",
+      "emoji": "🧭",
+      "depends_on": [],
+      "writable": [
+        "docs/product/**"
+      ],
+      "outputs": [
+        "docs/product/acceptance.md"
+      ],
+      "brief": "把 README 里的需求写成编号的验收标准 AC-1、AC-2……，每条一句话、可测；写进 docs/product/acceptance.md。"
+    },
+    {
+      "key": "architect",
+      "title": "架构师",
+      "emoji": "🏛️",
+      "depends_on": [
+        "pm"
+      ],
+      "writable": [
+        "docs/architecture/**",
+        "contracts/**"
+      ],
+      "outputs": [
+        "contracts/api.md",
+        "docs/architecture/layout.md"
+      ],
+      "brief": "按验收标准定 HTTP 接口契约（路径、请求、响应、错误码）写进 contracts/api.md；定后端、前端、测试、运维各自的文件布局写进 docs/architecture/layout.md。"
+    },
+    {
+      "key": "designer",
+      "title": "UI 设计",
+      "emoji": "🎨",
+      "depends_on": [
+        "pm"
+      ],
+      "writable": [
+        "docs/design/**",
+        "frontend/styles/**"
+      ],
+      "outputs": [
+        "docs/design/pages.md",
+        "frontend/styles/main.css"
+      ],
+      "brief": "设计首页、活动详情、报名表单、名单页的结构和交互写进 docs/design/pages.md；写一份能直接用的 frontend/styles/main.css，手机上也好用。"
+    },
+    {
+      "key": "tester",
+      "title": "测试",
+      "emoji": "🧪",
+      "depends_on": [
+        "architect"
+      ],
+      "writable": [
+        "tests/**"
+      ],
+      "outputs": [
+        "tests/"
+      ],
+      "brief": "按验收标准和接口契约写测试，用 node --test，零依赖。接口的测试放 tests/api-*.test.js，页面的测试放 tests/web-*.test.js（页面测试直接读 frontend/ 下的文件或调用前端的纯函数，不开浏览器），项目级的检查（npm 脚本、ops/start.sh、Dockerfile，不用起服务就能判断的）放 tests/ops-*.test.js。文件名决定测试失败时打回给谁。每个测试名以验收标准编号开头，比如 `AC-3: 名额满了不能报名`。接口测试自己在随机端口起 backend/server.js。现在实现还没写，测试应该是红的，这是对的。"
+    },
+    {
+      "key": "backend",
+      "title": "后端",
+      "emoji": "⚙️",
+      "depends_on": [
+        "architect",
+        "tester"
+      ],
+      "writable": [
+        "backend/**"
+      ],
+      "outputs": [
+        "backend/server.js"
+      ],
+      "brief": "照 contracts/api.md 实现后端，入口 backend/server.js，同时把 frontend/ 当静态文件提供；零依赖，数据存内存。让 tests/ 里的接口测试变绿。"
+    },
+    {
+      "key": "frontend",
+      "title": "前端",
+      "emoji": "🖥️",
+      "depends_on": [
+        "architect",
+        "designer",
+        "tester"
+      ],
+      "writable": [
+        "frontend/**"
+      ],
+      "outputs": [
+        "frontend/index.html"
+      ],
+      "brief": "照 docs/design/pages.md 和 contracts/api.md 写前端页面，只通过 HTTP 接口拿数据；用 frontend/styles/main.css。报名失败要显示原因。"
+    },
+    {
+      "key": "ops",
+      "title": "运维",
+      "emoji": "🚀",
+      "depends_on": [
+        "architect"
+      ],
+      "writable": [
+        "ops/**",
+        "Dockerfile",
+        ".dockerignore",
+        "package.json"
+      ],
+      "outputs": [
+        "ops/start.sh",
+        "Dockerfile"
+      ],
+      "brief": "写 ops/start.sh（检查 Node 版本、起服务、健康检查）、Dockerfile 和 .dockerignore；根目录 package.json 的 scripts 也归你，保证 `npm start` 能起服务、`npm test` 能跑全部测试。不改别人的目录。"
+    },
+    {
+      "key": "reviewer",
+      "title": "评审",
+      "emoji": "🔍",
+      "depends_on": [
+        "backend",
+        "frontend",
+        "ops"
+      ],
+      "writable": [],
+      "outputs": [],
+      "brief": "只读，不改任何文件。看运行分支相对需求提交的全部改动，对照 docs/product/acceptance.md 逐条核：有没有漏、有没有明显的缺陷、有没有越界改别人的目录。最后一条回复第一行写 `DONE: 可以交付` 或 `DONE: 要改`，要改就逐条列出归哪个角色。"
+    }
+  ],
+  "defaults": {
+    "model": "claude-opus-5.5",
+    "max_fix_rounds": 2
+  },
+  "test_owners": [
+    {
+      "glob": "tests/api-*",
+      "role": "backend"
+    },
+    {
+      "glob": "tests/web-*",
+      "role": "frontend"
+    },
+    {
+      "glob": "tests/ops-*",
+      "role": "ops"
+    }
+  ]
+}
