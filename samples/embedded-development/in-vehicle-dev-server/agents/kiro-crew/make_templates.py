@@ -15,13 +15,13 @@ from pathlib import Path
 KNOWLEDGE = "vstatd"
 
 # member name → the AI-DLC expert it runs as, display name, one line in Chinese (what Kiro Crew's Teammates page
-# shows). The members have their own names so that they do not clash with the agent-team sample's members, which
-# carry the experts' names.
+# shows). Names and display names are this team's own: Kiro Crew keeps both unique, and the agent-team sample's
+# members carry the experts' names and the display names 开发, 架构, 质量 and 架构评审.
 TEAM = {
-    "vstatd-developer": ("aidlc-developer-agent", "开发", "AI-DLC 开发专家：分诊、修复和重构 vstatd"),
-    "vstatd-architect": ("aidlc-architect-agent", "架构", "AI-DLC 架构专家：重构方案和按源文件分工"),
-    "vstatd-quality": ("aidlc-quality-agent", "质量", "AI-DLC 质量专家：测试先行，先失败的单元测试"),
-    "vstatd-architecture-reviewer": ("aidlc-architecture-reviewer-agent", "架构评审",
+    "vstatd-developer": ("aidlc-developer-agent", "车载开发", "AI-DLC 开发专家：分诊、修复和重构 vstatd"),
+    "vstatd-architect": ("aidlc-architect-agent", "车载架构", "AI-DLC 架构专家：重构方案和按源文件分工"),
+    "vstatd-quality": ("aidlc-quality-agent", "车载质量", "AI-DLC 质量专家：测试先行，先失败的单元测试"),
+    "vstatd-architecture-reviewer": ("aidlc-architecture-reviewer-agent", "车载架构评审",
                                      "AI-DLC 架构评审：独立、只读，复核说明和保住的行为"),
 }
 
