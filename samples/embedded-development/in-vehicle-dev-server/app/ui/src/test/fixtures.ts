@@ -18,7 +18,7 @@
  * - auditOf: GET /runs/<id>/audit of that run; benchAuditOf: GET /audit/bench (a baseline replay approved on the board).
  */
 import raw from './fixtures/board-running.json'
-import type { AuditActor, AuditEntry, AuditTrail, BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, RunFlow, FlowSegment, TeamEventKind, TestCase, TriageRow } from '../types'
+import type { AuditActor, AuditEntry, AuditTrail, BacklogIndex, BacklogRow, BacklogView, Board, EventData, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, RunFlow, FlowSegment, TeamEventKind, TestCase, TriageRow } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -594,6 +594,51 @@ function backlogView(approved: boolean): BacklogView {
   return { rows: clone(BACKLOG), next_id: 'F-031', triage: { state: approved ? 'approved' : 'proposed', approved: approved ? { by: '李工', at: '2026-11-02T09:12:00Z' } : null, findings } }
 }
 
+/** The vstatd run's event log up to *stage*: triage to its gate, then the build and checks, then the bench and the release check. */
+function vstatdEvents(id: string, title: string, t: number, stage: 'triage' | 'bench' | 'release'): TeamEvent[] {
+  type Row = [number, TeamEventKind, string | null, string, string | null, string | null, EventData | null]
+  const ev = (dt: number, kind: TeamEventKind, role: string | null, text: string, from: string | null = null, to: string | null = null, data: EventData | null = null): Row =>
+    [dt, kind, role, text, from, to, data]
+  const triage: Row[] = [
+    ev(0, 'run', null, `运行开始：${title}`),
+    ev(20, 'spawned', 'triage', '分诊开工：读 findings-backlog.md 和接口规范'),
+    ev(1480, 'committed', 'triage', '分诊提交 4b7e1d2：F-001..F-030 定了修、说明或延后，按 TR §4.4 加 F-031'),
+    ev(1490, 'done', 'triage', '分诊完成：22 个 fix、3 个 justify、5 个 defer，加 F-031 重构'),
+    ev(1510, 'gate', 'triage', '分诊交给人：F-008 说明、F-021 延后要你决定', 'triage', 'person'),
+  ]
+  const build: Row[] = [
+    ev(1800, 'approved', 'triage', '人批准了分诊（李工）', 'person', 'triage'),
+    ev(1805, 'handoff', 'architect', '分诊交给架构师', 'triage', 'architect', { carry: '分诊' }),
+    ev(2600, 'done', 'architect', '架构师完成：Service::run() 拆成 4 个函数，两个开发按源文件分工'),
+    ev(2610, 'gate', 'architect', '开工方案交给人', 'architect', 'person'),
+    ev(2700, 'approved', 'architect', '人批准了开工', 'person', 'architect'),
+    ev(2705, 'handoff', 'tester', '重构方案交给测试', 'architect', 'tester', { carry: '重构方案' }),
+    ev(3000, 'tests', null, '测试先行：3 个新测试在基线提交上都失败（应当如此）', null, null, { passed: 0, total: 3 }),
+    ev(3305, 'handoff', 'dev-fix', '测试交给开发 · 修复', 'tester', 'dev-fix', { carry: '测试' }),
+    ev(3305, 'handoff', 'dev-refactor', '测试交给开发 · 重构', 'tester', 'dev-refactor', { carry: '测试' }),
+    ev(3620, 'committed', 'dev-fix', '开发 · 修复提交 3c9a1f0：F-003: close fd on connect failure'),
+    ev(4100, 'committed', 'dev-refactor', '开发 · 重构提交 5f6b2e9：F-031: move signal table handling out of Service::run()'),
+    ev(4200, 'tests', null, '检查第 2 轮 3/5：static、unit FAIL', null, null, { passed: 3, total: 5, phase: 'before_bench' }),
+    ev(4201, 'bounce', 'dev-fix', '检查第 2 轮 static FAIL（F-018 还在报）、unit FAIL，退回开发 · 修复', 'tests', 'dev-fix', { cases: ['static', 'unit'] }),
+    ev(4210, 'spawned', 'dev-fix', '开发 · 修复第 2 轮：修 static、unit'),
+    ev(5120, 'committed', 'dev-fix', '开发 · 修复提交 d8e3a71：F-018: strtol with a range check in parse_interval'),
+    ev(5400, 'tests', null, '检查第 3 轮 5/5：build、static、unit、size、trace 都 PASS', null, null, { passed: 5, total: 5, phase: 'before_bench' }),
+    ev(5410, 'handoff', 'reviewer', '改动交给评审', 'dev-fix', 'reviewer', { carry: '改动' }),
+    ev(5800, 'done', 'reviewer', '评审：可以交付'),
+    ev(5460, 'bench', null, '台架自检 doctor.sh 通过'),
+    ev(5890, 'bench', null, '向操作台请求部署：vstatd 133240 bytes，摘要 bc93723c5a1f'),
+  ]
+  const release: Row[] = [
+    ev(5960, 'bench', null, '看板批准部署（李工）'),
+    ev(5990, 'bench', null, '部署结果 ok：installed'),
+    ev(6160, 'bench', null, '操作台批准回放，回放 drive-01'),
+    ev(6800, 'tests', null, '台架之后的检查 2/2：logdiff、runtime-limits PASS', null, null, { passed: 2, total: 2, phase: 'after_bench' }),
+    ev(7300, 'tests', null, '独立重跑 7/7：release.sh PASS，可以签字', null, null, { passed: 7, total: 7, phase: 'rerun' }),
+  ]
+  const rows = [...triage, ...(stage === 'triage' ? [] : build), ...(stage === 'release' ? release : [])].sort((a, b) => a[0] - b[0])
+  return rows.map(([dt, kind, role, text, from, to, data], i) => ({ seq: i + 1, at: t + dt, kind, role, text, from, to, data }))
+}
+
 const CHECK = (name: string, verdict: 'PASS' | 'FAIL' | 'BLOCKED', tier: string, owner: string | null, message: string | null, ms: number): TestCase => ({
   id: name, ac: name, name: `${name}.sh`, file: '', status: verdict === 'PASS' ? 'pass' : verdict === 'FAIL' ? 'fail' : 'blocked', verdict, tier, owner, ms, message,
 })
@@ -616,15 +661,41 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
     { id: 'F-021', q: 'F-021 分诊建议延后（待办标的是 fix）：src/ipc_server.cpp › IpcServer::accept', options: [{ key: 'A', text: '同意延后' }, { key: 'B', text: '不同意：本批修复（退回分诊补齐证据和行为）' }],
       recommend: 'A', why: '改法要动 IPC 的行为；什么时候再处理：下一批', cites: [], decision: 'defer' },
   ]
+  // what each role changed in reference-project, and its commits citing the findings (TR: every fix commit cites its ID)
+  const wt = (key: string): Partial<Lane> => ({ worktree: `${run.repo.replace(/\/repo$/, '')}/wt/${key}`, branch: `team/${run.id}/${key}`, session: `vstatd-team-${run.id}-${key}` })
+  const F = (path: string, added: number, removed: number, status: FileChange['status'] = 'M'): FileChange => ({ path, added, removed, status })
+  const C = (sha: string, subject: string, dt: number) => ({ sha, subject, at: t + dt })
+  const work = (files: FileChange[], commits: ReturnType<typeof C>[], done: number): Partial<Lane> =>
+    ({ files, commits, lines: { added: files.reduce((n, f) => n + f.added, 0), removed: files.reduce((n, f) => n + f.removed, 0) }, done_at: t + done })
+  const WORK: Record<string, Partial<Lane>> = {
+    triage: work([F('docs/aidlc/triage.json', 412, 0, 'A'), F('docs/aidlc/triage.md', 186, 0, 'A')],
+      [C('4b7e1d2', 'triage: F-001..F-030 decided, F-031 added under TR §4.4', 1480)], 1490),
+    architect: work([F('docs/aidlc/refactor-plan.md', 138, 0, 'A')], [C('9d02c6e', 'F-031: plan the Service::run() split and who edits which file', 2590)], 2600),
+    tester: work([F('tests/test_gateway_client.cpp', 96, 0, 'A'), F('tests/test_client_session.cpp', 54, 3), F('tests/test_signal_table.cpp', 71, 0), F('tests/CMakeLists.txt', 4, 1)],
+      [C('c41a8f3', 'F-003 F-018: tests that fail on the baseline', 3180), C('e5f9b20', 'F-031: characterization test for the signal table', 3290)], 3300),
+    'dev-fix': work([F('src/gateway_client.cpp', 18, 6), F('src/frame_decoder.cpp', 22, 9), F('src/client_session.cpp', 31, 12), F('src/ipc_server.cpp', 9, 3)],
+      [C('3c9a1f0', 'F-003: close fd on connect failure', 3620), C('7a1e44b', 'F-004 F-005: no narrowing in parse_record, init last_error_', 3900),
+        C('b20d9c5', 'F-016: check the optional before handle_sub reads it', 4180), C('d8e3a71', 'F-018: strtol with a range check in parse_interval', 5120)], 5200),
+    'dev-refactor': work([F('src/service.cpp', 38, 412), F('src/signal_table.cpp', 164, 12), F('src/signal_table.h', 21, 2)],
+      [C('5f6b2e9', 'F-031: move signal table handling out of Service::run()', 4100), C('a93c07d', 'F-010 F-012: init status, path by const ref in SignalTable::update', 4420)], 4500),
+    reviewer: { files: [], commits: [], lines: { added: 0, removed: 0 }, done_at: t + 5800 },
+  }
+  const did = (key: string): Partial<Lane> => ({ ...wt(key), ...(key === 'triage' || at ? WORK[key] : { files: [], commits: [], lines: { added: 0, removed: 0 }, done_at: null }) })
   run.roles = [
     mk('triage', '分诊', 'scope', 'inception', '分诊 · 修、说明或延后', [], 'merged', 'aidlc-developer-agent',
-      { gate: at ? 'approved' : 'pending', gate_label: '分诊', writable: ['docs/aidlc/triage.json', 'docs/aidlc/triage.md'], questions: at ? [] : questions }),
-    mk('architect', '架构师', 'architect', 'inception', '重构方案 · 分工', ['triage'], after('merged'), 'aidlc-architect-agent', { gate: at ? 'approved' : null, gate_label: '开工' }),
-    mk('tester', '测试', 'tester', 'construction', '测试先行', ['architect'], after('merged'), 'aidlc-quality-agent', { writable: ['tests/**'], tests_first: at ? 'passed' : null }),
-    mk('dev-fix', '开发 · 修复', 'backend', 'construction', '修复', ['tester'], after('merged'), 'aidlc-developer-agent', { attempt: at ? 2 : 1, kinds: at ? ['work', 'fix'] : ['work'] }),
-    mk('dev-refactor', '开发 · 重构', 'frontend', 'construction', '重构', ['tester'], after('merged'), 'aidlc-developer-agent'),
-    mk('reviewer', '评审', 'reviewer', 'review', '评审', ['dev-fix', 'dev-refactor'], at ? 'done' : 'waiting', 'aidlc-architecture-reviewer-agent', { writable: [], summary: at ? '可以交付' : null }),
+      { gate: at ? 'approved' : 'pending', gate_label: '分诊', writable: ['docs/aidlc/triage.json', 'docs/aidlc/triage.md'], questions: at ? [] : questions, ...did('triage') }),
+    mk('architect', '架构师', 'architect', 'inception', '重构方案 · 分工', ['triage'], after('merged'), 'aidlc-architect-agent',
+      { gate: at ? 'approved' : null, gate_label: '开工', writable: ['docs/aidlc/refactor-plan.md'], ...did('architect') }),
+    mk('tester', '测试', 'tester', 'construction', '测试先行', ['architect'], after('merged'), 'aidlc-quality-agent', { writable: ['tests/**'], tests_first: at ? 'passed' : null, ...did('tester') }),
+    mk('dev-fix', '开发 · 修复', 'backend', 'construction', '修复', ['tester'], after('merged'), 'aidlc-developer-agent',
+      { attempt: at ? 2 : 1, kinds: at ? ['work', 'fix'] : ['work'], writable: ['src/gateway_client.*', 'src/frame_decoder.*', 'src/client_session.*', 'src/ipc_server.*', 'src/supervisor.*', 'src/config.*', 'src/main.cpp'], ...did('dev-fix') }),
+    mk('dev-refactor', '开发 · 重构', 'frontend', 'construction', '重构', ['tester'], after('merged'), 'aidlc-developer-agent',
+      { writable: ['src/service.*', 'src/signal_table.*'], ...did('dev-refactor') }),
+    mk('reviewer', '评审', 'reviewer', 'review', '评审', ['dev-fix', 'dev-refactor'], at ? 'done' : 'waiting', 'aidlc-architecture-reviewer-agent', { writable: [], summary: at ? '可以交付' : null, ...did('reviewer') }),
   ]
+  run.ownership = { roles: Object.fromEntries(run.roles.filter((l) => l.writable.length).map((l) => [l.key, l.writable])), test_areas: {} }
+  run.delivery = { name: '', kind: '修复', size: '中', line: '内部系统', why: '', confirmed: false }
+  run.issue = { id: 'VSTATD-112', kind: '缺陷', reporter: '车载平台组', created_at: t }
   run.edges = run.roles.flatMap((r) => r.depends_on.map((d) => [d, r.key] as [string, string]))
   run.team = { name: 'AIDLC-Embedded团队', orchestrator: 'vstatd-team' }
   run.title = '修复 vstatd 静态分析待办里标为 fix 的发现'
@@ -634,6 +705,8 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
       { key: 'TR', title: '团队规则', path: 'team-rules.md', cites: at ? 6 : 4 }] }
   run.merges = []
   run.backlog = backlogView(at > 0)
+  run.events = vstatdEvents(run.id, run.title, t, stage)
+  b.at = t + (stage === 'triage' ? 1520 : stage === 'bench' ? 5900 : 7400) // the snapshot is taken after its last event
   run.tests = at ? {
     at: t + 5400, command: 'build static unit size trace', passed: 5, failed: 0, total: 5,
     history: [{ at: t + 3000, passed: 0, failed: 3 }, { at: t + 4200, passed: 3, failed: 2 }, { at: t + 5400, passed: 5, failed: 0 }],
@@ -675,6 +748,8 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
   } else {
     Object.assign(run, { status: at ? 'running' : 'gating', ended_at: null, sign_block: '运行结束以后才能签字' })
   }
+  run.wall_s = (run.ended_at ?? b.at) - t
+  run.serial_s = run.wall_s + (at ? 990 : 0) // the two developers worked side by side for 990 s
   b.runs = [{ ...b.runs[0], title: run.title, status: run.status, roles_total: run.roles.length, roles_done: run.roles.filter((l) => l.status === 'merged' || l.status === 'done').length,
     tests: { passed: run.tests.passed, failed: run.tests.failed, total: run.tests.total } }]
   return b
