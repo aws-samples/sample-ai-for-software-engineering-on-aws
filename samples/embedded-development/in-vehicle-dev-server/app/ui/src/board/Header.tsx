@@ -6,9 +6,10 @@
  * empty state itself: the work item, the flow from the backlog to sign-off, what this Mac still needs (FlowStrip.tsx)
  * the knowledge documents (Knowledge.tsx) and the requirement list (Backlog.tsx).
  */
-import { useState, type CSSProperties, type FormEvent } from 'react'
-import type { Board, Delivery, GateDecision, GateQuestion, RunDetail, TalkLine, TestWall } from '../types'
-import { AIDLC_AGENTS, FINISHED, expertsOf, LIVE, WORKING, aidlcUse, fmtAgo, fmtClock, fmtCredits, fmtSpan, isRunActive, laneMeta, runMeta, saving } from './format'
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
+import { useAppApi } from '@kirocrew/app-sdk'
+import type { Board, Delivery, GateDecision, GateQuestion, RunDetail, TalkLine, TeamPreview, TestWall } from '../types'
+import { AIDLC_AGENTS, BASE, FINISHED, PHASES, expertsOf, LIVE, WORKING, aidlcUse, fmtAgo, fmtClock, fmtCredits, fmtSpan, isRunActive, laneMeta, runMeta, saving } from './format'
 import { useChangeCount, useServerNow, useSinceSnapshot, useTween } from './hooks'
 import { groupByAc } from './TestWall'
 import { errorText } from './useBoard'
@@ -377,6 +378,81 @@ export const SCENARIOS: ReadonlyArray<{ label: string; hint: string; text: strin
   { label: 'vstatd · 本批待办', hint: '修待办里标了 fix 的发现，拆分 Service::run()，行为不变', text: '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。' },
 ]
 
+const CHECK_WHEN: ReadonlyArray<[string, string]> = [['before_bench', '上台架前'], ['after_bench', '台架后'], ['release', '签字前']]
+
+/** 组队预览 (GET /team): the one team's roles by AI-DLC phase, the templates they run, its checks and the knowledge source. */
+export function TeamPreviewPanel() {
+  const api = useAppApi()
+  const [t, setT] = useState<TeamPreview | null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let live = true
+    api.get<TeamPreview>(`${BASE}/team`).then(
+      (d) => live && setT(d),
+      (x) => live && setErr(errorText(x)),
+    )
+    return () => {
+      live = false
+    }
+  }, [api])
+  if (err) return <p className="kt-pick is-empty" data-testid="kt-pick">组队预览读不到：{err}</p>
+  if (!t) return <p className="kt-pick is-empty" data-testid="kt-pick">正在读团队配置…</p>
+  if (t.error) return <p className="kt-pick is-empty kt-warn" data-testid="kt-pick">{t.error}</p>
+  const missing = new Set(t.templates.filter((x) => !x.present).map((x) => x.name))
+  const phases = PHASES.map((ph) => ({ ...ph, roles: t.roles.filter((r) => r.phase === ph.key) })).filter((ph) => ph.roles.length)
+  const byKey = new Map(t.roles.map((r) => [r.key, r.title]))
+  const kb = t.knowledge
+  return (
+    <section className="kt-pick" aria-label="组队预览" data-testid="kt-pick">
+      <p className="kt-pick-team"><b>{t.name}</b> · {t.roles.length} 位成员</p>
+      <ol className="kt-pick-phases" aria-label="按 AI-DLC 阶段">
+        {phases.map((ph) => (
+          <li key={ph.key}>
+            <span className="kt-pick-phase">{ph.n} {ph.title}</span>
+            {ph.roles.map((r) => (
+              <span key={r.key} className={`kt-pick-role${missing.has(r.template) ? ' is-absent' : ''}`} data-testid="kt-pick-role" data-key={r.key}
+                title={`AI-DLC 专家 ${r.aidlc_agent || '—'} · 可写：${r.writable}`}>
+                <RoleIcon role={r.icon || r.key} size={16} />
+                <span>
+                  {r.title}
+                  {r.gate ? <em> · 人批准（{r.gate}）</em> : null}
+                  <small className="kt-mono">{r.template}{missing.has(r.template) && <span className="kt-pick-miss"> 模板没装</span>}</small>
+                </span>
+              </span>
+            ))}
+          </li>
+        ))}
+      </ol>
+      {missing.size > 0 && (
+        <p className="kt-warn" data-testid="kt-pick-missing">
+          模板 {[...missing].join('、')} 不在 ~/.kiro/agents：在场景文件夹里跑 <code className="kt-mono">bash setup.sh</code>
+        </p>
+      )}
+      <div className="kt-pick-checks" aria-label="检查">
+        {CHECK_WHEN.map(([when, label]) => {
+          const cs = t.checks.filter((c) => c.when === when)
+          if (!cs.length) return null
+          return (
+            <p key={when} data-testid="kt-pick-checks" data-when={when}>
+              <span className="kt-pick-phase">{label}</span>
+              {cs.map((c) => (
+                <span key={c.name} className="kt-pick-agent is-used kt-mono" title={c.owner ? `失败没写文件时交给${byKey.get(c.owner) ?? c.owner} · 最多 ${c.max_rounds} 轮` : '签字前在最终提交上跑'}>
+                  {c.name}
+                </span>
+              ))}
+            </p>
+          )
+        })}
+      </div>
+      {kb && (
+        <p className={kb.present === false ? 'kt-warn' : 'kt-dim'} data-testid="kt-pick-kb">
+          知识库「{kb.name}」：{kb.present === false ? `还没挂上，在 Crew 侧栏「知识库 → 来源」里加 ${kb.path || '~/workplace/vstatd/knowledge'}` : kb.present === null ? '读取中' : `${kb.items ?? 0} 份文档${kb.status === 'synced' ? ' · 已同步' : ' · 正在索引'}`}
+        </p>
+      )}
+    </section>
+  )
+}
+
 export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: () => void }) {
   const [text, setText] = useState(SCENARIOS[0].text)
   const [source, setSource] = useState('')
@@ -409,6 +485,7 @@ export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: 
       <label htmlFor="kt-req">交给 agent 团队的需求</label>
       <p className="kt-dim kt-req-hint">团队先分诊待办里的发现（修、说明或延后）、定重构方案和分工，你在分诊和开工两个关卡批准后才往下做。</p>
       <textarea id="kt-req" value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder={SCENARIOS[0].text} />
+      <TeamPreviewPanel />
       <details className="kt-start-more" open={!!source}>
       <summary>高级选项</summary>
       <div className="kt-start-row">

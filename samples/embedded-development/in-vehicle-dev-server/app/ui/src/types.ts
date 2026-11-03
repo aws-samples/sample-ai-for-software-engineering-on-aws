@@ -198,6 +198,31 @@ export type KnowledgeIndex = { docs: KnowledgeDoc[]; source: KnowledgeSource | n
 /** GET /knowledge/file: one document's text for the read-only viewer. */
 export type KnowledgeText = { path: string; title: string; text: string; size: number }
 
+/** One role in the start form's 组队预览 (GET /team), in flow order. */
+export type TeamRoleView = {
+  key: string
+  title: string
+  icon: string
+  aidlc_agent: string // the AI-DLC expert the role follows
+  template: string // the Kiro agent template its session runs (~/.kiro/agents/<template>.json)
+  writable: string // what it may write: paths, 按…的分工, or 只读
+  gate: string // the human gate's label; '' when none
+  phase: string
+}
+
+/** One check of the team file; when: before_bench | after_bench | release. */
+export type TeamCheckView = { name: string; when: string; owner: string | null; max_rounds: number }
+
+/** GET /team: the default team for the start form; templates say whether each template's file is installed. */
+export type TeamPreview = {
+  name: string
+  roles: TeamRoleView[]
+  checks: TeamCheckView[]
+  templates: { name: string; present: boolean }[]
+  knowledge: KnowledgeSource | null
+  error: string
+}
+
 /** A row of the findings backlog (findings-backlog.md); label fix puts it in this batch. */
 export type BacklogRow = { id: string; tool: string; check: string; location: string; message: string; label: string }
 

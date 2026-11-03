@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import board, checks, library, outputs, paths, readiness, scorecard
+from . import board, checks, library, outputs, paths, readiness, roster, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -66,6 +66,7 @@ class Service:
         self.crew: dict[str, Any] = {"at": float("-inf"), "members": None, "knowledge": None, "error": ""}
         self._live_runs: set[str] = set()  # the runs seen going last pulse: one that has ended since keeps its roster
         self.probes = readiness.Probes(self.data_dir / "readiness")  # 准备情况: the image and doctor.sh, cached
+        self.agents_dir = Path.home() / ".kiro" / "agents"  # the Kiro agent templates the roles run (组队预览 stats them)
 
     def manager(self) -> Any:
         """The agent manager the runs, the board and 产出 use: the role sessions."""
@@ -450,6 +451,17 @@ class Service:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
         return {"docs": await asyncio.to_thread(library.docs, sample / "knowledge"), "error": "",
                 "source": self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))}
+
+    async def team_view(self) -> dict[str, Any]:
+        """组队预览 (start form): the default team's roles, checks, knowledge source and templates."""
+        try:
+            team, _ = await asyncio.to_thread(self._default_team)
+        except AppError as exc:
+            return {"name": "", "roles": [], "checks": [], "templates": [], "knowledge": None, "error": str(exc)}
+        except (OSError, ValueError) as exc:
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+        kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
+        return await asyncio.to_thread(roster.preview, team, kb, self.agents_dir)
 
     async def knowledge_file(self, path: Any) -> dict[str, Any]:
         """One knowledge document as text, for the read-only viewer."""

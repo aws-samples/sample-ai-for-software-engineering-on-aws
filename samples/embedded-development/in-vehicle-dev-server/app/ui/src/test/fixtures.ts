@@ -13,10 +13,10 @@
  *   (the check wall green, a deploy waiting at the operator console), or ended with the release check (the
  *   independent rerun, a check that differed, the evidence page);
  * - readinessOf: GET /readiness on a Mac with the build image but no bench yet;
- * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file; backlogOf: GET /backlog.
+ * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file; backlogOf: GET /backlog; teamOf: GET /team.
  */
 import raw from './fixtures/board-running.json'
-import type { BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase, TriageRow } from '../types'
+import type { BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, TeamEventKind, TestCase, TriageRow } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -758,3 +758,26 @@ export const FIXTURES = {
 } as const
 
 export type FixtureName = keyof typeof FIXTURES
+
+/** GET /team: the vstatd team as team-vstatd.json has it; *missing* templates have no file in ~/.kiro/agents. */
+export function teamOf(missing: string[] = []): TeamPreview {
+  const role = (key: string, title: string, icon: string, template: string, aidlc_agent: string, phase: string, writable: string, gate = '') =>
+    ({ key, title, icon, template, aidlc_agent, phase, writable, gate })
+  const roles = [
+    role('triage', '分诊', 'scope', 'embedded-developer-agent', 'aidlc-developer-agent', 'inception', 'docs/aidlc/triage.json、docs/aidlc/triage.md', '分诊'),
+    role('architect', '架构师', 'architect', 'embedded-architect-agent', 'aidlc-architect-agent', 'inception', 'docs/aidlc/refactor-plan.md、docs/aidlc/work-split.json、docs/aidlc/plan.json', '开工'),
+    role('tester', '测试', 'tester', 'embedded-quality-agent', 'aidlc-quality-agent', 'construction', 'tests/**、docs/aidlc/tests.md'),
+    role('dev-fix', '开发 · 修复', 'backend', 'embedded-developer-agent', 'aidlc-developer-agent', 'construction', '按架构师的分工'),
+    role('dev-refactor', '开发 · 重构', 'frontend', 'embedded-developer-agent', 'aidlc-developer-agent', 'construction', '按架构师的分工'),
+    role('reviewer', '评审', 'reviewer', 'embedded-architecture-reviewer-agent', 'aidlc-architecture-reviewer-agent', 'review', '只读'),
+  ]
+  const check = (name: string, when: string, owner: string | null, max_rounds = 2) => ({ name, when, owner, max_rounds })
+  return {
+    name: 'AIDLC-Embedded团队', roles, error: '',
+    checks: [check('build', 'before_bench', 'dev-fix', 3), check('static', 'before_bench', 'dev-fix'), check('unit', 'before_bench', 'dev-fix'),
+      check('size', 'before_bench', 'dev-refactor'), check('trace', 'before_bench', 'dev-fix'), check('runtime-limits', 'after_bench', 'dev-fix'),
+      check('logdiff', 'after_bench', 'dev-fix'), check('release', 'release', null)],
+    templates: [...new Set(roles.map((r) => r.template))].sort().map((name) => ({ name, present: !missing.includes(name) })),
+    knowledge: { name: 'vstatd', present: true, items: 14, status: 'synced', files_total: 14, files_done: 14, path: '~/workplace/vstatd/knowledge' },
+  }
+}

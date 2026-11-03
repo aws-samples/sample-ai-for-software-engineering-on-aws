@@ -734,6 +734,22 @@ ${legendSwatches}
 .kt-ready-needed.is-later { color: var(--muted); }
 .kt-ready-detail { color: var(--text); font-size: .9em; }
 .kt-ready-cmd { grid-column: 2 / -1; font-size: .84em; overflow-wrap: anywhere; padding: 3px 8px; border-radius: 8px; background: var(--kt-glass); }
+.kt-pick { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--border-strong, var(--border)); background: var(--bg); font-size: .92em; }
+.kt-pick.is-empty { color: var(--muted); margin: 0; }
+.kt-pick p { margin: 0; }
+.kt-pick-team b { color: var(--text-strong); }
+.kt-pick-phases { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 4px; }
+.kt-pick-phases li, .kt-pick-checks p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.kt-pick-checks { display: grid; gap: 4px; }
+.kt-pick-phase { min-width: 6.5em; font-weight: 700; color: var(--muted); }
+.kt-pick-role { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); }
+.kt-pick-role > span { display: inline-flex; flex-direction: column; line-height: 1.25; }
+.kt-pick-role em { font-style: normal; color: var(--kt-approve); font-weight: 700; }
+.kt-pick-role small { font-size: .78em; color: var(--muted); font-weight: 500; }
+.kt-pick-role.is-absent { border-style: dashed; border-color: var(--kt-warn); }
+.kt-pick-miss { color: var(--kt-warn); font-weight: 700; }
+.kt-pick-agent { padding: 1px 7px; border-radius: 6px; font-size: .86em; color: var(--muted); border: 1px solid var(--border); }
+.kt-pick-agent.is-used { color: var(--text-strong); border-color: var(--kt-ok, var(--border-strong)); font-weight: 700; }
 .kt-lib-head { display: grid; gap: 2px; }
 .kt-lib-head h3 { margin: 0 0 2px; font-size: 1.05em; color: var(--text-strong); }
 .kt-lib-head p { margin: 0; font-size: .9em; }
