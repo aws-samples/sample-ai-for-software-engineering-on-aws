@@ -12,10 +12,11 @@
  * - vstatdBoard: the vstatd team (team-vstatd.json) at its triage gate (questions with citations), held at the bench
  *   (the check wall green, a deploy waiting at the operator console), or ended with the release check (the
  *   independent rerun, a check that differed, the evidence page);
- * - readinessOf: GET /readiness on a Mac with the build image but no bench yet.
+ * - readinessOf: GET /readiness on a Mac with the build image but no bench yet;
+ * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file.
  */
 import raw from './fixtures/board-running.json'
-import type { Board, FileChange, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase } from '../types'
+import type { Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -563,7 +564,9 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
   run.team = { name: 'AIDLC-Embedded团队', orchestrator: 'vstatd-team' }
   run.title = '修复 vstatd 静态分析待办里标为 fix 的发现'
   run.requirement = '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。'
-  run.knowledge = { source: { name: 'vstatd', present: true, items: 14, status: 'synced', files_total: 14, files_done: 14, path: '~/workplace/vstatd/knowledge' }, hits: [] }
+  run.knowledge = { source: { name: 'vstatd', present: true, items: 14, status: 'synced', files_total: 14, files_done: 14, path: '~/workplace/vstatd/knowledge' }, hits: [],
+    docs: [{ key: 'VSTATD-IF', title: 'vstatd 接口规范', path: 'vstatd-interface.md', cites: at ? 9 : 3 }, { key: 'CC1-PN', title: 'CC-1 平台说明', path: 'cc1-platform-notes.md', cites: at ? 2 : 0 },
+      { key: 'TR', title: '团队规则', path: 'team-rules.md', cites: at ? 6 : 4 }] }
   run.merges = []
   run.tests = at ? {
     at: t + 5400, command: 'build static unit size trace', passed: 5, failed: 0, total: 5,
@@ -629,6 +632,36 @@ export function readinessOf(at: number = raw.at): Readiness {
         command: `python3 ${SAMPLE}/bench/console.py`, needed: 'bench', age_s: null, running: false },
     ],
   }
+}
+
+const KB_DOC = (path: string, title: string, key: string | null, desc: string, counts: [string, number][], text = true): KnowledgeDoc => ({
+  path, title, key, desc, counts: counts.map(([label, n]) => ({ label, n })), present: true, text, rendered_from: text ? null : 'vstatd-interface.md',
+})
+
+/** GET /knowledge: the scenario's documents (figures as the backend counts them from the files) and the source indexed. */
+export function knowledgeOf(): KnowledgeIndex {
+  return {
+    error: '', source: { name: 'vstatd', present: true, items: 14, status: 'synced', files_total: 14, files_done: 14, path: '~/workplace/vstatd/knowledge' },
+    docs: [
+      KB_DOC('vstatd-interface.md', 'vstatd 接口规范', 'VSTATD-IF', '网关报文、信号、解码、监督、IPC、错误、运行日志和启动；引用要写页码', [['节', 41], ['页', 11]]),
+      KB_DOC('vstatd-interface.pdf', 'vstatd 接口规范（PDF）', null, '上面那份规范的排版版本，分页相同；这里只看 Markdown 版', [], false),
+      KB_DOC('cc1-platform-notes.md', 'CC-1 平台说明', 'CC1-PN', '目标、仿真的 CC-1、资源限额、启动顺序、日志格式、工具链和台架', [['节', 23]]),
+      KB_DOC('team-rules.md', '团队规则', 'TR', 'C++ 规则、构建选项、分析器设置、分诊规则、修复轮数和完成的定义', [['节', 22]]),
+      KB_DOC('findings-backlog.md', '静态分析待办', null, '当前版本的静态分析发现，标 fix 的进本批，标 later 的留在待办', [['发现', 30], ['fix', 22], ['later', 8]]),
+      KB_DOC('cc1-gateway.dbc', 'CAN 数据库（DBC）', null, '报文、信号、周期和 SNA 值；规范 §3.1 的表从这里来', [['报文', 9], ['信号', 24]]),
+      KB_DOC('vss-mapping.yaml', 'VSS 信号映射', null, '每个发布的信号路径（COVESA VSS v6.1 名字）对应哪个 CAN 信号', [['信号路径', 24]]),
+      KB_DOC('facts/signals.yaml', '事实条目 · 信号', null, '从规范里摘出的每个信号，带页和节', [['条目', 24]]),
+      KB_DOC('facts/messages.yaml', '事实条目 · 报文', null, '从规范里摘出的每个报文，带页和节', [['条目', 9]]),
+      KB_DOC('facts/rules.yaml', '事实条目 · 规则', null, '从规范里摘出的每条规则，带页和节', [['条目', 39]]),
+    ],
+  }
+}
+
+/** GET /knowledge/file for *path*: a short stand-in text (with markup that must show as text). */
+export function knowledgeTextOf(path: string): KnowledgeText {
+  const doc = knowledgeOf().docs.find((d) => d.path === path)
+  const text = `# ${doc?.title ?? path}\n\n> 预览里的替身文字；app 里是 ${path} 的全文。\n\n<b>不渲染</b> **也不渲染 Markdown**\n`
+  return { path, title: doc?.title ?? path, text, size: text.length }
 }
 
 /** A scorecard (GET /scorecard) with *b*'s run, its figures as the backend would take them from such a run. */

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import gitwork
+from . import gitwork, library
 from .sessions import agent_fields, find_agent
 from .team import ACTIVE, TeamRun, clean_risk, live_status
 from .toollog import short
@@ -81,7 +81,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "requirement": s.get("requirement") or "",
         "knowledge": {"source": (crew.knowledge_view(str(kb.get("source") or "")) if crew is not None else None)
                       or (source_row(str(kb["source"]), None) if kb.get("source") else None),
-                      "hits": knowledge_hits(run, mgr, scrub, str(kb.get("data_dir") or ""))},
+                      "hits": knowledge_hits(run, mgr, scrub, str(kb.get("data_dir") or "")), "docs": cited_docs(run)},
         "crew_members": crew_members(run, crew),
         "delivery": {**run.delivery(), "confirmed": bool(s.get("delivery"))},
         "issue": run.issue(),
@@ -142,6 +142,20 @@ def source_row(name: str, row: dict[str, Any] | None) -> dict[str, Any]:
     return {"name": name, "present": None if row is None else bool(row), "items": (row or {}).get("item_count"),
             "status": str((row or {}).get("sync_status") or ""), "files_total": spend.get("files_total"),
             "files_done": spend.get("files_done"), "path": str((row or {}).get("uri") or "").replace(str(Path.home()), "~")}
+
+
+def knowledge_dir(run: TeamRun) -> Path | None:
+    """The scenario's knowledge folder, as the team's triage role names it (None: a team without a triage)."""
+    return next((Path(r["triage"]["knowledge"]) for r in run.team["roles"] if r.get("triage")), None)
+
+
+def cited_docs(run: TeamRun) -> list[dict[str, Any]]:
+    """KnowledgeChip: each citable document and how often the roles' replies (or summaries) cite it."""
+    if knowledge_dir(run) is None:
+        return []
+    texts = [str(a.get("reply") or a.get("summary") or "") for k in run.order for a in run.lane(k)["attempts"]]
+    n = library.cites(texts)
+    return [{"key": k, "title": library.TITLES[k], "path": library.PATHS[k], "cites": n[k]} for k in library.CITE_KEYS]
 
 
 def knowledge_hits(run: TeamRun, mgr: Any, scrub: Callable[[str], str], data_dir: str) -> list[dict[str, Any]]:

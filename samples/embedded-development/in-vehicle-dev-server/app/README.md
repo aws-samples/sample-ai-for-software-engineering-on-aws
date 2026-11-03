@@ -41,12 +41,14 @@ image and doctor.sh are probed in the background and cached (doctor.sh runs once
 `POST /readiness/doctor`); the bench state is only read. During a run, a strip above the team graph shows the same
 steps and what comes next (`ui/src/board/flow.ts`).
 
+`GET /knowledge` lists the knowledge documents the team uses (title, citation key, figures counted from the files on each request) with Kiro Crew's source state, and `GET /knowledge/file?path=` returns one of them as text for a read-only viewer (listed files inside `knowledge/` only, no PDF, up to 1 MB); the board's knowledge panel counts each document's citations in the roles' replies.
+
 ## Code map
 
 | Path | What it is |
 | --- | --- |
 | `app.json` | Kiro Crew app manifest |
-| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
+| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
 | `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `types.ts` (the contract with the backend) |
 | `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd` (the default), `vstatd-triage`, `vstatd-release`, `empty`, `?view=score`) |
 | `team/` | `team-vstatd.json` and its task template |

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import board, checks, outputs, paths, readiness, scorecard
+from . import board, checks, library, outputs, paths, readiness, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -439,6 +439,22 @@ class Service:
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
         return {"at": now, "team": str(team.get("name") or ""), "error": "",
                 "items": readiness.items(team, self.probes, kb, state, sample, now)}
+
+    async def knowledge(self) -> dict[str, Any]:
+        """知识库 (home page): the scenario's knowledge documents with figures counted now, and Crew's source state."""
+        try:
+            team, sample = await asyncio.to_thread(self._default_team)
+        except AppError as exc:  # no scenario folder recorded: setup.sh has not run
+            return {"docs": [], "source": None, "error": str(exc)}
+        except (OSError, ValueError) as exc:
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+        return {"docs": await asyncio.to_thread(library.docs, sample / "knowledge"), "error": "",
+                "source": self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))}
+
+    async def knowledge_file(self, path: Any) -> dict[str, Any]:
+        """One knowledge document as text, for the read-only viewer."""
+        sample = await asyncio.to_thread(paths.sample_dir, self.data_dir)
+        return await asyncio.to_thread(library.read_text, sample / "knowledge", path)
 
     def board(self, rid: str | None = None) -> dict[str, Any]:
         return board.build(self.runs, rid, mgr=self.manager(), scrub=self.scrub, now=time.time(), crew=self)

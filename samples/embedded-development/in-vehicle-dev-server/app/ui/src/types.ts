@@ -61,7 +61,7 @@ export type RunDetail = {
   gate_notes: Record<string, string> // what a person said when approving a gate, by role
   gate_discuss: boolean // the team offers 讨论 at its gates
   imported?: { from: string; exported_at?: number } | null // 导入: recorded on another Mac; its code and sessions stayed there
-  knowledge: { source: KnowledgeSource | null; hits: KnowledgeHit[] } // the team's knowledge source and what roles looked up
+  knowledge: { source: KnowledgeSource | null; hits: KnowledgeHit[]; docs: KnowledgeChip[] } // the team's knowledge source, what roles looked up, the documents they cite
   crew_members: string[] | null // the team's members on Kiro Crew's 「代理」 page now (its workspace's), null while not read yet
   signoff: SignOff | null // 签字放行: the person who took responsibility for the release, once they did
   risks: Risk[] // 拦下的风险: what people who sent work back at a gate noted it kept from going live
@@ -175,6 +175,27 @@ export type KnowledgeSource = {
 
 /** A role looking something up: a 查知识库 call (kind search) or a read of a knowledge-base data file (kind data). */
 export type KnowledgeHit = { role: string; at: number; kind: 'search' | 'data'; text: string }
+
+/** A citable knowledge document on the board, and how often the roles' replies cite it (`[VSTATD-IF` …). */
+export type KnowledgeChip = { key: string; title: string; path: string; cites: number }
+
+/** One knowledge document of GET /knowledge; counts are read from the file now. */
+export type KnowledgeDoc = {
+  path: string // relative to the knowledge folder
+  title: string
+  key: string | null // citation key: VSTATD-IF, CC1-PN, TR
+  desc: string
+  counts: { label: string; n: number }[]
+  present: boolean
+  text: boolean // false: binary (the PDF), not shown in the viewer
+  rendered_from: string | null // the PDF: the Markdown file it is rendered from
+}
+
+/** GET /knowledge: the documents and Kiro Crew's source state (null: not read yet). */
+export type KnowledgeIndex = { docs: KnowledgeDoc[]; source: KnowledgeSource | null; error: string }
+
+/** GET /knowledge/file: one document's text for the read-only viewer. */
+export type KnowledgeText = { path: string; title: string; text: string; size: number }
 
 export type Ownership = { roles?: Record<string, string[]>; test_areas?: Record<string, string>; error?: string }
 

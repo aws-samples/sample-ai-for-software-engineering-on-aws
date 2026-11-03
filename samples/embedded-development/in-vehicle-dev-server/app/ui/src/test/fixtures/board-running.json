@@ -1477,7 +1477,8 @@
           "kind": "data",
           "text": "employees.json"
         }
-      ]
+      ],
+      "docs": []
     },
     "crew_members": [
       "aidlc-product-agent",
