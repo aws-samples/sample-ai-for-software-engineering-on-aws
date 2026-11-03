@@ -144,15 +144,15 @@ function TriageTable({ rows, backlog }: { rows: TriageRow[]; backlog: Map<string
   )
 }
 
-/** 需求清单 on the board, beside the knowledge panel. */
+/** 需求清单 on the board, folded unless the triage waits at its gate. */
 export function BacklogPanel({ run }: { run: RunDetail }) {
   const b = run.backlog
   if (!b) return null
   const t = b.triage
   const fix = b.rows.filter((r) => r.label === 'fix').length
   return (
-    <section className="kt-card kt-reqs" aria-label="需求清单" data-testid="kt-reqs">
-      <header className="kt-card-head">
+    <details className="kt-card kt-reqs kt-fold" aria-label="需求清单" data-testid="kt-reqs" open={t?.state === 'proposed'}>
+      <summary className="kt-card-head">
         <h2>需求清单</h2>
         <span className="kt-dim" data-testid="kt-reqs-state">
           {!t
@@ -161,7 +161,7 @@ export function BacklogPanel({ run }: { run: RunDetail }) {
               ? `分诊已批准${t.approved ? `（${t.approved.by}，${t.approved.at}）` : ''} · ${t.findings.length} 条`
               : `分诊的建议，等分诊关卡 · ${t.findings.length} 条`}
         </span>
-      </header>
+      </summary>
       {t ? (
         <TriageTable rows={t.findings} backlog={new Map(b.rows.map((r) => [r.id, r]))} />
       ) : (
@@ -170,6 +170,6 @@ export function BacklogPanel({ run }: { run: RunDetail }) {
           <p className="kt-dim">{refactorNote(b.next_id)}</p>
         </>
       )}
-    </section>
+    </details>
   )
 }

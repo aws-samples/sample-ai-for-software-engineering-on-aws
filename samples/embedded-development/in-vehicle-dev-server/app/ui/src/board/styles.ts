@@ -93,10 +93,10 @@ ${toneVars}
 .kt-start { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); }
 .kt-start label { font-weight: 750; color: var(--text-strong); }
 .kt-start textarea { font: inherit; resize: vertical; min-height: 86px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-strong, var(--border)); background: var(--bg); color: var(--text); }
-.kt-start-actions, .kt-confirm-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.kt-start-actions, .kt-confirm-actions, .kt-cli { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .kt-warn { color: var(--kt-warn); font-weight: 700; }
 .kt-cleanup-msg { margin: 0; cursor: pointer; }
-.kt-kb { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; } /* frame: kit.ts */
+.kt-kb-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; margin-top: 10px; } /* frame of .kt-kb: kit.ts */
 .kt-kb-col { min-width: 0; }
 .kt-kb-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 6px; flex-wrap: wrap; }
 .kt-kb-hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; max-height: 132px; overflow: auto; }

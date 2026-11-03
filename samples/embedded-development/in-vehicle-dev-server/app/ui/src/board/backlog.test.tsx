@@ -40,7 +40,11 @@ describe('需求清单', () => {
     serve(b)
     render(<TeamPage pollMs={60_000} />)
     const panel = await screen.findByTestId('kt-reqs')
-    expect(screen.getByTestId('kt-kb').compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // under the lanes, above the folded 知识库; folded while no triage waits at its gate
+    expect(screen.getAllByTestId('kt-lane')[0].compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(panel.compareDocumentPosition(screen.getByTestId('kt-kb')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(panel).not.toHaveAttribute('open')
+    expect(screen.getByTestId('kt-kb')).not.toHaveAttribute('open')
     expect(within(panel).getByTestId('kt-reqs-state')).toHaveTextContent('还没有分诊：待办 30 条，22 条标了 fix')
     expect(within(panel).getAllByTestId('kt-backlog-row')).toHaveLength(30)
     expect(within(panel).queryByTestId('kt-triage-table')).toBeNull()
@@ -50,6 +54,7 @@ describe('需求清单', () => {
     serve(vstatdBoard('triage'))
     render(<TeamPage pollMs={60_000} />)
     const panel = await screen.findByTestId('kt-reqs')
+    expect(panel).toHaveAttribute('open') // the triage gate is pending
     expect(within(panel).getByTestId('kt-reqs-state')).toHaveTextContent('分诊的建议，等分诊关卡 · 23 条')
     const rows = Object.fromEntries(within(panel).getAllByTestId('kt-triage-row').map((r) => [r.dataset.id, cells(r)]))
     expect(Object.keys(rows)).toHaveLength(23)

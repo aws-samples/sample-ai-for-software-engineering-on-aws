@@ -210,11 +210,16 @@ export function KnowledgePanel({ run, onRole }: { run: RunDetail; onRole?: (key:
   const searches = run.knowledge.hits.filter((h) => h.kind === 'search').length
   const reads = run.knowledge.hits.length - searches
   return (
-    <section className="kt-kb" aria-label="知识库" data-testid="kt-kb">
+    <details className="kt-kb kt-fold" aria-label="知识库" data-testid="kt-kb">
+      <summary className="kt-kb-head" data-testid="kt-kb-fold">
+        <b><RoleIcon role="book" size={16} /> 知识库{src ? `「${src.name}」` : ''}</b>
+        <span className="kt-dim">{[indexText(src), `${docs.length} 份文档被引用`, `查知识库 ${searches} 次 · 读数据 ${reads} 次`].filter(Boolean).join(' · ')}</span>
+      </summary>
+      <div className="kt-kb-grid">
       <div className="kt-kb-col">
         <p className="kt-kb-head">
-          <b><RoleIcon role="book" size={16} /> 知识库{src ? `「${src.name}」` : ''}</b>
-          <span className={`kt-dim${src && src.present === false ? ' kt-warn' : ''}`}>{sourceText(src)}</span>
+          <b>角色引用的文档</b>
+          <span className={`kt-dim${src && src.present === false ? ' kt-warn' : ''}`}>{src ? `来源「${src.name}」：${sourceText(src)}` : ''}</span>
         </p>
         {docs.length > 0 && (
           <ul className="kt-kb-chips" aria-label="角色引用的文档">
@@ -250,7 +255,8 @@ export function KnowledgePanel({ run, onRole }: { run: RunDetail; onRole?: (key:
           </ol>
         )}
       </div>
+      </div>
       {open && <KnowledgeViewer path={open} onClose={() => setOpen(null)} />}
-    </section>
+    </details>
   )
 }

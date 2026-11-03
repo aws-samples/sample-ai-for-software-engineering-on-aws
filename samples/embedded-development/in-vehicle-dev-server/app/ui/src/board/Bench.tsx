@@ -60,6 +60,43 @@ export function DecideRequest({ id, digest, onDone }: { id: string; digest: stri
   )
 }
 
+/** A console command with the sample's absolute path cut to bench/console.py; the full one is what gets copied. */
+export const shortCmd = (cmd: string) => cmd.replace(/\S*\/bench\/console\.py/g, 'bench/console.py')
+
+function useCopy(): [string, (text: string) => void] {
+  const [msg, setMsg] = useState('')
+  const copy = (text: string) => {
+    const fail = () => setMsg('复制不了：请手动选中复制')
+    if (!navigator.clipboard) return fail()
+    navigator.clipboard.writeText(text).then(() => setMsg('已复制'), fail)
+  }
+  return [msg, copy]
+}
+
+/** One command, shortened, with 复制命令 (the full command). */
+export function Cmd({ cmd }: { cmd: string }) {
+  const [msg, copy] = useCopy()
+  return (
+    <span className="kt-cli" data-testid="kt-cli">
+      <code className="kt-ready-cmd" title={cmd}>{shortCmd(cmd)}</code>
+      <button type="button" className="kt-btn is-small" onClick={() => copy(cmd)}>复制命令</button>
+      {msg && <small className="kt-dim" role="status">{msg}</small>}
+    </span>
+  )
+}
+
+/** A build digest: its first 12 characters, the full one in the title and copied. */
+export function Digest({ digest }: { digest: string }) {
+  const [msg, copy] = useCopy()
+  return (
+    <span data-testid="kt-digest">
+      <code className="kt-bench-digest" title={digest}>{digest.slice(0, 12)}</code>{' '}
+      <button type="button" className="kt-btn is-small" onClick={() => copy(digest)} title="复制完整摘要">复制</button>
+      {msg && <small className="kt-dim" role="status">{msg}</small>}
+    </span>
+  )
+}
+
 const STEP: Record<string, string> = {
   doctor: '检查台架（doctor.sh）',
   deploy: '部署：等操作台批准',
@@ -160,19 +197,26 @@ export function BenchPanel({ bench }: { bench: BenchView }) {
             {st.pending.map((r) => (
               <li key={r.id}>
                 <span><b>{r.action}</b> · {r.requested_by}{r.expired ? <span className="kt-bad"> · 已超时</span> : null}</span>
-                <span>构建摘要 <code className="kt-bench-digest">{r.digest}</code></span>
+                <span>构建摘要 <Digest digest={r.digest} /></span>
                 {r.detail && <span className="kt-dim">{r.detail}</span>}
                 {!r.expired && <DecideRequest id={r.id} digest={r.digest} />}
-                {bench.console && (
-                  <span className="kt-dim">
-                    或在操作台：<code>{`${bench.console} approve ${r.id} --digest ${r.digest.slice(0, 12)}`}</code>；拒绝：<code>{`${bench.console} refuse ${r.id} --reason <原因>`}</code>
-                  </span>
-                )}
               </li>
             ))}
           </ul>
         )}
-        {bench.console && <p className="kt-dim">在这里批准，或在另一个终端里的操作台：<code>{bench.console}</code>（a 批准、r 拒绝、c 核对）。两边都走台架自己的审批逻辑，电源、点火、超时照样拦。</p>}
+        {bench.console && (
+          <details className="kt-ready-cli">
+            <summary>用命令批准或拒绝</summary>
+            <span className="kt-dim">在另一个终端里开操作台（a 批准、r 拒绝、c 核对）。两边都走台架自己的审批逻辑，电源、点火、超时照样拦。</span>
+            <Cmd cmd={bench.console} />
+            {st.pending.filter((r) => !r.expired).map((r) => (
+              <div key={r.id}>
+                <Cmd cmd={`${bench.console} approve ${r.id} --digest ${r.digest.slice(0, 12)}`} />
+                <Cmd cmd={`${bench.console} refuse ${r.id} --reason <原因>`} />
+              </div>
+            ))}
+          </details>
+        )}
       </div>
       <div className="kt-bench-record">
         <b>动作记录（最近 {Math.min(ACTION_SHOWN, st.actions.length)} 条）</b>

@@ -50,11 +50,35 @@ describe('the vstatd board', () => {
     expect(bench).toHaveTextContent('13.5 V · KL15 on')
     expect(within(bench).getByTestId('kt-bench-doctor')).toHaveTextContent('通过 · doctor: ready')
     const pending = within(bench).getByTestId('kt-bench-pending')
-    expect(pending).toHaveTextContent('bc93723c5a1f0e8d2b7c46e19a0d3f58c2e7b1a49d6f0c38e5b2a71d94c06e3f')
-    expect(pending).toHaveTextContent('bench/console.py approve 20261102T101500-deploy-3fa1 --digest bc93723c5a1f')
+    const full = 'bc93723c5a1f0e8d2b7c46e19a0d3f58c2e7b1a49d6f0c38e5b2a71d94c06e3f'
+    const digest = within(pending).getByTestId('kt-digest')
+    expect(digest).toHaveTextContent(/^bc93723c5a1f 复制$/)
+    expect(digest.querySelector('code')).toHaveAttribute('title', full)
+    // the commands once, shortened to bench/console.py; 复制命令 copies the full one
+    const cmds = within(pending).getAllByTestId('kt-cli')
+    expect(cmds.map((c) => c.querySelector('code')!.textContent)).toEqual(['python3 bench/console.py',
+      'python3 bench/console.py approve 20261102T101500-deploy-3fa1 --digest bc93723c5a1f', 'python3 bench/console.py refuse 20261102T101500-deploy-3fa1 --reason <原因>'])
+    await userEvent.click(within(cmds[1]).getByRole('button', { name: '复制命令' }))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(cmds[1].querySelector('code')!.title)
+    expect(cmds[1].querySelector('code')!.title).toMatch(/^python3 \/\S+\/bench\/console\.py approve /)
+    expect(await within(cmds[1]).findByRole('status')).toHaveTextContent('已复制')
     const record = within(bench).getAllByRole('listitem').map((li) => li.textContent).filter((t) => t?.startsWith('2026'))
     expect(record[0]).toContain('请求 deploy bc93723c5a1f，vstatd-team r1006a')
     expect(record.at(-1)).toContain('电源 13.5 V，KL15 on（李工）')
+  })
+
+  test('the merge conveyor shows only once there is a merge', async () => {
+    const b = vstatdBoard('bench')
+    expect(b.run!.merges).toEqual([])
+    serve(b)
+    const { unmount } = render(<TeamPage pollMs={60_000} />)
+    await screen.findByTestId('kt-bench')
+    expect(screen.queryByTestId('kt-conveyor')).toBeNull()
+    unmount()
+    b.run!.merges = [{ role: 'dev-fix', sha: 'a1b2c3d', at: b.at - 60, status: 'merged', files: 2, note: null }]
+    serve(b)
+    render(<TeamPage pollMs={60_000} />)
+    expect(await screen.findByTestId('kt-conveyor')).toHaveTextContent('1 次合入')
   })
 
   test('a bench held for a person says why and the commands to run', async () => {

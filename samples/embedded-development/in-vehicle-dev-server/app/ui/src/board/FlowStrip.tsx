@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import type { Readiness, ReadinessItem, RunDetail } from '../types'
-import { DecideRequest } from './Bench'
+import { Cmd, DecideRequest, Digest } from './Bench'
 import { BASE, fmtAgo } from './format'
 import { WHO_LABEL, flowOf, type StepState } from './flow'
 import { errorText } from './useBoard'
@@ -112,18 +112,17 @@ export function ReadinessPanel({ state }: { state: ReadinessState }) {
             {r.pending.map((p) => (
               <li key={p.id} data-testid="kt-ready-request" data-id={p.id}>
                 <span>
-                  <b>{ACTION[p.action] ?? p.action}</b> <code>{p.digest.slice(0, 12)}</code>
+                  <b>{ACTION[p.action] ?? p.action}</b> <Digest digest={p.digest} />
                   <small className="kt-dim">
                     {' '}{p.id} · {p.requested_by}
                     {p.left_s !== null && ` · 还剩 ${Math.max(0, p.left_s)} 秒，超时自动拒绝`}
                   </small>
                 </span>
-                <span className="kt-dim">完整摘要：<code>{p.digest}</code></span>
                 <DecideRequest id={p.id} digest={p.digest} onDone={() => void load()} />
                 <details className="kt-ready-cli">
                   <summary>用命令批准或拒绝</summary>
-                  <code className="kt-ready-cmd">{p.approve}</code>
-                  <code className="kt-ready-cmd">{p.refuse}</code>
+                  <Cmd cmd={p.approve} />
+                  <Cmd cmd={p.refuse} />
                 </details>
               </li>
             ))}

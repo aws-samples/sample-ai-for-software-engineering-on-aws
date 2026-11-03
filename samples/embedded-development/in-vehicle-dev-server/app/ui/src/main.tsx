@@ -3,8 +3,8 @@
  *
  * Polls GET /board every 2 s (board/useBoard.ts) and renders only that contract (types.ts): the
  * header with the live counters, the flow strip (board/FlowStrip.tsx) and 人机分工 under it (board/DivisionGrid.tsx), the team
- * graph (the hero, with the particle layer), the merge conveyor, one lane per role, the test wall, the event feed and the
- * 审计记录 (board/Audit.tsx). Each poll's snapshot is diffed
+ * graph (the hero, with the particle layer) beside the test wall and the bench, the merge conveyor once there is a merge,
+ * one lane per role, 需求清单 and 知识库 (folded), the event feed and the 审计记录 (board/Audit.tsx). Each poll's snapshot is diffed
  * against the previous one (board/diff.ts): new events become particles and node flashes, changed
  * test cases flip, changed lanes and new merges get a one-time highlight. The first snapshot is
  * history and never animates.
@@ -332,6 +332,9 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
     },
     [api, reload],
   )
+  // the lanes and the feed sit in the body on a projector, under it otherwise
+  const laneList = run && <Lanes run={run} focus={focus} phase={phase} follow={followKey} bumps={fx.bumps} onRole={onRole} reducedMotion={reducedMotion} projection={projection} onOutputs={openOutputs} onRetry={projection || inReplay || run.imported ? undefined : (k) => void retry(k)} />
+  const eventFeed = run && <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} actors={actors} />
   const [cleanupMsg, setCleanupMsg] = useState('')
   const cleanup = useCallback(async () => {
     setCleanupMsg('正在清理…')
@@ -405,8 +408,8 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
             {run.bench && <FlowStrip run={run} />}
             {!projection && live && <DivisionView trail={audit.trail} current={run.bench ? flowOf(run).current : null} onPick={setAuditPick} />}
             {run.roles.some((l) => l.phase) && <ExpertStrip run={run} />}
-            <KnowledgePanel run={run} onRole={onRole} />
-            <BacklogPanel run={run} />
+            {projection && <KnowledgePanel run={run} onRole={onRole} />}
+            {projection && <BacklogPanel run={run} />}
             {!isRunActive(run.status) && run.tests.total > 0 && <SignOff run={run} onSign={sign} />}
             <div className="kt-body">
               <div className="kt-col">
@@ -414,15 +417,24 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
                 {focus && <FocusBar run={run} focus={focus} onClear={() => setFocus(null)} />}
                 {!focus && phase && <PhaseBar run={run} phase={phase} onClear={() => setPhase(null)} />}
                 {/* on a projector the rail of the graph carries the merges; the space goes to the lanes */}
-                {!projection && <Conveyor run={run} fresh={fx.merges} focus={focus} onRole={onRole} />}
-                <Lanes run={run} focus={focus} phase={phase} follow={followKey} bumps={fx.bumps} onRole={onRole} reducedMotion={reducedMotion} projection={projection} onOutputs={openOutputs} onRetry={projection || inReplay || run.imported ? undefined : (k) => void retry(k)} />
+                {!projection && run.merges.length > 0 && <Conveyor run={run} fresh={fx.merges} focus={focus} onRole={onRole} />}
+                {projection && laneList}
               </div>
-              <aside className="kt-side" aria-label="测试和事件">
+              <aside className="kt-side" aria-label={projection ? '测试和事件' : '检查和台架'}>
                 <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} />
                 {run.bench && <BenchPanel bench={run.bench} />}
-                <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} actors={actors} />
+                {projection && eventFeed}
               </aside>
             </div>
+            {/* off the projector the live state comes first: lanes, then the lists, then the feed */}
+            {!projection && (
+              <>
+                {laneList}
+                <BacklogPanel run={run} />
+                <KnowledgePanel run={run} onRole={onRole} />
+                {eventFeed}
+              </>
+            )}
             {!projection && live && <AuditPanel runId={live.id} ended={!isRunActive(live.status)} trail={audit.trail} err={audit.err} pick={auditPick} />}
           </>
         )}
