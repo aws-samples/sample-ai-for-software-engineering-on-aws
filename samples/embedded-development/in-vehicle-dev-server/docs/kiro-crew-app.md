@@ -374,24 +374,59 @@ bench images; step 12 needs them.
     `app/README.md`. *Verify:* links resolve; the README's claims match these notes.
 12. **One delivery end to end.** With the bench images built: from the triage gate to sign-off, approving bench
     actions at the console. Record the time and credits it used and how long the checks, the rerun and the image
-    build took. *Verify:* `release.sh` passes on the rerun and the scorecard shows the run.
+    build took. *Verify:* `release.sh` passes on the rerun and the scorecard shows the run. *Done* 2026-11-03 (run
+    `r11032637`, bench actions approved on the board, D3); the image build was not timed, the rest is in the
+    scenario README's [Cost](../README.md#cost) and in the next section.
+
+## Seen in the first delivery
+
+Run `r11032637` (2026-11-03, Apple Silicon Mac, native `vstatd-build:arm64`, stand-in sysroot). The run reached
+sign-off; on the way it held for a person five times where the app gave the person no good way on. Each was fixed in
+the app during the run, with a test, and installed; the run went on from where it was held.
+
+- **The cross build and the data race (the two seeded difficulties).** Both were held after the checks (D7) as
+  intended. The 补登 dialog (D15) prefilled the path of the file the check named, `src/main.cpp`, but the cross
+  build's cause is the toolchain file; the developer said so and committed nothing, three times. The dialog now
+  starts on a held check not yet registered at that place and says when the same check and place are registered
+  already.
+- **More paths for a finding added already.** Registering the same failure again only added duplicate IDs (F-033 and
+  F-034 are F-032's). `POST /runs/{rid}/finding` takes `extend` (an ID added by a check): no new finding, the triage
+  unchanged, the paths added to the role and one more round of that check. When the role said in its reply that the
+  cause is in a file outside its scope, or a unit-test finding has no test naming it (TR §4.1), the board proposes
+  the paths (`tests.held.suggest`) and the person agrees with one click; each is recorded as the person's action.
+- **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
+  justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the
+  board now offers 按评审意见再改一轮 (`review_redo`) with a decision prefilled for a justification the review names
+  (an empty commit citing the triage's pages, no history rewritten), sent as 重试 with `note` and `by`.
+- **`release.sh` read inputs the container could not see.** The independent rerun passed every check, then
+  `release.sh` reported the baseline as changed or missing: its container did not mount the baseline directory. A
+  release check now gets every input the other checks were given. The bench panel also had no 重试 button for a held
+  step; it has one now.
+- **What it confirmed.** The arm64 image runs ThreadSanitizer, `unit.sh` reported the seeded race in
+  `SignalTable::get` with the absolute path of the check's copy, and with the stand-in sysroot every check passed
+  on the final commit: 53 tests in each of plain, ThreadSanitizer and AddressSanitizer builds, peak RSS 5896 of
+  8192 KiB on the emulated CC-1, 328 of 328 log entries paired with no unexplained difference.
+- **Not right yet.** The scorecard counts F-007, F-008, F-021 and F-028 as justifications the reviewer overturned:
+  it counts every justification a 要改 review names, and that review named the first three to confirm them. The
+  signed-off run is unaffected; the figure is wrong until that is fixed.
 
 ## Not yet verified
 
 - Whether the build container's ThreadSanitizer reports give the absolute path of the check's copy, as the adapter
-  expects, or a relative one (D7); both are handled, neither has been seen in a run of the adapter. In the native
-  arm64 image, `rehearsal/check-examples/run.py` shows the absolute path (2026-11-03).
+  expects, or a relative one (D7): the absolute path, in the first delivery's runs of the adapter (2026-11-03); a
+  relative one is handled too and has not been seen.
 - ThreadSanitizer needs the build container native to the machine (2026-11-03, Apple Silicon, Docker Desktop): in
   `vstatd-build:amd64` under Rosetta even an empty `int main(){}` built with `-fsanitize=thread` stops with
   `FATAL: ThreadSanitizer: unexpected memory mapping` (exit 66), also under `setarch -R`, so `checks/unit.sh` always
-  failed and `release.sh` could not pass. The Dockerfile now builds `vstatd-build:arm64` natively, where it works.
-  Not yet seen: a full run of the app's checks on the new image.
+  failed and `release.sh` could not pass. The Dockerfile now builds `vstatd-build:arm64` natively, where it works;
+  the first delivery ran all the app's checks on it (2026-11-03).
 - With the Buildroot sysroot of `bench/build-target.sh` in the volume `cc1-sysroot`, `checks/static.sh` is BLOCKED
   once the toolchain file sets the sysroot: clang-tidy finds no C++ standard headers (`'chrono' file not found`),
   because that sysroot has `libstdc++` but not its headers. The same in the amd64 and the arm64 image; with the
   stand-in sysroot of `tools/make-standin-sysroot.py` the check examples are 23 of 23 (2026-11-03). The app's checks
   therefore mount the stand-in from the volume `vstatd-standin-sysroot` (team file `check_runner.sysroot`, resolved
-  when a container starts, so a stored run takes it too); not yet seen: a full run of the app's checks with it.
-- How long a full check run, the independent rerun (D9) and the Buildroot image build (D10) take on a Mac.
+  when a container starts, so a stored run takes it too); the first delivery passed every check with it.
+- How long the Buildroot image build (D10) takes on a Mac. A check round took 47 to 120 s and the independent rerun
+  75 s in the first delivery.
 - Whether write-scope rules in an agent's own configuration are enforced on a machine whose user-level
   `permissions.yaml` does not allow everything (D2).

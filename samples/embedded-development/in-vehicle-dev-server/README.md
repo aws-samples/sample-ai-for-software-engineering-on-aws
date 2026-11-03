@@ -192,9 +192,11 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 
 ## The Kiro Crew app
 
-> **Status: in development.** The app's own tests pass. It has not yet taken a delivery end to end with agents and the
-> bench (step 12 of the [implementation plan](docs/kiro-crew-app.md#implementation-plan)), so nothing on this page about
-> it is measured yet.
+> **Status: one delivery end to end (2026-11-03).** Run `r11032637` went from the triage gate through the bench to a
+> passing `release.sh` on the independent rerun and a signed-off evidence page, on a Mac with Apple Silicon (step 12 of
+> the [implementation plan](docs/kiro-crew-app.md#implementation-plan)). The app was fixed during that run where it
+> held the run with no way on for the person; [what that run showed](docs/kiro-crew-app.md#seen-in-the-first-delivery).
+> One run is not a benchmark: the figures below are that run's.
 
 [`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (AIDLC-Embedded团队), modelled on the
 [agent-team sample](../../agent-team-on-kiro-crew/). It takes the work item through AI-DLC with six roles, each a Kiro
@@ -254,7 +256,10 @@ On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
 7. After the independent rerun, read the evidence page in the sign-off dialog and sign off. 评分卡 shows the run's
    figures.
 
-Cost: to be measured with the first delivery. A run uses Kiro Crew credits and creates no AWS resources.
+Cost: the first delivery used 91.4 Kiro Crew credits, with 32 minutes of agent work, 4 minutes waiting on a
+person at the two gates and the two bench approvals, and 7 minutes of checks (four rounds before the bench, the
+after-bench checks and the independent rerun of 75 s). It took 4.1 hours from start to sign-off, most of it held for a person
+while the app was being fixed (see [Cost](#cost)). A run creates no AWS resources.
 
 Remove it with `bash cleanup.sh` (`--dry-run` lists what it would remove). It removes only what setup.sh recorded in
 `.install-state.json` and puts back agent templates setup.sh replaced; it leaves the Docker images and volumes, the
@@ -352,9 +357,9 @@ been dry-run once.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
    Record the time and credits it used.
-8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its roles' templates, `setup.sh` and `cleanup.sh`. *In
-   development:* steps 1 to 11 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan) are done; one
-   delivery end to end (step 12) is not.
+8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its roles' templates, `setup.sh` and `cleanup.sh`. *Done:* steps
+   1 to 12 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan), with one delivery end to end
+   (2026-11-03).
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page; `cleanup.sh` removes everything it created; every third-party tool is listed with its
@@ -440,8 +445,24 @@ v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and
 
 ## Cost
 
-To be measured with the dry run, and for the Kiro Crew app with its first delivery. The sample creates no AWS resources;
-the cost is the model usage of Kiro or Kiro Crew for one batch (see [Kiro pricing](https://kiro.dev/pricing/)).
+The sample creates no AWS resources; the cost is the model usage of Kiro or Kiro Crew for one batch (see
+[Kiro pricing](https://kiro.dev/pricing/)). The dry run of item 7 is not measured yet.
+
+The Kiro Crew app's first delivery (run `r11032637`, 2026-11-03, Apple Silicon Mac, Docker Desktop, model
+`claude-sonnet-5.5`), from the app's own records (交付详情 and 评分卡):
+
+| Measure | Value |
+| --- | --- |
+| Credits | 91.4 |
+| Agent work (sum of the six roles' sessions) | 32 min |
+| Waiting on a person at the gates and the bench approvals | 4 min: triage gate 101 s, build-start gate 9 s, deploy 102 s, replay 24 s (the holds after the checks and the review are not in it) |
+| Checks before the bench | 4 rounds: 118 s, 51 s, 47 s, 120 s |
+| After-bench checks; independent rerun with `release.sh` | 4 s; 75 s |
+| Start to sign-off | 4.1 h, most of it held for a person while the app was fixed |
+| Findings | 17 fixed, 4 justified, 1 deferred from the backlog; 5 added under TR §4.4 (the refactor, the cross build, the data race) |
+| Send-backs | 11 (checks and review) |
+
+The run is a single sample, and its wall time is not what a run takes: it includes the holds the app's fixes ended.
 
 ## Cleanup
 
