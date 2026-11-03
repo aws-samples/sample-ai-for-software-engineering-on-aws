@@ -132,7 +132,7 @@ export function AuditPanel({ runId, ended, trail, err, pick }: { runId: string; 
         )}
         {trail && <Downloads path={path} name={`audit-${runId}`} trail={trail} />}
       </div>
-      {err && <p className="kt-error" role="alert">审计记录读不到：{err}</p>}
+      {err && <p className="kt-error" role="status">审计记录读不到：{err}</p>}
       {!trail && !err && <p className="kt-dim">正在读…</p>}
       {trail && shown.length === 0 && <p className="kt-dim">没有这样的记录</p>}
       {shown.length > 0 && <Rows entries={shown} />}
@@ -147,7 +147,7 @@ export function BenchAudit() {
   return (
     <section className="kt-audit-bench" data-testid="kt-audit-bench" aria-label="台架动作记录">
       <h4>台架动作记录（不属于任何运行）</h4>
-      {err && <p className="kt-error" role="alert">读不到：{err}</p>}
+      {err && <p className="kt-error" role="status">台架动作记录读不到：{err}</p>}
       {trail && entries.length === 0 && <p className="kt-dim">还没有</p>}
       {entries.length > 0 && <Rows entries={entries} />}
     </section>
