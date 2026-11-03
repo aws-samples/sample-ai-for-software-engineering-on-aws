@@ -103,6 +103,35 @@ describe('补登发现并交给角色', () => {
     expect(q.queryByTestId('kt-finding-dup')).toBeNull()
   })
 
+  test('every held failure registered at its place: the dialog starts on 给已补登的发现加路径 and sends only the paths', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('vstatd-team:signer', '王工')
+    const b = heldBoard()
+    const row = (id: string, check: string, location: string) => ({ id, decision: 'fix', added: true, found_by: `checks/${check}.sh`, location,
+      cites: [], facts: [], evidence: 'build', behaviour: false, answer: null, static: null, trace: null })
+    b.run!.backlog!.triage!.findings.push(row('F-032', 'build', 'src/main.cpp:12'), row('F-035', 'unit', 'src/signal_table.cpp:90'))
+    setApiRoutes({
+      [`GET ${API}/board*`]: () => clone(b),
+      [`POST ${API}/runs/r1006a/finding`]: () => ({ id: 'F-032', triage_sha256: 'ab', held: true, status: 'failed' }),
+    })
+    render(<TeamPage pollMs={60_000} />)
+    await user.click(within(await screen.findByTestId('kt-wall-held')).getByRole('button', { name: '补登发现并交给角色' }))
+    const q = within(await screen.findByTestId('kt-finding-dialog'))
+    expect(q.getByText('给已补登的发现加可写路径')).toBeInTheDocument()
+    expect(q.getByLabelText('要做什么')).toHaveValue('extend')
+    expect([...(q.getByLabelText('发现') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['F-032', 'F-035'])
+    expect(q.getByLabelText('发现')).toHaveValue('F-032')
+    await user.click(q.getByRole('button', { name: '加路径并接着运行' }))
+    expect(q.getByRole('alert')).toHaveTextContent('写明要加的可写路径')
+    await user.type(q.getByLabelText('加可写路径'), 'cmake/cc1-aarch64.cmake')
+    await user.type(q.getByLabelText('备注'), '设 CMAKE_SYSROOT')
+    await user.click(q.getByLabelText('接着运行'))
+    await user.click(q.getByRole('button', { name: '加路径' }))
+    await waitFor(() => expect(posts()).toEqual([[`${API}/runs/r1006a/finding`, {
+      extend: 'F-032', role: 'dev-fix', paths: ['cmake/cc1-aarch64.cmake'], note: '设 CMAKE_SYSROOT', by: '王工', continue: false,
+    }]]))
+  })
+
   test('a refused finding says why and the dialog stays', async () => {
     const user = userEvent.setup()
     setApiRoutes({

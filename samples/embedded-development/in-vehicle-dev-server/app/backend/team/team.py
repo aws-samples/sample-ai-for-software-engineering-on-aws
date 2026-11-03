@@ -871,42 +871,57 @@ class TeamRun:
             if not held:
                 raise LookupError("这个运行没有在检查之后停下来等人决定")
             spec = {c["name"]: c for c in self.team.get("checks") or []}
-            check, role = body["check"], body["role"]
-            if check not in spec:
-                raise ValueError(f"团队没有叫 {check} 的检查")
+            role, ext = body["role"], body.get("extend")
             if role not in self.impl or not self.roles[role]["writable"]:
                 raise ValueError(f"{role} 不是做实现的角色（可以选：{'、'.join(self.impl)}）")
             k, path = self._knowledge(), Path(self.s["repo"]).parent / TRIAGE_FILE
             data = self._approved_triage()
             if k is None or data is None:
                 raise ValueError("这个运行还没有批准的分诊，没地方登记发现")
-            fid = self.next_finding_id()
-            entry: dict[str, Any] = {"id": fid, "decision": body["decision"]}
-            for key in ("evidence", "behaviour", "facts", "cites", "reason", "pick_up_when", "note"):
-                if body.get(key) not in (None, "", []):
-                    entry[key] = body[key]
-            entry["added"] = {"found_by": f"checks/{check}.sh", "tool": body["tool"], "location": body["location"]}
-            data = {**data, "findings": [*data.get("findings", []), entry]}
-            problems = triage_mod.problems(data, k)
-            if problems:
-                raise FindingRefused(problems)
-            digest = await asyncio.to_thread(triage_mod.write, path, data)
-            if isinstance(self.s.get("triage"), dict):
-                self.s["triage"]["sha256"] = digest
+            if ext:  # a finding added already: its role gets more paths, the triage stays as it is
+                entry = next((f for f in data.get("findings") or [] if isinstance(f, dict) and f.get("id") == ext
+                              and isinstance(f.get("added"), dict)), None)
+                if entry is None:
+                    raise ValueError(f"批准的分诊里没有补登过的 {ext}")
+                m = re.fullmatch(r"checks/([\w-]+)\.sh", str(entry["added"].get("found_by") or ""))
+                if not m:
+                    raise ValueError(f"{ext} 不是检查发现的，没有检查可以再跑一轮")
+                fid, check, location = ext, m.group(1), str(entry["added"].get("location") or "")
+                digest = str((self.s.get("triage") or {}).get("sha256") or "")
+            else:
+                check, location = body["check"], body["location"]
+            if check not in spec:
+                raise ValueError(f"团队没有叫 {check} 的检查")
+            if not ext:
+                fid = self.next_finding_id()
+                entry = {"id": fid, "decision": body["decision"]}
+                for key in ("evidence", "behaviour", "facts", "cites", "reason", "pick_up_when", "note"):
+                    if body.get(key) not in (None, "", []):
+                        entry[key] = body[key]
+                entry["added"] = {"found_by": f"checks/{check}.sh", "tool": body["tool"], "location": location}
+                data = {**data, "findings": [*data.get("findings", []), entry]}
+                problems = triage_mod.problems(data, k)
+                if problems:
+                    raise FindingRefused(problems)
+                digest = await asyncio.to_thread(triage_mod.write, path, data)
+                if isinstance(self.s.get("triage"), dict):
+                    self.s["triage"]["sha256"] = digest
             r = self.roles[role]
             added = [g for g in body["paths"] if g not in r["writable"]]
             r["writable"] = [*r["writable"], *added]
             r["granted"] = [*(r.get("granted") or []), *added]
             reg = {"id": fid, "check": check, "role": role, "paths": list(body["paths"]), "added_paths": added,
                    "decision": entry["decision"], "evidence": entry.get("evidence"), "behaviour": entry.get("behaviour"),
-                   "facts": entry.get("facts") or [], "location": body["location"], "note": body["note"], "by": body["by"]}
+                   "facts": entry.get("facts") or [], "location": location, "note": body["note"], "by": body["by"],
+                   "extend": bool(ext)}
             held["registered"] = [*(held.get("registered") or []), reg]
             go_on = bool(body["continue"])
-            self.emit("finding", f"{body['by']}补登 {fid}（{check} 发现：{body['location']}，{entry['decision']}），交给{self.title(role)}，"
-                      f"可写 {'、'.join(body['paths']) or '不变'}" + ("，接着运行" if go_on else "") + (f"：{body['note']}" if body["note"] else ""),
+            head = (f"{body['by']}给已补登的 {fid}（{check} 发现：{location}）加可写路径，交给{self.title(role)}，" if ext else
+                    f"{body['by']}补登 {fid}（{check} 发现：{location}，{entry['decision']}），交给{self.title(role)}，")
+            self.emit("finding", head + f"可写 {'、'.join(body['paths']) or '不变'}" + ("，接着运行" if go_on else "") + (f"：{body['note']}" if body["note"] else ""),
                       role=role, frm="person", to=role,
                       data={"by": body["by"], "id": fid, "check": check, "role": role, "paths": list(body["paths"]),
-                            "note": body["note"], "continue": go_on})
+                            "note": body["note"], "continue": go_on, "extend": bool(ext)})
             if go_on:
                 await self._go_on_with_findings(held["registered"])
             await self.save()

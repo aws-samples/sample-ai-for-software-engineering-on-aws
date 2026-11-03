@@ -45,11 +45,27 @@ def scope_glob(g: str) -> bool:
 
 
 def finding_body(body: dict[str, Any]) -> dict[str, Any]:
-    """POST /runs/{rid}/finding, its shape checked (what it means is checked by the run, the triage by its rules)."""
-    out: dict[str, Any] = {k: _text(body, k, n, True) for k, n in (("check", 40), ("tool", 80), ("location", 200), ("role", 40))}
+    """POST /runs/{rid}/finding, its shape checked (what it means is checked by the run, the triage by its rules).
+    With ``extend`` (the ID of a finding added already): no new finding, only the paths, the role and the note for it."""
+    ext = body.get("extend")
+    if ext is not None and not (isinstance(ext, str) and re.fullmatch(r"F-\d{3}", ext)):
+        raise AppError("extend 要是一个已补登的发现编号，例如 F-032", "invalid_finding")
+    out: dict[str, Any] = {k: _text(body, k, n, not ext or k == "role") for k, n in (("check", 40), ("tool", 80), ("location", 200), ("role", 40))}
     out.update({k: _text(body, k, n) for k, n in (("reason", 400), ("pick_up_when", 400), ("note", 1000), ("by", 60))})
     if not out["by"]:
         raise AppError("要写明是谁补登的（by）", "invalid_finding")
+    out["extend"] = ext or None
+    if ext:
+        if body.get("continue") is not None and not isinstance(body["continue"], bool):
+            raise AppError("continue 要是 true 或 false", "invalid_finding")
+        out.update(decision=None, evidence=None, behaviour=None, facts=[], cites=[], paths=_texts(body, "paths"),
+                   **{"continue": body.get("continue", True)})
+        if not out["paths"]:
+            raise AppError("要写明给它加哪些可写路径（paths）", "invalid_finding")
+        bad = [g for g in out["paths"] if not scope_glob(g)]
+        if bad:
+            raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding")
+        return out
     if body.get("decision") not in ("fix", "justify", "defer"):
         raise AppError("decision 只能是 fix、justify 或 defer", "invalid_finding")
     out["decision"] = body["decision"]

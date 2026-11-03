@@ -6,7 +6,7 @@
  * rules and answers what is wrong; 「接着运行」 off records it only, so a second can be registered first.
  */
 import { useState } from 'react'
-import type { RunDetail, TestCase } from '../types'
+import type { RunDetail, TestCase, TriageRow } from '../types'
 import { errorText } from './useBoard'
 
 const SIGNER_KEY = 'vstatd-team:signer' // the sign-off's: the same person signs and registers
@@ -67,6 +67,26 @@ export function findingPreset(run: RunDetail, check?: string): FindingBody | nul
   }
 }
 
+/** 给已补登的发现加路径: no new ID, the role gets the files where the cause is and one more round of that check. */
+export type ExtendBody = { extend: string; role: string; paths: string[]; note: string; by: string; continue: boolean }
+
+const CHECK_OF = /^checks\/([\w-]+)\.sh$/
+/** The findings a check added already: the ones that can get more paths. */
+export function extendable(run: RunDetail): TriageRow[] {
+  return (run.backlog?.triage?.findings ?? []).filter((f) => f.added && CHECK_OF.test(f.found_by ?? ''))
+}
+
+/** Adding paths comes first when every held check whose reason names a file:line has it registered already: one more
+ * new finding there hands the role the same failure and the same files. */
+export function startsExtending(run: RunDetail): boolean {
+  const held = run.tests.held
+  if (!held || !extendable(run).length) return false
+  return held.checks.every((c) => {
+    const at = locationOf(run.tests.cases.find((x) => x.id === c)?.message ?? null)
+    return !at || registeredAs(run, c, at).length > 0
+  })
+}
+
 /** The roles that write code: the ones a finding can be handed to. */
 function implementers(run: RunDetail) {
   return run.roles.filter((l) => l.writable.length > 0 && l.status !== 'skipped' && !l.writable.every((g) => g.startsWith('docs/') || g.startsWith('tests/')))
@@ -76,7 +96,85 @@ const list = (s: string) => s.split(/[\s,，、]+/).map((x) => x.trim()).filter(
 /** Citations hold spaces (`[VSTATD-IF p.11 §8.4]`): one per bracket. */
 const citesOf = (s: string) => s.match(/\[[^\]]+\]/g) ?? []
 
-export function FindingDialog({ run, onConfirm, onCancel }: { run: RunDetail; onConfirm: (body: FindingBody) => Promise<void>; onCancel: () => void }) {
+type Confirm = (body: FindingBody | ExtendBody) => Promise<void>
+
+/** 要做什么: a new finding, or more paths for one added already. */
+function ModePick({ extending, onPick }: { extending: boolean; onPick: (extending: boolean) => void }) {
+  return (
+    <label className="kt-start-field is-narrow"><span>要做什么</span>
+      <select aria-label="要做什么" value={extending ? 'extend' : 'new'} onChange={(e) => onPick(e.target.value === 'extend')}>
+        <option value="new">登记新发现（新编号）</option><option value="extend">给已补登的发现加路径</option>
+      </select>
+    </label>
+  )
+}
+
+export function FindingDialog({ run, onConfirm, onCancel }: { run: RunDetail; onConfirm: Confirm; onCancel: () => void }) {
+  const [extending, setExtending] = useState(() => startsExtending(run))
+  return extending
+    ? <ExtendForm run={run} onConfirm={onConfirm} onCancel={onCancel} onMode={setExtending} />
+    : <NewFinding run={run} onConfirm={onConfirm} onCancel={onCancel} onMode={setExtending} />
+}
+
+function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onConfirm: Confirm; onCancel: () => void; onMode: (x: boolean) => void }) {
+  const held = run.tests.held!
+  const roles = implementers(run)
+  const ids = extendable(run)
+  const first = held.checks.map((c) => ids.find((f) => CHECK_OF.exec(f.found_by ?? '')?.[1] === c)).find(Boolean) ?? ids[0]
+  const [b, setB] = useState<ExtendBody>(() => ({ extend: first?.id ?? '', role: roles[0]?.key ?? '', paths: [], note: '',
+    by: (typeof localStorage !== 'undefined' && localStorage.getItem(SIGNER_KEY)) || '', continue: true }))
+  const [paths, setPaths] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (x: Partial<ExtendBody>) => setB((o) => ({ ...o, ...x }))
+  const pick = ids.find((f) => f.id === b.extend)
+  const confirm = async () => {
+    if (!b.by.trim()) return setErr('写下你的名字（谁补登的）')
+    if (!list(paths).length) return setErr('写明要加的可写路径（根因所在的文件）')
+    setBusy(true)
+    setErr('')
+    try {
+      localStorage.setItem(SIGNER_KEY, b.by.trim())
+      await onConfirm({ ...b, by: b.by.trim(), paths: list(paths) })
+    } catch (x) {
+      setErr(errorText(x))
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="kt-confirm kt-gate-dialog" role="dialog" aria-labelledby="kt-finding-title" data-testid="kt-finding-dialog">
+      <strong id="kt-finding-title">给已补登的发现加可写路径</strong>
+      <span>不新加编号：选一个已补登的发现，给交给的角色加上根因所在的文件，它所在的检查再修一轮（{held.why}）。要给几个发现加时，前面的先取消「接着运行」，最后一个再勾上。</span>
+      <div className="kt-start-row">
+        <ModePick extending onPick={onMode} />
+        <label className="kt-start-field"><span>发现</span>
+          <select aria-label="发现" value={b.extend} onChange={(e) => set({ extend: e.target.value })}>
+            {ids.map((f) => <option key={f.id} value={f.id}>{f.id} · {CHECK_OF.exec(f.found_by ?? '')?.[1]} · {f.location}</option>)}
+          </select>
+        </label>
+        <label className="kt-start-field is-narrow"><span>交给</span>
+          <select aria-label="交给" value={b.role} onChange={(e) => set({ role: e.target.value })}>
+            {roles.map((l) => <option key={l.key} value={l.key}>{l.title}</option>)}
+          </select>
+        </label>
+      </div>
+      {pick && <p className="kt-dim">{pick.id} 是 {pick.found_by} 在 {pick.location} 发现的；交给的角色现在可以改：{roles.find((l) => l.key === b.role)?.writable.join(' ') || '—'}</p>}
+      <div className="kt-start-row">
+        <label className="kt-start-field"><span>加可写路径</span><input aria-label="加可写路径" value={paths} onChange={(e) => setPaths(e.target.value)} placeholder="例如 cmake/cc1-aarch64.cmake tests/test_concurrency.cpp" /></label>
+        <label className="kt-start-field is-narrow"><span>补登人</span><input aria-label="补登人" value={b.by} maxLength={60} onChange={(e) => set({ by: e.target.value })} /></label>
+      </div>
+      <textarea className="kt-gate-note" rows={2} value={b.note} onChange={(e) => set({ note: e.target.value })} aria-label="备注" placeholder="例如：根因在 cmake/cc1-aarch64.cmake，没设 CMAKE_SYSROOT（CC1-PN §7.2）" />
+      <span className="kt-confirm-actions">
+        <label><input type="checkbox" checked={b.continue} onChange={(e) => set({ continue: e.target.checked })} /> 接着运行</label>
+        <button type="button" className="kt-btn is-solid is-primary" onClick={confirm} disabled={busy}>{busy ? '正在提交…' : b.continue ? '加路径并接着运行' : '加路径'}</button>
+        <button type="button" className="kt-btn" onClick={onCancel}>取消</button>
+      </span>
+      {err && <p className="kt-error" role="alert">{err}</p>}
+    </div>
+  )
+}
+
+function NewFinding({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onConfirm: Confirm; onCancel: () => void; onMode: (x: boolean) => void }) {
   const [f, setF] = useState<FindingBody>(() => findingPreset(run)!)
   const [extra, setExtra] = useState('')
   const [facts, setFacts] = useState('')
@@ -107,6 +205,7 @@ export function FindingDialog({ run, onConfirm, onCancel }: { run: RunDetail; on
       <strong id="kt-finding-title">补登发现 {nextFindingId(run)} 并交给角色</strong>
       <span>按 TR §4.4 把检查发现、待办里没有的问题记进批准的分诊（{held.why}）。交给的角色从此可以改下面的路径，提交说明要写这个编号。</span>
       <div className="kt-start-row">
+        {extendable(run).length > 0 && <ModePick extending={false} onPick={onMode} />}
         <label className="kt-start-field is-narrow"><span>检查</span>
           <select aria-label="检查" value={f.check} onChange={(e) => setF({ ...findingPreset(run, e.target.value)!, by: f.by, note: f.note, continue: f.continue })}>
             {held.checks.map((c) => <option key={c}>{c}</option>)}
@@ -117,7 +216,7 @@ export function FindingDialog({ run, onConfirm, onCancel }: { run: RunDetail; on
       </div>
       {dup.length > 0 && (
         <p className="kt-warn" role="status" data-testid="kt-finding-dup">
-          {f.check} 在 {f.location.trim()} 已经补登过：{dup.join('、')}。交出去还没修好，多半是根因不在这个文件：在「再加路径」里给根因所在的文件，备注里写清楚；或者换一个检查登记。
+          {f.check} 在 {f.location.trim()} 已经补登过：{dup.join('、')}。交出去还没修好，多半是根因不在这个文件：在「要做什么」里选「给已补登的发现加路径」，给它根因所在的文件。
         </p>
       )}
       <div className="kt-start-row">

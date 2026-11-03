@@ -138,6 +138,44 @@ def test_two_findings_are_registered_then_the_role_gets_a_fix_round_naming_them(
     assert again.roles["dev"]["writable"] == ["src/a.*", "cmake/tc.cmake", "tests/test_a.cpp"]
 
 
+def test_extending_a_finding_added_already_gives_its_role_paths_and_a_round_without_a_new_finding(tmp_path, monkeypatch):
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+
+    async def go():
+        await svc.finding(run.rid, handlers.finding_body({**F032, "location": "src/a.cpp:12", "paths": ["src/a.cpp"]}))
+        sha, before = path.read_bytes(), len(mgr.continued)
+        out = await svc.finding(run.rid, handlers.finding_body(
+            {"extend": "F-032", "role": "dev", "paths": ["cmake/tc.cmake"], "note": "根因在工具链文件", "by": "王工"}))
+        assert out["id"] == "F-032" and out["held"] is False
+        assert path.read_bytes() == sha  # no new finding in the triage
+        assert run.roles["dev"]["writable"] == ["src/a.*", "src/a.cpp", "cmake/tc.cmake"]
+        assert run.s["tests"]["granted"] == {"build": 1}
+        task = mgr.continued[-1][2]
+        assert len(mgr.continued) == before + 1 and "F-032（build 发现" in task and "`cmake/tc.cmake`" in task and "根因在工具链文件" in task
+        entry = [e for e in audit.build(run.s, list(run.events), [])["entries"] if "加可写路径" in e["what"]]
+        assert len(entry) == 1 and entry[0]["actor"] == "person" and entry[0]["evidence"] == "F-032 检查 build 交给 dev 可写 cmake/tc.cmake"
+
+    asyncio.run(go())
+
+
+def test_extending_refuses_an_id_not_added_by_a_check(tmp_path, monkeypatch):
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+
+    async def go():
+        for fid, why in (("F-099", "没有补登过的 F-099"), ("F-031", "不是检查发现的")):
+            with pytest.raises(httpkit.AppError) as e:
+                await svc.finding(run.rid, handlers.finding_body({"extend": fid, "role": "dev", "paths": ["x.cmake"], "by": "王工"}))
+            assert e.value.status == 400 and why in str(e.value)
+        assert run.s["tests"]["held"]
+
+    asyncio.run(go())
+    for bad in ({"extend": "32", "role": "dev", "paths": ["x"], "by": "王工"}, {"extend": "F-032", "role": "dev", "paths": [], "by": "王工"}):
+        with pytest.raises(httpkit.AppError):
+            handlers.finding_body(bad)
+
+
 def test_the_audit_shows_the_registration_as_a_person_action(tmp_path, monkeypatch):
     _, mgr, run, _ = held_run(tmp_path, monkeypatch)
     asyncio.run(svc_of(tmp_path, run, mgr).finding(run.rid, handlers.finding_body(F032)))

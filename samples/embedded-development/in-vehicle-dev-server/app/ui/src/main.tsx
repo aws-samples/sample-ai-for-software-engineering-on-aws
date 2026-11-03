@@ -42,7 +42,7 @@ import { BacklogPanel } from './board/Backlog'
 import { SignOff } from './board/SignOff'
 import { BenchPanel } from './board/Bench'
 import { FlowStrip } from './board/FlowStrip'
-import { FindingDialog, type FindingBody } from './board/Finding'
+import { FindingDialog, type ExtendBody, type FindingBody } from './board/Finding'
 import { AuditPanel, useAudit, type AuditPick } from './board/Audit'
 import { DivisionView } from './board/DivisionGrid'
 import { flowOf } from './board/flow'
@@ -313,7 +313,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
     [api, run, gateAsk, reload],
   )
   const finding = useCallback(
-    async (body: FindingBody) => {
+    async (body: FindingBody | ExtendBody) => {
       if (!run) return
       await api.post(paths.finding(run.id), body)
       setFindingAsk(false)
