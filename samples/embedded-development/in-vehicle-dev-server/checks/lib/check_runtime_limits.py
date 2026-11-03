@@ -31,6 +31,12 @@ def body(args, r):
     if run["vm_hwm_kib"] > lim["peak_rss_kib"]:
         r.reason(f"peak RSS {run['vm_hwm_kib']} KiB is over the limit of {lim['peak_rss_kib']} KiB (CC1-PN §3); "
                  f"baseline {base['vm_hwm_kib']} KiB")
+    restarts = run.get("vstatd_restarts", 0)  # a count, checked by rundir.load_result
+    d["vstatd_restarts"] = restarts
+    if restarts:
+        # VmHWM is that of the last process only, so a restart would hide the peak of the one before
+        # (CC1-PN §8.5).
+        r.reason(f"vstatd restarted {restarts} time(s) during the replay; its figures describe the last process only")
     if run["threads_at_end"] > lim["threads_at_end"]:
         r.reason(f"{run['threads_at_end']} threads at the end of the replay, limit {lim['threads_at_end']} (CC1-PN §3)")
     summary = (f"peak RSS {run['vm_hwm_kib']} of {lim['peak_rss_kib']} KiB (baseline {base['vm_hwm_kib']}), "

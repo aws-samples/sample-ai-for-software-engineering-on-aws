@@ -18,7 +18,26 @@ FIGURES = {"vm_hwm_kib": int, "threads_at_end": int, "cpu_ms": int}
 TARGETS = {"emulated-cc1": "emulation", "real-cc1": "real target"}
 # How the bench knew the replay had ended (CC1-PN §8.5). The exit status of the script that started it does not count.
 REPLAY_ENDS = {"player-end-of-drive"}
-ICOUNT = re.compile(r"-icount\s+(shift=\d+,sleep=off)\b")
+ICOUNT = re.compile(r"(?:^|\s)--?icount\s+(\S+)")
+
+
+def icount(command):
+    """The `-icount` option of a QEMU command line as a dict, or None when it is missing, appears more than once, or
+    is not deterministic: an integer `shift` and `sleep=off` are required, in any order [CC1-PN §2.2]. `shift` is
+    normalised (`03` is `3`), as QEMU reads it."""
+    found = ICOUNT.findall(command or "")
+    if len(found) != 1:
+        return None
+    opts = {}
+    for part in found[0].split(","):
+        key, _, value = part.partition("=")
+        if not key or key in opts:
+            return None
+        opts[key] = value
+    if not re.fullmatch(r"[0-9]+", opts.get("shift", "")) or opts.get("sleep") != "off":
+        return None
+    opts["shift"] = str(int(opts["shift"]))
+    return opts
 
 
 class Problem(Exception):
@@ -40,11 +59,14 @@ def load_result(path, what, figures=False):
     if data["target"] not in TARGETS:
         raise Problem(c.BLOCKED, f"{what}: target must be one of {', '.join(TARGETS)}")
     if data["target"] == "emulated-cc1":
-        m = ICOUNT.search(data.get("qemu_command") or "")
-        if not m:
-            raise Problem(c.BLOCKED, f"{what}: the QEMU command line with -icount shift=<n>,sleep=off is not recorded "
-                                     "(CC1-PN §2.2)")
-        data["icount"] = m.group(1)
+        opts = icount(data.get("qemu_command"))
+        if opts is None:
+            raise Problem(c.BLOCKED, f"{what}: the QEMU command line's -icount option is missing, repeated, or not "
+                                     "shift=<n>,sleep=off (CC1-PN §2.2)")
+        data["icount"] = ",".join(f"{k}={v}" for k, v in sorted(opts.items()))
+    restarts = data.get("vstatd_restarts", 0)
+    if not isinstance(restarts, int) or isinstance(restarts, bool) or restarts < 0:
+        raise Problem(c.BLOCKED, f"{what}: vstatd_restarts is {restarts!r}, not a count")
     if data["replay_end"] not in REPLAY_ENDS:
         raise Problem(c.BLOCKED, f"{what}: replay_end {data['replay_end']!r} is not a recognised end of the replay "
                                  f"({', '.join(sorted(REPLAY_ENDS))}; CC1-PN §8.5)")

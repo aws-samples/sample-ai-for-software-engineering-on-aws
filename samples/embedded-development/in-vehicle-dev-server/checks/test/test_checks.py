@@ -535,6 +535,22 @@ class RuntimeLimits(RunChecks):
     def test_not_the_approved_build_fails(self):
         self.assertEqual(self.go("runtime-limits", result={"readback_digest": "cd" * 32})[0], 1)
 
+    def test_a_restart_during_the_replay_fails(self):
+        rc, out = self.go("runtime-limits", result={"vstatd_restarts": 1})
+        self.assertEqual(rc, 1, out)
+        self.assertIn("restarted 1 time", out)
+        rc, out = self.go("runtime-limits", result={"vstatd_restarts": 2, "vm_hwm_kib": 8193})
+        self.assertEqual(rc, 1, out)
+        self.assertIn("over the limit", out)
+        self.assertEqual(self.go("runtime-limits", result={"vstatd_restarts": 0})[0], 0)
+        for bad in ("1", True, -1, None, 1.0):
+            self.assertEqual(self.go("runtime-limits", result={"vstatd_restarts": bad})[0], 3, bad)
+
+    def test_extra_fields_of_the_bench_are_ignored(self):
+        rc, out = self.go("runtime-limits", result={"approval_request": "20261103T101500-deploy-ab12",
+                                                    "journal_marker": "cc1-bench marker 1234"})
+        self.assertEqual(rc, 0, out)
+
     def test_missing_figures_or_icount_is_blocked(self):
         self.assertEqual(self.go("runtime-limits", result={"vm_hwm_kib": None})[0], 3)
         self.assertEqual(self.go("runtime-limits", result={"qemu_command": "qemu-system-aarch64 -icount shift=auto"})[0], 3)
@@ -615,6 +631,18 @@ class LogDiff(RunChecks):
     def test_not_comparable_is_blocked(self):
         self.assertEqual(self.go("logdiff", result={"replay_id": "drive-02"})[0], 3)
         self.assertEqual(self.go("logdiff", result={"qemu_command": "qemu -icount shift=4,sleep=off"})[0], 3)
+
+    def test_icount_options_in_any_order_are_the_same_setting(self):
+        for same in ("qemu -icount sleep=off,shift=3", "qemu --icount shift=3,sleep=off",
+                     "qemu -icount shift=03,sleep=off"):
+            self.assertEqual(self.go("logdiff", result={"qemu_command": same})[0], 0, same)
+        self.assertEqual(self.go("logdiff", result={"qemu_command": "qemu -icount shift=3,sleep=off,align=off"})[0], 3)
+        for cmd in ("qemu -icount shift=3,sleep=on", "qemu -icount shift=auto,sleep=off",
+                    "qemu -icount shift=3,sleep=off,", "qemu -icount shift=3,sleep=off -icount shift=4,sleep=off",
+                    "qemu -icount shift=3,sleep=off --icount shift=9,sleep=on",
+                    "qemu -icount shift=3,shift=3,sleep=off", "qemu -icount shift=\uff13,sleep=off",
+                    "qemu-icount shift=3,sleep=off"):
+            self.assertEqual(self.go("logdiff", result={"qemu_command": cmd})[0], 3, cmd)
 
     def test_pairing_takes_the_first_matching_entry(self):
         b = [{"t_ms": 100, "ev": "X"}, {"t_ms": 110, "ev": "X"}]

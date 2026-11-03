@@ -153,6 +153,12 @@ nothing, not that the log path was broken or flooded by another process.
 | `figures_after_replay_end` | boolean | `VmHWM` and threads were read after the end |
 | `vm_hwm_kib`, `threads_at_end`, `cpu_ms` | integer | Read from `/proc/<pid>/status` and `/proc/<pid>/stat` before `vstatd` was stopped |
 | `approved_digest`, `readback_digest` | string | SHA-256 of the build approved at the operator console, and as read back from the target (CC1-PN §8.4) |
+| `vstatd_restarts` | integer, optional | How often systemd restarted `vstatd` during the replay; more than 0 is a FAIL of `runtime-limits.sh`, because the figures then describe the last process only; a value that is not a non-negative integer is BLOCKED |
+| `approval_request`, `journal_marker` | string, optional | The bench's request ID of the approved replay, and the marker the bench wrote to the journal and read back; kept in the run directory, not read by the checks |
+
+`qemu_command` is compared by its `-icount` option, whose keys may come in any order; it must appear once, with an
+integer `shift` and `sleep=off`. Any other key counts as part of the setting, so `align=off` in the run and no
+`align` in the baseline are different settings (BLOCKED).
 
 ## Tests
 
