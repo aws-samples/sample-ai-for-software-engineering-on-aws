@@ -10,7 +10,7 @@ from teamkit import FakeManager, mod, ts_types
 from test_flow import T0, ev, iso, recorded
 
 audit, service, handlers = mod("audit"), mod("service"), mod("handlers")
-BOARD_BY = "Kiro Crew 看板（lilinll，vstatd-team）"
+BOARD_BY = "Kiro Crew 看板（you，vstatd-team）"
 
 
 def bench_file(tmp_path, rid):
@@ -23,11 +23,11 @@ def bench_file(tmp_path, rid):
             {"at": iso(T0 + 4170), "event": "action", "id": "q1", "action": "deploy", "result": "ok", "detail": "installed"},
             {"at": iso(T0 + 4171), "event": "target", "state": "known", "why": "done", "last_request": "q1"},
             {"at": iso(T0 + 4200), "event": "request", "id": "q2", "action": "replay", "requested_by": me, "timeout_s": 300},
-            {"at": iso(T0 + 4500), "event": "decision", "id": "q2", "verdict": "refused", "action": "replay", "by": "lilinll@mac (/dev/ttys003)", "reason": "wrong drive"},
+            {"at": iso(T0 + 4500), "event": "decision", "id": "q2", "verdict": "refused", "action": "replay", "by": "you@mac (/dev/ttys003)", "reason": "wrong drive"},
             {"at": iso(T0 + 10), "event": "request", "id": "b1", "action": "replay", "requested_by": "bench tools", "timeout_s": 300},
             {"at": iso(T0 + 20), "event": "decision", "id": "b1", "verdict": "approved", "action": "replay", "by": BOARD_BY, "reason": ""},
             {"at": iso(T0 + 30), "event": "action", "id": "b1", "action": "replay", "result": "ok", "detail": "replay to baseline"},
-            {"at": iso(T0 + 31), "event": "supply", "voltage_v": 13.5, "by": "lilinll@mac (/dev/ttys003)"},
+            {"at": iso(T0 + 31), "event": "supply", "voltage_v": 13.5, "by": "you@mac (/dev/ttys003)"},
             {"at": iso(T0 + 4150), "event": "request", "id": "q9", "action": "deploy", "requested_by": "vstatd-team r1199else"}]
     d = tmp_path / "bench"
     d.mkdir()
@@ -85,7 +85,7 @@ def test_the_run_trail_ties_events_and_its_bench_requests_together(tmp_path, mon
         assert by("测试先行")["step"] == "tests-first"
         assert [x["step"] for x in e if x["actor"] == "app" and "runtime-limits" in x["evidence"]] == ["after"]
         dec = [x for x in e if x["step"] == "bench" and x["actor"] == "person"]
-        assert [(x["who"], x["what"]) for x in dec] == [(BOARD_BY, "看板批准部署"), ("lilinll@mac (/dev/ttys003)", "操作台拒绝回放：wrong drive")]
+        assert [(x["who"], x["what"]) for x in dec] == [(BOARD_BY, "看板批准部署"), ("you@mac (/dev/ttys003)", "操作台拒绝回放：wrong drive")]
         assert by("向操作台请求部署")["actor"] == "app" and "摘要 bc9372" in by("向操作台请求部署")["evidence"]
         assert by("部署结果 ok")["actor"] == "bench" and by("目标状态 known")["evidence"] == "请求 q1"
         assert not any("q9" in x["evidence"] or "b1" in x["evidence"] for x in e)
@@ -96,7 +96,7 @@ def test_the_run_trail_ties_events_and_its_bench_requests_together(tmp_path, mon
         md = await call(routes, "GET", path + "?format=md")
         assert md.content_type == "text/markdown" and 'filename="audit-r1201done.md"' in md.headers["Content-Disposition"]
         assert md.text.startswith("# 审计记录 · r1201done") and "- 基线提交：1111222233334444" in md.text and "- 团队：vstatd" in md.text
-        assert "## 关卡：分诊" in md.text and "| 人 · Kiro Crew 看板（lilinll，vstatd-team） | 看板批准部署 |" in md.text
+        assert "## 关卡：分诊" in md.text and "| 人 · Kiro Crew 看板（you，vstatd-team） | 看板批准部署 |" in md.text
         js = await call(routes, "GET", path + "?format=json")
         assert js.content_type == "application/json" and json.loads(js.text)["entries"] == e
 
