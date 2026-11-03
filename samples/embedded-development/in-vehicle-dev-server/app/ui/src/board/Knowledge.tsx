@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
-import type { KnowledgeChip, KnowledgeIndex, KnowledgeSource, KnowledgeText, Lane, RunDetail } from '../types'
+import type { KnowledgeChip, KnowledgeDoc, KnowledgeIndex, KnowledgeSource, KnowledgeText, Lane, RunDetail } from '../types'
 import { BASE, fmtAgo } from './format'
 import { useServerNow } from './hooks'
 import { RoleIcon } from './RoleIcon'
@@ -61,7 +61,67 @@ export function KnowledgeViewer({ path, onClose }: { path: string; onClose: () =
   )
 }
 
-/** 知识库 on the home page: every document the team uses, its figures counted from the file, and the index state. */
+/** The home page's card groups: which documents go together (the facts files share one card, the PDF is a note on the spec). */
+const GROUPS: { title: string; paths: string[] }[] = [
+  { title: '规范', paths: ['vstatd-interface.md', 'cc1-platform-notes.md', 'team-rules.md'] },
+  { title: '待办与数据', paths: ['findings-backlog.md', 'cc1-gateway.dbc', 'vss-mapping.yaml'] },
+  { title: '事实条目', paths: ['facts/'] },
+]
+const FACTS = 'facts/'
+
+function Figures({ d }: { d: KnowledgeDoc }) {
+  if (!d.present) return <span className="kt-lib-chip is-missing">文件不在</span>
+  return <>{d.counts.map((c) => <span key={c.label} className="kt-lib-chip">{c.label} {c.n}</span>)}</>
+}
+
+function Open({ d, onOpen }: { d: KnowledgeDoc; onOpen: (path: string) => void }) {
+  if (!d.text || !d.present) return null
+  return (
+    <button type="button" className="kt-btn kt-lib-open" onClick={() => onOpen(d.path)} aria-label={`查看 ${d.title}`} title={`打开 ${d.path}（只读）`}>
+      查看
+    </button>
+  )
+}
+
+function DocCard({ d, pdf, onOpen }: { d: KnowledgeDoc; pdf?: KnowledgeDoc; onOpen: (path: string) => void }) {
+  return (
+    <li className={`kt-lib-card${d.present ? '' : ' is-missing'}`} data-testid="kt-kb-doc" data-path={d.path}>
+      <div className="kt-lib-top">
+        <b className="kt-lib-title">{d.title}</b>
+        {d.key && <span className="kt-lib-key kt-mono">{d.key}</span>}
+        {pdf?.present && <span className="kt-lib-pdf" title={`${pdf.path}：${pdf.desc}`} data-testid="kt-kb-pdf">PDF 版</span>}
+      </div>
+      <div className="kt-lib-counts"><Figures d={d} /></div>
+      <p className="kt-lib-desc" title={d.desc}>{d.desc}</p>
+      <div className="kt-lib-foot">
+        <small className="kt-dim kt-mono">{d.path}</small>
+        <Open d={d} onOpen={onOpen} />
+      </div>
+    </li>
+  )
+}
+
+/** The three facts files on one card: a figure and a 查看 per file. */
+function FactsCard({ docs, onOpen }: { docs: KnowledgeDoc[]; onOpen: (path: string) => void }) {
+  const kind = (d: KnowledgeDoc) => d.title.split(' · ').pop() ?? d.title
+  return (
+    <li className="kt-lib-card" data-testid="kt-kb-doc" data-path={FACTS}>
+      <div className="kt-lib-top"><b className="kt-lib-title">事实条目</b></div>
+      <div className="kt-lib-counts">
+        {docs.map((d) => <span key={d.path} className={`kt-lib-chip${d.present ? '' : ' is-missing'}`}>{kind(d)} {d.present ? d.counts[0]?.n ?? '—' : '文件不在'}</span>)}
+      </div>
+      <p className="kt-lib-desc">从规范里摘出的信号、报文和规则，每条带页和节</p>
+      {docs.map((d) => (
+        <div key={d.path} className="kt-lib-foot">
+          <small className="kt-dim kt-mono">{d.path}</small>
+          <Open d={d} onOpen={onOpen} />
+        </div>
+      ))}
+    </li>
+  )
+}
+
+/** 知识库 on the home page: every document the team uses as cards by kind, its figures counted from the file, and the index state. */
 export function KnowledgeHome() {
   const api = useAppApi()
   const [k, setK] = useState<KnowledgeIndex | null>(null)
@@ -78,35 +138,38 @@ export function KnowledgeHome() {
   useEffect(() => {
     void load()
   }, [load])
+  const docs = k?.docs ?? []
+  const byPath = new Map(docs.map((d) => [d.path, d]))
+  const pdfOf = (d: KnowledgeDoc) => docs.find((x) => x.rendered_from === d.path)
+  const placed = new Set(GROUPS.flatMap((g) => g.paths))
+  const isFact = (d: KnowledgeDoc) => d.path.startsWith(FACTS)
+  // a document no group names (and that is not a PDF note) still shows, last
+  const rest = docs.filter((d) => !placed.has(d.path) && !isFact(d) && !d.rendered_from)
   return (
     <section className="kt-ready kt-lib" aria-label="知识库" data-testid="kt-kb-home">
-      <header className="kt-ready-head">
+      <header className="kt-lib-head">
         <h3><RoleIcon role="book" size={16} /> 知识库</h3>
-        <span className="kt-dim">agent 分诊、修复和评审时查这些文档，引用写成 [VSTATD-IF p.7 §4.1]、[CC1-PN §6.3]、[TR §4.1]。</span>
-        {k?.source && <span className={`kt-dim${k.source.present === false ? ' kt-warn' : ''}`} data-testid="kt-kb-index">Kiro Crew 来源「{k.source.name}」：{sourceText(k.source)}</span>}
+        <p className="kt-dim">agent 分诊、修复和评审时查这些文档，引用写成 [VSTATD-IF p.7 §4.1]、[CC1-PN §6.3]、[TR §4.1]。</p>
+        {k?.source && <p className={`kt-dim${k.source.present === false ? ' kt-warn' : ''}`} data-testid="kt-kb-index">Kiro Crew 来源「{k.source.name}」：{sourceText(k.source)}</p>}
       </header>
       {err && <p className="kt-error" role="alert">知识库读不到：{err}</p>}
       {k?.error && <p className="kt-warn" role="status">{k.error}</p>}
       {!k && !err && <p className="kt-dim">正在读…</p>}
-      {k && k.docs.length > 0 && (
-        <ul className="kt-lib-list">
-          {k.docs.map((d) => (
-            <li key={d.path} className={`kt-lib-doc${d.present ? '' : ' is-missing'}`} data-testid="kt-kb-doc" data-path={d.path}>
-              {d.text && d.present ? (
-                <button type="button" className="kt-file-open kt-lib-title" onClick={() => setOpen(d.path)} title={`打开 ${d.path}（只读）`}>{d.title}</button>
-              ) : (
-                <b className="kt-lib-title">{d.title}</b>
-              )}
-              {d.key && <span className="kt-lib-key kt-mono">{d.key}</span>}
-              <span className="kt-lib-counts">
-                {d.present ? d.counts.map((c) => `${c.label} ${c.n}`).join(' · ') || (d.rendered_from ? `${d.rendered_from} 的 PDF 版` : '') : '文件不在'}
-              </span>
-              <small className="kt-dim kt-mono">{d.path}</small>
-              <span className="kt-lib-desc">{d.desc}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {docs.length > 0 &&
+        [...GROUPS, { title: '其他', paths: rest.map((d) => d.path) }].map((g) => {
+          const facts = g.paths.includes(FACTS) ? docs.filter(isFact) : []
+          const cards = g.paths.map((p) => byPath.get(p)).filter((d): d is KnowledgeDoc => !!d)
+          if (cards.length === 0 && facts.length === 0) return null
+          return (
+            <div key={g.title} className="kt-lib-group" data-testid="kt-kb-group" data-group={g.title}>
+              <h4>{g.title}</h4>
+              <ul className="kt-lib-grid">
+                {cards.map((d) => <DocCard key={d.path} d={d} pdf={pdfOf(d)} onOpen={setOpen} />)}
+                {facts.length > 0 && <FactsCard docs={facts} onOpen={setOpen} />}
+              </ul>
+            </div>
+          )
+        })}
       {open && <KnowledgeViewer path={open} onClose={() => setOpen(null)} />}
     </section>
   )

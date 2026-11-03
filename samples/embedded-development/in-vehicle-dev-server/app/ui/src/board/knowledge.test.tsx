@@ -8,7 +8,7 @@ import { TeamPage } from '../main'
 const API = '/api/apps/vstatd-team'
 
 describe('知识库', () => {
-  test('the home page lists the documents with key, figures and the index state; one opens as plain text', async () => {
+  test('the home page shows the documents as cards by kind with key, figures and the index state; one opens as plain text', async () => {
     const user = userEvent.setup()
     setApiRoutes({ [`GET ${API}/board*`]: () => emptyBoard(), [`GET ${API}/readiness`]: () => readinessOf(), [`GET ${API}/knowledge`]: () => knowledgeOf(),
       [`GET ${API}/knowledge/file*`]: (_b, path) => knowledgeTextOf(new URL(path, 'http://x').searchParams.get('path') ?? '') })
@@ -16,15 +16,26 @@ describe('知识库', () => {
     const home = await screen.findByTestId('kt-kb-home')
     expect(within(screen.getByTestId('kt-empty')).getByTestId('kt-kb-home')).toBe(home)
     expect(await within(home).findByTestId('kt-kb-index')).toHaveTextContent('Kiro Crew 来源「vstatd」：14 份文档 · 已同步')
-    const docs = await within(home).findAllByTestId('kt-kb-doc')
-    expect(docs).toHaveLength(10)
+    const groups = within(home).getAllByTestId('kt-kb-group')
+    const paths = (g: HTMLElement) => within(g).getAllByTestId('kt-kb-doc').map((d) => d.dataset.path)
+    expect(groups.map((g) => [g.dataset.group, paths(g)])).toEqual([
+      ['规范', ['vstatd-interface.md', 'cc1-platform-notes.md', 'team-rules.md']],
+      ['待办与数据', ['findings-backlog.md', 'cc1-gateway.dbc', 'vss-mapping.yaml']],
+      ['事实条目', ['facts/']],
+    ])
+    const docs = within(home).getAllByTestId('kt-kb-doc')
     const doc = (p: string) => docs.find((d) => d.dataset.path === p)!
-    expect(doc('vstatd-interface.md')).toHaveTextContent('vstatd 接口规范VSTATD-IF节 41 · 页 11')
-    expect(doc('findings-backlog.md')).toHaveTextContent('发现 30 · fix 22 · later 8')
-    expect(doc('cc1-gateway.dbc')).toHaveTextContent('报文 9 · 信号 24')
-    expect(doc('vstatd-interface.pdf')).toHaveTextContent('vstatd-interface.md 的 PDF 版')
-    expect(within(doc('vstatd-interface.pdf')).queryByRole('button')).toBeNull() // the PDF does not open here
-    await user.click(within(doc('team-rules.md')).getByRole('button', { name: '团队规则' }))
+    const chips = (p: string) => [...doc(p).querySelectorAll('.kt-lib-chip')].map((c) => c.textContent)
+    expect(doc('vstatd-interface.md')).toHaveTextContent('vstatd 接口规范VSTATD-IFPDF 版')
+    expect(within(doc('vstatd-interface.md')).getByTestId('kt-kb-pdf')).toHaveAttribute('title', expect.stringContaining('vstatd-interface.pdf'))
+    expect(chips('vstatd-interface.md')).toEqual(['节 41', '页 11'])
+    expect(chips('findings-backlog.md')).toEqual(['发现 30', 'fix 22', 'later 8'])
+    expect(chips('cc1-gateway.dbc')).toEqual(['报文 9', '信号 24'])
+    expect(chips('facts/')).toEqual(['信号 24', '报文 9', '规则 39'])
+    expect(within(doc('facts/')).getAllByRole('button', { name: /^查看/ })).toHaveLength(3)
+    expect(docs.some((d) => d.dataset.path === 'vstatd-interface.pdf')).toBe(false) // the PDF is a note, not a card
+    expect(within(doc('team-rules.md')).queryByRole('button', { name: '团队规则' })).toBeNull() // the title is not a link
+    await user.click(within(doc('team-rules.md')).getByRole('button', { name: '查看 团队规则' }))
     const viewer = await screen.findByTestId('kt-kb-viewer')
     expect(apiCalls.some((c) => c.path === `${API}/knowledge/file?path=team-rules.md`)).toBe(true)
     const pre = await within(viewer).findByTestId('kt-kb-text')
@@ -57,7 +68,7 @@ describe('知识库', () => {
       } })
     render(<TeamPage pollMs={60_000} />)
     const docs = await screen.findAllByTestId('kt-kb-doc')
-    await user.click(within(docs.find((d) => d.dataset.path === 'team-rules.md')!).getByRole('button'))
+    await user.click(within(docs.find((d) => d.dataset.path === 'team-rules.md')!).getByRole('button', { name: '查看 团队规则' }))
     expect(await within(screen.getByTestId('kt-kb-viewer')).findByRole('alert')).toHaveTextContent('读不到：知识库里没有 team-rules.md')
   })
 })
