@@ -443,14 +443,15 @@ class Service:
         try:
             team, sample = await asyncio.to_thread(self._default_team)
         except AppError as exc:  # no scenario folder recorded: setup.sh has not run
-            return {"at": now, "team": "", "items": [], "error": str(exc)}
+            return {"at": now, "team": "", "items": [], "pending": [], "error": str(exc)}
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
         self.probes.refresh(team, doctor=doctor)
         state = await asyncio.to_thread(bench_mod.read_state)
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
         return {"at": now, "team": str(team.get("name") or ""), "error": "",
-                "items": readiness.items(team, self.probes, kb, state, sample, now)}
+                "items": readiness.items(team, self.probes, kb, state, sample, now),
+                "pending": readiness.pending(team, state, now)}
 
     async def knowledge(self) -> dict[str, Any]:
         """知识库 (home page): the scenario's knowledge documents with figures counted now, and Crew's source state."""

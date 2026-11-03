@@ -47,7 +47,7 @@ def read_state(d: Path | None = None) -> dict[str, Any]:
         r = _json(p)
         if isinstance(r, dict) and r.get("id") and not (d / "decisions" / f"{r['id']}.json").exists():
             pending.append({k: r.get(k) for k in ("id", "action", "digest", "detail", "requested_at", "requested_by")}
-                           | {"expired": now >= float(r.get("expires") or 0)})
+                           | {"expired": now >= float(r.get("expires") or 0), "expires": r.get("expires")})
     actions = []
     with contextlib.suppress(OSError):
         for line in (d / "actions.jsonl").read_text(encoding="utf-8").splitlines()[-ACTIONS_SHOWN:]:

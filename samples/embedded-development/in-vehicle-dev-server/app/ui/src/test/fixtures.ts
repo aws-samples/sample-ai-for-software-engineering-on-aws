@@ -696,6 +696,12 @@ export function readinessOf(at: number = raw.at): Readiness {
       { key: 'console', label: '操作台', ok: null, detail: 'app 看不出操作台开着没有：部署和回放要人在操作台上批准，它要在自己的终端里开着',
         command: `python3 ${SAMPLE}/bench/console.py`, needed: 'bench', age_s: null, running: false },
     ],
+    pending: [
+      { id: '20261103T094307-deploy-ac78', action: 'deploy', digest: 'bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98',
+        requested_by: 'bench tools', left_s: 168,
+        approve: `python3 ${SAMPLE}/bench/console.py approve 20261103T094307-deploy-ac78 --digest bc93723c0cb0`,
+        refuse: `python3 ${SAMPLE}/bench/console.py refuse 20261103T094307-deploy-ac78 --reason <原因>` },
+    ],
   }
 }
 

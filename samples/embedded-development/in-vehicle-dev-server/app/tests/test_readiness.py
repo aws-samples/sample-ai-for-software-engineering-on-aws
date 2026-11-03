@@ -140,3 +140,32 @@ def test_without_a_scenario_folder_the_checklist_says_why(tmp_path, monkeypatch)
         assert r.status == 200 and r.body["items"] == [] and "setup.sh" in r.body["error"]
 
     asyncio.run(go())
+
+
+def test_the_checklist_lists_the_requests_waiting_at_the_console(tmp_path, monkeypatch):
+    svc, routes, sample, state = scenario(tmp_path, monkeypatch)
+    now = time.time()
+    req = {"id": "20261103T094307-deploy-ac78", "action": "deploy", "digest": "bc93723c0cb02e054acc5f25705b61a4",
+           "detail": "", "requested_at": "2026-11-03T01:43:07.000Z", "requested_by": "bench tools", "expires": now + 200}
+    (state / "requests" / f"{req['id']}.json").write_text(json.dumps(req), encoding="utf-8")
+    old = {**req, "id": "20261103T094046-deploy-2570", "expires": now - 10}  # timed out: not listed
+    (state / "requests" / f"{old['id']}.json").write_text(json.dumps(old), encoding="utf-8")
+    done = {**req, "id": "20261103T090000-replay-0001"}  # decided: not listed
+    (state / "requests" / f"{done['id']}.json").write_text(json.dumps(done), encoding="utf-8")
+    (state / "decisions").mkdir()
+    (state / "decisions" / f"{done['id']}.json").write_text("{}", encoding="utf-8")
+    before = snapshot(state)
+
+    async def go():
+        try:
+            return (await call(routes, "GET", "/readiness")).body["pending"]
+        finally:
+            await svc.stop()
+
+    pending = asyncio.run(go())
+    assert [p["id"] for p in pending] == [req["id"]]
+    p = pending[0]
+    assert p["action"] == "deploy" and p["requested_by"] == "bench tools" and 190 <= p["left_s"] <= 200
+    assert p["approve"] == f"python3 {sample}/bench/console.py approve {req['id']} --digest bc93723c0cb0"
+    assert p["refuse"] == f"python3 {sample}/bench/console.py refuse {req['id']} --reason <原因>"
+    assert snapshot(state) == before  # read only

@@ -83,6 +83,25 @@ class Probes:
         self._tasks = {}
 
 
+def pending(team: dict[str, Any], state: dict[str, Any], now: float) -> list[dict[str, Any]]:
+    """The bench requests waiting at the operator console now, whoever made them (a run, or a person setting up the
+    baseline), with the seconds left before the console's timeout refuses them and the console commands for them. Read
+    from the bench state; the app never approves."""
+    spec = team.get("bench") or {}
+    console = Path(spec["deploy"][0]).with_name("console.py") if spec.get("deploy") else None
+    cmd = shlex.join(["python3", str(console)]) if console else "python3 bench/console.py"
+    out = []
+    for r in state.get("pending") or []:
+        if r.get("expired"):
+            continue
+        left = round(float(r["expires"]) - now) if isinstance(r.get("expires"), (int, float)) else None
+        out.append({"id": r["id"], "action": r.get("action") or "", "digest": r.get("digest") or "",
+                    "requested_by": r.get("requested_by") or "", "left_s": left,
+                    "approve": f"{cmd} approve {r['id']} --digest {str(r.get('digest') or '')[:12]}",
+                    "refuse": f"{cmd} refuse {r['id']} --reason <原因>"})
+    return out
+
+
 def items(team: dict[str, Any], probes: Probes, knowledge: dict[str, Any] | None, state: dict[str, Any],
           sample: Path, now: float) -> list[dict[str, Any]]:
     """The checklist: each item's state (ok True, False, or None when the app cannot tell or has not read it yet),

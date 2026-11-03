@@ -111,7 +111,18 @@ export type Readiness = {
   at: number
   team: string
   items: ReadinessItem[]
+  pending?: PendingRequest[] // bench requests waiting at the operator console now, from a run or from setting up the baseline
   error: string // the scenario folder is not known (setup.sh has not run): no items
+}
+
+export type PendingRequest = {
+  id: string
+  action: string
+  digest: string
+  requested_by: string
+  left_s: number | null // seconds before the console's timeout refuses it
+  approve: string // the console command that approves it
+  refuse: string
 }
 
 export type ReadinessItem = {

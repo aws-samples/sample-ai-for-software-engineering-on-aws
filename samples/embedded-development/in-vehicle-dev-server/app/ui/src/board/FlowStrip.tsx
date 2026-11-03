@@ -51,6 +51,7 @@ export function FlowStrip({ run }: { run: RunDetail }) {
 
 const NEEDED: Record<ReadinessItem['needed'], string> = { start: '开始就要', checks: '测试先行起要', bench: '上台架才要' }
 const POLL_READY_MS = 5000
+const ACTION: Record<string, string> = { deploy: '部署', restart: '重启', replay: '回放' }
 
 function itemState(i: ReadinessItem): { icon: string; tone: string; text: string } {
   if (i.running && i.ok === null) return { icon: '…', tone: 'run', text: '正在查' }
@@ -98,6 +99,27 @@ export function ReadinessPanel() {
       {err && <p className="kt-error" role="alert">准备情况读不到：{err}</p>}
       {r?.error && <p className="kt-warn" role="status">{r.error}</p>}
       {!r && !err && <p className="kt-dim">正在读…</p>}
+      {r?.pending && r.pending.length > 0 && (
+        <div className="kt-ready-pending" role="status" data-testid="kt-ready-pending">
+          <b>✋ 操作台上有 {r.pending.length} 个请求等你批准</b>
+          <span className="kt-dim">在开着操作台的终端里批准（a 序号 摘要前 6 位），或者在任意终端运行下面的命令；看板不能批准。核对摘要再批。</span>
+          <ul>
+            {r.pending.map((p) => (
+              <li key={p.id} data-testid="kt-ready-request" data-id={p.id}>
+                <span>
+                  <b>{ACTION[p.action] ?? p.action}</b> <code>{p.digest.slice(0, 12)}</code>
+                  <small className="kt-dim">
+                    {' '}{p.id} · {p.requested_by}
+                    {p.left_s !== null && ` · 还剩 ${Math.max(0, p.left_s)} 秒，超时自动拒绝`}
+                  </small>
+                </span>
+                <span>批准：<code className="kt-ready-cmd">{p.approve}</code></span>
+                <span>拒绝：<code className="kt-ready-cmd">{p.refuse}</code></span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {r && r.items.length > 0 && (
         <ul className="kt-ready-list">
           {r.items.map((i) => {
