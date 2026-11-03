@@ -2,7 +2,7 @@
 (``events.jsonl``) and the bench's action record (``actions.jsonl``) for the requests the run made
 (``requested_by == "vstatd-team <rid>"``). Nothing is inferred: a field with no record behind it is ``""`` (shown —).
 
-Each entry: ``at`` (epoch), ``iso``, ``actor`` (``person`` | ``agent`` | ``app`` | ``bench``), ``who``, ``step`` (a
+Each entry: ``at`` (epoch), ``iso``, ``seq`` (the event's, None for a bench record), ``actor`` (``person`` | ``agent`` | ``app`` | ``bench``), ``who``, ``step`` (a
 step key of ui/src/board/flow.ts, ``""`` where none applies), ``what`` (one line) and ``evidence``.
 
 ``bench_only`` lists the bench's request, decision and action records whose request no run made (setting up the
@@ -45,8 +45,8 @@ def _epoch(text: Any) -> float | None:
 
 
 def _entry(at: float, actor: str, who: str, step: str, what: str, evidence: str = "") -> dict[str, Any]:
-    return {"at": round(float(at), 3), "iso": iso_of(float(at)), "actor": actor, "who": who, "step": step or "",
-            "what": what, "evidence": evidence}
+    return {"at": round(float(at), 3), "iso": iso_of(float(at)), "seq": None, "actor": actor, "who": who,
+            "step": step or "", "what": what, "evidence": evidence}
 
 
 def _verdicts(data: dict[str, Any]) -> str:
@@ -167,7 +167,7 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
             extra = "改了 " + " ".join(map(str, e["data"]["answers"]))
         entry = _event_entry(e, s, titles, extra)
         if entry:
-            out.append(entry)
+            out.append({**entry, "seq": int(e["seq"]) if e.get("seq") is not None else None})
     me = f"{APP_NAME} {rid}"
     mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") == me}
     for r in recs:

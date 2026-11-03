@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
 import { apiCalls, setApiRoutes } from '../test/stubs/app-sdk'
 import { auditOf, benchAuditOf, clone, emptyBoard, readinessOf, vstatdBoard } from '../test/fixtures'
-import { TeamPage } from '../main'
+import VstatdTeamApp, { TeamPage } from '../main'
 
 const API = '/api/apps/vstatd-team'
 
@@ -48,4 +48,27 @@ describe('审计记录', () => {
     await userEvent.click(within(req).getByRole('button', { name: '批准' }))
     await waitFor(() => expect(reads()).toBeGreaterThan(before))
   })
+
+  test('the event feed marks who acted, as the audit trail has it; the app bar counts what waits for the person', async () => {
+    const b = vstatdBoard('bench')
+    const trail = auditOf(b)
+    const ev = b.run!.events.at(-1)!
+    trail.entries[0] = { ...trail.entries[0], seq: ev.seq, actor: 'bench' }
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b), [`GET ${API}/runs/${b.run!.id}/audit`]: () => trail })
+    render(<VstatdTeamApp pollMs={60_000} />)
+    const feed = await screen.findByTestId('kt-feed')
+    const row = await waitFor(() => {
+      const li = feed.querySelector(`[data-seq="${ev.seq}"]`)!
+      expect(li.querySelector('[data-actor="bench"]')).toHaveTextContent('台架')
+      return li
+    })
+    expect(row).toBeTruthy()
+    expect(feed.querySelectorAll('.kt-actor')).toHaveLength(1) // an event the trail does not list has none
+    const waiting = b.run!.bench!.state.pending.filter((r) => !r.expired).length + b.run!.roles.filter((l) => l.gate === 'pending').length
+    expect(waiting).toBeGreaterThan(0)
+    expect(await screen.findByTestId('kt-needs')).toHaveTextContent(`下一步需要你 ${waiting}`)
+    const flow = screen.getByTestId('kt-flow')
+    expect(flow.compareDocumentPosition(screen.getByTestId('kt-experts')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy() // 现在 near the top
+  })
 })
+

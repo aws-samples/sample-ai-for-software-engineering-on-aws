@@ -10,7 +10,7 @@ import type { AuditEntry } from '../types'
 
 const API = '/api/apps/vstatd-team'
 const e = (at: number, actor: AuditEntry['actor'], step: string, what: string, evidence = '', who = ''): AuditEntry =>
-  ({ at, iso: '', actor, who, step, what, evidence })
+  ({ at, iso: '', seq: null, actor, who, step, what, evidence })
 
 describe('人机分工', () => {
   test('each cell counts what that actor did at that step, with its times and figures from the evidence', () => {

@@ -89,6 +89,7 @@ def test_the_run_trail_ties_events_and_its_bench_requests_together(tmp_path, mon
         assert by("向操作台请求部署")["actor"] == "app" and "摘要 bc9372" in by("向操作台请求部署")["evidence"]
         assert by("部署结果 ok")["actor"] == "bench" and by("目标状态 known")["evidence"] == "请求 q1"
         assert not any("q9" in x["evidence"] or "b1" in x["evidence"] for x in e)
+        assert by("运行开始")["seq"] == 1 and by("部署结果 ok")["seq"] is None
         sig = e[-1]
         assert (sig["actor"], sig["who"], sig["step"]) == ("person", "王经理", "signoff")
 

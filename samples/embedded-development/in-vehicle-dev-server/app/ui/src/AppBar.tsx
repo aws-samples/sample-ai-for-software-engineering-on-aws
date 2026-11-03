@@ -1,6 +1,6 @@
 /**
  * The app bar the views share: the app's name, the views as tabs — 团队看板 (how the run went), 评分卡 (the measured
- * figures over the runs) — and 投影. It stays where it is when the view changes, and 投影 belongs to the
+ * figures over the runs) — 下一步需要你 (how many gates and bench requests wait for the person on the board) and 投影. It stays where it is when the view changes, and 投影 belongs to the
  * app, not to a view: full screen goes on, the person moves between views, it stays on. Each view's own controls
  * (the run, 回放, 新需求 … on the board) sit in the row below.
  */
@@ -18,6 +18,8 @@ export const APP_CSS = `
 .kt-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--text-strong); }
 .kt-tabs button:focus-visible, .kt-appbar .kt-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .kt-appbar-grow { flex: 1; }
+.kt-needs { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-weight: 750; color: var(--kt-approve, var(--accent)); border: 1px solid currentColor; }
+.kt-needs b { min-width: 1.4em; text-align: center; border-radius: 999px; color: var(--kt-on, #fff); background: var(--kt-approve, var(--accent)); }
 .kt-appbar .kt-btn { padding: 5px 12px; margin: 4px 0 6px; }
 .kt-app.is-projection { position: fixed; inset: 0; z-index: 2147483000; height: 100vh; background: var(--bg); }
 .kt-app.is-projection > .kt-appbar { flex: none; padding: 8px 26px 0; }
@@ -29,7 +31,7 @@ const TABS: [ViewKind, string, string][] = [
   ['score', '评分卡', '量出来的数：分诊、检查、台架、独立重跑，按次和合计'],
 ]
 
-export function AppBar({ view, projection, onView, onProjection }: { view: ViewKind | 'item'; projection: boolean; onView: (v: ViewKind) => void; onProjection: () => void }) {
+export function AppBar({ view, projection, onView, onProjection, needs = 0 }: { view: ViewKind | 'item'; projection: boolean; onView: (v: ViewKind) => void; onProjection: () => void; needs?: number }) {
   return (
     <header className="kt-appbar" data-testid="kt-appbar">
       <h1>AIDLC-Embedded团队</h1>
@@ -41,6 +43,11 @@ export function AppBar({ view, projection, onView, onProjection }: { view: ViewK
         ))}
       </div>
       <span className="kt-appbar-grow" />
+      {needs > 0 && (
+        <span className="kt-needs" role="status" data-testid="kt-needs" title="关卡等你批准，或台架请求等你批准（看板上的关卡和台架面板）">
+          下一步需要你 <b>{needs}</b>
+        </span>
+      )}
       <button type="button" className={`kt-btn${projection ? ' is-on' : ''}`} onClick={onProjection} title={projection ? '退出投影（Esc）' : '全屏、大字；切换视图时保持投影'}>
         {projection ? '退出投影' : '投影'}
       </button>

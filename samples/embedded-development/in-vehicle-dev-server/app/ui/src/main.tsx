@@ -2,8 +2,9 @@
  * vstatd-team page: the live mission control of the vstatd team (team/team-vstatd.json).
  *
  * Polls GET /board every 2 s (board/useBoard.ts) and renders only that contract (types.ts): the
- * header with the live counters, the flow strip (board/FlowStrip.tsx), the team graph (the hero,
- * with the particle layer), the merge conveyor, one lane per role, the test wall and the event feed. Each poll's snapshot is diffed
+ * header with the live counters, the flow strip (board/FlowStrip.tsx) and 人机分工 under it (board/DivisionGrid.tsx), the team
+ * graph (the hero, with the particle layer), the merge conveyor, one lane per role, the test wall, the event feed and the
+ * 审计记录 (board/Audit.tsx). Each poll's snapshot is diffed
  * against the previous one (board/diff.ts): new events become particles and node flashes, changed
  * test cases flip, changed lanes and new merges get a one-time highlight. The first snapshot is
  * history and never animates.
@@ -100,6 +101,8 @@ const structureKey = (run: RunDetail) => `${run.roles.map((l) => `${l.key}${l.st
 
 type TeamPageProps = {
   pollMs?: number
+  /** how many gates and bench requests of the run wait for the person (the app bar's 下一步需要你) */
+  onNeeds?: (n: number) => void
   entry?: BoardEntry
   /** a run picked in the board's picker: the URL's entry says that run now */
   onPick?: (rid: string) => void
@@ -112,7 +115,7 @@ type TeamPageProps = {
   onProjection?: (on: boolean) => void
 }
 
-export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning = false, projection: appProjection, onProjection }: TeamPageProps = {}) {
+export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning = false, projection: appProjection, onProjection, onNeeds }: TeamPageProps = {}) {
   const api = useAppApi()
   const reducedMotion = useReducedMotion()
   const [selected, setSelected] = useState<string | null>(entry?.run ?? null)
@@ -146,8 +149,12 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
   const inReplay = !!rp.run
   const run = rp.run ?? board?.run ?? null
   const live = board?.run ?? null // the audit trail is the whole record, read for the run itself, not a replay's moment
-  const [auditPick, setAuditPick] = useState<AuditPick | null>(null)
   const audit = useAudit(live ? `${BASE}/runs/${live.id}/audit` : null, `${live?.id}:${live?.events[live.events.length - 1]?.seq ?? 0}`)
+  const [auditPick, setAuditPick] = useState<AuditPick | null>(null)
+  const actors = useMemo(() => new Map((audit.trail?.entries ?? []).filter((x) => x.seq !== null).map((x) => [x.seq!, x.actor])), [audit.trail])
+  const needs = live ? live.roles.filter((l) => l.gate === 'pending').length + (live.bench?.state.pending.filter((r) => !r.expired).length ?? 0) : 0
+  useEffect(() => onNeeds?.(needs), [needs, onNeeds])
+  useEffect(() => () => onNeeds?.(0), [onNeeds])
   useEffect(() => setFx(NO_EFFECTS), [rp.id])
   // the way in: once the board shows the run asked for, its replay starts (at a moment of a finished run: paused there),
   // or the page goes to its 签字单, its 测试墙, its counters, or the team graph (a gate, a role, a phase)
@@ -395,12 +402,12 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
         {run && lay && (
           <>
             <Kpis key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} reducedMotion={reducedMotion} onRole={onRole} />
+            {run.bench && <FlowStrip run={run} />}
+            {!projection && live && <DivisionView trail={audit.trail} current={run.bench ? flowOf(run).current : null} onPick={setAuditPick} />}
             {run.roles.some((l) => l.phase) && <ExpertStrip run={run} />}
             <KnowledgePanel run={run} onRole={onRole} />
             <BacklogPanel run={run} />
             {!isRunActive(run.status) && run.tests.total > 0 && <SignOff run={run} onSign={sign} />}
-            {run.bench && <FlowStrip run={run} />}
-            {!projection && live && <DivisionView trail={audit.trail} current={run.bench ? flowOf(run).current : null} onPick={setAuditPick} />}
             <div className="kt-body">
               <div className="kt-col">
                 <TeamGraph key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} lay={lay} focus={focus} onRole={onRole} flashes={fx.flashes} reducedMotion={reducedMotion} feed={feed} onRetry={projection || inReplay || run.imported ? undefined : (k) => void retry(k)} onGate={inReplay ? undefined : (k, d) => setGateAsk({ role: k, decision: d })} quiet={projection} onOutputs={(k) => openOutputs(k)} phase={phase} onPhase={(p) => { setFocus(null); setPhase((x) => (x === p ? null : p)) }} />
@@ -413,7 +420,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
               <aside className="kt-side" aria-label="测试和事件">
                 <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} />
                 {run.bench && <BenchPanel bench={run.bench} />}
-                <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} />
+                <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} actors={actors} />
               </aside>
             </div>
             {!projection && live && <AuditPanel runId={live.id} ended={!isRunActive(live.status)} trail={audit.trail} err={audit.err} pick={auditPick} />}
@@ -470,6 +477,7 @@ function entryOf(v: View & { n: number; returning?: boolean }): BoardEntry {
 export default function VstatdTeamApp({ pollMs }: { pollMs?: number } = {}) {
   const [view, setView] = useState<View & { n: number; returning?: boolean }>(() => ({ ...parseView(window.location.search), n: 0 }))
   const [projection, setProjection] = useState(false)
+  const [needs, setNeeds] = useState(0)
   const navigate = useNavigate()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const restore = useRef<number | null>(null) // back or forward: the scroll to put the page back at
@@ -589,10 +597,10 @@ export default function VstatdTeamApp({ pollMs }: { pollMs?: number } = {}) {
   return (
     <div ref={rootRef} className={`kt-app${projection ? ' is-projection' : ''}`} data-testid="kt-app">
       <style>{APP_CSS}</style>
-      <AppBar view={view.kind} projection={projection} onView={(k) => go({ kind: k })} onProjection={() => onProjection(!projection)} />
+      <AppBar view={view.kind} projection={projection} onView={(k) => go({ kind: k })} onProjection={() => onProjection(!projection)} needs={view.kind === 'board' ? needs : 0} />
       {view.kind === 'score' ? <ScorecardView key={n} onDetail={onDetail} />
         : view.kind === 'item' ? <ItemView key={n} run={view.run} onBoard={(e) => go({ kind: 'board', ...e })} />
-        : <TeamPage key={n} pollMs={pollMs} entry={entryOf(view)} returning={returning} onPick={onPick} onDetail={onDetail} projection={projection} onProjection={onProjection} />}
+        : <TeamPage key={n} pollMs={pollMs} entry={entryOf(view)} returning={returning} onPick={onPick} onDetail={onDetail} projection={projection} onProjection={onProjection} onNeeds={setNeeds} />}
     </div>
   )
 }

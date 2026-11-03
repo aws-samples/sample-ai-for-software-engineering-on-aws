@@ -45,7 +45,7 @@ image and doctor.sh are probed in the background and cached (doctor.sh runs once
 `POST /readiness/doctor`); the bench state is only read. Above it, the requests waiting at the operator console now
 (from a run or from setting up the baseline), each with 批准 (after typing the first six characters of its digest) and
 拒绝 (with a reason): `POST /bench/decide` runs the bench's own `benchstate.decide()` (D3). During a run, a strip above the team graph shows the same
-steps and what comes next (`ui/src/board/flow.ts`), and the 人机分工 grid under it what each actor did at each step, counted from the run's 审计记录; a cell opens those entries in the 审计记录 panel.
+steps and what comes next (`ui/src/board/flow.ts`), and the 人机分工 grid under it what each actor did at each step, counted from the run's 审计记录; a cell opens those entries in the 审计记录 panel. The strip and the grid sit at the top of the run, under the counters; each event in the feed carries the actor chip its 审计记录 entry has, and the app bar shows 下一步需要你 N while gates or bench requests of the run wait for the person.
 
 `GET /knowledge` lists the knowledge documents the team uses (title, citation key, figures counted from the files on each request) with Kiro Crew's source state, and `GET /knowledge/file?path=` returns one of them as text for a read-only viewer (listed files inside `knowledge/` only, no PDF, up to 1 MB); the board's knowledge panel counts each document's citations in the roles' replies.
 

@@ -181,6 +181,7 @@ export type AuditActor = 'person' | 'agent' | 'app' | 'bench'
 export type AuditEntry = {
   at: number
   iso: string
+  seq: number | null // the run event it comes from; null for a bench record
   actor: AuditActor
   who: string
   step: string // a FlowKey of board/flow.ts; '' when no step applies

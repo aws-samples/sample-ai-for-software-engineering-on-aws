@@ -817,7 +817,7 @@ export function flowOf(b: Board = vstatdBoard('release')): RunFlow {
 
 const BOARD_BY = 'Kiro Crew 看板（you，vstatd-team）'
 const audit = (t0: number, rows: [number, AuditActor, string, string, string, string?][]): AuditEntry[] =>
-  rows.map(([dt, actor, who, step, what, evidence = '']) => ({ at: t0 + dt, iso: new Date((t0 + dt) * 1000).toISOString().slice(0, 19) + 'Z', actor, who, step, what, evidence }))
+  rows.map(([dt, actor, who, step, what, evidence = '']) => ({ at: t0 + dt, iso: new Date((t0 + dt) * 1000).toISOString().slice(0, 19) + 'Z', seq: null, actor, who, step, what, evidence }))
 
 /** GET /runs/<id>/audit: the vstatd run (vstatdBoard('release')), every decision and action as audit.py records them. */
 export function auditOf(b: Board = vstatdBoard('release')): AuditTrail {

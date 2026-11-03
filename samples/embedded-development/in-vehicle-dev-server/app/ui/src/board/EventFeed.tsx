@@ -1,10 +1,11 @@
 /**
- * The event feed: newest first, an icon per kind, the role chips (click one to look at that role
+ * The event feed: newest first, an icon per kind, who acted (人 / AI / app / 台架, as the 审计记录 has it), the role chips (click one to look at that role
  * only, everywhere on the board), the relative time. Events that are new since the previous poll slide
  * in. Tool calls are many and quiet; they can be hidden.
  */
 import { useState } from 'react'
-import type { Lane, RunDetail, TeamEvent } from '../types'
+import type { AuditActor, Lane, RunDetail, TeamEvent } from '../types'
+import { ActorChip } from './Audit'
 import { EVENT_META, eventTouches, fmtAgo } from './format'
 import { useServerNow } from './hooks'
 import { RoleIcon } from './RoleIcon'
@@ -16,12 +17,14 @@ export interface EventFeedProps {
   fresh: ReadonlySet<number>
   /** Projection: only the milestones a room can follow (no tool calls, commits or raw commands). */
   milestones?: boolean
+  /** who acted, by event seq, from the 审计记录 (an event it does not list has no chip) */
+  actors?: ReadonlyMap<number, AuditActor>
 }
 
 /** The events worth telling a room: the flow, the gates and what they caught. */
 const MILESTONES = new Set(['run', 'spawned', 'handoff', 'merged', 'tests', 'bounce', 'review', 'gate', 'approved', 'ownership', 'skipped', 'failed', 'conflict'])
 
-export function EventFeed({ run, focus, onRole, fresh, milestones = false }: EventFeedProps) {
+export function EventFeed({ run, focus, onRole, fresh, milestones = false, actors }: EventFeedProps) {
   const now = useServerNow()
   const [tools, setTools] = useState(true)
   const byKey = new Map(run.roles.map((l) => [l.key, l]))
@@ -53,7 +56,7 @@ export function EventFeed({ run, focus, onRole, fresh, milestones = false }: Eve
               <span className="kt-ev-icon" aria-hidden="true" title={meta.label}>
                 {meta.icon}
               </span>
-              <span className="kt-ev-text">{e.text}</span>
+              <span className="kt-ev-text">{actors?.has(e.seq) && <ActorChip actor={actors.get(e.seq)!} />} {e.text}</span>
               <RoleChips e={e} byKey={byKey} onRole={onRole} />
               <time className="kt-ev-time" dateTime={new Date(e.at * 1000).toISOString()}>
                 {fmtAgo(now - e.at)}
