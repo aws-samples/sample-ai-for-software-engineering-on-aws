@@ -159,7 +159,10 @@ def triage_view(run: TeamRun) -> dict[str, Any] | None:
         answer = None
         if a is not None:
             answer = f"其他：{a.get('text') or ''}" if a.get("choice") == "other" else f"{a.get('choice')} {a.get('option') or ''}".strip()
+        added = f.get("added") if isinstance(f.get("added"), dict) else {}
         out.append({"id": fid, "decision": str(f.get("decision") or ""), "added": "added" in f,
+                    "found_by": str(added["found_by"]) if added.get("found_by") else None,
+                    "location": str(added["location"]) if added.get("location") else None,
                     "cites": [str(c) for c in f.get("cites") or []], "facts": [str(x) for x in f.get("facts") or []],
                     "evidence": f.get("evidence") if isinstance(f.get("evidence"), str) else None,
                     "behaviour": f.get("behaviour") if isinstance(f.get("behaviour"), bool) else None, "answer": answer,

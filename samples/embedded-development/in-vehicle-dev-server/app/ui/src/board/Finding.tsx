@@ -41,11 +41,21 @@ export function toolOf(check: string, message: string | null): string {
 
 const EVIDENCE: Record<string, FindingBody['evidence']> = { build: 'build', unit: 'unit-test', static: 'static-analysis' }
 
-/** The dialog's starting values for one held check (null: the run is not held after the checks). */
+/** The IDs already added under TR §4.4 for *check* at *location*: registering it again hands the same failure back. */
+export function registeredAs(run: RunDetail, check: string, location: string): string[] {
+  return (run.backlog?.triage?.findings ?? [])
+    .filter((f) => f.added && f.found_by === `checks/${check}.sh` && !!location && f.location === location).map((f) => f.id)
+}
+
+/** The dialog's starting values for one held check (null: the run is not held after the checks). Without *check*: the
+ * first failing held check not registered yet at its location, else the first failing one. */
 export function findingPreset(run: RunDetail, check?: string): FindingBody | null {
   const held = run.tests.held
   if (!held || !held.checks.length) return null
-  const name = check && held.checks.includes(check) ? check : held.checks.find((c) => run.tests.cases.find((x) => x.id === c)?.status === 'fail') ?? held.checks[0]
+  const at = (c: string) => locationOf(run.tests.cases.find((x) => x.id === c)?.message ?? null)
+  const failing = held.checks.filter((c) => run.tests.cases.find((x) => x.id === c)?.status === 'fail')
+  const name = check && held.checks.includes(check) ? check
+    : failing.find((c) => !registeredAs(run, c, at(c)).length) ?? failing[0] ?? held.checks[0]
   const c: TestCase | undefined = run.tests.cases.find((x) => x.id === name)
   const location = locationOf(c?.message ?? null)
   const file = location.replace(/:\d+$/, '') || c?.file || ''
@@ -76,6 +86,7 @@ export function FindingDialog({ run, onConfirm, onCancel }: { run: RunDetail; on
   const set = (x: Partial<FindingBody>) => setF((o) => ({ ...o, ...x }))
   const held = run.tests.held!
   const roles = implementers(run)
+  const dup = registeredAs(run, f.check, f.location.trim())
   const confirm = async () => {
     if (!f.by.trim()) return setErr('写下你的名字（谁补登的）')
     if (!f.location.trim() || !f.tool.trim()) return setErr('写明发现它的工具和位置')
@@ -104,6 +115,11 @@ export function FindingDialog({ run, onConfirm, onCancel }: { run: RunDetail; on
         <label className="kt-start-field is-narrow"><span>工具</span><input aria-label="工具" value={f.tool} maxLength={80} onChange={(e) => set({ tool: e.target.value })} /></label>
         <label className="kt-start-field"><span>位置</span><input aria-label="位置" value={f.location} maxLength={200} onChange={(e) => set({ location: e.target.value })} placeholder="文件:行" /></label>
       </div>
+      {dup.length > 0 && (
+        <p className="kt-warn" role="status" data-testid="kt-finding-dup">
+          {f.check} 在 {f.location.trim()} 已经补登过：{dup.join('、')}。交出去还没修好，多半是根因不在这个文件：在「再加路径」里给根因所在的文件，备注里写清楚；或者换一个检查登记。
+        </p>
+      )}
       <div className="kt-start-row">
         <label className="kt-start-field is-narrow"><span>决定</span>
           <select aria-label="决定" value={f.decision} onChange={(e) => set({ decision: e.target.value as FindingBody['decision'] })}>

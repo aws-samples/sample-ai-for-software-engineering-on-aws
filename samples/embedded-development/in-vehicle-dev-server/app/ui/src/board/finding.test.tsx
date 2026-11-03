@@ -84,6 +84,25 @@ describe('补登发现并交给角色', () => {
     await waitFor(() => expect(screen.queryByTestId('kt-finding-dialog')).toBeNull())
   })
 
+  test('a check registered at the same place already: the dialog starts on the next one and says so for that one', async () => {
+    const user = userEvent.setup()
+    const b = heldBoard()
+    b.run!.backlog!.triage!.findings.push({ id: 'F-032', decision: 'fix', added: true, found_by: 'checks/build.sh', location: 'src/main.cpp:12',
+      cites: [], facts: [], evidence: 'build', behaviour: false, answer: null, static: null, trace: null })
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    render(<TeamPage pollMs={60_000} />)
+    await user.click(within(await screen.findByTestId('kt-wall-held')).getByRole('button', { name: '补登发现并交给角色' }))
+    const q = within(await screen.findByTestId('kt-finding-dialog'))
+    expect(q.getByText('补登发现 F-033 并交给角色')).toBeInTheDocument()
+    expect(q.getByLabelText('检查')).toHaveValue('unit')
+    expect(q.queryByTestId('kt-finding-dup')).toBeNull()
+    await user.selectOptions(q.getByLabelText('检查'), 'build')
+    expect(q.getByTestId('kt-finding-dup')).toHaveTextContent('build 在 src/main.cpp:12 已经补登过：F-032')
+    await user.clear(q.getByLabelText('位置'))
+    await user.type(q.getByLabelText('位置'), 'cmake/cc1-aarch64.cmake:1')
+    expect(q.queryByTestId('kt-finding-dup')).toBeNull()
+  })
+
   test('a refused finding says why and the dialog stays', async () => {
     const user = userEvent.setup()
     setApiRoutes({

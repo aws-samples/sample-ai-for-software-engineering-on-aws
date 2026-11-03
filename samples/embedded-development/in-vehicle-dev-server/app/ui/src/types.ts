@@ -311,6 +311,8 @@ export type TriageRow = {
   id: string
   decision: string // fix | justify | defer
   added: boolean // added under TR §4.4
+  found_by?: string | null // an added one's: checks/<check>.sh, or the work item
+  location?: string | null // an added one's: where it was found (file:line)
   cites: string[]
   facts: string[]
   evidence: string | null // a fix's: unit-test | static-analysis | build
