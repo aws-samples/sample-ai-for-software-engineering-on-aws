@@ -383,7 +383,8 @@ bench images; step 12 needs them.
 
 Run `r11032637` (2026-11-03, Apple Silicon Mac, native `vstatd-build:arm64`, stand-in sysroot). The run reached
 sign-off; on the way it held for a person five times where the app gave the person no good way on. Each was fixed in
-the app during the run, with a test, and installed; the run went on from where it was held.
+the app during the run, with a test, and installed; the run went on from where it was held. Its audit trail and
+evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-delivery/README.md) (facilitator side).
 
 - **The cross build and the data race (the two seeded difficulties).** Both were held after the checks (D7) as
   intended. The 补登 dialog (D15) prefilled the path of the file the check named, `src/main.cpp`, but the cross

@@ -230,7 +230,8 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 > **Status: one delivery end to end (2026-11-03).** Run `r11032637` went from the triage gate through the bench to a
 > passing `release.sh` on the independent rerun and a signed-off evidence page, on a Mac with Apple Silicon (step 12 of
 > the [implementation plan](docs/kiro-crew-app.md#implementation-plan)). The app was fixed during that run where it
-> held the run with no way on for the person; [what that run showed](docs/kiro-crew-app.md#seen-in-the-first-delivery).
+> held the run with no way on for the person; [what that run showed](docs/kiro-crew-app.md#seen-in-the-first-delivery);
+> its audit trail and evidence page, for facilitators, in [rehearsal/first-delivery/](rehearsal/first-delivery/README.md).
 > One run is not a benchmark: the figures below are that run's.
 
 [`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (AIDLC-Embedded团队), modelled on the
