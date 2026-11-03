@@ -1,0 +1,14 @@
+{
+  "name": "hw",
+  "version": "0.1.0",
+  "description": "Hardware steps for embedded work in AI-DLC: environment detection and hardware knowledge with citations, a verification plan with evidence tiers, model design in the modelling tool, simulation verification, guarded bench deployment and one evidence page for sign-off.",
+  "author": { "name": "AWS samples: sample-ai-for-software-engineering-on-aws" },
+  "license": "MIT-0",
+  "dependencies": ["core"],
+  "aidlc": {
+    "contributes": {
+      "stages": "stages/",
+      "overlays": "contributions/"
+    }
+  }
+}
