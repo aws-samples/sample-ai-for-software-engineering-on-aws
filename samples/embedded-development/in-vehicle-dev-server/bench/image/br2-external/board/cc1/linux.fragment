@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT-0
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Additions to board/qemu/aarch64-virt/linux.config.
+# Four virtual CPUs (CC1-PN §2.1).
+CONFIG_SMP=y
+# MemoryMax= of vstatd.service (CC1-PN §3) needs the memory controller.
+CONFIG_CGROUPS=y
+CONFIG_MEMCG=y
+# The bench passes its SSH public key through QEMU's fw_cfg, so the image carries no key.
+CONFIG_FW_CFG_SYSFS=y

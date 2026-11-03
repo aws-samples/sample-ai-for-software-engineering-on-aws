@@ -1,0 +1,44 @@
+{
+  "name": "vstatd-team",
+  "version": "0.1.0",
+  "displayName": "AIDLC-Embedded团队",
+  "description": "An AI-DLC agent team on Kiro Crew for the in-vehicle platform service vstatd: triage of the static analysis backlog, a human gate, tests first, fixes and a refactor, the scenario's own checks run by the app, bench actions approved at the operator console, and sign-off on a live team board.",
+  "author": "aws-samples",
+  "minKiroCrewVersion": "0.8.0",
+  "backend": {
+    "hooks": {
+      "routes": "backend.routes:register_routes",
+      "on_startup": "backend.hooks:on_startup",
+      "on_shutdown": "backend.hooks:on_shutdown"
+    }
+  },
+  "ui": {
+    "entry": "dist/index.mjs",
+    "pages": [
+      {
+        "route": "/apps/vstatd-team",
+        "label": "AIDLC-Embedded团队",
+        "icon": "Users"
+      }
+    ],
+    "sidebar": {
+      "section": "Apps"
+    }
+  },
+  "permissions": {
+    "api": [
+      "/api/apps/vstatd-team",
+      "/api/chat",
+      "/api/agents",
+      "/api/knowledge"
+    ],
+    "storage": true,
+    "sessionApproval": true
+  },
+  "platform": {
+    "os": [
+      "macos",
+      "linux"
+    ]
+  }
+}

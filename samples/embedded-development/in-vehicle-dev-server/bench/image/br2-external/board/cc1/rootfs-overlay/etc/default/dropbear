@@ -1,0 +1,2 @@
+# Key logins only; the bench's key comes from fw_cfg (cc1-bench-key.service).
+DROPBEAR_ARGS="-s"

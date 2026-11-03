@@ -1,0 +1,5 @@
+config BR2_PACKAGE_CC1_BENCH
+	bool "cc1-bench"
+	depends on BR2_INSTALL_LIBSTDCPP
+	help
+	  The bench's drive player, replay clients and helpers inside the emulated CC-1 (synthetic).
