@@ -8,6 +8,7 @@ race added as F-032 and fixed, a fix the
 triage did not approve, a justification with and without the suppression of TR §3.2, and the F-008 wrong fix. After
 each step it runs the check the step is about and compares the exit status with the expected verdict. The synthetic
 examples of every check, and the tests of the verdict rules, are in [`../../checks/test/`](../../checks/test/).
+[`../build-server-run/`](../build-server-run/) walks the same batch through the `build` MCP server.
 
 ```bash
 docker run --rm --security-opt seccomp=unconfined -v "$PWD":/sample:ro -v /opt/cc1-sysroot:/opt/cc1-sysroot:ro \
