@@ -142,6 +142,12 @@ def test_a_check_gets_its_arguments_its_results_dir_and_a_snapshot_at_the_head(t
     assert "--name vstatd-check-" in line
     after = run_round(bench, team, wt, head, n=5, phase="after_bench", triage=triage)
     assert after["checks"][0]["verdict"] == "USAGE" and after["checks"][0]["reasons"] == ["没有 --run（logdiff 要它）"]
+    # release.sh reads again every input the checks recorded, the baseline outside the run too (r11032637)
+    base = tmp_path / "baseline"
+    base.mkdir()
+    rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage"], when="release"))
+    run_round(bench, rel, wt, head, n=6, phase="release", triage=triage, baseline=base)
+    assert f"-v {base}:{base}:ro " in bench.log.read_text().splitlines()[-1]
 
 
 def test_a_failure_goes_to_the_owner_of_the_file_it_names_else_to_the_checks_default_owner(tmp_path, monkeypatch):

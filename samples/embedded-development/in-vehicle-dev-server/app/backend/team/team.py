@@ -818,7 +818,8 @@ class TeamRun:
             if not keys and not failed and self.ended and bench.get("held"):  # a person dealt with the bench: carry on
                 self._resume()
                 bench["held"] = None
-                self.emit("run", f"重试：台架从「{bench['step']}」接着做" + (f"（{note}）" if note else ""))
+                self.emit("run", f"重试：{by}让台架从「{bench['step']}」接着做" + (f"（{note}）" if note else ""),
+                          data={"by": by, "note": note} if by else None)
                 self._settle()
                 await self.save()
                 return ["bench"]

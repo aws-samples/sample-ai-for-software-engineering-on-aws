@@ -135,7 +135,7 @@ export function actionLine(a: Record<string, unknown>): string {
   }
 }
 
-export function BenchPanel({ bench }: { bench: BenchView }) {
+export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () => Promise<void> }) {
   const st = bench.state
   const target = str(st.target.state)
   const supply = st.supply
@@ -157,7 +157,8 @@ export function BenchPanel({ bench }: { bench: BenchView }) {
               {bench.held.commands.map((c) => <li key={c}><code>{c}</code></li>)}
             </ul>
           )}
-          <span className="kt-dim">处理好以后在看板上点「重试」，从「{STEP[bench.held.step] ?? bench.held.step}」接着做。</span>
+          <span className="kt-dim">处理好以后点「重试」，从「{STEP[bench.held.step] ?? bench.held.step}」接着做。</span>
+          {onRetry && <span><button type="button" className="kt-btn is-solid is-primary" onClick={() => void onRetry()}>重试，从「{STEP[bench.held.step] ?? bench.held.step}」接着做</button></span>}
         </div>
       )}
       <dl className="kt-bench-grid">

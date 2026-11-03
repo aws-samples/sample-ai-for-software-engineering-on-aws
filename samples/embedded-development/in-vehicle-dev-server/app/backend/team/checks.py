@@ -340,8 +340,9 @@ async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: 
         else:
             sample = Path(check["command"][0]).resolve().parents[1]  # the scenario folder: the checks and the knowledge
             mounts = [(str(sample), False), (str(root), True)]
-            mounts += [(str(Path(v)), False) for k, v in values.items() if k in check["args"] and v is not None
-                       and not Path(v).resolve().is_relative_to(root.resolve()) and k != "project"]
+            # a release check reads again every input the other checks recorded (the baseline too): it sees them all
+            mounts += [(str(Path(v)), False) for k, v in values.items() if (k in check["args"] or check["when"] == "release")
+                       and v is not None and not Path(v).resolve().is_relative_to(root.resolve()) and k != "project"]
             container = f"vstatd-check-{uuid.uuid4().hex[:12]}"
             cmd = docker_command(runner, mounts, argv, name=container)
             (results / f"{name}.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")

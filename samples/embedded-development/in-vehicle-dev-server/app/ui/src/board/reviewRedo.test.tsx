@@ -41,4 +41,21 @@ describe('按评审意见再改一轮', () => {
       [`${API}/runs/r1006a/retry`, { note: note.value.trim(), by: '王工' }],
     ]))
   })
+  test('a held bench step has its own 重试 button that carries on from it', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('vstatd-team:signer', '王工')
+    const b = vstatdBoard('bench')
+    b.run!.status = 'failed'
+    b.run!.bench = { ...b.run!.bench!, step: 'rerun', running: null, held: { step: 'rerun', why: '独立重跑后 release.sh 没通过', commands: [], at: 0 } }
+    setApiRoutes({
+      [`GET ${API}/board*`]: () => clone(b),
+      [`POST ${API}/runs/r1006a/retry`]: () => ({ ok: true, run: 'r1006a', roles: ['bench'], status: 'running' }),
+    })
+    render(<TeamPage pollMs={60_000} />)
+    const held = within(await screen.findByTestId('kt-bench-held'))
+    await user.click(held.getByRole('button', { name: /^重试，从「.+」接着做$/ }))
+    await waitFor(() => expect(apiCalls.filter((c) => c.method === 'POST').map((c) => [c.path, c.body])).toEqual([
+      [`${API}/runs/r1006a/retry`, { by: '王工' }],
+    ]))
+  })
 })

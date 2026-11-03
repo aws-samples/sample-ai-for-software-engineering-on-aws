@@ -321,6 +321,16 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
     },
     [api, run, reload],
   )
+  const benchRetry = useCallback(async () => {  // a held bench step: the person carries on from it, named in the audit
+    if (!run) return
+    setRetryErr('')
+    try {
+      await api.post(paths.retry(run.id), { by: localStorage.getItem('vstatd-team:signer') || '' })
+    } catch (e) {
+      setRetryErr(errorText(e))
+    }
+    reload()
+  }, [api, run, reload])
   const redo = useCallback(
     async (body: { note: string; by: string }) => {
       if (!run) return
@@ -443,7 +453,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
               </div>
               <aside className="kt-side" aria-label={projection ? '测试和事件' : '检查和台架'}>
                 <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} onFinding={onFinding} />
-                {run.bench && <BenchPanel bench={run.bench} />}
+                {run.bench && <BenchPanel bench={run.bench} onRetry={!projection && !inReplay && !run.imported && run.bench.held ? benchRetry : undefined} />}
                 {projection && eventFeed}
               </aside>
             </div>
