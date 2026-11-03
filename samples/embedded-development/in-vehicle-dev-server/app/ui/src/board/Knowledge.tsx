@@ -20,6 +20,14 @@ function sourceText(s: KnowledgeSource | null): string {
   return `${s.items ?? 0} 份文档 · ${sync}`
 }
 
+/** The index state in a few words, for the folded 知识库's summary. */
+function indexText(s: KnowledgeSource | null): string {
+  if (!s) return ''
+  if (s.present === null) return '读取中'
+  if (!s.present) return '来源还没挂上'
+  return s.status === 'synced' ? '已索引' : s.files_total ? `正在索引 ${s.files_done ?? 0}/${s.files_total}` : '索引中'
+}
+
 /** One knowledge document as plain text (escaped by React in a <pre>, never rendered as HTML or Markdown). */
 export function KnowledgeViewer({ path, onClose }: { path: string; onClose: () => void }) {
   const api = useAppApi()
@@ -146,9 +154,13 @@ export function KnowledgeHome() {
   // a document no group names (and that is not a PDF note) still shows, last
   const rest = docs.filter((d) => !placed.has(d.path) && !isFact(d) && !d.rendered_from)
   return (
-    <section className="kt-ready kt-lib" aria-label="知识库" data-testid="kt-kb-home">
-      <header className="kt-lib-head">
+    <details className="kt-ready kt-lib kt-fold" aria-label="知识库" data-testid="kt-kb-home">
+      <summary data-testid="kt-kb-sum">
         <h3><RoleIcon role="book" size={16} /> 知识库</h3>
+        {k && !k.error && <span className="kt-dim">{[`${docs.length} 份文档`, indexText(k.source)].filter(Boolean).join(' · ')}</span>}
+      </summary>
+      <div className="kt-fold-body">
+      <header className="kt-lib-head">
         <p className="kt-dim">agent 分诊、修复和评审时查这些文档，引用写成 [VSTATD-IF p.7 §4.1]、[CC1-PN §6.3]、[TR §4.1]。</p>
         {k?.source && <p className={`kt-dim${k.source.present === false ? ' kt-warn' : ''}`} data-testid="kt-kb-index">Kiro Crew 来源「{k.source.name}」：{sourceText(k.source)}</p>}
       </header>
@@ -170,8 +182,9 @@ export function KnowledgeHome() {
             </div>
           )
         })}
+      </div>
       {open && <KnowledgeViewer path={open} onClose={() => setOpen(null)} />}
-    </section>
+    </details>
   )
 }
 

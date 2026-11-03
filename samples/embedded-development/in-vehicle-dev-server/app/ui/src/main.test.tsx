@@ -5,7 +5,7 @@ import type { Board } from './types'
 import { apiCalls, apiError, setApiRoutes } from './test/stubs/app-sdk'
 import { clone, emptyBoard, multiRunBoard, readinessOf, runningBoard, setCase, withEvent } from './test/fixtures'
 import { TeamPage, mostActive } from './main'
-import { SCENARIOS } from './board/Header'
+import { WORK_ITEM } from './board/Header'
 
 const BOARD = 'GET /api/apps/vstatd-team/board*'
 const RUNS = '/api/apps/vstatd-team/runs'
@@ -161,7 +161,7 @@ describe('the board', () => {
     await user.click(screen.getByRole('button', { name: '新需求' }))
     await user.click(screen.getByRole('button', { name: '交给团队' }))
     expect(await within(screen.getByRole('form', { name: '给 agent 团队派需求' })).findByRole('alert')).toHaveTextContent('已经有一个运行在跑（409）')
-    expect(apiCalls.filter((c) => c.method === 'POST' && c.path === RUNS).map((c) => c.body)).toEqual([{ requirement: SCENARIOS[0].text }])
+    expect(apiCalls.filter((c) => c.method === 'POST' && c.path === RUNS).map((c) => c.body)).toEqual([{ requirement: WORK_ITEM }])
     ok = true
     await user.click(screen.getByRole('button', { name: '交给团队' }))
     await waitFor(() => expect(screen.queryByLabelText(/^需求/)).toBeNull())
@@ -211,6 +211,12 @@ describe('the board', () => {
     expect(item('target').querySelector('code')).toHaveTextContent(/bench\/cc1\.sh start$/)
     expect(item('console')).toHaveTextContent('?操作台上台架才要app 看不出操作台开着没有')
     expect(within(empty).getByTestId('kt-ready')).toHaveTextContent('台架没准备好也能先开始')
+    // the start form comes first, its summary links to the checklist
+    const sum = within(empty).getByTestId('kt-ready-sum')
+    expect(sum).toHaveTextContent(/^准备情况：\d\/6 就绪 · 1 个台架请求等你批准$/)
+    expect(sum).toHaveAttribute('href', '#kt-ready')
+    expect(within(empty).getByRole('form', { name: '给 agent 团队派需求' }).compareDocumentPosition(within(empty).getByTestId('kt-ready')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(empty).queryByRole('group', { name: '需求示例' })).toBeNull()
     const waiting = within(empty).getByTestId('kt-ready-pending')
     expect(waiting).toHaveTextContent('台架上有 1 个请求等你批准')
     expect(waiting).toHaveTextContent('部署 bc93723c0cb0')

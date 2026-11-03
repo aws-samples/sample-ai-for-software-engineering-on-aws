@@ -145,7 +145,7 @@ export function BenchAudit() {
   const { trail, err } = useAudit(`${BASE}/audit/bench`, null)
   const entries = (trail?.entries ?? []).slice().reverse()
   return (
-    <section className="kt-audit-bench" data-testid="kt-audit-bench" aria-label="台架动作记录">
+    <section className="kt-ready kt-audit-bench" data-testid="kt-audit-bench" aria-label="台架动作记录">
       <h4>台架动作记录（不属于任何运行）</h4>
       {err && <p className="kt-error" role="status">台架动作记录读不到：{err}</p>}
       {trail && entries.length === 0 && <p className="kt-dim">还没有</p>}

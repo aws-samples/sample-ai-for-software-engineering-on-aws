@@ -3,10 +3,10 @@
  * after a confirmation, 跟随, 投影), and the live counters: tests passed/total, the wall clock against
  * the serial estimate (what one agent doing everything would take) with the saving, roles done,
  * KiroCrew's sub-agent lanes, credits. Also the start form (here and in the empty state) and the
- * empty state itself: the work item, the flow from the backlog to sign-off, what this Mac still needs (FlowStrip.tsx)
- * the knowledge documents (Knowledge.tsx) and the requirement list (Backlog.tsx).
+ * empty state itself: the start form first, what this Mac still needs (FlowStrip.tsx), the flow from the backlog to
+ * sign-off, the knowledge documents (Knowledge.tsx) and the requirement list (Backlog.tsx), and the bench actions of no run.
  */
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import type { Board, Delivery, GateDecision, GateQuestion, RunDetail, TalkLine, TeamPreview, TestWall } from '../types'
 import { AIDLC_AGENTS, BASE, FINISHED, PHASES, expertsOf, LIVE, WORKING, aidlcUse, fmtAgo, fmtClock, fmtCredits, fmtSpan, isRunActive, laneMeta, runMeta, saving } from './format'
@@ -16,7 +16,8 @@ import { errorText } from './useBoard'
 import { RoleIcon } from './RoleIcon'
 import { MarkdownRenderer } from '@kirocrew/app-sdk/ui'
 import { FlowSteps } from './DivisionGrid'
-import { ReadinessPanel } from './FlowStrip'
+import { ReadinessPanel, ReadinessSummary, useReadiness } from './FlowStrip'
+import { BenchAudit } from './Audit'
 import { KnowledgeHome } from './Knowledge'
 import { BacklogHome } from './Backlog'
 
@@ -382,9 +383,7 @@ export interface StartOptions {
 export type StartFn = (requirement: string, opts?: StartOptions) => Promise<void>
 
 /** The scenario's work item (README.md, "The scenario"): it fills the requirement box. */
-export const SCENARIOS: ReadonlyArray<{ label: string; hint: string; text: string }> = [
-  { label: 'vstatd · 本批待办', hint: '修待办里标了 fix 的发现，拆分 Service::run()，行为不变', text: '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。' },
-]
+export const WORK_ITEM = '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。'
 
 const CHECK_WHEN: ReadonlyArray<[string, string]> = [['before_bench', '上台架前'], ['after_bench', '台架后'], ['release', '签字前']]
 
@@ -461,8 +460,8 @@ export function TeamPreviewPanel() {
   )
 }
 
-export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: () => void }) {
-  const [text, setText] = useState(SCENARIOS[0].text)
+export function StartForm({ onStart, onCancel, note }: { onStart: StartFn; onCancel?: () => void; note?: ReactNode }) {
+  const [text, setText] = useState(WORK_ITEM)
   const [source, setSource] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -482,18 +481,13 @@ export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: 
   }
   return (
     <form className="kt-start" onSubmit={submit} aria-label="给 agent 团队派需求">
-      <div className="kt-scenarios" role="group" aria-label="需求示例">
-        {SCENARIOS.map((s) => (
-          <button key={s.label} type="button" className={`kt-scenario${text === s.text ? ' is-on' : ''}`} onClick={() => setText(s.text)} title={s.hint}>
-            <b>{s.label}</b>
-            <small>{s.hint}</small>
-          </button>
-        ))}
-      </div>
       <label htmlFor="kt-req">交给 agent 团队的需求</label>
       <p className="kt-dim kt-req-hint">团队先分诊待办里的发现（修、说明或延后）、定重构方案和分工，你在分诊和开工两个关卡批准后才往下做。</p>
-      <textarea id="kt-req" value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder={SCENARIOS[0].text} />
-      <TeamPreviewPanel />
+      <textarea id="kt-req" value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder={WORK_ITEM} />
+      <details className="kt-start-more">
+        <summary>看团队配置</summary>
+        <TeamPreviewPanel />
+      </details>
       <details className="kt-start-more" open={!!source}>
       <summary>高级选项</summary>
       <div className="kt-start-row">
@@ -513,6 +507,7 @@ export function StartForm({ onStart, onCancel }: { onStart: StartFn; onCancel?: 
           </button>
         )}
         <span className="kt-dim">检查由 app 自己跑，台架上的每个动作在操作台批准，最后你按证据页签字</span>
+        {note}
       </div>
       {err && (
         <p className="kt-error" role="alert">
@@ -777,19 +772,21 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
 // ---------------------------------------------------------------------------------------------
 
 export function EmptyStart({ onStart }: { onStart: StartFn }) {
+  const ready = useReadiness()
   return (
     <section className="kt-empty" data-testid="kt-empty" aria-label="还没有运行">
       <div className="kt-empty-hero">
         <h2>vstatd 本批：修待办里的发现，拆分 Service::run()，行为不变</h2>
         <p>
-          工作项：修复 vstatd 静态分析待办里标为 fix 的发现，把信号表的处理从 <code>Service::run()</code> 里拆出去，在录制的行驶数据上行为不变。六个 AI-DLC 角色各在一个 Kiro Crew 会话里做分诊、架构、测试、开发和评审；检查由 app 自己跑，agent 改不了它们；部署和回放这些台架动作，每个都要人在操作台上按构建摘要批准；最后发布负责人看证据页签字放行。
+          六个 AI-DLC 角色在 Kiro Crew 里分诊、定方案、写测试、修复和评审；检查由 app 自己跑，台架动作和最后的签字都由人批准。
         </p>
       </div>
+      <StartForm onStart={onStart} note={<ReadinessSummary r={ready.r} />} />
+      <ReadinessPanel state={ready} />
       <FlowSteps />
-      <ReadinessPanel />
       <KnowledgeHome />
       <BacklogHome />
-      <StartForm onStart={onStart} />
+      <BenchAudit />
     </section>
   )
 }

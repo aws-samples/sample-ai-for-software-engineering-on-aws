@@ -35,12 +35,12 @@ export function BacklogTable({ rows }: { rows: BacklogRow[] }) {
           <tbody>
             {shown.map((r) => (
               <tr key={r.id} data-testid="kt-backlog-row" data-id={r.id} className={`is-${r.label}`}>
-                <td className="kt-mono">{r.id}</td>
-                <td>{r.tool}</td>
-                <td className="kt-mono">{r.check}</td>
-                <td className="kt-mono">{r.location}</td>
-                <td>{r.message}</td>
-                <td><span className={`kt-reqs-label is-${r.label}`}>{r.label}</span></td>
+                <td className="kt-mono is-nowrap">{r.id}</td>
+                <td className="is-nowrap">{r.tool}</td>
+                <td className="kt-mono is-nowrap">{r.check}</td>
+                <td className="kt-mono is-clip" title={r.location}>{r.location}</td>
+                <td className="is-clip" title={r.message}>{r.message}</td>
+                <td className="is-nowrap"><span className={`kt-reqs-label is-${r.label}`}>{r.label}</span></td>
               </tr>
             ))}
           </tbody>
@@ -48,6 +48,12 @@ export function BacklogTable({ rows }: { rows: BacklogRow[] }) {
       </div>
     </div>
   )
+}
+
+/** 30 条（fix 22 / later 8） */
+export function countText(rows: BacklogRow[]): string {
+  const by = (l: string) => rows.filter((r) => r.label === l).length
+  return `${rows.length} 条（fix ${by('fix')} / later ${by('later')}）`
 }
 
 function refactorNote(nextId: string): string {
@@ -71,11 +77,13 @@ export function BacklogHome() {
     void load()
   }, [load])
   return (
-    <section className="kt-ready kt-reqs" aria-label="需求清单" data-testid="kt-reqs-home">
-      <header className="kt-ready-head">
+    <details className="kt-ready kt-reqs kt-fold" aria-label="需求清单" data-testid="kt-reqs-home">
+      <summary data-testid="kt-reqs-sum">
         <h3>需求清单</h3>
-        <span className="kt-dim">工作项和静态分析待办（findings-backlog.md）：标 fix 的进本批，每条在分诊里定修、说明或延后。</span>
-      </header>
+        {b && !b.error && <span className="kt-dim">{countText(b.rows)}</span>}
+      </summary>
+      <div className="kt-fold-body">
+      <p className="kt-dim">工作项和静态分析待办（findings-backlog.md）：标 fix 的进本批，每条在分诊里定修、说明或延后。</p>
       {err && <p className="kt-error" role="alert">需求清单读不到：{err}</p>}
       {b?.error && <p className="kt-warn" role="status">{b.error}</p>}
       {!b && !err && <p className="kt-dim">正在读…</p>}
@@ -86,7 +94,8 @@ export function BacklogHome() {
           <p className="kt-dim" data-testid="kt-reqs-note">{refactorNote(b.next_id)}</p>
         </>
       )}
-    </section>
+      </div>
+    </details>
   )
 }
 

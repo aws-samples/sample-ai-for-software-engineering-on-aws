@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import type { Readiness, ReadinessItem, RunDetail } from '../types'
-import { BenchAudit } from './Audit'
 import { DecideRequest } from './Bench'
 import { BASE, fmtAgo } from './format'
 import { WHO_LABEL, flowOf, type StepState } from './flow'
@@ -46,12 +45,13 @@ function itemState(i: ReadinessItem): { icon: string; tone: string; text: string
   return { icon: '?', tone: 'idle', text: '看不出' }
 }
 
-/** 准备情况: what a run needs on this Mac, each with its state and, when not ready, the command for it. */
-export function ReadinessPanel() {
+export type ReadinessState = { r: Readiness | null; err: string; load: (doctor?: boolean) => Promise<void> }
+
+/** GET /readiness, polled; the home page reads it once for the start form's summary and the checklist. */
+export function useReadiness(): ReadinessState {
   const api = useAppApi()
   const [r, setR] = useState<Readiness | null>(null)
   const [err, setErr] = useState('')
-  const [asking, setAsking] = useState(false)
   const load = useCallback(async (doctor = false) => {
     try {
       setR(await (doctor ? api.post<Readiness>(`${BASE}/readiness/doctor`, {}) : api.get<Readiness>(`${BASE}/readiness`)))
@@ -65,6 +65,25 @@ export function ReadinessPanel() {
     const t = setInterval(() => void load(), POLL_READY_MS)
     return () => clearInterval(t)
   }, [load])
+  return { r, err, load }
+}
+
+/** The start form's one line: how many readiness items are ready, linking to the checklist. */
+export function ReadinessSummary({ r }: { r: Readiness | null }) {
+  if (!r || r.items.length === 0) return null
+  const ok = r.items.filter((i) => i.ok === true).length
+  const waiting = r.pending?.length ?? 0
+  return (
+    <a className="kt-ready-sum" href="#kt-ready" data-testid="kt-ready-sum">
+      准备情况：{ok}/{r.items.length} 就绪{waiting > 0 ? ` · ${waiting} 个台架请求等你批准` : ''}
+    </a>
+  )
+}
+
+/** 准备情况: what a run needs on this Mac, each with its state and, when not ready, the command for it. */
+export function ReadinessPanel({ state }: { state: ReadinessState }) {
+  const { r, err, load } = state
+  const [asking, setAsking] = useState(false)
   const doctor = r?.items.find((i) => i.key === 'doctor')
   const redo = async () => {
     setAsking(true)
@@ -72,7 +91,7 @@ export function ReadinessPanel() {
     setAsking(false)
   }
   return (
-    <section className="kt-ready" aria-label="准备情况" data-testid="kt-ready">
+    <section className="kt-ready" id="kt-ready" aria-label="准备情况" data-testid="kt-ready">
       <header className="kt-ready-head">
         <h3>准备情况</h3>
         <span className="kt-dim">台架没准备好也能先开始：运行做到台架前会停下，看板上写着缺什么和要跑的命令。</span>
@@ -130,7 +149,6 @@ export function ReadinessPanel() {
           })}
         </ul>
       )}
-      <BenchAudit />
     </section>
   )
 }

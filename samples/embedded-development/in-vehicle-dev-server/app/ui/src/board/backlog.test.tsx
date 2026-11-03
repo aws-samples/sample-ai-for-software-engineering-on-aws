@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest'
 import { setApiRoutes } from '../test/stubs/app-sdk'
 import { backlogOf, clone, emptyBoard, vstatdBoard } from '../test/fixtures'
 import { TeamPage } from '../main'
-import { SCENARIOS } from './Header'
+import { WORK_ITEM } from './Header'
 import type { Board } from '../types'
 
 const API = '/api/apps/vstatd-team'
@@ -18,7 +18,9 @@ describe('需求清单', () => {
     render(<TeamPage pollMs={60_000} />)
     const home = await screen.findByTestId('kt-reqs-home')
     expect(within(screen.getByTestId('kt-empty')).getByTestId('kt-reqs-home')).toBe(home)
-    expect(await within(home).findByTestId('kt-work-item')).toHaveTextContent(`工作项：${SCENARIOS[0].text}`)
+    expect(await within(home).findByTestId('kt-work-item')).toHaveTextContent(`工作项：${WORK_ITEM}`)
+    expect(home).not.toHaveAttribute('open')
+    expect(within(home).getByTestId('kt-reqs-sum')).toHaveTextContent('需求清单30 条（fix 22 / later 8）')
     expect(within(home).getAllByTestId('kt-backlog-row')).toHaveLength(30)
     const filter = within(home).getByRole('group', { name: '按标注筛选' })
     expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['全部 30', 'fix 22', 'later 8'])

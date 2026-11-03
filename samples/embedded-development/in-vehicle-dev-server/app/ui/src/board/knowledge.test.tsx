@@ -16,6 +16,8 @@ describe('知识库', () => {
     const home = await screen.findByTestId('kt-kb-home')
     expect(within(screen.getByTestId('kt-empty')).getByTestId('kt-kb-home')).toBe(home)
     expect(await within(home).findByTestId('kt-kb-index')).toHaveTextContent('Kiro Crew 来源「vstatd」：14 份文档 · 已同步')
+    expect(home).not.toHaveAttribute('open')
+    expect(within(home).getByTestId('kt-kb-sum')).toHaveTextContent(/^知识库\d+ 份文档 · 已索引$/)
     const groups = within(home).getAllByTestId('kt-kb-group')
     const paths = (g: HTMLElement) => within(g).getAllByTestId('kt-kb-doc').map((d) => d.dataset.path)
     expect(groups.map((g) => [g.dataset.group, paths(g)])).toEqual([

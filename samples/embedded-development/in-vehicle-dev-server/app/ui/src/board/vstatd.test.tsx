@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { setApiRoutes } from '../test/stubs/app-sdk'
 import { clone, vstatdBoard } from '../test/fixtures'
 import { TeamPage } from '../main'
-import { GateDialog, SCENARIOS } from './Header'
+import { GateDialog, WORK_ITEM } from './Header'
 import type { Board, TestCase } from '../types'
 
 const API = '/api/apps/vstatd-team'
@@ -109,6 +109,6 @@ describe('the vstatd board', () => {
   })
 
   test('the start form offers the scenario\'s work item', () => {
-    expect(SCENARIOS.map((s) => s.text)).toEqual([expect.stringContaining('把信号表的处理从 750 行的 Service::run() 里拆出去')])
+    expect(WORK_ITEM).toContain('把信号表的处理从 750 行的 Service::run() 里拆出去')
   })
 })
