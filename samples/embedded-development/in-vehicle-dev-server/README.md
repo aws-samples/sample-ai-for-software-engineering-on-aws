@@ -392,8 +392,10 @@ been dry-run once.
    proposed interface with item 3); the facilitators' runs on the reference project are in
    [rehearsal/check-examples/](rehearsal/check-examples/).
 5. MCP servers `build` and `bench`, with their guardrails, the audit log, a test for each guardrail and a smoke test
-   of both. *`build` done:* [mcp/build/](mcp/build/README.md); `bench` follows. The Kiro Crew app (item 8) does not
-   use them yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting it to them is open.
+   of both. *`build` done:* [mcp/build/](mcp/build/README.md), and one batch walked through it in
+   [rehearsal/build-server-run/](rehearsal/build-server-run/README.md); `bench` follows. The Kiro Crew app (item 8)
+   does not use them yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting it to them is
+   open.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
    Kiro Crew app (item 8) does not need this item's configurations.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
