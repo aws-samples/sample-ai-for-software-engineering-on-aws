@@ -32,6 +32,8 @@ not enforce: [the scenario README](../README.md#the-kiro-crew-app).
 
 `GET /runs/{rid}/flow` is the run's 交付详情 (`?view=item&run=<id>`, from the board's run header and the scorecard's rows): measured segments on one timeline (each role's attempts, the human gates, the waits at the operator console from the bench's action record, each check round from its checks' own wall times, the independent rerun), the moments (send-backs, failing rounds, approvals, sign-off) and the totals; a segment opens the board's replay at its start. [backend/team/flow.py](backend/team/flow.py) says where each one comes from.
 
+`GET /runs/{rid}/audit` is the run's 审计记录 (D14): one chronological list of who (人 / AI / app / 台架) did what at which step, with its evidence, from the run's events and the bench's action records for the run's requests; `?format=md` or `?format=json` downloads it, and sign-off writes `results/audit.md` and `results/audit.json` beside the repository and names their sha256 on the sign-off record. `GET /audit/bench` lists the bench's requests no run made (newest 50) for the home page. [backend/team/audit.py](backend/team/audit.py).
+
 The scorecard (`GET /scorecard`) is computed from each run's `run.json`, `events.jsonl`, approved triage, results
 directories and the bench's `actions.jsonl`; [backend/team/scorecard.py](backend/team/scorecard.py) says how each figure
 is taken (D8).
@@ -56,8 +58,8 @@ steps and what comes next (`ui/src/board/flow.ts`).
 | Path | What it is |
 | --- | --- |
 | `app.json` | Kiro Crew app manifest |
-| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
-| `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `item/` (交付详情), `types.ts` (the contract with the backend) |
+| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
+| `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, audit trail (`Audit.tsx`), graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `item/` (交付详情), `types.ts` (the contract with the backend) |
 | `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd` (the default), `vstatd-triage`, `vstatd-release`, `empty`, `?view=score`, `?view=item&run=<id>`) |
 | `team/` | `team-vstatd.json` and its task template |
 | `scripts/dev-install.sh` | Builds the board and installs or updates the app in the local Kiro Crew; `scripts/kcapi.sh` calls Kiro Crew's local API as the dashboard owner |

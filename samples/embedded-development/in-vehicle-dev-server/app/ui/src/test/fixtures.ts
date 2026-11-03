@@ -14,10 +14,11 @@
  *   independent rerun, a check that differed, the evidence page);
  * - readinessOf: GET /readiness on a Mac with the build image but no bench yet;
  * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file; backlogOf: GET /backlog; teamOf: GET /team;
- *   flowOf: GET /runs/<id>/flow (交付详情) of the vstatd run that ended with the release check.
+ *   flowOf: GET /runs/<id>/flow (交付详情) of the vstatd run that ended with the release check;
+ * - auditOf: GET /runs/<id>/audit of that run; benchAuditOf: GET /audit/bench (a baseline replay approved on the board).
  */
 import raw from './fixtures/board-running.json'
-import type { BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, RunFlow, FlowSegment, TeamEventKind, TestCase, TriageRow } from '../types'
+import type { AuditActor, AuditEntry, AuditTrail, BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, RunFlow, FlowSegment, TeamEventKind, TestCase, TriageRow } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -811,5 +812,52 @@ export function flowOf(b: Board = vstatdBoard('release')): RunFlow {
       { at: 4900, kind: 'check_fail', role: null, label: '检查不过：build' }, { at: 4901, kind: 'bounce', role: 'dev-fix', label: 'build 失败，打回开发 · 修复' }],
     roles: r.roles.map((l) => ({ key: l.key, title: l.title, icon: l.icon })),
     totals: { elapsed_s: 7300, agent_s: 4705, person_s: 510, gate_s: 390, console_s: 120, check_s: 1260, credits: 18.4, check_rounds: 3, send_backs: 1 },
+  }
+}
+
+const BOARD_BY = 'Kiro Crew 看板（you，vstatd-team）'
+const audit = (t0: number, rows: [number, AuditActor, string, string, string, string?][]): AuditEntry[] =>
+  rows.map(([dt, actor, who, step, what, evidence = '']) => ({ at: t0 + dt, iso: new Date((t0 + dt) * 1000).toISOString().slice(0, 19) + 'Z', actor, who, step, what, evidence }))
+
+/** GET /runs/<id>/audit: the vstatd run (vstatdBoard('release')), every decision and action as audit.py records them. */
+export function auditOf(b: Board = vstatdBoard('release')): AuditTrail {
+  const r = b.run!
+  return {
+    run: r.id, title: r.title, requirement: r.requirement, team: r.team.name, base: r.base, status: r.status,
+    entries: audit(r.started_at, [
+      [0, 'person', '负责人', '', `运行开始：${r.title}`],
+      [20, 'agent', '分诊', 'triage', '分诊开工'],
+      [1490, 'agent', '分诊', 'triage', '分诊完成：22 个 fix、3 个 justify、5 个 defer，加 F-031 重构', 'F-031 VSTATD-IF-4.2'],
+      [1500, 'agent', '分诊', 'triage', '分诊的分诊：5 件要人决定，25 条照分诊做（见分诊文档）'],
+      [1510, 'app', 'app', 'gate-triage', '关卡打开，等人批准：分诊'],
+      [1800, 'person', '王经理', 'gate-triage', '分诊批准（王经理），记在 triage.json（sha256 6f1e0c2a9b3d）', 'sha256 6f1e0c2a9b3d Q1=A；Q2=A；Q3=A；Q4=A；Q5=A'],
+      [2600, 'agent', '架构师', 'architect', '架构师完成：Service::run() 拆成 4 个函数，两个开发按源文件分工'],
+      [2610, 'app', 'app', 'gate-start', '关卡打开，等人批准：开工'],
+      [2700, 'person', '负责人', 'gate-start', '人批准了开工', 'Q1=B（与建议不同）'],
+      [3300, 'app', 'app', 'tests-first', '测试的新测试在需求提交上都失败了，开发开工', 'T-F003 T-F012'],
+      [4300, 'app', 'app', 'dev', '开发 · 修复的分支合入运行分支', 'commit 3c9a1f07b2e4'],
+      [4900, 'app', 'app', 'before', '测试 4/5', 'build=FAIL static=PASS unit=PASS size=PASS trace=PASS'],
+      [4901, 'app', 'app', 'before', 'build 失败，打回开发 · 修复'],
+      [5400, 'app', 'app', 'before', '测试 5/5：全绿', 'build=PASS static=PASS unit=PASS size=PASS trace=PASS'],
+      [5800, 'agent', '评审', 'review', '审查：可以交付'],
+      [5890, 'app', 'app', 'bench', '向操作台请求部署：vstatd, 133240 bytes', '请求 20261103T094046-deploy-2570 摘要 bc93723c0cb0'],
+      [5960, 'person', BOARD_BY, 'bench', '看板批准部署', '请求 20261103T094046-deploy-2570 摘要 bc93723c0cb0'],
+      [5990, 'bench', '台架', 'bench', '部署结果 ok：installed', '请求 20261103T094046-deploy-2570 摘要 bc93723c0cb0'],
+      [6160, 'person', 'you@mac (/dev/ttys003)', 'bench', '操作台批准回放', '请求 20261103T101353-replay-0f40 摘要 bc93723c0cb0'],
+      [6800, 'app', 'app', 'after', '台架之后的检查 2/2', 'logdiff=PASS runtime-limits=PASS'],
+      [7300, 'app', 'app', 'rerun', '独立重跑：release.sh PASS，和上一轮结果不同的检查：size', 'build=PASS static=PASS size=FAIL'],
+    ]),
+  }
+}
+
+/** GET /audit/bench: the baseline replay, requested at the console and approved on the board. */
+export function benchAuditOf(at: number = raw.at): AuditTrail {
+  return {
+    run: '', title: '台架动作（不属于任何运行）', requirement: '', team: '', base: '', status: '',
+    entries: audit(at - 3600, [
+      [0, 'bench', 'bench tools', 'bench', '向操作台请求回放', '请求 20261103T101353-replay-0f40 摘要 bc93723c0cb0'],
+      [76, 'person', BOARD_BY, 'bench', '看板批准回放', '请求 20261103T101353-replay-0f40 摘要 bc93723c0cb0'],
+      [88, 'bench', '台架', 'bench', '回放结果 ok：replay drive-01 to ~/workplace/vstatd-team/baseline', '请求 20261103T101353-replay-0f40 摘要 bc93723c0cb0'],
+    ]),
   }
 }

@@ -297,6 +297,27 @@ merged commits cite fact entries, `Facts: …`.
 Alternatives considered: `trace.sh` accepting work-item IDs (a change to a check the agents cannot change); leaving
 the refactor out of this version.
 
+### D14. Audit trail
+
+Every decision and action of a run leaves a record a person can read on the board and download, as AI-DLC keeps
+`aidlc-docs/audit.md`. `backend/team/audit.py` builds it from what is already recorded, and nothing else: the run's
+`events.jsonl` (run start, each role's work and replies, gates opened and decided with the person's answer to each
+question, merges with their commit, every check round with its verdicts, tests first, the bench steps, the rerun,
+sign-off) and the bench's `actions.jsonl` records of the run's own requests (`requested_by == "vstatd-team <rid>"`):
+request, decision (who decided, on the board or at the console, from `by`), the physical gate, the action's result and
+the target state. Each entry names its actor (人, AI, app, 台架), who, the flow step, what happened and the evidence;
+what has no record is shown as —. A person's name is recorded where the board asks for it (the triage gate, sign-off);
+other gate decisions are the dashboard owner's and read 负责人.
+
+`GET /runs/{rid}/audit` (JSON, `?format=md`, `?format=json`), and the 审计记录 panel on the board; `GET /audit/bench`
+for the bench requests no run made, on the home page under 准备情况. At sign-off the app writes `results/audit.md` and
+`results/audit.json` next to the run's repository (not inside it, so `trace.sh` and `release.sh` see the same tree)
+and the sign-off record carries their sha256. The files are written after the sign-off event, so they include it; the
+record cannot include its own hash.
+
+Alternatives considered: a separate audit log the app appends to (a second record that can drift from the events);
+writing the audit into the run repository (a commit `trace.sh` would judge).
+
 ## Implementation plan
 
 Each step ends with its verification; a step is done when that verification passes. Steps 1 to 11 run without the

@@ -8,6 +8,7 @@
  *   ?fixture=running|finished|started|trouble|failed|multi           the snapshot the stub serves (the web team of the tests)
  *   ?view=score        the 评分卡, from the run of vstatd-release
  *   ?view=item&run=<id>  交付详情 (GET /runs/<id>/flow) of the run of vstatd-release
+ *   (every run's 审计记录 is GET /runs/<id>/audit of that run; the home page's bench actions GET /audit/bench)
  *   ?simulate=1        play scenario() forward, one snapshot every 3.2 s (?stepMs=…); ?step=n freezes it
  *   ?mode=light        the kiro-light theme (default kiro-dark)
  *   ?fixture=gate      a real run rebuilt at a moment: the IM run r1012307c at its 安全 gate (&t=<秒> for another moment)
@@ -18,7 +19,7 @@ import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from '../src/main'
 import { apiError, setApiRoutes } from '../src/test/stubs/app-sdk'
-import { FIXTURES, asRun, backlogOf, clone, knowledgeOf, knowledgeTextOf, multiRunBoard, readinessOf, scenario, scorecardOf, shiftTimes, startedBoard, flowOf, teamOf, vstatdBoard, type FixtureName } from '../src/test/fixtures'
+import { FIXTURES, asRun, auditOf, benchAuditOf, backlogOf, clone, knowledgeOf, knowledgeTextOf, multiRunBoard, readinessOf, scenario, scorecardOf, shiftTimes, startedBoard, flowOf, teamOf, vstatdBoard, type FixtureName } from '../src/test/fixtures'
 import type { Board, RunDetail, TeamEvent } from '../src/types'
 import realRun from '../src/test/fixtures/replay-im.json'
 import { replayAt, replaySpan } from '../src/board/timeline'
@@ -70,10 +71,13 @@ setApiRoutes({
   'GET /api/apps/vstatd-team/knowledge': () => knowledgeOf(),
   'GET /api/apps/vstatd-team/backlog': () => backlogOf(),
   'GET /api/apps/vstatd-team/team': () => teamOf(),
-  'GET /api/apps/vstatd-team/runs/*': (_body, path) => {  // 交付详情 only: the other run reads have no stub here
+  'GET /api/apps/vstatd-team/runs/*': (_body, path) => {  // 交付详情 and 审计记录 only: the other run reads have no stub here
+    const rid = path.split('/')[5]
+    if (path.endsWith('/audit')) return { ...auditOf(), run: rid }
     if (!path.endsWith('/flow')) throw apiError(404, 'route_not_found', 'no stub route')
-    return { ...flowOf(), run: path.split('/')[5] }
+    return { ...flowOf(), run: rid }
   },
+  'GET /api/apps/vstatd-team/audit/bench': () => benchAuditOf(Date.now() / 1000),
   'GET /api/apps/vstatd-team/knowledge/file*': (_body, path) => knowledgeTextOf(new URL(path, location.origin).searchParams.get('path') ?? ''),
   'POST /api/apps/vstatd-team/runs': (body) => {
     const requirement = (body as { requirement?: string } | null)?.requirement?.trim()

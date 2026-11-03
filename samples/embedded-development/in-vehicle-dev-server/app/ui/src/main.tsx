@@ -24,7 +24,7 @@ import { Conveyor } from './board/Conveyor'
 import type { BoardDiff } from './board/diff'
 import type { Item } from './board/engine'
 import { EventFeed } from './board/EventFeed'
-import { LIVE, PHASES, POLL_MS, isRunActive, paths } from './board/format'
+import { BASE, LIVE, PHASES, POLL_MS, isRunActive, paths } from './board/format'
 import { FolderPanel } from './board/Folder'
 import { OutputsDrawer, type OutputsTarget } from './board/Outputs'
 import { EmptyStart, ExpertStrip, GateDialog, Kpis, StartForm, StopConfirm, TopBar, type DeliveryPick, type GateAnswers, type GateRisk } from './board/Header'
@@ -41,6 +41,7 @@ import { BacklogPanel } from './board/Backlog'
 import { SignOff } from './board/SignOff'
 import { BenchPanel } from './board/Bench'
 import { FlowStrip } from './board/FlowStrip'
+import { AuditPanel, useAudit } from './board/Audit'
 import { ReplayBar, useReplay } from './board/Replay'
 import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
@@ -142,6 +143,8 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
   replaying.current = !!rp.id
   const inReplay = !!rp.run
   const run = rp.run ?? board?.run ?? null
+  const live = board?.run ?? null // the audit trail is the whole record, read for the run itself, not a replay's moment
+  const audit = useAudit(live ? `${BASE}/runs/${live.id}/audit` : null, `${live?.id}:${live?.events[live.events.length - 1]?.seq ?? 0}`)
   useEffect(() => setFx(NO_EFFECTS), [rp.id])
   // the way in: once the board shows the run asked for, its replay starts (at a moment of a finished run: paused there),
   // or the page goes to its 签字单, its 测试墙, its counters, or the team graph (a gate, a role, a phase)
@@ -409,6 +412,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
                 <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} />
               </aside>
             </div>
+            {!projection && live && <AuditPanel runId={live.id} ended={!isRunActive(live.status)} trail={audit.trail} err={audit.err} />}
           </>
         )}
         {run && outputs && <OutputsDrawer api={api} run={run} target={outputs} onTarget={setOutputs} onClose={() => setOutputs(null)} />}

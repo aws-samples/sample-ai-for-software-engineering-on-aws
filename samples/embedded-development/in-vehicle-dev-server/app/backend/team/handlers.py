@@ -9,6 +9,7 @@ import re
 
 MODEL_RE = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,63}$")
 
+from . import audit as audit_mod
 from .httpkit import AppError, Kit
 
 try:  # always there in the gateway; plain pytest passes a fake web module
@@ -97,6 +98,24 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     async def run_flow(request: Any) -> Any:
         return kit.json(await svc.flow(str(request.match_info.get("rid", ""))))
 
+    async def run_audit(request: Any) -> Any:
+        trail = await svc.audit(str(request.match_info.get("rid", "")))
+        return download(request, trail, f"audit-{trail['run']}")
+
+    async def bench_audit(request: Any) -> Any:
+        return download(request, {"run": "", "title": "台架动作（不属于任何运行）", "requirement": "", "team": "", "base": "",
+                                  "status": "", **await svc.audit_bench()}, "audit-bench")
+
+    def download(request: Any, trail: dict[str, Any], name: str) -> Any:
+        fmt = request.query.get("format") or ""
+        if fmt not in ("", "md", "json"):
+            raise AppError("format 只能是 md 或 json", "invalid_format")
+        if not fmt:
+            return kit.json(trail)
+        text = audit_mod.markdown(trail) if fmt == "md" else audit_mod.as_json(trail)
+        return web.Response(text=text, content_type="text/markdown" if fmt == "md" else "application/json", charset="utf-8",
+                            headers={"Content-Disposition": f'attachment; filename="{name}.{fmt}"'})
+
     async def gate(request: Any) -> Any:
         body = await kit.body(request)
         role, decision, note = body.get("role"), body.get("decision"), body.get("note")
@@ -165,6 +184,8 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         AppRoute("POST", "/runs/{rid}/hide", kit.guarded(hide_run)),
         AppRoute("GET", "/runs/{rid}/events", kit.guarded(events)),
         AppRoute("GET", "/runs/{rid}/flow", kit.guarded(run_flow)),
+        AppRoute("GET", "/runs/{rid}/audit", kit.guarded(run_audit)),
+        AppRoute("GET", "/audit/bench", kit.guarded(bench_audit)),
         AppRoute("POST", "/runs/{rid}/open", kit.guarded(open_folder)),
         AppRoute("GET", "/runs/{rid}/roles/{role}", kit.guarded(role_output)),
         AppRoute("GET", "/runs/{rid}/roles/{role}/file", kit.guarded(file_view)),

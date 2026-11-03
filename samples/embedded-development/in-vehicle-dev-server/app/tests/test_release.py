@@ -2,6 +2,7 @@
 evidence page, and sign-off only when release.sh passed (stand-in checks and bench, as in test_bench.py)."""
 
 import asyncio
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -58,6 +59,11 @@ def test_the_rerun_judges_the_final_commit_afresh_and_signing_merges_into_main(t
         svc = signer(tmp_path, rig)
         out = await svc.signoff(run.rid, "王经理", "按证据页放行")
         assert out["signoff"]["by"] == "王经理" and out["signoff"]["merged"]
+        trail = out["signoff"]["audit"]  # the audit trail beside the evidence, outside the repository, named by sha256
+        assert trail["dir"] == str(root / "results") and not (results / "audit.md").exists()
+        for name in ("md", "json"):
+            assert hashlib.sha256((root / "results" / f"audit.{name}").read_bytes()).hexdigest() == trail[name]
+        assert (root / "results" / "audit.md").read_text().startswith(f"# 审计记录 · {run.rid}")
         repo = Path(run.s["repo"])
         assert sh(repo, "rev-parse", "main").strip() == sh(repo, "rev-parse", run.s["branch"]).strip()
 

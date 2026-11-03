@@ -722,6 +722,25 @@ ${legendSwatches}
 .kt-flow-now { margin: 6px 2px 0; overflow-wrap: anywhere; }
 .kt-flow-now b { color: var(--text-strong); }
 /* 准备情况 (FlowStrip.tsx) */
+.kt-actor { font-style: normal; font-size: .76em; font-weight: 800; padding: 0 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; justify-self: start; }
+.kt-actor.is-agent { color: var(--kt-run); }
+.kt-actor.is-person { color: var(--kt-approve); }
+.kt-actor.is-app { color: var(--kt-ok); }
+.kt-actor.is-bench { color: var(--kt-warn); }
+.kt-audit > summary { cursor: pointer; list-style: none; }
+.kt-audit > summary::before { content: '▸'; color: var(--muted); }
+.kt-audit[open] > summary::before { content: '▾'; }
+.kt-audit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 8px; }
+.kt-audit-dl { margin-left: auto; font-size: .86em; color: var(--muted); }
+.kt-audit-dl .kt-out-btn { padding: 0; }
+.kt-audit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; max-height: 420px; overflow-y: auto; scrollbar-width: thin; font-size: .86em; }
+.kt-audit-row { display: grid; grid-template-columns: 11.5em 3.4em minmax(6em, 12em) 7.5em minmax(0, 1fr) minmax(0, .8fr); gap: 2px 10px; align-items: baseline; padding: 3px 6px; border-radius: 6px; }
+.kt-audit-row:nth-child(odd) { background: color-mix(in srgb, var(--muted) 7%, transparent); }
+.kt-audit-row time, .kt-audit-step, .kt-audit-who { color: var(--muted); overflow-wrap: anywhere; }
+.kt-audit-what { color: var(--text); overflow-wrap: anywhere; }
+.kt-audit-ev { font-size: .9em; color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 900px) { .kt-audit-row { grid-template-columns: 11.5em 3.4em minmax(0, 1fr); } .kt-audit-what, .kt-audit-ev { grid-column: 1 / -1; } }
+.kt-audit-bench h4 { margin: 4px 0 6px; font-size: .95em; color: var(--text-strong); }
 .kt-ready { display: grid; gap: 8px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-elevated, var(--card)); }
 .kt-ready-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
 .kt-ready-head h3 { margin: 0; font-size: 1.05em; color: var(--text-strong); }

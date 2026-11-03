@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import type { Readiness, ReadinessItem, RunDetail } from '../types'
+import { BenchAudit } from './Audit'
 import { DecideRequest } from './Bench'
 import { BASE, fmtAgo } from './format'
 import { FLOW, WHO_LABEL, flowOf, type StepState } from './flow'
@@ -145,6 +146,7 @@ export function ReadinessPanel() {
           })}
         </ul>
       )}
+      <BenchAudit />
     </section>
   )
 }

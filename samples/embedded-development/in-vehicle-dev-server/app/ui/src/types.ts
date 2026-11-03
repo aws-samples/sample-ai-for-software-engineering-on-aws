@@ -172,7 +172,30 @@ export type Delivery = {
 /** 拦下的风险: noted by the person who sent work back at a gate (amount in yuan, or none). */
 export type Risk = { what: string; amount: number | null; gate: string; role: string | null; at: number }
 
-export type SignOff = { by: string; note: string; at: number; tests: string }
+export type SignOff = { by: string; note: string; at: number; tests: string; audit?: SignOffAudit }
+/** results/audit.md and audit.json, written at sign-off, with their sha256. */
+export type SignOffAudit = { dir: string; md: string; json: string }
+
+/** 审计记录 (GET /runs/<id>/audit, GET /audit/bench; backend/team/audit.py): who did what, from the records only. */
+export type AuditActor = 'person' | 'agent' | 'app' | 'bench'
+export type AuditEntry = {
+  at: number
+  iso: string
+  actor: AuditActor
+  who: string
+  step: string // a FlowKey of board/flow.ts; '' when no step applies
+  what: string
+  evidence: string // '' when there is none
+}
+export type AuditTrail = {
+  run: string
+  title: string
+  requirement: string
+  team: string
+  base: string
+  status: string
+  entries: AuditEntry[]
+}
 
 /** A knowledge source of Kiro Crew (「知识库 → 来源」). */
 export type KnowledgeSource = {

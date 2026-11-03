@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import type { BenchView } from '../types'
+import { auditChanged } from './Audit'
 import { BASE } from './format'
 import { errorText } from './useBoard'
 
@@ -27,6 +28,7 @@ export function DecideRequest({ id, digest, onDone }: { id: string; digest: stri
     try {
       await api.post(`${BASE}/bench/decide`, { id, verdict, digest: prefix.trim(), reason: reason.trim() })
       setDone(verdict === 'approve' ? '已批准' : '已拒绝')
+      auditChanged()
       onDone?.()
     } catch (x) {
       setErr(errorText(x))

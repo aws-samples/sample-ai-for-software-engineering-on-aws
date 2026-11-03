@@ -4,6 +4,8 @@ Built by ``register_routes`` (no I/O), started by ``on_startup``, stopped by ``o
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import hashlib
 import json
 import logging
 import re
@@ -12,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import board, checks, flow, library, outputs, paths, readiness, roster, scorecard
+from . import audit, board, checks, flow, library, outputs, paths, readiness, roster, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -317,7 +319,40 @@ class Service:
         merged = f"PR #{pr.get('number')} 合入 main（{run.s['signoff']['merged']}）" if run.s["signoff"]["merged"] else ""
         run.emit("signoff", f"{by} 签字放行" + (f"：{note}" if note else "") + (f"；{merged}" if merged else ""), role=None)
         await run.save()
+        if not run.s.get("imported"):  # results/audit.{md,json} beside the rerun's evidence, named on the sign-off record
+            with contextlib.suppress(OSError):
+                run.s["signoff"]["audit"] = await asyncio.to_thread(self._write_audit, run)
+                await run.save()
         return {"ok": True, "run": run.rid, "signoff": run.s["signoff"]}
+
+    def _trail(self, run: TeamRun) -> dict[str, Any]:
+        """Blocking: the run's audit trail, its text scrubbed as /events sends it."""
+        evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
+        out = audit.build(run.s, evs, scorecard.records())
+        out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
+        return out
+
+    def _write_audit(self, run: TeamRun) -> dict[str, str]:
+        trail = self._trail(run)
+        d = Path(str(run.s["repo"])).parent / "results"
+        d.mkdir(parents=True, exist_ok=True)
+        out = {"dir": str(d)}
+        for name, text in (("md", audit.markdown(trail)), ("json", audit.as_json(trail))):
+            data = text.encode("utf-8")
+            (d / f"audit.{name}").write_bytes(data)
+            out[name] = hashlib.sha256(data).hexdigest()
+        return out
+
+    async def audit(self, rid: str) -> dict[str, Any]:
+        """审计记录: every decision and action of the run, from its events and the bench's action record."""
+        run = self._run(rid)
+        return await asyncio.to_thread(self._trail, run)
+
+    async def audit_bench(self) -> dict[str, Any]:
+        """The bench's requests no run made (the baseline set up at the console or on the board), and their outcome."""
+        out = await asyncio.to_thread(lambda: audit.bench_only(scorecard.records()))
+        out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
+        return out
 
     async def import_run(self, state: Any, events: Any, replace: bool = False) -> dict[str, Any]:
         """导入: a finished run recorded on another Mac (its run.json and events.jsonl), to look at and replay here. Its record only:
