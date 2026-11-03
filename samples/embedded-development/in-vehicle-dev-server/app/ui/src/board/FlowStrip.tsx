@@ -29,11 +29,20 @@ export function FlowStrip({ run, onFinding }: { run: RunDetail; onFinding?: () =
           </li>
         ))}
       </ol>
-      <p className="kt-flow-now" data-testid="kt-flow-now"><b>现在：</b>{f.now}
-        {onFinding && run.tests.held && f.steps.some((s) => s.state === 'held') && (
-          <> <button type="button" className="kt-btn" onClick={onFinding}>补登发现并交给角色</button></>
-        )}
-      </p>
+      {onFinding && run.tests.held && f.steps.some((s) => s.state === 'held') ? (
+        <div className="kt-ready-pending" role="status" data-testid="kt-flow-held">
+          <b>✋ 检查停下来交给你决定</b>
+          <ul>
+            {run.tests.held.why.split('；').filter(Boolean).map((w) => <li key={w}>{w}</li>)}
+          </ul>
+          <span className="kt-dim">没有角色的范围或待办能修它：按 TR §4.4 补登成下一个编号，交给一个开发并给它要改的文件（是根因所在的文件，不一定是报错那一行）；或者停止这次运行。登记几条时，前面的先取消「接着运行」，最后一条再勾上。</span>
+          <span className="kt-start-actions">
+            <button type="button" className="kt-btn is-solid is-primary" onClick={onFinding}>补登发现并交给角色</button>
+          </span>
+        </div>
+      ) : (
+        <p className="kt-flow-now" data-testid="kt-flow-now"><b>现在：</b>{f.now}</p>
+      )}
     </section>
   )
 }
