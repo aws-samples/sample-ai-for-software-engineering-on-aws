@@ -4,7 +4,7 @@
  * src/test/fixtures.ts. Built by `npm run preview:build` into preview-dist/index.html (one file).
  *
  *   ?fixture=vstatd|vstatd-triage|vstatd-release                     the vstatd team: at the bench (the default), at its triage gate, at sign-off
- *   ?fixture=empty                                                   no runs: the work item, the flow, 准备情况 (GET /readiness) and 知识库 (GET /knowledge)
+ *   ?fixture=empty                                                   no runs: the work item, the flow, 准备情况 (GET /readiness), 知识库 (GET /knowledge) and 需求清单 (GET /backlog)
  *   ?fixture=running|finished|started|trouble|failed|multi           the snapshot the stub serves (the web team of the tests)
  *   ?view=score        the 评分卡, from the run of vstatd-release
  *   ?simulate=1        play scenario() forward, one snapshot every 3.2 s (?stepMs=…); ?step=n freezes it
@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from '../src/main'
 import { setApiRoutes } from '../src/test/stubs/app-sdk'
-import { FIXTURES, asRun, clone, knowledgeOf, knowledgeTextOf, multiRunBoard, readinessOf, scenario, scorecardOf, shiftTimes, startedBoard, vstatdBoard, type FixtureName } from '../src/test/fixtures'
+import { FIXTURES, asRun, backlogOf, clone, knowledgeOf, knowledgeTextOf, multiRunBoard, readinessOf, scenario, scorecardOf, shiftTimes, startedBoard, vstatdBoard, type FixtureName } from '../src/test/fixtures'
 import type { Board, RunDetail, TeamEvent } from '../src/types'
 import realRun from '../src/test/fixtures/replay-im.json'
 import { replayAt, replaySpan } from '../src/board/timeline'
@@ -67,6 +67,7 @@ setApiRoutes({
   'GET /api/apps/vstatd-team/readiness': () => readinessOf(Date.now() / 1000),
   'POST /api/apps/vstatd-team/readiness/doctor': () => readinessOf(Date.now() / 1000),
   'GET /api/apps/vstatd-team/knowledge': () => knowledgeOf(),
+  'GET /api/apps/vstatd-team/backlog': () => backlogOf(),
   'GET /api/apps/vstatd-team/knowledge/file*': (_body, path) => knowledgeTextOf(new URL(path, location.origin).searchParams.get('path') ?? ''),
   'POST /api/apps/vstatd-team/runs': (body) => {
     const requirement = (body as { requirement?: string } | null)?.requirement?.trim()

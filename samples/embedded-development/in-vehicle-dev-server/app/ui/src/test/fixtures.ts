@@ -13,10 +13,10 @@
  *   (the check wall green, a deploy waiting at the operator console), or ended with the release check (the
  *   independent rerun, a check that differed, the evidence page);
  * - readinessOf: GET /readiness on a Mac with the build image but no bench yet;
- * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file.
+ * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file; backlogOf: GET /backlog.
  */
 import raw from './fixtures/board-running.json'
-import type { Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase } from '../types'
+import type { BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamEventKind, TestCase, TriageRow } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -529,6 +529,69 @@ export function aidlcBoard(gatePending = false): Board {
   return b
 }
 
+/** The backlog (findings-backlog.md) as GET /backlog and the board carry it. */
+const BACKLOG: BacklogRow[] = ([
+  ["F-001", "cppcheck", "nullPointerRedundantCheck", "src/gateway_client.cpp › GatewayClient::read_records", "Either the condition 'buf==nullptr' is redundant or there is possible null pointer dereference: buf.", "fix"],
+  ["F-002", "clang-tidy", "bugprone-unused-return-value", "src/gateway_client.cpp › GatewayClient::connect", "the value returned by this function should not be disregarded; neglecting it may lead to errors (`fcntl`)", "fix"],
+  ["F-003", "cppcheck", "resourceLeak", "src/gateway_client.cpp › GatewayClient::connect", "Resource leak: fd", "fix"],
+  ["F-004", "clang-tidy", "bugprone-narrowing-conversions", "src/frame_decoder.cpp › parse_record", "narrowing conversion from 'unsigned long' to signed type 'int' is implementation-defined", "fix"],
+  ["F-005", "cppcheck", "uninitMemberVar", "src/frame_decoder.cpp › FrameDecoder::FrameDecoder", "Member variable 'FrameDecoder::last_error_' is not initialized in the constructor.", "fix"],
+  ["F-006", "clang-tidy", "bugprone-signed-char-misuse", "src/frame_decoder.cpp › hex_nibble", "'signed char' to 'int' conversion; consider casting to 'unsigned char' first.", "fix"],
+  ["F-007", "clang-tidy", "bugprone-implicit-widening-of-multiplication-result", "src/frame_decoder.cpp › scale_unsigned", "performing an implicit widening conversion to type 'std::uint64_t' (aka 'unsigned long') of a multiplication performed in type 'std::uint32_t' (aka 'unsigned int')", "fix"],
+  ["F-008", "cppcheck", "knownConditionTrueFalse", "src/supervisor.cpp › Supervisor::check", "Condition 'entry.supervised' is always true", "fix"],
+  ["F-009", "cppcheck", "variableScope", "src/supervisor.cpp › Supervisor::check", "The scope of the variable 'now' can be reduced.", "later"],
+  ["F-010", "clang-tidy", "cppcoreguidelines-init-variables", "src/signal_table.cpp › SignalTable::update", "variable 'status' is not initialized", "fix"],
+  ["F-011", "cppcheck", "arrayIndexOutOfBoundsCond", "src/signal_table.cpp › SignalTable::find", "Either the condition 'i>24' is redundant or the array 'entries_[24]' is accessed at index 24, which is out of bounds.", "fix"],
+  ["F-012", "clang-tidy", "performance-unnecessary-value-param", "src/signal_table.cpp › SignalTable::update", "the parameter 'path' is copied for each invocation but only used as a const reference; consider making it a const reference", "fix"],
+  ["F-013", "cppcheck", "passedByValue", "src/ipc_server.cpp › IpcServer::broadcast", "Function parameter 'line' should be passed by const reference.", "fix"],
+  ["F-014", "cppcheck", "resourceLeak", "src/ipc_server.cpp › IpcServer::open_listener", "Resource leak: listen_fd", "fix"],
+  ["F-015", "clang-tidy", "bugprone-unused-return-value", "src/ipc_server.cpp › IpcServer::accept_client", "the value returned by this function should not be disregarded; neglecting it may lead to errors (`fcntl`)", "fix"],
+  ["F-016", "clang-tidy", "bugprone-unchecked-optional-access", "src/client_session.cpp › ClientSession::handle_sub", "unchecked access to optional value", "fix"],
+  ["F-017", "cppcheck", "containerOutOfBounds", "src/client_session.cpp › ClientSession::parse_line", "Either the condition 'words.size()==1' is redundant or words size can be 1. Expression 'words[1]' cause access out of bounds.", "fix"],
+  ["F-018", "clang-tidy", "cert-err34-c", "src/client_session.cpp › parse_interval", "'atoi' used to convert a string to an integer value, but function will not report conversion errors; consider using 'strtol' instead", "fix"],
+  ["F-019", "cppcheck", "uselessCallsSubstr", "src/client_session.cpp › ClientSession::parse_line", "Ineffective call of function 'substr' because it returns a copy of the object. Use operator= instead.", "later"],
+  ["F-020", "clang-tidy", "performance-inefficient-string-concatenation", "src/log_writer.cpp › LogWriter::format", "string concatenation results in allocation of unnecessary temporary strings; consider using 'operator+=' or 'string::append()' instead", "later"],
+  ["F-021", "clang-tidy", "cppcoreguidelines-pro-type-member-init", "src/client_session.h › ClientSession::ClientSession", "constructor does not initialize these fields: lines_", "fix"],
+  ["F-022", "cppcheck", "shadowVariable", "src/service.cpp › Service::run", "Local variable 'status' shadows outer variable", "later"],
+  ["F-023", "clang-tidy", "bugprone-branch-clone", "src/service.cpp › Service::run", "repeated branch body in conditional chain", "fix"],
+  ["F-024", "cppcheck", "duplicateCondition", "src/service.cpp › Service::run", "The if condition is the same as the previous if condition", "later"],
+  ["F-025", "clang-tidy", "bugprone-empty-catch", "src/service.cpp › Service::run", "empty catch statements hide issues; to handle exceptions appropriately, consider re-throwing, handling, or avoiding catch altogether", "fix"],
+  ["F-026", "cppcheck", "unreadVariable", "src/service.cpp › Service::run", "Variable 'loops' is assigned a value that is never used.", "later"],
+  ["F-027", "clang-tidy", "cppcoreguidelines-pro-type-member-init", "src/config.cpp › Config::Config", "constructor does not initialize these fields: grace_ms_", "fix"],
+  ["F-028", "clang-tidy", "bugprone-unused-return-value", "src/main.cpp › main", "the value returned by this function should not be disregarded; neglecting it may lead to errors (`sd_notify`)", "fix"],
+  ["F-029", "cppcheck", "missingOverride", "src/log_writer.h › JournalSink::write", "The function 'write' overrides a function in a base class but is not marked with a 'override' specifier.", "later"],
+  ["F-030", "clang-tidy", "bugprone-easily-swappable-parameters", "src/supervisor.cpp › Supervisor::Supervisor", "2 adjacent parameters of 'Supervisor' of similar type ('std::chrono::milliseconds') are easily swapped by mistake", "later"],
+] as const).map(([id, tool, check, location, message, label]) => ({ id, tool, check, location, message, label }))
+
+const WORK_ITEM = '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。'
+
+/** GET /backlog: the work item and the backlog. */
+export function backlogOf(): BacklogIndex {
+  return { work_item: WORK_ITEM, rows: clone(BACKLOG), next_id: 'F-031', error: '' }
+}
+
+/** The board's 需求清单: the triage proposed at its gate (*approved* false), or approved with the latest static and trace results. */
+function backlogView(approved: boolean): BacklogView {
+  const special: Record<string, Partial<TriageRow>> = {
+    'F-008': { decision: 'justify', cites: ['[VSTATD-IF p.7 §4.2]'], evidence: null, behaviour: null },
+    'F-021': { decision: 'defer', evidence: null, behaviour: null },
+    'F-018': { evidence: 'unit-test', behaviour: true, cites: ['[VSTATD-IF p.8 §5.2]'], facts: ['IPC-REQUESTS'] },
+    'F-016': { evidence: 'unit-test' },
+  }
+  const answers: Record<string, string> = { 'F-008': 'A 同意说明（评审还会复核引用）', 'F-021': 'A 同意延后', 'F-031': 'A 同意加入本批' }
+  const fix = BACKLOG.filter((r) => r.label === 'fix').map((r) => r.id)
+  const findings: TriageRow[] = [...fix, 'F-031'].map((id, i) => {
+    const f: TriageRow = { id, decision: 'fix', added: id === 'F-031', cites: [], facts: [], evidence: id === 'F-031' ? 'build' : 'static-analysis', behaviour: false,
+      answer: null, static: null, trace: null, ...special[id] }
+    if (!approved) return f
+    const traced = f.decision === 'fix' || f.decision === 'justify'
+    return { ...f, answer: answers[id] ?? null,
+      static: f.added ? 'added under TR §4.4 (found by 工作项：拆分 Service::run())' : f.decision === 'fix' ? 'gone' : 'reported',
+      trace: traced && f.decision === 'fix' ? [`${(0x3a1f00 + i * 7919).toString(16)}c0de${i % 10}`.slice(0, 12)] : [] }
+  })
+  return { rows: clone(BACKLOG), next_id: 'F-031', triage: { state: approved ? 'approved' : 'proposed', approved: approved ? { by: '李工', at: '2026-11-02T09:12:00Z' } : null, findings } }
+}
+
 const CHECK = (name: string, verdict: 'PASS' | 'FAIL' | 'BLOCKED', tier: string, owner: string | null, message: string | null, ms: number): TestCase => ({
   id: name, ac: name, name: `${name}.sh`, file: '', status: verdict === 'PASS' ? 'pass' : verdict === 'FAIL' ? 'fail' : 'blocked', verdict, tier, owner, ms, message,
 })
@@ -568,6 +631,7 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
     docs: [{ key: 'VSTATD-IF', title: 'vstatd 接口规范', path: 'vstatd-interface.md', cites: at ? 9 : 3 }, { key: 'CC1-PN', title: 'CC-1 平台说明', path: 'cc1-platform-notes.md', cites: at ? 2 : 0 },
       { key: 'TR', title: '团队规则', path: 'team-rules.md', cites: at ? 6 : 4 }] }
   run.merges = []
+  run.backlog = backlogView(at > 0)
   run.tests = at ? {
     at: t + 5400, command: 'build static unit size trace', passed: 5, failed: 0, total: 5,
     history: [{ at: t + 3000, passed: 0, failed: 3 }, { at: t + 4200, passed: 3, failed: 2 }, { at: t + 5400, passed: 5, failed: 0 }],

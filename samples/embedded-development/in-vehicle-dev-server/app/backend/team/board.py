@@ -3,6 +3,7 @@ about their agents right now (cheap attribute reads), so the live parts stay liv
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 from pathlib import Path
@@ -88,6 +89,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "pr": run.pr(),
         "bench": bench_view(run),
         "release": release_view(run),
+        "backlog": backlog_view(run),
     }
 
 
@@ -108,6 +110,64 @@ def release_view(run: TeamRun) -> dict[str, Any] | None:
             evidence = None
     return {"at": r["at"], "head": r["head"], "results": r["results"], "release": dict(r["release"]),
             "checks": [dict(c) for c in r["checks"]], "differs": [dict(d) for d in r["differs"]], "evidence": evidence}
+
+
+def _json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def backlog_view(run: TeamRun) -> dict[str, Any] | None:
+    """BacklogView: the backlog, and once the triage exists (merged for the gate, or approved) one row per finding."""
+    kdir = knowledge_dir(run)
+    if kdir is None:
+        return None
+    try:
+        rows, next_id = library.backlog_rows(kdir)
+    except (OSError, IndexError):
+        rows, next_id = [], ""
+    return {"rows": rows, "next_id": next_id, "triage": triage_view(run)}
+
+
+def triage_view(run: TeamRun) -> dict[str, Any] | None:
+    """TriageView: the approved triage beside the repository, else the proposed one merged into the run branch; each
+    finding with the person's answer at the gate, and what the latest round's static and trace results say of it (None
+    where the app has no such record)."""
+    key = next(k for k in run.order if run.roles[k].get("triage"))
+    s = run.s
+    t = _json(Path(s["repo"]).parent / "triage.json") if s.get("repo") else None
+    state = "approved" if isinstance(t, dict) and isinstance(t.get("approved"), dict) else None
+    if state is None:
+        t = _json(Path(s["run_wt"]) / run.roles[key]["triage"]["file"]) if s.get("run_wt") else None
+        state = "proposed" if isinstance(t, dict) else None
+    if state is None or not isinstance(t.get("findings"), list):
+        return None
+    answers = {a.get("id"): a for a in (s.get("answers") or {}).get(key) or [] if isinstance(a, dict)}
+    results = Path(str(s["tests"].get("results") or "")) if s["tests"].get("results") else None
+    static = _json(results / "static.json") if results else None
+    trace = _json(results / "trace.json") if results else None
+    reported = {f.get("id"): str(f.get("status") or "") for f in ((static or {}).get("details") or {}).get("findings") or []
+                if isinstance(f, dict) and f.get("id")} if isinstance(static, dict) else None
+    traced = ((trace or {}).get("details") or {}).get("traced") if isinstance(trace, dict) else None
+    out = []
+    for f in t["findings"]:
+        if not isinstance(f, dict) or not isinstance(f.get("id"), str):
+            continue
+        fid, a = f["id"], answers.get(f["id"])
+        answer = None
+        if a is not None:
+            answer = f"其他：{a.get('text') or ''}" if a.get("choice") == "other" else f"{a.get('choice')} {a.get('option') or ''}".strip()
+        out.append({"id": fid, "decision": str(f.get("decision") or ""), "added": "added" in f,
+                    "cites": [str(c) for c in f.get("cites") or []], "facts": [str(x) for x in f.get("facts") or []],
+                    "evidence": f.get("evidence") if isinstance(f.get("evidence"), str) else None,
+                    "behaviour": f.get("behaviour") if isinstance(f.get("behaviour"), bool) else None, "answer": answer,
+                    "static": reported.get(fid) if reported is not None else None,
+                    "trace": [str(c) for c in traced.get(fid) or []] if isinstance(traced, dict) else None})
+    approved = t.get("approved") if state == "approved" else None
+    return {"state": state, "approved": {"by": str(approved.get("by") or ""), "at": str(approved.get("at") or "")} if approved else None,
+            "findings": out}
 
 
 def bench_view(run: TeamRun) -> dict[str, Any] | None:

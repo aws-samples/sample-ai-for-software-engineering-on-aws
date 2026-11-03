@@ -8,6 +8,7 @@
     "data_dir": "~/workplace/vstatd"
   },
   "task_template": "task_template-vstatd.md",
+  "work_item": "修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。",
   "ownership": {
     "file": "docs/aidlc/work-split.json",
     "from": "architect"

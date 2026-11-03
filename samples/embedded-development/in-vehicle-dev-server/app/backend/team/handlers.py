@@ -43,6 +43,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     async def knowledge_file(request: Any) -> Any:
         return kit.json(await svc.knowledge_file(request.query.get("path")))
 
+    async def backlog(request: Any) -> Any:
+        return kit.json(await svc.backlog())
+
     async def score(request: Any) -> Any:
         return kit.json(await svc.scorecard())
 
@@ -138,6 +141,7 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         AppRoute("POST", "/readiness/doctor", kit.guarded(ready_doctor)),
         AppRoute("GET", "/knowledge", kit.guarded(knowledge)),
         AppRoute("GET", "/knowledge/file", kit.guarded(knowledge_file)),
+        AppRoute("GET", "/backlog", kit.guarded(backlog)),
         AppRoute("GET", "/runs", kit.guarded(runs)),
         AppRoute("POST", "/runs", kit.guarded(create_run)),
         AppRoute("POST", "/sessions/cleanup", kit.guarded(cleanup_sessions)),

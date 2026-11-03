@@ -456,6 +456,20 @@ class Service:
         sample = await asyncio.to_thread(paths.sample_dir, self.data_dir)
         return await asyncio.to_thread(library.read_text, sample / "knowledge", path)
 
+    async def backlog(self) -> dict[str, Any]:
+        """需求清单 (home page): the default team's work item and the findings backlog."""
+        try:
+            team, sample = await asyncio.to_thread(self._default_team)
+        except AppError as exc:
+            return {"work_item": "", "rows": [], "next_id": "", "error": str(exc)}
+        except (OSError, ValueError) as exc:
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+        try:
+            rows, next_id = await asyncio.to_thread(library.backlog_rows, sample / "knowledge")
+        except (OSError, IndexError) as exc:
+            raise AppError(f"读不了待办 findings-backlog.md：{exc}", "bad_backlog", 500)
+        return {"work_item": str(team.get("work_item") or ""), "rows": rows, "next_id": next_id, "error": ""}
+
     def board(self, rid: str | None = None) -> dict[str, Any]:
         return board.build(self.runs, rid, mgr=self.manager(), scrub=self.scrub, now=time.time(), crew=self)
 

@@ -37,6 +37,7 @@ import { TestWall } from './board/TestWall'
 import { errorText, useBoard } from './board/useBoard'
 import { RoleIcon } from './board/RoleIcon'
 import { KnowledgePanel } from './board/Knowledge'
+import { BacklogPanel } from './board/Backlog'
 import { SignOff } from './board/SignOff'
 import { BenchPanel } from './board/Bench'
 import { FlowStrip } from './board/FlowStrip'
@@ -386,6 +387,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, returning = false, p
             <Kpis key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} reducedMotion={reducedMotion} onRole={onRole} />
             {run.roles.some((l) => l.phase) && <ExpertStrip run={run} />}
             <KnowledgePanel run={run} onRole={onRole} />
+            <BacklogPanel run={run} />
             {!isRunActive(run.status) && run.tests.total > 0 && <SignOff run={run} onSign={sign} />}
             {run.bench && <FlowStrip run={run} />}
             <div className="kt-body">

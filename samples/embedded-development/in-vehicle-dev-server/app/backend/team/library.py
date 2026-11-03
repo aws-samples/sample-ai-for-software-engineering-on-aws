@@ -1,5 +1,6 @@
-"""知识库 on the home page and the board: the scenario's knowledge documents the team uses, with figures read from the
-files at request time, and one of them as text for the read-only viewer. Read only; nothing here writes."""
+"""知识库 and 需求清单 on the home page and the board: the scenario's knowledge documents the team uses, with figures read
+from the files at request time, one of them as text for the read-only viewer, and the findings backlog. Read only;
+nothing here writes."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from . import triage as triage_mod
 from .httpkit import AppError
 
 MAX_TEXT = 1_000_000  # bytes the viewer gets of one file
@@ -108,3 +110,10 @@ def cites(texts: list[str]) -> dict[str, int]:
     """How often each citation key opens a citation (``[VSTATD-IF``, ``[CC1-PN``, ``[TR``) in *texts*."""
     joined = "\n".join(texts)
     return {k: len(re.findall(rf"\[{re.escape(k)}(?![\w-])", joined)) for k in CITE_KEYS}
+
+
+def backlog_rows(knowledge: Path) -> tuple[list[dict[str, str]], str]:
+    """BacklogRow: the backlog's rows (triage.py's parser), and the next free ID, the one TR §4.4 gives the refactor."""
+    rows = triage_mod.backlog(Path(knowledge))
+    last = max((int(i[2:]) for i in rows), default=0)
+    return [{"id": i, **r} for i, r in rows.items()], f"F-{last + 1:03d}"

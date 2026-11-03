@@ -43,6 +43,8 @@ steps and what comes next (`ui/src/board/flow.ts`).
 
 `GET /knowledge` lists the knowledge documents the team uses (title, citation key, figures counted from the files on each request) with Kiro Crew's source state, and `GET /knowledge/file?path=` returns one of them as text for a read-only viewer (listed files inside `knowledge/` only, no PDF, up to 1 MB); the board's knowledge panel counts each document's citations in the roles' replies.
 
+`GET /backlog` returns the default team's work item (`work_item` in the team file, the start form's default) and the findings backlog rows; the home page shows them as 需求清单 with a label filter, and the board's 需求清单 shows the backlog until the triage exists, then each finding's decision, citations, evidence, behaviour, the answer at the triage gate and what the latest round's `static` and `trace` results recorded (— where there is no record).
+
 ## Code map
 
 | Path | What it is |

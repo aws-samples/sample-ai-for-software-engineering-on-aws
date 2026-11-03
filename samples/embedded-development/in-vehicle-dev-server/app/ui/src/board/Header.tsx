@@ -4,7 +4,7 @@
  * the serial estimate (what one agent doing everything would take) with the saving, roles done,
  * KiroCrew's sub-agent lanes, credits. Also the start form (here and in the empty state) and the
  * empty state itself: the work item, the flow from the backlog to sign-off, what this Mac still needs (FlowStrip.tsx)
- * and the knowledge documents (Knowledge.tsx).
+ * the knowledge documents (Knowledge.tsx) and the requirement list (Backlog.tsx).
  */
 import { useState, type CSSProperties, type FormEvent } from 'react'
 import type { Board, Delivery, GateDecision, GateQuestion, RunDetail, TalkLine, TestWall } from '../types'
@@ -16,6 +16,7 @@ import { RoleIcon } from './RoleIcon'
 import { MarkdownRenderer } from '@kirocrew/app-sdk/ui'
 import { FlowSteps, ReadinessPanel } from './FlowStrip'
 import { KnowledgeHome } from './Knowledge'
+import { BacklogHome } from './Backlog'
 
 // ---------------------------------------------------------------------------------------------
 // the top bar
@@ -702,6 +703,7 @@ export function EmptyStart({ onStart }: { onStart: StartFn }) {
       <FlowSteps />
       <ReadinessPanel />
       <KnowledgeHome />
+      <BacklogHome />
       <StartForm onStart={onStart} />
     </section>
   )

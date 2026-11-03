@@ -74,6 +74,7 @@ export type RunDetail = {
   pr: PullRequest | null // the run branch into main: open once the run delivered, merged when a person signs it off
   bench: BenchView | null // the bench actions of a team with a bench (D3, D10); null for a team without one
   release: ReleaseView | null // the independent rerun and release.sh (D9); null before it ran
+  backlog: BacklogView | null // 需求清单: the findings backlog and the triage's findings; null for a team without a triage
 }
 
 /** The independent rerun of every check on the final commit (D9): release.sh's verdict (sign-off needs PASS), the
@@ -196,6 +197,34 @@ export type KnowledgeIndex = { docs: KnowledgeDoc[]; source: KnowledgeSource | n
 
 /** GET /knowledge/file: one document's text for the read-only viewer. */
 export type KnowledgeText = { path: string; title: string; text: string; size: number }
+
+/** A row of the findings backlog (findings-backlog.md); label fix puts it in this batch. */
+export type BacklogRow = { id: string; tool: string; check: string; location: string; message: string; label: string }
+
+/** GET /backlog: the work item and the backlog; next_id is the free ID the triage gives the refactor (TR §4.4). */
+export type BacklogIndex = { work_item: string; rows: BacklogRow[]; next_id: string; error: string }
+
+/** One finding of the triage, with only what the app records about it (null: no record). */
+export type TriageRow = {
+  id: string
+  decision: string // fix | justify | defer
+  added: boolean // added under TR §4.4
+  cites: string[]
+  facts: string[]
+  evidence: string | null // a fix's: unit-test | static-analysis | build
+  behaviour: boolean | null
+  answer: string | null // the person's answer at the triage gate
+  static: string | null // the latest static result's status: reported | gone | …
+  trace: string[] | null // commits citing it in the latest trace result
+}
+
+export type TriageApproval = { by: string; at: string }
+
+/** The triage: proposed (merged, at its gate) or approved. */
+export type TriageView = { state: 'proposed' | 'approved'; approved: TriageApproval | null; findings: TriageRow[] }
+
+/** 需求清单 on the board: the backlog, and once there is one the triage. */
+export type BacklogView = { rows: BacklogRow[]; next_id: string; triage: TriageView | null }
 
 export type Ownership = { roles?: Record<string, string[]>; test_areas?: Record<string, string>; error?: string }
 
