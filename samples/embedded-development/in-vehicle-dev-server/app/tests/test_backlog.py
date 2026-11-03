@@ -21,7 +21,7 @@ def test_the_work_item_and_the_backlog(tmp_path):
         out = (await call(routes, "GET", "/backlog")).body
         assert set(out) == ts_types()[0]["BacklogIndex"] and out["error"] == ""
         header = (ROOT / "ui" / "src" / "board" / "Header.tsx").read_text(encoding="utf-8")
-        assert out["work_item"] and f"text: '{out['work_item']}'" in header  # the StartForm's default, the same text
+        assert out["work_item"] and f"WORK_ITEM = '{out['work_item']}'" in header  # the StartForm's default
         assert len(out["rows"]) == 30 and out["next_id"] == "F-031"
         assert set(out["rows"][0]) == ts_types()[0]["BacklogRow"]
         assert [r["label"] for r in out["rows"]].count("fix") == 22
