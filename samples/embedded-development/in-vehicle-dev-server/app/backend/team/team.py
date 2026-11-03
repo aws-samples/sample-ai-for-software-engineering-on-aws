@@ -796,7 +796,19 @@ class TeamRun:
         self.s.update(status="running", ended_at=None, paused_s=round(float(self.s.get("paused_s") or 0) + gap, 1))
         self.errors = 0
 
-    async def retry(self, keys: list[str] | None = None, note: str = "") -> list[str]:
+    def review_redo(self) -> dict[str, Any] | None:
+        """按评审意见再改一轮, open to a person: the run ended on a 要改 review that names the roles it sends back, and no
+        role failed. {role: the reviewer, summary, targets: the roles it sends back}; None otherwise."""
+        if not self.ended or any(self.lane(k)["status"] == "failed" for k in self.order):
+            return None
+        rev = next((k for k in self.order if not self.roles[k]["writable"] and self.lane(k)["status"] == "done"), None)
+        last = self.lane(rev)["attempts"][-1] if rev and self.lane(rev)["attempts"] else {}
+        targets = review_targets(last.get("reply") or "", self.team["roles"])
+        if not (str(last.get("summary") or "").startswith("要改") and targets):
+            return None
+        return {"role": rev, "summary": str(last["summary"]), "targets": targets}
+
+    async def retry(self, keys: list[str] | None = None, note: str = "", by: str = "") -> list[str]:
         """The person's 重试: every failed role (or the given ones) gets one more round, and an ended run carries on.
         A role whose work never got merged starts over in its own worktree (what it left there stays); a role that
         failed later is sent back with what is failing now, or its merge is tried again."""
@@ -810,19 +822,19 @@ class TeamRun:
                 self._settle()
                 await self.save()
                 return ["bench"]
-            if not keys and not failed and self.ended:  # it ended on a 要改 review: the person sends that back
-                rev = next((k for k in self.order if not self.roles[k]["writable"] and self.lane(k)["status"] == "done"), None)
-                last = self.lane(rev)["attempts"][-1] if rev and self.lane(rev)["attempts"] else {}
-                review = last.get("reply") or ""
-                if (last.get("summary") or "").startswith("要改") and review_targets(review, self.team["roles"]):
-                    self._resume()
-                    if note:  # the person's decisions on what the review left to them
-                        self.s["review_note"] = note
-                    self.emit("run", "重试：按评审意见改" + ("，附人的决定" if note else ""))
-                    picked = await self._review_bounce(rev, review)
-                    self._settle()
-                    await self.save()
-                    return picked
+            redo = self.review_redo() if not keys and not failed else None
+            if redo:  # it ended on a 要改 review: the person sends that back
+                rev = redo["role"]
+                review = self.lane(rev)["attempts"][-1].get("reply") or ""
+                self._resume()
+                if note:  # the person's decisions on what the review left to them
+                    self.s["review_note"] = note
+                self.emit("run", f"重试：{by}按评审意见改" + (f"，附人的决定：{note}" if note else ""),
+                          data={"by": by, "note": note} if by else None)
+                picked = await self._review_bounce(rev, review)
+                self._settle()
+                await self.save()
+                return picked
             picked = [k for k in self.order if k in set(keys)] if keys else failed
             if not picked or any(k not in failed for k in picked):
                 return []

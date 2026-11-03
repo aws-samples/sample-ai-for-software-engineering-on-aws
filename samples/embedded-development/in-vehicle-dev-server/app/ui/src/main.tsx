@@ -321,6 +321,14 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
     },
     [api, run, reload],
   )
+  const redo = useCallback(
+    async (body: { note: string; by: string }) => {
+      if (!run) return
+      await api.post(paths.retry(run.id), body)
+      reload()
+    },
+    [api, run, reload],
+  )
   const onFinding = run && run.tests.held && !projection && !inReplay && !run.imported ? () => setFindingAsk(true) : undefined
   const gateLane = gateAsk && run ? run.roles.find((l) => l.key === gateAsk.role) : undefined
   // at a writing role's gate, the documents of its stage (the 启动 gate: architecture, interfaces, design, acceptance)
@@ -418,7 +426,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
         {run && lay && (
           <>
             <Kpis key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} reducedMotion={reducedMotion} onRole={onRole} />
-            {run.bench && <FlowStrip run={run} onFinding={onFinding} onAgree={onFinding ? finding : undefined} />}
+            {run.bench && <FlowStrip run={run} onFinding={onFinding} onAgree={onFinding ? finding : undefined} onRedo={!projection && !inReplay && !run.imported ? redo : undefined} />}
             {!projection && live && <DivisionView trail={audit.trail} current={run.bench ? flowOf(run).current : null} onPick={setAuditPick} />}
             {run.roles.some((l) => l.phase) && <ExpertStrip run={run} />}
             {projection && <KnowledgePanel run={run} onRole={onRole} />}

@@ -1495,6 +1495,7 @@
     "plan_skip": {},
     "overruled": null,
     "sign_block": "运行结束以后才能签字",
+    "review_redo": null,
     "delivery": {
       "name": "活动报名小站",
       "kind": "新应用",

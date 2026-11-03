@@ -12,12 +12,13 @@ import { BASE, fmtAgo } from './format'
 import { WHO_LABEL, flowOf, type StepState } from './flow'
 import { errorText } from './useBoard'
 import { SuggestAgree, type Confirm } from './Finding'
+import { ReviewRedoBox } from './ReviewRedo'
 
 const STATE_ICON: Record<StepState, string> = { todo: '', current: '●', done: '✔', failed: '✕', held: '✋' }
 const STATE_LABEL: Record<StepState, string> = { todo: '还没到', current: '现在在这一步', done: '做完了', failed: '没过', held: '交给人决定' }
 
 /** During a run: the steps in one row, and 现在：… */
-export function FlowStrip({ run, onFinding, onAgree }: { run: RunDetail; onFinding?: () => void; onAgree?: Confirm }) {
+export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail; onFinding?: () => void; onAgree?: Confirm; onRedo?: (b: { note: string; by: string }) => Promise<void> }) {
   const f = flowOf(run)
   return (
     <section className="kt-flow" aria-label="流程" data-testid="kt-flow">
@@ -42,6 +43,8 @@ export function FlowStrip({ run, onFinding, onAgree }: { run: RunDetail; onFindi
             <button type="button" className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`} onClick={onFinding}>{run.tests.held.suggest?.length ? '自己填' : '补登发现并交给角色'}</button>
           </span>
         </div>
+      ) : onRedo && run.review_redo ? (
+        <ReviewRedoBox key={run.id} run={run} onConfirm={onRedo} />
       ) : (
         <p className="kt-flow-now" data-testid="kt-flow-now"><b>现在：</b>{f.now}</p>
       )}

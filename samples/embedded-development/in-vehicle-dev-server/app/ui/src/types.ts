@@ -69,6 +69,7 @@ export type RunDetail = {
   plan_skip: Record<string, string> // the optional members the planner's 分工提案 leaves out this run, with why (applied once a person approves)
   overruled: { role: string; note: string; review: string } | null // a person approved a gate over a review that still said 要改, and why
   sign_block: string // why this run cannot be signed off ('' when it can: it finished and what it deploys went out)
+  review_redo?: ReviewRedo | null // the run ended on a 要改 review a person can send back once more (按评审意见再改一轮)
   delivery: Delivery // 交付标签: what the CTO view counts this run as, once a person signs it off
   issue: Issue // the requirement as the organisation tracks it
   pr: PullRequest | null // the run branch into main: open once the run delivered, merged when a person signs it off
@@ -305,6 +306,9 @@ export type BacklogRow = { id: string; tool: string; check: string; location: st
 
 /** GET /backlog: the work item and the backlog; next_id is the free ID the triage gives the refactor (TR §4.4). */
 export type BacklogIndex = { work_item: string; rows: BacklogRow[]; next_id: string; error: string }
+
+/** A 要改 review the run ended on: the reviewer, its verdict line, the roles it sends back. */
+export type ReviewRedo = { role: string; summary: string; targets: string[] }
 
 /** The app's proposal on a held run: give *role* the files *paths* for the finding *extend* added already (note: why). */
 export type PathSuggestion = { extend: string; check: string; role: string; paths: string[]; note: string }

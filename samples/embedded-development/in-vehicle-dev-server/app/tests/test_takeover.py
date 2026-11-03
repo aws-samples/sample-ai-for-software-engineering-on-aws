@@ -90,9 +90,15 @@ def test_after_its_rounds_a_review_that_still_says_change_it_goes_to_a_person(tm
     assert fixes == ["backend"] and len(reviews) == 2 and run.s["status"] == "failed"
     assert [e["text"] for e in run.events if e["kind"] == "run"][-1] == "运行结束：评审打回 1 轮后仍要改，交给人决定"
 
+    assert run.review_redo() == {"role": "reviewer", "summary": "要改：二（归后端）", "targets": ["backend"]}
+
     async def again():  # the person's 重试 sends the last review back once more, with their decisions
-        return await run.retry(note="拍照：补回系统拍照入口")
+        return await run.retry(note="拍照：补回系统拍照入口", by="王工")
 
     assert asyncio.run(again()) == ["backend"] and run.s["status"] == "fixing" and run.s["review_rounds"] == 2
+    assert run.review_redo() is None  # running again
+    entry = [e for e in mod("audit").build(run.s, list(run.events), [])["entries"] if e["what"].startswith("重试")]
+    assert entry[-1]["actor"] == "person" and entry[-1]["who"] == "王工"
+    assert entry[-1]["what"] == "重试：王工按评审意见改，附人的决定：拍照：补回系统拍照入口"
     task = run.lane("backend")["attempts"][-1]["task"]
     assert "人已经定了" in task and "拍照：补回系统拍照入口" in task and "要改：二（归后端）" in task

@@ -154,7 +154,11 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         note = body.get("note")
         if note is not None and not isinstance(note, str):
             raise AppError("note 必须是文字", "invalid_note")
-        return kit.json(await svc.retry(str(request.match_info.get("rid", "")), body.get("roles"), (note or "").strip()[:4000]))
+        by = body.get("by")
+        if by is not None and not isinstance(by, str):
+            raise AppError("by 是做决定的人的名字", "invalid_note")
+        return kit.json(await svc.retry(str(request.match_info.get("rid", "")), body.get("roles"), (note or "").strip()[:4000],
+                                        (by or "").strip()[:60]))
 
     async def events(request: Any) -> Any:
         return kit.json(await svc.events(str(request.match_info.get("rid", ""))))

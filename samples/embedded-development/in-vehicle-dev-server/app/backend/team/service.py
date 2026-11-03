@@ -271,7 +271,7 @@ class Service:
             raise AppError("没有这个运行", "not_found", 404)
         return run
 
-    async def retry(self, rid: str, roles: Any = None, note: str = "") -> dict[str, Any]:
+    async def retry(self, rid: str, roles: Any = None, note: str = "", by: str = "") -> dict[str, Any]:
         """重试: the failed roles of *rid* (all of them, or those named) get another round; an ended run carries on."""
         run = self._run(rid)
         self._not_imported(run, "重试")
@@ -281,7 +281,7 @@ class Service:
             active = [r.rid for r in self.runs.values() if not r.ended and r.rid != run.rid]
             if active:
                 raise AppError(f"已经有一个运行在跑（{active[0]}），一次只跑一个", "run_active", 409)
-            picked = await run.retry(roles or None, note=note)
+            picked = await run.retry(roles or None, note=note, by=by)
         if not picked:
             raise AppError("没有失败的角色可以重试", "nothing_to_retry", 409)
         return {"ok": True, "run": run.rid, "roles": picked, "status": run.s["status"]}

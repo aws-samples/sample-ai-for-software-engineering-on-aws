@@ -99,7 +99,7 @@ def _event_entry(e: dict[str, Any], s: dict[str, Any], titles: dict[str, str], e
     person = "负责人"
     if kind == "run":
         if text.startswith(("运行开始", "重试")):
-            return _entry(at, "person", person, "", text, ev)
+            return _entry(at, "person", str(data.get("by") or person), "", text, ev)
         return _entry(at, "app", "app", "", text, ev)
     if kind == "signoff":
         sig = s.get("signoff") or {}
