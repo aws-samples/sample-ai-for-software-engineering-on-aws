@@ -194,11 +194,14 @@ describe('the board', () => {
     const empty = await screen.findByTestId('kt-empty')
     expect(within(empty).getByRole('heading', { name: 'vstatd 本批：修待办里的发现，拆分 Service::run()，行为不变' })).toBeInTheDocument()
     const steps = within(empty).getByTestId('kt-flow-steps')
-    expect(within(steps).getAllByRole('listitem').map((li) => li.querySelector('b')?.textContent)).toEqual(
+    expect([...steps.querySelectorAll('thead th b')].map((b) => b.textContent)).toEqual(
       ['分诊', '关卡：分诊', '架构', '关卡：开工', '测试先行', '开发 ×2 并行', '上台架前检查', '评审', '台架：部署、回放', '台架后检查', '独立重跑', '签字放行'])
-    expect(steps.querySelector('[data-step="bench"]')).toHaveTextContent('台架+操作台')
-    expect(steps.querySelector('[data-step="tests-first"]')).toHaveTextContent('agent 角色app 自动')
-    expect(steps.querySelector('[data-step="gate-triage"]')).toHaveTextContent('人')
+    const cell = (actor: string, step: string) => steps.querySelector(`tr[data-actor="${actor}"] td[data-step="${step}"]`)!
+    expect(cell('bench', 'bench')).toHaveTextContent('每个动作在 bench/console.py 按构建摘要批准')
+    expect(cell('agent', 'tests-first')).toHaveTextContent(/^测试给要测的修复写测试$/)
+    expect(cell('app', 'tests-first')).toHaveTextContent(/^app 在基线提交上跑，每个都必须失败$/)
+    expect(cell('person', 'gate-triage')).toHaveTextContent('你逐题决定')
+    expect(cell('agent', 'gate-triage')).toHaveClass('is-empty')
     const items = await within(empty).findAllByTestId('kt-ready-item')
     expect(items.map((i) => i.dataset.key)).toEqual(['knowledge', 'image', 'doctor', 'target', 'baseline', 'console'])
     const item = (k: string) => items.find((i) => i.dataset.key === k)!

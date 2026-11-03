@@ -41,7 +41,9 @@ import { BacklogPanel } from './board/Backlog'
 import { SignOff } from './board/SignOff'
 import { BenchPanel } from './board/Bench'
 import { FlowStrip } from './board/FlowStrip'
-import { AuditPanel, useAudit } from './board/Audit'
+import { AuditPanel, useAudit, type AuditPick } from './board/Audit'
+import { DivisionView } from './board/DivisionGrid'
+import { flowOf } from './board/flow'
 import { ReplayBar, useReplay } from './board/Replay'
 import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
@@ -144,6 +146,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
   const inReplay = !!rp.run
   const run = rp.run ?? board?.run ?? null
   const live = board?.run ?? null // the audit trail is the whole record, read for the run itself, not a replay's moment
+  const [auditPick, setAuditPick] = useState<AuditPick | null>(null)
   const audit = useAudit(live ? `${BASE}/runs/${live.id}/audit` : null, `${live?.id}:${live?.events[live.events.length - 1]?.seq ?? 0}`)
   useEffect(() => setFx(NO_EFFECTS), [rp.id])
   // the way in: once the board shows the run asked for, its replay starts (at a moment of a finished run: paused there),
@@ -397,6 +400,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
             <BacklogPanel run={run} />
             {!isRunActive(run.status) && run.tests.total > 0 && <SignOff run={run} onSign={sign} />}
             {run.bench && <FlowStrip run={run} />}
+            {!projection && live && <DivisionView trail={audit.trail} current={run.bench ? flowOf(run).current : null} onPick={setAuditPick} />}
             <div className="kt-body">
               <div className="kt-col">
                 <TeamGraph key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} lay={lay} focus={focus} onRole={onRole} flashes={fx.flashes} reducedMotion={reducedMotion} feed={feed} onRetry={projection || inReplay || run.imported ? undefined : (k) => void retry(k)} onGate={inReplay ? undefined : (k, d) => setGateAsk({ role: k, decision: d })} quiet={projection} onOutputs={(k) => openOutputs(k)} phase={phase} onPhase={(p) => { setFocus(null); setPhase((x) => (x === p ? null : p)) }} />
@@ -412,7 +416,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
                 <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} />
               </aside>
             </div>
-            {!projection && live && <AuditPanel runId={live.id} ended={!isRunActive(live.status)} trail={audit.trail} err={audit.err} />}
+            {!projection && live && <AuditPanel runId={live.id} ended={!isRunActive(live.status)} trail={audit.trail} err={audit.err} pick={auditPick} />}
           </>
         )}
         {run && outputs && <OutputsDrawer api={api} run={run} target={outputs} onTarget={setOutputs} onClose={() => setOutputs(null)} />}

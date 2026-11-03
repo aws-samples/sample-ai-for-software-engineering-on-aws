@@ -1,7 +1,7 @@
 /**
- * The flow of flow.ts, drawn twice: as the numbered steps of the empty state (who acts at each and what happens), and
- * as the strip above the team graph during a run (the current step highlighted, done steps checked, failed or held ones
- * marked, and one line saying who must do what next). The strip is the overview; the graph, the lanes, the check wall
+ * The flow of flow.ts as the strip above the team graph during a run (the current step highlighted, done steps
+ * checked, failed or held ones marked, and one line saying who must do what next); the home page draws the flow as
+ * the 人机分工 grid (DivisionGrid.tsx). The strip is the overview; the graph, the lanes, the check wall
  * and the bench panel keep the details. Also the 准备情况 checklist of the empty state (GET /readiness).
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -10,27 +10,11 @@ import type { Readiness, ReadinessItem, RunDetail } from '../types'
 import { BenchAudit } from './Audit'
 import { DecideRequest } from './Bench'
 import { BASE, fmtAgo } from './format'
-import { FLOW, WHO_LABEL, flowOf, type StepState } from './flow'
+import { WHO_LABEL, flowOf, type StepState } from './flow'
 import { errorText } from './useBoard'
 
 const STATE_ICON: Record<StepState, string> = { todo: '', current: '●', done: '✔', failed: '✕', held: '✋' }
 const STATE_LABEL: Record<StepState, string> = { todo: '还没到', current: '现在在这一步', done: '做完了', failed: '没过', held: '交给人决定' }
-
-/** The empty state's flow: every step, numbered, with who acts and what happens there. */
-export function FlowSteps() {
-  return (
-    <ol className="kt-flow-steps" aria-label="流程" data-testid="kt-flow-steps">
-      {FLOW.map((s) => (
-        <li key={s.key} className={`kt-flow-step${s.n ? '' : ' is-gate'}`} data-step={s.key}>
-          <span className="kt-flow-n">{s.n || '◆'}</span>
-          <b>{s.title}</b>
-          <span className="kt-flow-who">{s.who.map((w) => <i key={w} className={`is-${w}`}>{WHO_LABEL[w]}</i>)}</span>
-          <span className="kt-flow-does">{s.does}</span>
-        </li>
-      ))}
-    </ol>
-  )
-}
 
 /** During a run: the steps in one row, and 现在：… */
 export function FlowStrip({ run }: { run: RunDetail }) {

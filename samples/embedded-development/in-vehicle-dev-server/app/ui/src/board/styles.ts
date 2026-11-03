@@ -694,20 +694,7 @@ ${legendSwatches}
 .kt-role-icon { display: inline-block; vertical-align: -0.18em; flex: none; }
 .kt-empty-hero code { font-size: .92em; }
 /* the flow (FlowStrip.tsx): its steps in the empty state, its strip during a run */
-.kt-flow-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.kt-flow-step { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 8px; row-gap: 2px; padding: 9px 11px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg-elevated, var(--card)); }
-.kt-flow-step.is-gate { border-style: dashed; border-color: color-mix(in srgb, var(--kt-approve) 55%, var(--border)); }
-.kt-flow-step > :not(.kt-flow-n) { grid-column: 2; }
-.kt-flow-n { grid-row: span 3; align-self: start; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 850; font-size: .86em; color: var(--kt-on); background: var(--kt-info); }
-.kt-flow-step.is-gate .kt-flow-n { background: var(--kt-approve); }
-.kt-flow-step b { color: var(--text-strong); }
-.kt-flow-does { font-size: .84em; color: var(--muted); }
-.kt-flow-who { display: flex; gap: 4px; flex-wrap: wrap; }
-.kt-flow-who i { font-style: normal; font-size: .74em; font-weight: 800; padding: 0 7px; border-radius: 999px; border: 1px solid currentColor; }
-.kt-flow-who .is-agent { color: var(--kt-run); }
-.kt-flow-who .is-person { color: var(--kt-approve); }
-.kt-flow-who .is-app { color: var(--kt-ok); }
-.kt-flow-who .is-bench { color: var(--kt-warn); }
+.kt-flow-n { display: inline-grid; vertical-align: middle; width: 22px; height: 22px; border-radius: 50%; place-items: center; font-weight: 850; font-size: .86em; color: var(--kt-on); background: var(--kt-info); }
 .kt-flow { padding: 8px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); }
 .kt-flow-row { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .kt-flow-cell { flex: 1 0 auto; display: flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: .82em; white-space: nowrap; color: var(--muted); border: 1px solid transparent; }
@@ -741,6 +728,21 @@ ${legendSwatches}
 .kt-audit-ev { font-size: .9em; color: var(--muted); overflow-wrap: anywhere; }
 @media (max-width: 900px) { .kt-audit-row { grid-template-columns: 11.5em 3.4em minmax(0, 1fr); } .kt-audit-what, .kt-audit-ev { grid-column: 1 / -1; } }
 .kt-audit-bench h4 { margin: 4px 0 6px; font-size: .95em; color: var(--text-strong); }
+.kt-div-wrap { overflow-x: auto; scrollbar-width: thin; }
+.kt-div { border-collapse: separate; border-spacing: 3px; font-size: .84em; min-width: 1100px; width: 100%; table-layout: fixed; }
+.kt-div th, .kt-div td { vertical-align: top; text-align: left; padding: 5px 7px; border-radius: 8px; }
+.kt-div thead th { font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--muted) 8%, transparent); }
+.kt-div thead th.is-gate { font-style: italic; }
+.kt-div thead th.is-gate .kt-flow-n { background: var(--kt-approve); }
+.kt-div tbody th { width: 3.6em; }
+.kt-div thead th:first-child { width: 3.6em; background: none; }
+.kt-div td { border: 1px solid var(--border); color: var(--text); overflow-wrap: anywhere; }
+.kt-div td.is-empty { border-style: dashed; opacity: .45; }
+.kt-div td.is-current { border-color: var(--kt-run); background: color-mix(in srgb, var(--kt-run) 12%, transparent); }
+.kt-div-cell { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; display: grid; gap: 2px; width: 100%; }
+.kt-div-cell:hover b { color: var(--accent); }
+.kt-div-note { font-weight: 700; color: var(--text-strong); }
+.kt-div-line { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .kt-ready { display: grid; gap: 8px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-elevated, var(--card)); }
 .kt-ready-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
 .kt-ready-head h3 { margin: 0; font-size: 1.05em; color: var(--text-strong); }
