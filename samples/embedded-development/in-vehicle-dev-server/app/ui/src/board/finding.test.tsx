@@ -132,6 +132,29 @@ describe('补登发现并交给角色', () => {
     }]]))
   })
 
+  test('the app proposes the paths: one 同意 sends each, the last one carries on', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('vstatd-team:signer', '王工')
+    const b = heldBoard()
+    b.run!.tests.held!.suggest = [
+      { extend: 'F-032', check: 'build', role: 'dev-fix', paths: ['cmake/cc1-aarch64.cmake'], note: '开发 · 修复说根因在 cmake/cc1-aarch64.cmake' },
+      { extend: 'F-035', check: 'unit', role: 'dev-fix', paths: ['tests/test_signal_table.cpp'], note: '还没有测试写 F-035' },
+    ]
+    setApiRoutes({
+      [`GET ${API}/board*`]: () => clone(b),
+      [`POST ${API}/runs/r1006a/finding`]: () => ({ id: 'F-032', triage_sha256: 'ab', held: true, status: 'failed' }),
+    })
+    render(<TeamPage pollMs={60_000} />)
+    const box = await screen.findByTestId('kt-suggest')
+    expect(box).toHaveTextContent('F-032（build）交给开发 · 修复，加可写 cmake/cc1-aarch64.cmake')
+    expect(within(screen.getByTestId('kt-flow-held')).getByRole('button', { name: '自己填' })).toBeInTheDocument()
+    await user.click(within(box).getByRole('button', { name: '同意建议并接着运行' }))
+    await waitFor(() => expect(posts()).toEqual([
+      [`${API}/runs/r1006a/finding`, { extend: 'F-032', role: 'dev-fix', paths: ['cmake/cc1-aarch64.cmake'], note: '同意 app 的建议：开发 · 修复说根因在 cmake/cc1-aarch64.cmake', by: '王工', continue: false }],
+      [`${API}/runs/r1006a/finding`, { extend: 'F-035', role: 'dev-fix', paths: ['tests/test_signal_table.cpp'], note: '同意 app 的建议：还没有测试写 F-035', by: '王工', continue: true }],
+    ]))
+  })
+
   test('a refused finding says why and the dialog stays', async () => {
     const user = userEvent.setup()
     setApiRoutes({

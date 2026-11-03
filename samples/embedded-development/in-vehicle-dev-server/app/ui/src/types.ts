@@ -306,6 +306,9 @@ export type BacklogRow = { id: string; tool: string; check: string; location: st
 /** GET /backlog: the work item and the backlog; next_id is the free ID the triage gives the refactor (TR §4.4). */
 export type BacklogIndex = { work_item: string; rows: BacklogRow[]; next_id: string; error: string }
 
+/** The app's proposal on a held run: give *role* the files *paths* for the finding *extend* added already (note: why). */
+export type PathSuggestion = { extend: string; check: string; role: string; paths: string[]; note: string }
+
 /** One finding of the triage, with only what the app records about it (null: no record). */
 export type TriageRow = {
   id: string
@@ -434,7 +437,7 @@ export type TestWall = {
   failed: number
   total: number
   history: { at: number; passed: number; failed: number }[] // one point per test run
-  held: { checks: string[]; why: string } | null // a check a person decides: BLOCKED, misconfigured, or out of its repair rounds (D7)
+  held: { checks: string[]; why: string; suggest?: PathSuggestion[] } | null // a check a person decides: BLOCKED, misconfigured, or out of its repair rounds (D7)
   round: number // the team file's checks: how many rounds before the bench were started
   running: boolean // a round of checks is due or running on what is merged
 }

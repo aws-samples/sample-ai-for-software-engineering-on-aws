@@ -11,12 +11,13 @@ import { Cmd, DecideRequest, Digest } from './Bench'
 import { BASE, fmtAgo } from './format'
 import { WHO_LABEL, flowOf, type StepState } from './flow'
 import { errorText } from './useBoard'
+import { SuggestAgree, type Confirm } from './Finding'
 
 const STATE_ICON: Record<StepState, string> = { todo: '', current: '●', done: '✔', failed: '✕', held: '✋' }
 const STATE_LABEL: Record<StepState, string> = { todo: '还没到', current: '现在在这一步', done: '做完了', failed: '没过', held: '交给人决定' }
 
 /** During a run: the steps in one row, and 现在：… */
-export function FlowStrip({ run, onFinding }: { run: RunDetail; onFinding?: () => void }) {
+export function FlowStrip({ run, onFinding, onAgree }: { run: RunDetail; onFinding?: () => void; onAgree?: Confirm }) {
   const f = flowOf(run)
   return (
     <section className="kt-flow" aria-label="流程" data-testid="kt-flow">
@@ -35,9 +36,10 @@ export function FlowStrip({ run, onFinding }: { run: RunDetail; onFinding?: () =
           <ul>
             {run.tests.held.why.split('；').filter(Boolean).map((w) => <li key={w}>{w}</li>)}
           </ul>
+          {onAgree && <SuggestAgree run={run} onConfirm={onAgree} />}
           <span className="kt-dim">没有角色的范围或待办能修它：按 TR §4.4 补登成下一个编号，交给一个开发并给它要改的文件（是根因所在的文件，不一定是报错那一行）；或者停止这次运行。登记几条时，前面的先取消「接着运行」，最后一条再勾上。</span>
           <span className="kt-start-actions">
-            <button type="button" className="kt-btn is-solid is-primary" onClick={onFinding}>补登发现并交给角色</button>
+            <button type="button" className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`} onClick={onFinding}>{run.tests.held.suggest?.length ? '自己填' : '补登发现并交给角色'}</button>
           </span>
         </div>
       ) : (

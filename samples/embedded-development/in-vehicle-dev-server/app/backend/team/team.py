@@ -56,6 +56,16 @@ REVIEW_KEEP = 12_000  # characters of a 要改 review a bounced role is given
 TALK_KEEP = 2_000  # characters of a role's answer in a 讨论 at its gate, kept for the gate card
 DECISIONS_FILE = "docs/aidlc/decisions.md"  # what people decided at the gates, written into the run branch by the app
 TRIAGE_FILE = "triage.json"  # the approved triage, beside the run's repository (runs/<run>/), out of the agents' worktrees
+PATH_SAID = re.compile(r"(?<![\w/.-])((?:[\w-]+/)+[\w.-]+\.[A-Za-z]\w*|CMakeLists\.txt)(?![\w/])")  # a project path in a reply
+OUT_OF_SCOPE = re.compile(r"不归我|改不了|可写范围|没有权限|分给")  # a role saying a file is not its to change
+
+
+def _ids_in(text: str) -> set[str]:
+    """The finding IDs a sentence names, ranges (F-032~F-034) spelled out."""
+    ids = set(re.findall(r"F-\d{3}", text))
+    for a, b in re.findall(r"F-(\d{3})\s*[~～–-]\s*F-(\d{3})", text):
+        ids.update(f"F-{n:03d}" for n in range(int(a), min(int(b), int(a) + 50) + 1))
+    return ids
 # A review names who fixes what: its own `打回：` line (role keys or titles), else every 归X it writes.
 _BOUNCE_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*打回[*_`]*\s*[:：]\s*(.+)$", re.M)  # a list item too
 _OWNER_RE = re.compile(r"归([^）)，,；;。\n]{1,40})")
@@ -926,6 +936,46 @@ class TeamRun:
                 await self._go_on_with_findings(held["registered"])
             await self.save()
             return {"id": fid, "triage_sha256": digest, "held": bool(t.get("held")), "status": self.s["status"]}
+
+    def path_suggestions(self) -> list[dict[str, Any]]:
+        """给已补登的发现加路径, proposed for a person to agree to: for each held check that has a finding added for it
+        already, the files its role cannot write that would let it fix it. From what the role said (a path in its
+        replies about the finding that is in the project and outside its scope) and, for a unit-test finding no test
+        names yet (TR §4.1), the test file of its location. [] when there is nothing to propose; nothing changes here."""
+        t, data = self.s["tests"], self._approved_triage()
+        held, wt = t.get("held"), self.s.get("run_wt")
+        if not held or not data or not wt:
+            return []
+        root = Path(wt)
+        added = [f for f in data.get("findings") or [] if isinstance(f, dict) and isinstance(f.get("added"), dict)]
+        rows = {r["name"]: r for r in t.get("checks") or []}
+        out: list[dict[str, Any]] = []
+        for c in held.get("checks") or []:
+            mine = [f for f in added if f["added"].get("found_by") == f"checks/{c}.sh"]
+            owners = [o for o in (rows.get(c) or {}).get("owners") or [] if o in self.impl]
+            role = owners[0] if owners else next(iter(self.impl), None)
+            if not mine or role is None:
+                continue
+            first, globs, ids = mine[0], self.roles[role]["writable"], {f["id"] for f in mine}
+            loc = str(first["added"].get("location") or "")
+            same = [f["id"] for f in mine[1:] if f["added"].get("location") == loc]
+            free = lambda p: (root / p).is_file() and not gitwork.matches(p, globs)  # noqa: E731
+            said = [s for a in self.lane(role)["attempts"] for s in re.split(r"[。\n；;]", str(a.get("reply") or ""))
+                    if OUT_OF_SCOPE.search(s) and ids & _ids_in(s)]  # "F-032 的根因在 `x`，这个文件不归我改"
+            paths = [p for p in dict.fromkeys(m for s in said for m in PATH_SAID.findall(s)) if free(p)]
+            why = [f"{self.title(role)}说根因在 {'、'.join(paths)}，这些它改不了"] if paths else []
+            reasons = " ".join(str(x) for x in (rows.get(c) or {}).get("reasons") or [])
+            for f in mine:
+                stem = Path(str(f["added"].get("location") or "").split(":")[0]).stem
+                test = f"tests/test_{stem}.cpp"
+                if (f.get("evidence") == "unit-test" and f"{f['id']}: triaged as fix with evidence unit-test, but no test" in reasons
+                        and stem and free(test) and test not in paths):
+                    paths.append(test)
+                    why.append(f"{f['id']} 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 {test} 里加")
+            if paths:
+                note = "；".join(why) + (f"。{'、'.join(same)} 和 {first['id']} 是同一个失败，提交说明一并写上 {first['id']}、{'、'.join(same)}" if same else "")
+                out.append({"extend": first["id"], "check": c, "role": role, "paths": paths, "note": note[:1000]})
+        return out
 
     async def _go_on_with_findings(self, registered: list[dict[str, Any]]) -> None:
         """The hold ends: each role named gets one more round of each check it was given a finding for (the check's

@@ -96,7 +96,47 @@ const list = (s: string) => s.split(/[\s,，、]+/).map((x) => x.trim()).filter(
 /** Citations hold spaces (`[VSTATD-IF p.11 §8.4]`): one per bracket. */
 const citesOf = (s: string) => s.match(/\[[^\]]+\]/g) ?? []
 
-type Confirm = (body: FindingBody | ExtendBody) => Promise<void>
+export type Confirm = (body: FindingBody | ExtendBody) => Promise<void>
+
+/** The app's proposal on a held run (GET /board tests.held.suggest): which files to give to which finding's role. The
+ * person agrees with one click; each is sent as 给已补登的发现加路径, the last one with 接着运行. */
+export function SuggestAgree({ run, onConfirm }: { run: RunDetail; onConfirm: Confirm }) {
+  const items = run.tests.held?.suggest ?? []
+  const [by, setBy] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem(SIGNER_KEY)) || '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  if (!items.length) return null
+  const title = (k: string) => run.roles.find((l) => l.key === k)?.title ?? k
+  const agree = async () => {
+    if (!by.trim()) return setErr('写下你的名字（谁同意的）')
+    setBusy(true)
+    setErr('')
+    localStorage.setItem(SIGNER_KEY, by.trim())
+    try {
+      for (const [i, s] of items.entries()) {
+        await onConfirm({ extend: s.extend, role: s.role, paths: s.paths, note: `同意 app 的建议：${s.note}`, by: by.trim(), continue: i === items.length - 1 })
+      }
+    } catch (x) {
+      setErr(errorText(x))
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="kt-ready-pending" data-testid="kt-suggest">
+      <b>app 的建议：给已补登的发现加路径，不新加编号</b>
+      <ul>
+        {items.map((s) => (
+          <li key={s.extend}>{s.extend}（{s.check}）交给{title(s.role)}，加可写 <code className="kt-mono">{s.paths.join(' ')}</code>：<span className="kt-dim">{s.note}</span></li>
+        ))}
+      </ul>
+      <span className="kt-start-actions">
+        <label className="kt-start-field is-narrow"><span>同意人</span><input aria-label="同意人" value={by} maxLength={60} onChange={(e) => setBy(e.target.value)} /></label>
+        <button type="button" className="kt-btn is-solid is-primary" onClick={agree} disabled={busy}>{busy ? '正在提交…' : '同意建议并接着运行'}</button>
+      </span>
+      {err && <p className="kt-error" role="alert">{err}</p>}
+    </div>
+  )
+}
 
 /** 要做什么: a new finding, or more paths for one added already. */
 function ModePick({ extending, onPick }: { extending: boolean; onPick: (extending: boolean) => void }) {
@@ -121,9 +161,10 @@ function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
   const roles = implementers(run)
   const ids = extendable(run)
   const first = held.checks.map((c) => ids.find((f) => CHECK_OF.exec(f.found_by ?? '')?.[1] === c)).find(Boolean) ?? ids[0]
-  const [b, setB] = useState<ExtendBody>(() => ({ extend: first?.id ?? '', role: roles[0]?.key ?? '', paths: [], note: '',
-    by: (typeof localStorage !== 'undefined' && localStorage.getItem(SIGNER_KEY)) || '', continue: true }))
-  const [paths, setPaths] = useState('')
+  const proposed = (id: string) => held.suggest?.find((s) => s.extend === id)
+  const [b, setB] = useState<ExtendBody>(() => ({ extend: first?.id ?? '', role: proposed(first?.id ?? '')?.role ?? roles[0]?.key ?? '', paths: [],
+    note: proposed(first?.id ?? '')?.note ?? '', by: (typeof localStorage !== 'undefined' && localStorage.getItem(SIGNER_KEY)) || '', continue: true }))
+  const [paths, setPaths] = useState(() => proposed(first?.id ?? '')?.paths.join(' ') ?? '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (x: Partial<ExtendBody>) => setB((o) => ({ ...o, ...x }))
@@ -148,7 +189,11 @@ function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
       <div className="kt-start-row">
         <ModePick extending onPick={onMode} />
         <label className="kt-start-field"><span>发现</span>
-          <select aria-label="发现" value={b.extend} onChange={(e) => set({ extend: e.target.value })}>
+          <select aria-label="发现" value={b.extend} onChange={(e) => {
+            const s = proposed(e.target.value)
+            set({ extend: e.target.value, note: s?.note ?? '', ...(s ? { role: s.role } : {}) })
+            setPaths(s?.paths.join(' ') ?? '')
+          }}>
             {ids.map((f) => <option key={f.id} value={f.id}>{f.id} · {CHECK_OF.exec(f.found_by ?? '')?.[1]} · {f.location}</option>)}
           </select>
         </label>

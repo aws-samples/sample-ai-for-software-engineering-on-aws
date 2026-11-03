@@ -159,6 +159,32 @@ def test_extending_a_finding_added_already_gives_its_role_paths_and_a_round_with
     asyncio.run(go())
 
 
+def test_the_app_proposes_the_files_the_role_said_it_cannot_change_and_the_test_file_of_a_unit_test_finding(tmp_path, monkeypatch):
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+    wt = Path(run.s["run_wt"])
+    for p in ("cmake/tc.cmake", "tests/test_a.cpp"):
+        (wt / p).parent.mkdir(parents=True, exist_ok=True)
+        (wt / p).write_text("x\n")
+
+    async def go():
+        await svc.finding(run.rid, handlers.finding_body({**F032, "location": "src/a.cpp:12", "paths": ["src/a.cpp"]}))
+        await svc.finding(run.rid, handlers.finding_body({**F032, "location": "src/a.cpp:12", "paths": []}))
+        await svc.finding(run.rid, handlers.finding_body({**F033, "paths": ["src/a.*"], "continue": False}))
+    asyncio.run(go())
+    assert run.path_suggestions() == []  # the role said nothing yet, and no check wants a test naming one
+    run.lane("dev")["attempts"].append({**run.lane("dev")["attempts"][-1], "reply": "F-032~F-033 的根因在 `cmake/tc.cmake`,这个文件不归我改。`CMakeLists.txt:46` 推测同样会失败。"})
+    unit = next(r for r in run.s["tests"]["checks"] if r["name"] == "unit")
+    unit["reasons"] = ["F-034: triaged as fix with evidence unit-test, but no test that is new or changed in the batch and runs names it (TR §4.1)"]
+    assert run.path_suggestions() == [
+        {"extend": "F-032", "check": "build", "role": "dev", "paths": ["cmake/tc.cmake"],
+         "note": "dev说根因在 cmake/tc.cmake，这些它改不了。F-033 和 F-032 是同一个失败，提交说明一并写上 F-032、F-033"},
+        {"extend": "F-034", "check": "unit", "role": "dev", "paths": ["tests/test_a.cpp"],
+         "note": "F-034 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 tests/test_a.cpp 里加"}]
+    held = svc.board(run.rid)["run"]["tests"]["held"]
+    assert [s["extend"] for s in held["suggest"]] == ["F-032", "F-034"]
+
+
 def test_extending_refuses_an_id_not_added_by_a_check(tmp_path, monkeypatch):
     _, mgr, run, _ = held_run(tmp_path, monkeypatch)
     svc = svc_of(tmp_path, run, mgr)

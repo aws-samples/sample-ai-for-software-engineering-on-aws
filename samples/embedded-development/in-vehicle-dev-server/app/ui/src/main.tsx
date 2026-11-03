@@ -418,7 +418,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
         {run && lay && (
           <>
             <Kpis key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} reducedMotion={reducedMotion} onRole={onRole} />
-            {run.bench && <FlowStrip run={run} onFinding={onFinding} />}
+            {run.bench && <FlowStrip run={run} onFinding={onFinding} onAgree={onFinding ? finding : undefined} />}
             {!projection && live && <DivisionView trail={audit.trail} current={run.bench ? flowOf(run).current : null} onPick={setAuditPick} />}
             {run.roles.some((l) => l.phase) && <ExpertStrip run={run} />}
             {projection && <KnowledgePanel run={run} onRole={onRole} />}
