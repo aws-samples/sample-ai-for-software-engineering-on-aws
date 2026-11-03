@@ -11,7 +11,7 @@ examples of every check, and the tests of the verdict rules, are in [`../../chec
 
 ```bash
 docker run --rm --security-opt seccomp=unconfined -v "$PWD":/sample:ro -v /opt/cc1-sysroot:/opt/cc1-sysroot:ro \
-    vstatd-build python3 /sample/rehearsal/check-examples/run.py
+    vstatd-build:arm64 python3 /sample/rehearsal/check-examples/run.py   # vstatd-build:amd64 on x86_64
 ```
 
 Run from the scenario folder, with the image of `reference-project/tools/Dockerfile` and the stand-in sysroot of
@@ -20,8 +20,13 @@ builds that `unit.sh` makes on each call.
 
 ## Last run
 
-2026-10-28, Ubuntu 24.04 build container (GCC 12.4.0, cppcheck 2.13.0, clang-tidy 18.1.3, git 2.43.0), stand-in
-sysroot. 23 of 23 as expected; `checks/test/test_checks.py` 72 tests OK in the same container.
+2026-11-03, native arm64 build container `vstatd-build:arm64` on Apple Silicon (GCC 12.4.0, cppcheck 2.13.0,
+clang-tidy 18.1.3, git 2.43.0), stand-in sysroot in a Docker volume. 23 of 23 as expected, in 215 s;
+`checks/test/test_checks.py` 72 tests OK in the same container. The table is from 2026-10-28 (amd64 container, the
+same verdicts); on arm64 ThreadSanitizer names the race with the absolute path of the check's copy. The amd64
+container under Rosetta cannot run ThreadSanitizer, so there the `unit` rows fail for that reason. With the Buildroot
+sysroot (volume `cc1-sysroot`) instead of the stand-in, the seven `static` rows from step 2 on are BLOCKED: that
+sysroot has no C++ standard headers for clang-tidy (in both images).
 
 | Step | Check | Expected | Verdict | First reason |
 | --- | --- | --- | --- | --- |

@@ -125,7 +125,7 @@ A finding entry:
 | `cites` | Sections such as `[VSTATD-IF p.7 §4.2]` or `[CC1-PN §3]`; required for a justification and for a fix that touches behaviour, which cite VSTATD-IF or CC1-PN. The section must exist, and a VSTATD-IF citation gives its page |
 | `facts` | Fact entry IDs of `knowledge/facts/`, such as `SUP-GRACE` |
 | `reason`, `pick_up_when` | For a deferral |
-| `added` | For a finding added during the batch (TR §4.4): `found_by`, `tool`, `location`. Added findings take the next free IDs in turn, from F-031 |
+| `added` | For a finding added during the batch (TR §4.4): `found_by`, `tool`, `location`. Added findings take the next free IDs in turn, from F-031. A change the work item asks for that no finding covers, such as the refactor, is added the same way with `found_by` naming the work item |
 
 An allowed log difference: `{"finding": "F-nnn", "side": "baseline" or "run", "entry": {<the whole entry>},
 "count": 1}`. The entry gives `ev` and every compared field; `t_ms`, if given, matches within the comparison window.

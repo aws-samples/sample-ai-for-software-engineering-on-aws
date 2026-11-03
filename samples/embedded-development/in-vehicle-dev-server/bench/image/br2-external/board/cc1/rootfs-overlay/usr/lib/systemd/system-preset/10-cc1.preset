@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT-0
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Buildroot enables every unit with `systemctl preset-all` when it makes the root file system. vstatd stays
+# disabled: the bench starts it for each run, and the known state has it stopped (CC1-PN §8.3).
+disable vstatd.service
+# Nothing may reach the guest from outside during a replay except the bench's own SSH session: an event from the host
+# lands at a host-dependent guest time and moves the log (CC1-PN §2.2). No time sync, no resolver.
+disable systemd-timesyncd.service
+disable systemd-resolved.service

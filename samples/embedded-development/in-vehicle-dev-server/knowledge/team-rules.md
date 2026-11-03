@@ -48,7 +48,8 @@
 - **§4.3** The triage list is approved before any code changes.
 - **§4.4** A defect that a check finds during the batch and that is not in the backlog, such as a ThreadSanitizer
   report, is added with the next free ID (from F-031), the tool or check that found it, and label `fix`. It is
-  triaged like the others.
+  triaged like the others. A change the work item asks for that no finding covers, such as a refactor, is added
+  the same way, with the work item as what found it, so that its commits can cite it (§7.2).
 
 ## §5 Bounded repair
 

@@ -100,7 +100,7 @@ On the build server's host, with Docker, git and Python 3.11 or later, as root o
 
 ```bash
 useradd --system --create-home buildsrv && usermod -aG docker buildsrv     # or rootless Docker: sandbox.docker_host
-docker build -t vstatd-build /srv/sample/reference-project/tools
+docker build -t vstatd-build /srv/sample/reference-project/tools   # for the host's architecture, as in the Dockerfile
 python3 -m venv /opt/buildserver && /opt/buildserver/bin/pip install /srv/sample/mcp/build
 ```
 
@@ -148,16 +148,16 @@ python3 tests/smoke.py --config <config> --full       # over MCP stdio, on the r
 python3 tests/smoke.py --config <config> --probe      # tries to leave the container, on a throwaway clone
 ```
 
-Run them from this folder with the server's virtual environment. `test_guardrails.py` runs the server logic without a container (`sandbox.runner = "none"`, which the server accepts
-only with `BUILDSERVER_UNSANDBOXED_FOR_TESTS=1`); it needs git, and the MCP SDK for its MCP-layer tests. The smoke
-test starts the server as an agent would and calls each tool: it configures and builds the host profile, configures
-the cross profile, runs `checks/build.sh`, reads its result and runs `checks/release.sh`, which must find every
-input the published build result recorded. The probe clones the work tree into a new folder with
-its own state and commits project code that, at configure and build time and from a background process that leaves
-its session, tries to write the audit log, the repair count, the published results, the work tree, the server user's
-home and a host path, to reach the network and to forge the build check's result; it also sets a `core.fsmonitor`
-hook. It asserts that none of this gets through and that no background process still writes after the calls return,
-then deletes its folder.
+Run them from this folder with the server's virtual environment. `test_guardrails.py` runs the server logic without
+a container (`sandbox.runner = "none"`, which the server accepts only with `BUILDSERVER_UNSANDBOXED_FOR_TESTS=1`);
+it needs git, and the MCP SDK for its MCP-layer tests. The smoke test starts the server as an agent would and calls
+each tool: it configures and builds the host profile, configures the cross profile, runs `checks/build.sh`, reads
+its result and runs `checks/release.sh`, which must find every input the published build result recorded. The probe
+clones the work tree into a new folder with its own state and commits project code that, at configure and build time
+and from a background process that leaves its session, tries to write the audit log, the repair count, the published
+results, the work tree, the server user's home and a host path, to reach the network and to forge the build check's
+result; it also sets a `core.fsmonitor` hook. It asserts that none of this gets through and that no background
+process still writes after the calls return, then deletes its folder.
 
 Last run on 2026-11-03 on an Ubuntu 24.04 build host with Docker 29.8.2, git 2.43.0 and MCP Python SDK 2.3.0:
 48 guardrail tests OK. The smoke test's calls returned as expected over stdio, each in its container; `checks/build.sh`

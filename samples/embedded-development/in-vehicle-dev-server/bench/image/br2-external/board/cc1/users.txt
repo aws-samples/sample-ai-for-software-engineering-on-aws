@@ -1,0 +1,1 @@
+vstat -1 vstat -1 * - - - vstatd service user (CC1-PN 1.2)
