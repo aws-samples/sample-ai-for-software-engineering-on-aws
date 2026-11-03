@@ -9,7 +9,8 @@ How each figure is taken:
 - Findings fixed, justified, deferred: the decisions of the approved triage, the entries it added (TR §4.4: the
   refactor) left out.
 - Justifications overturned: a finding the triage proposed to justify that a person answered other than A at the triage
-  gate (the send-back event names it), or that a reviewer's 要改 verdict names while the approved triage justifies it.
+  gate (the send-back event names it), or that a reviewer's 要改 verdict names on a ``推翻说明：`` line while the approved
+  triage justifies it (naming it elsewhere, to confirm it, does not count).
 - Times: wall clock from the run's start (the requirement given) to the triage approval, to the first round of the
   checks before the bench in which every check passed, and to the sign-off.
 - Build repair rounds: the fix rounds the app gave for a failing ``build`` check.
@@ -39,6 +40,10 @@ from .constants import APP_NAME
 from .store import all_events
 from .team import TRIAGE_FILE
 from .triage import FINDING_ID
+
+# A reviewer overturns a justification on a line of its own (team file brief): `推翻说明：F-008`; naming it elsewhere,
+# to confirm it, is no overturn.
+OVERTURN_LINE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*推翻说明[*_`]*\s*[:：]\s*(.+)$", re.M)
 
 
 def _json(path: Path) -> Any:
@@ -131,7 +136,8 @@ def run_figures(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict
     readonly = {r["key"] for r in (s.get("team") or {}).get("roles") or [] if not r.get("writable")}
     by_reviewer = sorted({i for k in readonly for a in ((s.get("lanes") or {}).get(k) or {}).get("attempts") or []
                           if a.get("kind") != "discuss" and str(a.get("summary") or "").startswith("要改")
-                          for i in FINDING_ID.findall(str(a.get("reply") or "")) if i in justified})
+                          for line in OVERTURN_LINE.findall(str(a.get("reply") or ""))
+                          for i in FINDING_ID.findall(line) if i in justified})
     overturned = ({"ids": sorted({*by_person, *by_reviewer}), "by_person": by_person, "by_reviewer": by_reviewer}
                   if approved or by_person else None)
 

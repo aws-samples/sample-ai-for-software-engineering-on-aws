@@ -43,7 +43,8 @@ def recorded(tmp: Path, rid: str = "r1115done") -> dict:
               {"seq": 2, "at": T0 + 900, "kind": "bounce", "text": "人在分诊关卡改了 2 条决定",
                "data": {"answers": ["F-012", "F-021"], "justified": ["F-012"]}}]
     write(tmp / "data" / "runs" / rid / "events.jsonl", "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events))
-    review = {"kind": "work", "summary": "要改：F-008 的说明不成立", "reply": "DONE: 要改\nF-1 F-008 的说明引的页不成立；F-003 也看了"}
+    review = {"kind": "work", "summary": "要改：F-008 的说明不成立", "reply": "DONE: 要改\nF-1 F-008 的说明引的页不成立；F-003 也看了\n"
+              "- **推翻说明**：F-008\n\n复核通过：F-012 的说明成立，结论不变"}  # F-012 named to confirm it: no overturn
     return {"id": rid, "title": "vstatd 本批", "status": "done", "started_at": T0, "repo": str(root / "repo"),
             "team": {"checks": CHECKS, "roles": ROLES, "bench": {"deploy": ["cc1.sh"]}},
             "lanes": {"reviewer": {"attempts": [review, {"kind": "review", "summary": "可以交付", "reply": "F-012 无害"}]}},

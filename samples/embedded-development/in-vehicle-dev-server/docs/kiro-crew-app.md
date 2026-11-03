@@ -170,7 +170,8 @@ this app the agents use no such server (D2, D3), so the view leaves that figure 
 How (step 8): `GET /scorecard` reads each run's `run.json`, `events.jsonl`, approved triage and results directories,
 and the bench's `actions.jsonl` (entries tied to the run by the requester the app passes to `cc1.sh`). A
 justification counts as overturned when a person answers other than A to its question at the triage gate (the
-send-back event names it) or a reviewer's 要改 reply names a finding the approved triage justifies. Findings leave
+send-back event names it) or a reviewer's 要改 reply names a finding the approved triage justifies on a line of its
+own, `推翻说明：F-007` (naming it elsewhere, to confirm it, does not count). Findings leave
 out the entries the triage added (the refactor, D13). Times are wall clock from the run's start and are not summed
 over runs. Log differences are `logdiff`'s over the after-bench rounds, with how many no approved difference
 explained; whether a difference was a real change of behaviour is not recorded by the app, so that figure is left
@@ -406,9 +407,10 @@ the app during the run, with a test, and installed; the run went on from where i
   `SignalTable::get` with the absolute path of the check's copy, and with the stand-in sysroot every check passed
   on the final commit: 53 tests in each of plain, ThreadSanitizer and AddressSanitizer builds, peak RSS 5896 of
   8192 KiB on the emulated CC-1, 328 of 328 log entries paired with no unexplained difference.
-- **Not right yet.** The scorecard counts F-007, F-008, F-021 and F-028 as justifications the reviewer overturned:
-  it counts every justification a 要改 review names, and that review named the first three to confirm them. The
-  signed-off run is unaffected; the figure is wrong until that is fixed.
+- **Justifications overturned.** The scorecard first counted F-007, F-008, F-021 and F-028 as overturned by the
+  reviewer: it counted every justification a 要改 review named, and that review named them to confirm them. The
+  reviewer now writes an overturn on a line of its own, `推翻说明：F-007` (team file brief), and only that line
+  counts; for this run the figure is 0, which is what happened.
 
 ## Not yet verified
 
