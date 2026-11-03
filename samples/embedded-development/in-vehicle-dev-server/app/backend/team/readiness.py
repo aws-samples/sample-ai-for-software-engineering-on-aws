@@ -1,7 +1,7 @@
 """``GET /readiness``: what a run of the default team needs, before it starts and before its first bench action (D10),
 for the board's empty state. Read only: the bench state is read, never written.
 
-The build container image and ``bench/doctor.sh`` are probed in the background and cached; a request never waits for
+The build container image, the checks' sysroot volume and ``bench/doctor.sh`` are probed in the background and cached; a request never waits for
 them and gets the cached result with its time. doctor.sh runs once by itself and again when a person asks (it builds
 the bench runner image when that is not cached, so it is not run on every request).
 """
@@ -32,6 +32,11 @@ def runner_here(team: dict[str, Any]) -> dict[str, Any]:
         return {}
 
 
+def sysroot_of(team: dict[str, Any]) -> str:
+    """The Docker volume the team's checks mount as the sysroot (check_runner ``sysroot``; "" without one)."""
+    return str((team.get("check_runner") or {}).get("sysroot") or "")
+
+
 def platform_of(runner: dict[str, Any]) -> str:
     """The ``--platform`` of a resolved runner's docker words, else this machine's (linux/<arch>)."""
     words = list(runner.get("docker") or [])
@@ -43,10 +48,27 @@ def platform_of(runner: dict[str, Any]) -> str:
     return f"linux/{checks.host_arch()}"
 
 
+def sysroot_command(runner: dict[str, Any], volume: str, sample: Path) -> str:
+    """The command that makes the stand-in sysroot in *volume*: tools/make-standin-sysroot.py in this machine's build
+    container (resolved *runner*), with the volume at checks.SYSROOT_AT and the scenario folder read-only at /sample."""
+    return shlex.join(["docker", "run", "--rm", "--platform", platform_of(runner),
+                       "-v", f"{volume}:{checks.SYSROOT_AT}", "-v", f"{sample}:/sample:ro", runner["image"],
+                       "python3", "/sample/reference-project/tools/make-standin-sysroot.py", checks.SYSROOT_AT])
+
+
 async def image_exists(docker: str, image: str) -> dict[str, Any]:
     """``docker image inspect``: ok True (there), False (not there, or Docker does not answer: *why*)."""
+    return await _inspect(docker, "image", image, "{{.Id}}", "镜像不在本机")
+
+
+async def volume_exists(docker: str, volume: str) -> dict[str, Any]:
+    """``docker volume inspect``: ok True (there), False (not there, or Docker does not answer: *why*)."""
+    return await _inspect(docker, "volume", volume, "{{.Name}}", "卷不在本机")
+
+
+async def _inspect(docker: str, kind: str, name: str, fmt: str, missing_why: str) -> dict[str, Any]:
     try:
-        proc = await asyncio.create_subprocess_exec(docker, "image", "inspect", "-f", "{{.Id}}", image,
+        proc = await asyncio.create_subprocess_exec(docker, kind, "inspect", "-f", fmt, name,
                                                     stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                                                     stderr=asyncio.subprocess.PIPE)
     except OSError as exc:
@@ -61,7 +83,7 @@ async def image_exists(docker: str, image: str) -> dict[str, Any]:
         return {"ok": True, "why": out.decode(errors="replace").strip()[:19], "at": time.time()}
     msg = err.decode(errors="replace").strip().splitlines()
     missing = any("no such" in ln.lower() for ln in msg)
-    return {"ok": False, "why": "镜像不在本机" if missing else (msg[-1][:200] if msg else "Docker 没回答"), "at": time.time()}
+    return {"ok": False, "why": missing_why if missing else (msg[-1][:200] if msg else "Docker 没回答"), "at": time.time()}
 
 
 class Probes:
@@ -70,6 +92,7 @@ class Probes:
     def __init__(self, log_dir: Path) -> None:
         self.log_dir = Path(log_dir)
         self.image: dict[str, Any] | None = None
+        self.sysroot: dict[str, Any] | None = None
         self.doctor: dict[str, Any] | None = None
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -78,11 +101,17 @@ class Probes:
         return task is not None and not task.done()
 
     def refresh(self, team: dict[str, Any], *, doctor: bool = False) -> None:
-        """Start what is due: the image probe when older than IMAGE_TTL_S, doctor.sh when never run or *doctor*."""
+        """Start what is due: the image and sysroot probes when older than IMAGE_TTL_S, doctor.sh when never run or
+        *doctor*."""
         runner, spec = runner_here(team), team.get("bench") or {}
+        docker = (runner.get("docker") or ["docker"])[0]
         if runner.get("image") and not self.running("image") and (
                 self.image is None or time.time() - self.image["at"] >= IMAGE_TTL_S):
-            self._start("image", self._image((runner.get("docker") or ["docker"])[0], runner["image"]))
+            self._start("image", self._image(docker, runner["image"]))
+        volume = sysroot_of(team)
+        if runner.get("image") and volume and not self.running("sysroot") and (
+                self.sysroot is None or time.time() - self.sysroot["at"] >= IMAGE_TTL_S):
+            self._start("sysroot", self._sysroot(docker, volume))
         if spec.get("doctor") and not self.running("doctor") and (doctor or self.doctor is None):
             self._start("doctor", self._doctor(spec["doctor"]))
 
@@ -91,6 +120,9 @@ class Probes:
 
     async def _image(self, docker: str, image: str) -> None:
         self.image = await image_exists(docker, image)
+
+    async def _sysroot(self, docker: str, volume: str) -> None:
+        self.sysroot = await volume_exists(docker, volume)
 
     async def _doctor(self, cmd: list[str]) -> None:
         log = self.log_dir / "doctor.log"
@@ -155,6 +187,11 @@ def items(team: dict[str, Any], probes: Probes, knowledge: dict[str, Any] | None
             f"docker build --platform {shlex.quote(platform_of(runner))} -t {shlex.quote(name)} {shlex.quote(str(tools))}/",
             "checks",
             img["at"] if img else None, probes.running("image"))
+        volume, vol = sysroot_of(team), probes.sysroot
+        if volume:
+            add("sysroot", f"检查用的 sysroot（{volume}）", None if vol is None else vol["ok"],
+                "正在查" if vol is None else ("在本机" if vol["ok"] else vol["why"]),
+                sysroot_command(runner, volume, sample), "checks", vol["at"] if vol else None, probes.running("sysroot"))
     elif (team.get("check_runner") or {}).get("image"):
         add("image", "构建容器镜像", False, f"团队文件的 check_runner 没有本机架构（{checks.host_arch()}）的镜像",
             "", "checks")

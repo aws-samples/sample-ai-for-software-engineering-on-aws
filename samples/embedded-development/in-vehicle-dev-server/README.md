@@ -235,6 +235,8 @@ On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
 
    ```bash
    docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/   # Apple Silicon; linux/amd64 and vstatd-build:amd64 on Intel
+   docker run --rm --platform linux/arm64 -v vstatd-standin-sysroot:/opt/cc1-sysroot -v "$PWD":/sample:ro vstatd-build:arm64 \
+     python3 /sample/reference-project/tools/make-standin-sysroot.py /opt/cc1-sysroot   # the checks' sysroot (stand-in)
    bench/build-target.sh        # the target image and its sysroot (first build: about 40 min, bench/README.md)
    bench/doctor.sh
    ```
@@ -415,7 +417,9 @@ are those `dpkg-query` reports in the container, the same in both images; GCC 12
 | `ca-certificates` (HTTPS downloads of the stand-in sysroot) | 20260816 | MPL-2.0 (certificate data) |
 
 Until the bench's Buildroot build (build plan item 3) provides the CC-1 sysroot, `tools/make-standin-sysroot.py`
-unpacks a stand-in from Ubuntu 24.04 arm64 packages; it is generated on the build server and not committed:
+unpacks a stand-in from Ubuntu 24.04 arm64 packages; it is generated on the build server and not committed. The app's
+checks mount it from the Docker volume `vstatd-standin-sysroot` (`check_runner.sysroot` in `app/team/team-vstatd.json`)
+until the Buildroot sysroot in `cc1-sysroot` also carries the C++ standard headers, which clang-tidy needs:
 
 | Packages | Licence |
 | --- | --- |

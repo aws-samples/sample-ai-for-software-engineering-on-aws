@@ -370,7 +370,9 @@ bench images; step 12 needs them.
 - With the Buildroot sysroot of `bench/build-target.sh` in the volume `cc1-sysroot`, `checks/static.sh` is BLOCKED
   once the toolchain file sets the sysroot: clang-tidy finds no C++ standard headers (`'chrono' file not found`),
   because that sysroot has `libstdc++` but not its headers. The same in the amd64 and the arm64 image; with the
-  stand-in sysroot of `tools/make-standin-sysroot.py` the check examples are 23 of 23 (2026-11-03).
+  stand-in sysroot of `tools/make-standin-sysroot.py` the check examples are 23 of 23 (2026-11-03). The app's checks
+  therefore mount the stand-in from the volume `vstatd-standin-sysroot` (team file `check_runner.sysroot`, resolved
+  when a container starts, so a stored run takes it too); not yet seen: a full run of the app's checks with it.
 - How long a full check run, the independent rerun (D9) and the Buildroot image build (D10) take on a Mac.
 - Whether write-scope rules in an agent's own configuration are enforced on a machine whose user-level
   `permissions.yaml` does not allow everything (D2).

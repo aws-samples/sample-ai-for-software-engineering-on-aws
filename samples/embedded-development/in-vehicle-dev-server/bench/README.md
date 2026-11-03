@@ -147,6 +147,10 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
   for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on
   Apple Silicon (the host `g++-12` and `binutils` already target `aarch64-linux-gnu`), `linux/amd64` and
   `vstatd-build:amd64` with the cross compiler on x86_64. The amd64 image under Rosetta cannot run ThreadSanitizer.
+- **C++ headers in the sysroot.** Export the toolchain's libstdc++ headers (`usr/include/c++`) into `cc1-sysroot`:
+  Buildroot keeps them in its toolchain, so with this sysroot `checks/static.sh` is BLOCKED (clang-tidy:
+  `'array' file not found`) while g++ builds. Until then the app's checks mount the stand-in sysroot of
+  `reference-project/tools/make-standin-sysroot.py` from the volume `vstatd-standin-sysroot`.
 - **SSH host key.** The target makes a new host key on every boot and the bench does not check it; the connection is
   loopback inside the runner container.
 - **QEMU version.** The runner uses Ubuntu 24.04's QEMU 8.2.2, not the QEMU that Buildroot builds for itself.

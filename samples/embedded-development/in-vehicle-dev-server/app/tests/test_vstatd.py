@@ -145,10 +145,24 @@ def test_the_check_runner_is_the_native_image_of_the_machine_it_runs_on(machine,
     runner = raw_team()["check_runner"]
     got = checks_mod.resolve_runner(runner, machine)
     assert got["image"] == f"vstatd-build:{arch}"
-    assert got["docker"] == [*runner["docker"], "--platform", f"linux/{arch}"]
+    assert got["docker"] == [*runner["docker"], "--platform", f"linux/{arch}",
+                             "-v", "vstatd-standin-sysroot:/opt/cc1-sysroot:ro"]
     assert runner["image"] == {"arm64": "vstatd-build:arm64", "amd64": "vstatd-build:amd64"}  # not changed
+    assert runner["sysroot"] == "vstatd-standin-sysroot" and "cc1-sysroot:/opt/cc1-sysroot:ro" not in runner["docker"]
     one = {"docker": ["docker", "run", "--platform", "linux/amd64"], "image": "img"}
     assert checks_mod.resolve_runner(one, machine) is one  # one image: as the team file says
+    assert checks_mod.resolve_runner({**one, "sysroot": "vol"}, machine) == {
+        "docker": [*one["docker"], "-v", "vol:/opt/cc1-sysroot:ro"], "image": "img"}
+
+
+def test_the_sysroot_is_one_volume_name_and_docker_mounts_nothing_else_there():
+    runner = raw_team()["check_runner"]
+    checks_mod._check_runner(runner)
+    for bad in ("", "/opt/x", "vol:/opt/cc1-sysroot", 3):
+        with pytest.raises(ValueError, match="sysroot 要写成一个 Docker 卷名"):
+            checks_mod._check_runner({**runner, "sysroot": bad})
+    with pytest.raises(ValueError, match="docker 里就不要再挂 /opt/cc1-sysroot"):
+        checks_mod._check_runner({**runner, "docker": [*runner["docker"], "-v", "cc1-sysroot:/opt/cc1-sysroot:ro"]})
 
 
 def test_a_machine_without_an_image_in_the_team_file_cannot_run_the_checks(monkeypatch):
@@ -171,6 +185,20 @@ def test_a_run_made_with_one_image_takes_the_per_architecture_runner():
     own = {"docker": ["docker", "run"], "image": "my-build:1"}
     assert checks_mod.adopt_runner(own, current) is own
     assert checks_mod.adopt_runner(old, None) is old and checks_mod.adopt_runner(current, current) is current
+
+
+def test_a_run_made_with_the_buildroot_sysroot_in_docker_takes_the_sysroot_setting():
+    """A run made after the image was per architecture but with ``-v cc1-sysroot:/opt/cc1-sysroot:ro`` in docker
+    (before the sysroot was a setting) uses the team file's runner and so the stand-in sysroot; a runner that differs
+    in anything else is its own."""
+    current = raw_team()["check_runner"]
+    before = {k: v for k, v in current.items() if k != "sysroot"}
+    before["docker"] = [*current["docker"], "-v", "cc1-sysroot:/opt/cc1-sysroot:ro"]
+    assert checks_mod.adopt_runner(before, current) is current
+    other = {**before, "docker": [*before["docker"], "--cpus", "2"]}
+    assert checks_mod.adopt_runner(other, current) is other
+    own = {**before, "sysroot": "my-sysroot", "docker": current["docker"]}
+    assert checks_mod.adopt_runner(own, current) is own
 
 
 @pytest.mark.parametrize("machine, arch", [("arm64", "arm64"), ("x86_64", "amd64")])
@@ -204,8 +232,8 @@ def test_a_run_starts_from_the_scenarios_reference_project(tmp_path, monkeypatch
             assert f"{SAMPLE}/checks/README.md" in task and "${sample}" not in task
             assert "知识库来源「vstatd」" in task and "[VSTATD-IF p.7 §4.1]" in task
             wt = run.lane("triage")["worktree"]
-            assert (f"docker run --rm --security-opt seccomp=unconfined -v cc1-sysroot:/opt/cc1-sysroot:ro "
-                    f"--platform linux/{arch} -v {wt}:{wt}:ro") in task
+            assert (f"docker run --rm --security-opt seccomp=unconfined --platform linux/{arch} "
+                    f"-v vstatd-standin-sysroot:/opt/cc1-sysroot:ro -v {wt}:{wt}:ro") in task
             assert f"-w {wt} vstatd-build:{arch} sh -c 'cmake -S . -B /tmp/build" in task
             assert "{build_env}" not in task and "`docs/aidlc/triage.json`" in task
         finally:
@@ -267,6 +295,8 @@ def test_a_stored_run_with_the_amd64_image_runs_its_checks_in_this_machines_imag
             cmd = checks_mod.docker_command(runner, [], ["true"])
             assert cmd[cmd.index("--platform") + 1] == "linux/arm64" and cmd.count("--platform") == 1
             assert "vstatd-build:arm64" in cmd and "vstatd-build:amd64" not in cmd
+            assert cmd[cmd.index("vstatd-standin-sysroot:/opt/cc1-sysroot:ro") - 1] == "-v"
+            assert not any(w.startswith("cc1-sysroot:") for w in cmd)  # not the Buildroot sysroot (no C++ headers)
         finally:
             await again.stop()
 

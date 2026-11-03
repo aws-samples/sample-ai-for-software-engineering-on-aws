@@ -39,6 +39,7 @@ BENCH_ACTIONS = ("deploy", "restart", "replay")
 BENCH_TOOLS = ("doctor", "build", "start")  # the app runs doctor; build and start are the bench owner's, shown on the board
 ARCHES = ("arm64", "amd64")  # a check runner's image and platform per host architecture, as Docker names them
 MACHINE_ARCH = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "amd64", "amd64": "amd64"}  # from platform.machine()
+SYSROOT_AT = "/opt/cc1-sysroot"  # where the build container finds the CC-1 sysroot (the toolchain file's CMAKE_SYSROOT)
 
 
 def _words(x: Any) -> bool:
@@ -102,9 +103,15 @@ def _per_arch(value: Any) -> bool:
 def _check_runner(runner: Any) -> None:
     """``{docker: [命令和参数], image: 镜像名}``, or with the image per host architecture
     ``{docker, image: {arm64: …, amd64: …}, platform: {arm64: linux/arm64, amd64: linux/amd64}}`` (the platform is
-    optional and, when given, names the same architectures; ``docker`` then has no ``--platform`` of its own)."""
+    optional and, when given, names the same architectures; ``docker`` then has no ``--platform`` of its own).
+    ``sysroot``, optional: the Docker volume mounted read-only at SYSROOT_AT (``docker`` then mounts nothing there)."""
     if not (isinstance(runner, dict) and _words(runner.get("docker"))):
         raise ValueError("team.json：check_runner 要写成 {docker: [命令和参数], image: 镜像名}")
+    sysroot = runner.get("sysroot")
+    if sysroot is not None and not (isinstance(sysroot, str) and sysroot and ":" not in sysroot and "/" not in sysroot):
+        raise ValueError("team.json：check_runner 的 sysroot 要写成一个 Docker 卷名（挂在 /opt/cc1-sysroot）")
+    if sysroot is not None and _sysroot_mount(runner["docker"]) is not None:
+        raise ValueError("team.json：check_runner 写了 sysroot，docker 里就不要再挂 /opt/cc1-sysroot")
     image, plat = runner.get("image"), runner.get("platform")
     if isinstance(image, str) and image:
         if plat is None:
@@ -119,6 +126,14 @@ def _check_runner(runner: Any) -> None:
         raise ValueError("team.json：check_runner 写了 platform，docker 里就不要再写 --platform")
 
 
+def _sysroot_mount(words: list[str]) -> int | None:
+    """The index of the ``-v`` whose mount is at SYSROOT_AT in docker *words*, else None."""
+    for i, w in enumerate(words[:-1]):
+        if w == "-v" and words[i + 1].split(":")[1:2] == [SYSROOT_AT]:
+            return i
+    return None
+
+
 def host_arch(machine: str | None = None) -> str:
     """This machine's architecture as Docker names it (arm64, amd64); another machine name is returned as it is."""
     m = (machine if machine is not None else platform.machine()).lower()
@@ -127,25 +142,36 @@ def host_arch(machine: str | None = None) -> str:
 
 def resolve_runner(runner: dict[str, Any], machine: str | None = None) -> dict[str, Any]:
     """The check runner for this machine (*machine*: ``platform.machine()`` by default), as ``{docker, image}`` with
-    the image a name and the platform in ``docker``. Resolved each time a container starts, not when a run is
-    created, so a run made on one machine runs its checks in the native image of the one it runs on. A runner whose
-    image is one name is returned as it is; a ValueError when the team file has no image for this architecture."""
-    image = runner["image"]
+    the image a name and the platform and the sysroot volume in ``docker``. Resolved each time a container starts, not
+    when a run is created, so a run made on one machine runs its checks in the native image of the one it runs on. A
+    runner whose image is one name and that has no sysroot is returned as it is; a ValueError when the team file has
+    no image for this architecture."""
+    image, sysroot = runner["image"], runner.get("sysroot")
+    mount = ["-v", f"{sysroot}:{SYSROOT_AT}:ro"] if sysroot else []
     if isinstance(image, str):
-        return runner
+        return {"docker": list(runner["docker"]) + mount, "image": image} if mount else runner
     arch = host_arch(machine)
     if arch not in image:
         raise ValueError(f"team.json：check_runner 没有 {arch} 的镜像（有 {'、'.join(image)}）")
     plat = (runner.get("platform") or {}).get(arch)
-    return {"docker": list(runner["docker"]) + (["--platform", plat] if plat else []), "image": image[arch]}
+    return {"docker": list(runner["docker"]) + (["--platform", plat] if plat else []) + mount, "image": image[arch]}
 
 
 def adopt_runner(old: Any, current: Any) -> Any:
-    """The check runner a loaded run uses: its own, unless that is one image name the team file now declares per
-    architecture (a run made before the image was per architecture), when it is the team file's declaration."""
-    if (isinstance(old, dict) and isinstance(old.get("image"), str) and isinstance(current, dict)
-            and isinstance(current.get("image"), dict) and old["image"] in current["image"].values()):
+    """The check runner a loaded run uses: its own, unless the team file's declaration is a later form of it, when it
+    is the team file's: a run made before the image was per architecture (one image name the team file now declares
+    per architecture), or before the sysroot was a setting (the same runner with a volume mounted at SYSROOT_AT in
+    ``docker`` where the team file names its ``sysroot``)."""
+    if not (isinstance(old, dict) and isinstance(current, dict)):
+        return old
+    if (isinstance(old.get("image"), str) and isinstance(current.get("image"), dict)
+            and old["image"] in current["image"].values()):
         return current
+    words, at = list(old.get("docker") or []), _sysroot_mount(list(old.get("docker") or []))
+    if current.get("sysroot") and old.get("sysroot") is None and at is not None:
+        del words[at:at + 2]
+        if {**old, "docker": words} == {k: v for k, v in current.items() if k != "sysroot"}:
+            return current
     return old
 
 

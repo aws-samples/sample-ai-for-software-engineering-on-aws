@@ -90,7 +90,7 @@ class Service:
         if self.started:
             return
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        try:  # a run made before the build image was per architecture takes the team file's (checks.adopt_runner)
+        try:  # a run made before the image was per architecture or the sysroot a setting takes the team file's
             runner = (await asyncio.to_thread(load_team, self.team_file)).get("check_runner")
         except (OSError, ValueError):
             runner = None

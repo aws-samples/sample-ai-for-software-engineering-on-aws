@@ -18,7 +18,10 @@ checks_mod = mod("checks")
 
 DOCKER = f"""#!{sys.executable}
 import sys
-print("Error: No such image: " + sys.argv[-1], file=sys.stderr)
+if sys.argv[1] == "volume":
+    print("Error response from daemon: get " + sys.argv[-1] + ": no such volume", file=sys.stderr)
+else:
+    print("Error: No such image: " + sys.argv[-1], file=sys.stderr)
 sys.exit(1)
 """
 
@@ -91,19 +94,24 @@ def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatc
             assert r.status == 200 and time.monotonic() - t0 < 1.0  # doctor.sh is still running
             first = {i["key"]: i for i in r.body["items"]}
             assert r.body["team"] == "AIDLC-Embedded团队" and r.body["error"] == ""
-            assert list(first) == ["knowledge", "image", "doctor", "target", "baseline", "console"]
+            assert list(first) == ["knowledge", "image", "sysroot", "doctor", "target", "baseline", "console"]
             assert first["doctor"]["ok"] is None and first["doctor"]["running"] and first["doctor"]["detail"] == "正在跑"
             for _ in range(100):
                 await asyncio.sleep(0.05)
                 items = {i["key"]: i for i in (await call(routes, "GET", "/readiness")).body["items"]}
-                if items["doctor"]["ok"] is not None and items["image"]["ok"] is not None:
+                if all(items[k]["ok"] is not None for k in ("doctor", "image", "sysroot")):
                     break
-            assert {k: i["needed"] for k, i in items.items()} == {"knowledge": "start", "image": "checks", "doctor": "bench",
-                                                                   "target": "bench", "baseline": "bench", "console": "bench"}
+            assert {k: i["needed"] for k, i in items.items()} == {"knowledge": "start", "image": "checks", "sysroot": "checks",
+                                                                   "doctor": "bench", "target": "bench", "baseline": "bench", "console": "bench"}
             assert items["knowledge"]["ok"] is None  # Kiro Crew's sources not read yet
             assert items["image"]["ok"] is False and items["image"]["detail"] == "镜像不在本机"
             assert items["image"]["label"] == f"构建容器镜像 vstatd-build:{arch}"
             assert items["image"]["command"] == f"docker build --platform linux/{arch} -t vstatd-build:{arch} {sample}/reference-project/tools/"
+            assert items["sysroot"]["label"] == "检查用的 sysroot（vstatd-standin-sysroot）"
+            assert items["sysroot"]["ok"] is False and items["sysroot"]["detail"] == "卷不在本机"
+            assert items["sysroot"]["command"] == (
+                f"docker run --rm --platform linux/{arch} -v vstatd-standin-sysroot:/opt/cc1-sysroot -v {sample}:/sample:ro "
+                f"vstatd-build:{arch} python3 /sample/reference-project/tools/make-standin-sysroot.py /opt/cc1-sysroot")
             assert items["doctor"]["ok"] is False and not items["doctor"]["running"] and items["doctor"]["age_s"] >= 0
             assert "no target image" in items["doctor"]["detail"] and "the supply is not set" in items["doctor"]["detail"]
             assert items["doctor"]["command"] == f"{sample}/bench/build-target.sh"
