@@ -21,6 +21,8 @@ export interface TestWallProps {
   focus: string | null
   onRole: (key: string) => void
   flips: Record<string, number>
+  /** 补登发现并交给角色, on a run held for a person after the checks (absent: not offered, e.g. in a replay) */
+  onFinding?: () => void
 }
 
 export interface AcGroup {
@@ -50,7 +52,7 @@ export function groupLabel(g: AcGroup, prev: AcGroup | undefined, multi: boolean
   return CASE_GROUPS[k].label
 }
 
-export function TestWall({ tests, roles, focus, onRole, flips }: TestWallProps) {
+export function TestWall({ tests, roles, focus, onRole, flips, onFinding }: TestWallProps) {
   const [inspect, setInspect] = useState<string | null>(null)
   const byRole = new Map(roles.map((l) => [l.key, l]))
   const groups = groupByAc(tests.cases)
@@ -81,6 +83,14 @@ export function TestWall({ tests, roles, focus, onRole, flips }: TestWallProps) 
         <div className="kt-spark-row">
           <span title="app 每次在运行分支上跑测试记一个点">通过数</span>
           <Sparkline history={tests.history} total={tests.total} />
+        </div>
+      )}
+      {tests.held && (
+        <div className="kt-bench-held" role="status" data-testid="kt-wall-held">
+          <b>交给人决定：</b>{tests.held.why}
+          {onFinding && (
+            <span><button type="button" className="kt-btn" onClick={onFinding}>补登发现并交给角色</button></span>
+          )}
         </div>
       )}
       {checked ? (

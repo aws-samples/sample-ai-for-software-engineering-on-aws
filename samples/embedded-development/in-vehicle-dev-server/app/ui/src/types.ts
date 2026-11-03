@@ -465,6 +465,7 @@ export type TeamEventKind =
   | 'skipped' // a role this project does not need
   | 'gate' // a role's output waits for a person (from role -> to 'person')
   | 'approved' // the person approved it (from 'person' -> to role)
+  | 'finding' // 补登发现 (TR §4.4): a person registered what a check found and handed it to a role (person -> role)
   | 'signoff' // 签字放行: a person signed for the release
   | 'plan' // 分工提案: the gated role proposed who does what; it holds once a person approves the gate
   | 'member' // a required role is held for its Crew member (and starts once a person adds it)

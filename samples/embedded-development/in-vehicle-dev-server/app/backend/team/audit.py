@@ -105,6 +105,12 @@ def _event_entry(e: dict[str, Any], s: dict[str, Any], titles: dict[str, str], e
         sig = s.get("signoff") or {}
         return _entry(at, "person", str(sig.get("by") or person), "signoff", text, " ".join(
             x for x in (f"测试 {sig['tests']}" if sig.get("tests") else "", f"合入 {sig['merged']}" if sig.get("merged") else "") if x))
+    if kind == "finding":  # 补登发现 (TR §4.4): a person registers what a check found and hands it to a role
+        paths = " ".join(map(str, data.get("paths") or []))
+        return _entry(at, "person", str(data.get("by") or person), "before", text, " ".join(
+            x for x in (str(data.get("id") or ""), f"检查 {data['check']}" if data.get("check") else "",
+                        f"交给 {titles.get(str(data.get('role')), str(data.get('role') or ''))}" if data.get("role") else "",
+                        f"可写 {paths}" if paths else "") if x))
     if kind in ("approved", "talk", "bounce") and frm == "person":
         return _entry(at, "person", person, gate, text, ev)
     if kind == "plan" and (text.startswith("人") or text.startswith("分诊批准")):

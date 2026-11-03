@@ -19,6 +19,7 @@ export const paths = {
   file: (run: string, role: string, path: string, view: 'content' | 'diff') =>
     `${BASE}/runs/${enc(run)}/roles/${enc(role)}/file?path=${enc(path)}&view=${view}`,
   retry: (run: string) => `${BASE}/runs/${enc(run)}/retry`,
+  finding: (run: string) => `${BASE}/runs/${enc(run)}/finding`,
   gate: (run: string) => `${BASE}/runs/${enc(run)}/gate`,
   open: (run: string) => `${BASE}/runs/${enc(run)}/open`,
   cleanup: () => `${BASE}/sessions/cleanup`,
@@ -80,6 +81,7 @@ export const EVENT_META: Record<TeamEventKind, { icon: string; label: string; to
   skipped: { icon: '–', label: '跳过', tone: 'idle' },
   gate: { icon: '✋', label: '等人批准', tone: 'approve' },
   approved: { icon: '👍', label: '人批准', tone: 'ok' },
+  finding: { icon: '📌', label: '补登发现', tone: 'approve' },
   signoff: { icon: '✍️', label: '签字放行', tone: 'approve' },
   plan: { icon: '🗂️', label: '分工提案', tone: 'handoff' },
   member: { icon: '⏸', label: '缺成员', tone: 'warn' },

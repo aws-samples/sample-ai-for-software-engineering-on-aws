@@ -20,6 +20,54 @@ except ImportError:  # pragma: no cover
 MAX_REQUIREMENT = 8000
 
 
+def _text(body: dict[str, Any], key: str, limit: int, required: bool = False) -> str:
+    v = body.get(key)
+    if v is not None and not isinstance(v, str):
+        raise AppError(f"{key} 要是文字", "invalid_finding")
+    v = " ".join((v or "").split())
+    if required and not v:
+        raise AppError(f"要写明 {key}", "invalid_finding")
+    if len(v) > limit:
+        raise AppError(f"{key} 太长了（最多 {limit} 字）", "invalid_finding")
+    return v
+
+
+def _texts(body: dict[str, Any], key: str, limit: int = 120) -> list[str]:
+    v = body.get(key, [])
+    if not isinstance(v, list) or len(v) > 20 or not all(isinstance(x, str) and 0 < len(x.strip()) <= limit for x in v):
+        raise AppError(f"{key} 要是文字的列表（最多 20 条）", "invalid_finding")
+    return list(dict.fromkeys(x.strip() for x in v))
+
+
+def scope_glob(g: str) -> bool:
+    """A path a person adds to a role's write scope: relative, inside the project, not everything."""
+    return not g.startswith(("/", "~", ".git", "!")) and ".." not in g.split("/") and g.strip("*/") != "" and "\\" not in g
+
+
+def finding_body(body: dict[str, Any]) -> dict[str, Any]:
+    """POST /runs/{rid}/finding, its shape checked (what it means is checked by the run, the triage by its rules)."""
+    out: dict[str, Any] = {k: _text(body, k, n, True) for k, n in (("check", 40), ("tool", 80), ("location", 200), ("role", 40))}
+    out.update({k: _text(body, k, n) for k, n in (("reason", 400), ("pick_up_when", 400), ("note", 1000), ("by", 60))})
+    if not out["by"]:
+        raise AppError("要写明是谁补登的（by）", "invalid_finding")
+    if body.get("decision") not in ("fix", "justify", "defer"):
+        raise AppError("decision 只能是 fix、justify 或 defer", "invalid_finding")
+    out["decision"] = body["decision"]
+    if body.get("evidence") not in (None, "", "unit-test", "static-analysis", "build"):
+        raise AppError("evidence 只能是 unit-test、static-analysis 或 build", "invalid_finding")
+    out["evidence"] = body.get("evidence") or None
+    for k in ("behaviour", "continue"):
+        if body.get(k) is not None and not isinstance(body[k], bool):
+            raise AppError(f"{k} 要是 true 或 false", "invalid_finding")
+    out["behaviour"] = body.get("behaviour")
+    out["continue"] = body.get("continue", True)
+    out.update(facts=_texts(body, "facts", 40), cites=_texts(body, "cites", 60), paths=_texts(body, "paths"))
+    bad = [g for g in out["paths"] if not scope_glob(g)]
+    if bad:
+        raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding")
+    return out
+
+
 def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = None) -> list[Any]:
     web = web if web is not None else _web
     if web is None:
@@ -134,6 +182,10 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         return kit.json(await svc.gate(str(request.match_info.get("rid", "")), role, decision, (note or "").strip()[:4000],
                                        delivery, answers, risk, (by or "").strip()[:60]))
 
+    async def finding(request: Any) -> Any:
+        body = await kit.body(request)
+        return kit.json(await svc.finding(str(request.match_info.get("rid", "")), finding_body(body)))
+
     async def signoff(request: Any) -> Any:
         body = await kit.body(request)
         by, note = body.get("by"), body.get("note")
@@ -181,6 +233,7 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         AppRoute("POST", "/runs/{rid}/retry", kit.guarded(retry)),
         AppRoute("POST", "/runs/{rid}/gate", kit.guarded(gate)),
         AppRoute("POST", "/runs/{rid}/signoff", kit.guarded(signoff)),
+        AppRoute("POST", "/runs/{rid}/finding", kit.guarded(finding)),
         AppRoute("POST", "/runs/{rid}/hide", kit.guarded(hide_run)),
         AppRoute("GET", "/runs/{rid}/events", kit.guarded(events)),
         AppRoute("GET", "/runs/{rid}/flow", kit.guarded(run_flow)),

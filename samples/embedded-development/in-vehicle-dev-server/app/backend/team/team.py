@@ -66,6 +66,14 @@ _ROLE_ALIASES = {"后端": "backend", "服务端": "backend", "前端": "fronten
                  "架构": "architect"}
 
 
+class FindingRefused(ValueError):
+    """The triage with a person's new finding would not pass the checks' rules: what is wrong."""
+
+    def __init__(self, problems: list[str]) -> None:
+        super().__init__("；".join(problems))
+        self.problems = problems
+
+
 @dataclass
 class Deps:
     """What a run needs from outside; tests pass fakes."""
@@ -354,7 +362,9 @@ class TeamRun:
 
     @property
     def test_writers(self) -> list[str]:
-        return [k for k in self.order if any(g.startswith("tests/") for g in self.roles[k]["writable"])]
+        # a test file a person added to an implementer's scope with a finding (TR §4.4) does not make it a test writer
+        return [k for k in self.order if any(g.startswith("tests/") and g not in (self.roles[k].get("granted") or [])
+                                             for g in self.roles[k]["writable"])]
 
     @property
     def ended(self) -> bool:
@@ -525,9 +535,10 @@ class TeamRun:
                                                 if self.roles[k]["writable"] and k in before)
 
     async def _start(self, key: str, kind: str, mgr: Any, *, failing: list[dict[str, Any]] | None = None,
-                     conflicts: list[str] | None = None, review: str = "") -> None:
-        """A new attempt: ``work`` (the role's first, or a retry of it), ``fix`` (failing tests), ``conflict`` (its
-        merge) or ``review`` (what a 要改 review found in its area)."""
+                     conflicts: list[str] | None = None, review: str = "", found: list[dict[str, Any]] | None = None) -> None:
+        """A new attempt: ``work`` (the role's first, or a retry of it), ``fix`` (failing tests; with *found*: the
+        findings a person registered for them), ``conflict`` (its merge) or ``review`` (what a 要改 review found in its
+        area)."""
         s, lane, role, now = self.s, self.lane(key), self.roles[key], self.d.now()
         again = kind == "work" and bool(lane["attempts"]) and bool(lane.get("worktree"))  # a retry: its worktree stays
         if again and not role["writable"]:  # read-only: it looks at what is merged now, in its own snapshot
@@ -558,7 +569,10 @@ class TeamRun:
                 self.emit("handoff", f"{self.title(dep)}把 {outs} 交给{self.title(key)}", role=key, frm=dep, to=key,
                           data={"carry": outs})
         n = len(lane["attempts"]) + 1
-        if kind == "fix":
+        if kind == "fix" and found:
+            caught_up = await self._catch_up(key)
+            task, label = self._found_task(key, n, found, caught_up), f"修 {'、'.join(f['id'] for f in found)}"
+        elif kind == "fix":
             names = "、".join(c["ac"] or c["name"] for c in failing[:6]) + ("等" if len(failing) > 6 else "")
             caught_up = await self._catch_up(key)
             task, label = self._fix_task(key, n, failing, caught_up, said=review), f"修 {names}"
@@ -829,6 +843,129 @@ class TeamRun:
             self._settle()
             await self.save()
             return picked
+
+    # --- a finding a check found, registered by a person (TR §4.4) ------------------------------------------- #
+
+    def _knowledge(self) -> Path | None:
+        return next((Path(r["triage"]["knowledge"]) for r in self.team["roles"] if r.get("triage")), None)
+
+    def next_finding_id(self) -> str:
+        """The next free ID: after the backlog's and every ID in the approved triage (added ones take them in turn)."""
+        k, t = self._knowledge(), self._approved_triage() or {}
+        ids = [int(i[2:]) for i in (triage_mod.backlog(k) if k else {})]
+        ids += [int(f["id"][2:]) for f in t.get("findings") or [] if isinstance(f, dict)
+                and re.fullmatch(r"F-\d{3}", str(f.get("id")))]
+        return f"F-{max(ids, default=0) + 1:03d}"
+
+    async def register_finding(self, body: dict[str, Any]) -> dict[str, Any]:
+        """A person registers a defect a check found and the backlog does not have (TR §4.4) while the run is held
+        for them after the checks: it gets the next free ID in the approved triage (``added``: the check, its tool and
+        where), *role* may write *paths* from now on, and with ``continue`` the hold ends and the role gets one more
+        round of that check, its session continued with the check's reasons and the findings registered since the
+        hold. Without ``continue`` the run stays held, so several can be registered first.
+
+        Raises LookupError (not held), ValueError (the request) or FindingRefused (the triage would not pass)."""
+        async with self._lock:
+            t = self.s["tests"]
+            held = t.get("held")
+            if not held:
+                raise LookupError("这个运行没有在检查之后停下来等人决定")
+            spec = {c["name"]: c for c in self.team.get("checks") or []}
+            check, role = body["check"], body["role"]
+            if check not in spec:
+                raise ValueError(f"团队没有叫 {check} 的检查")
+            if role not in self.impl or not self.roles[role]["writable"]:
+                raise ValueError(f"{role} 不是做实现的角色（可以选：{'、'.join(self.impl)}）")
+            k, path = self._knowledge(), Path(self.s["repo"]).parent / TRIAGE_FILE
+            data = self._approved_triage()
+            if k is None or data is None:
+                raise ValueError("这个运行还没有批准的分诊，没地方登记发现")
+            fid = self.next_finding_id()
+            entry: dict[str, Any] = {"id": fid, "decision": body["decision"]}
+            for key in ("evidence", "behaviour", "facts", "cites", "reason", "pick_up_when", "note"):
+                if body.get(key) not in (None, "", []):
+                    entry[key] = body[key]
+            entry["added"] = {"found_by": f"checks/{check}.sh", "tool": body["tool"], "location": body["location"]}
+            data = {**data, "findings": [*data.get("findings", []), entry]}
+            problems = triage_mod.problems(data, k)
+            if problems:
+                raise FindingRefused(problems)
+            digest = await asyncio.to_thread(triage_mod.write, path, data)
+            if isinstance(self.s.get("triage"), dict):
+                self.s["triage"]["sha256"] = digest
+            r = self.roles[role]
+            added = [g for g in body["paths"] if g not in r["writable"]]
+            r["writable"] = [*r["writable"], *added]
+            r["granted"] = [*(r.get("granted") or []), *added]
+            reg = {"id": fid, "check": check, "role": role, "paths": list(body["paths"]), "added_paths": added,
+                   "decision": entry["decision"], "evidence": entry.get("evidence"), "behaviour": entry.get("behaviour"),
+                   "facts": entry.get("facts") or [], "location": body["location"], "note": body["note"], "by": body["by"]}
+            held["registered"] = [*(held.get("registered") or []), reg]
+            go_on = bool(body["continue"])
+            self.emit("finding", f"{body['by']}补登 {fid}（{check} 发现：{body['location']}，{entry['decision']}），交给{self.title(role)}，"
+                      f"可写 {'、'.join(body['paths']) or '不变'}" + ("，接着运行" if go_on else "") + (f"：{body['note']}" if body["note"] else ""),
+                      role=role, frm="person", to=role,
+                      data={"by": body["by"], "id": fid, "check": check, "role": role, "paths": list(body["paths"]),
+                            "note": body["note"], "continue": go_on})
+            if go_on:
+                await self._go_on_with_findings(held["registered"])
+            await self.save()
+            return {"id": fid, "triage_sha256": digest, "held": bool(t.get("held")), "status": self.s["status"]}
+
+    async def _go_on_with_findings(self, registered: list[dict[str, Any]]) -> None:
+        """The hold ends: each role named gets one more round of each check it was given a finding for (the check's
+        limit and the role's own), continuing its session with the findings."""
+        t = self.s["tests"]
+        t["held"] = None
+        if self.ended:
+            self._resume()
+        rounds, granted = t.setdefault("rounds", {}), t.setdefault("granted", {})
+        for c in dict.fromkeys(r["check"] for r in registered):
+            granted[c] = int(granted.get(c) or 0) + 1
+            rounds[c] = int(rounds.get(c) or 0) + 1
+        mgr = self.d.manager()
+        for key in [k for k in self.order if any(r["role"] == k for r in registered)]:
+            mine = [r for r in registered if r["role"] == key]
+            lane = self.lane(key)
+            lane["extra"] = int(lane.get("extra") or 0) + 1
+            lane["stuck"] = False
+            if lane.get("merged_sha"):
+                lane["status"] = "merged"
+            names = {r["check"] for r in mine}
+            failing = [c for c in t["cases"] if c["id"] in names] or [{"id": n, "ac": n, "name": n, "file": ""} for n in names]
+            self.emit("bounce", f"按负责人补登的 {'、'.join(r['id'] for r in mine)}，{'、'.join(sorted(names))} 交给{self.title(key)}再修一轮",
+                      role=key, frm="tests", to=key, data={"cases": sorted(names)})
+            await self._start(key, "fix", mgr, failing=failing, found=mine)
+        self._settle()
+
+    def _found_task(self, key: str, n: int, found: list[dict[str, Any]], caught_up: bool) -> str:
+        s, lane = self.s, self.lane(key)
+        rows = {r["name"]: r for r in s["tests"].get("checks") or []}
+        lines = [self._tag(key, n), "", f"你是开发团队里的「{self.title(key)}」。app 在运行分支 `{s['branch']}` 上跑的检查没过，"
+                 "停下来交给人决定。负责人按 TR §4.4 把检查发现的问题补登成分诊里的发现，交给你修："]
+        for f in found:
+            how = {"fix": "修复", "justify": "说明", "defer": "延后"}.get(f["decision"], f["decision"])
+            extra = f"，证据 {f['evidence']}" if f.get("evidence") else ""
+            lines.append(f"- {f['id']}（{f['check']} 发现，{how}{extra}）：{f['location']}" + (f"。负责人说：{f['note']}" if f.get("note") else ""))
+        lines += ["", "没过的检查和它们的原因："]
+        for c in dict.fromkeys(f["check"] for f in found):
+            row = rows.get(c) or {}
+            reasons = row.get("reasons") or [row.get("summary") or "没过"]
+            lines += [f"- {c}：{x}" for x in reasons[:8]]
+        added = sorted({g for f in found for g in f.get("added_paths") or []})
+        if added:
+            lines += ["", f"为了这些发现，你的可写范围加了：{'、'.join(f'`{g}`' for g in added)}。"]
+        if any(f.get("evidence") == "unit-test" for f in found):
+            ids = "、".join(f["id"] for f in found if f.get("evidence") == "unit-test")
+            lines.append(f"{ids} 的证据是单元测试：新加或改的测试要在名字或测试体里写它的编号（TR §4.1）。")
+        if caught_up:
+            lines += ["", "app 已经把你的分支快进到运行分支的最新提交：测试和别的角色的代码都在你的工作目录里了。"]
+        cite = "、".join(f["id"] + (f"（behaviour 为 true，再写事实条目 {'或'.join(f['facts'])}）" if f.get("behaviour") and f.get("facts") else "")
+                        for f in found)
+        lines += ["", f"在你的工作目录 {lane['worktree']}（分支 {lane['branch']}）里把它们修好。你只能改：{self._writable(key)}。",
+                  f"每个提交说明都写它修的发现编号：{cite}（TR §7.2）。",
+                  f"每个检查的完整结果在 `{s['tests'].get('results')}/<检查>.json` 和 `<检查>.log`；检查由 app 重跑，你不能改它们。"]
+        return "\n".join(lines + self._closing(key))
 
     async def _integrate(self, key: str) -> None:
         """Commit its leftovers, record what it changed, merge it into the run branch."""
@@ -1197,7 +1334,8 @@ class TeamRun:
             rows += (await self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), phase=phase, **common))["checks"]
         limits = {c["name"]: c["max_rounds"] for c in self.team["checks"]}
         (results / "repair-rounds.json").write_text(json.dumps(  # TR §5.2: the limits in use, with the run
-            {"rounds": self.s["tests"].get("rounds") or {}, "limits": limits}, ensure_ascii=False) + "\n", encoding="utf-8")
+            {"rounds": self.s["tests"].get("rounds") or {}, "limits": limits,
+             "granted": self.s["tests"].get("granted") or {}}, ensure_ascii=False) + "\n", encoding="utf-8")
         release = (await self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), phase="release", **common))["checks"]
         page = None
         if self.team.get("evidence_page"):
@@ -1234,11 +1372,12 @@ class TeamRun:
         rows = t.get("checks") or []
         failing = [r for r in rows if r["verdict"] == "FAIL"]
         rounds = self.s["tests"].setdefault("rounds", {})
+        granted = self.s["tests"].get("granted") or {}  # rounds a person gave a check with a finding (TR §4.4)
         held: list[tuple[dict[str, Any], str]] = [(r, "检查配置错误") for r in rows if r["verdict"] == "USAGE"]
         if not failing:
             held += [(r, "没法判定") for r in rows if r["verdict"] == "BLOCKED"]
         for r in failing:
-            if rounds.get(r["name"], 0) >= spec[r["name"]]["max_rounds"]:
+            if rounds.get(r["name"], 0) >= spec[r["name"]]["max_rounds"] + int(granted.get(r["name"]) or 0):
                 held.append((r, f"修了 {rounds.get(r['name'], 0)} 轮仍不过"))
             elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck") for o in r["owners"]):
                 held.append((r, "没过，负责的角色没法再改"))

@@ -16,7 +16,7 @@ const STATE_ICON: Record<StepState, string> = { todo: '', current: '●', done: 
 const STATE_LABEL: Record<StepState, string> = { todo: '还没到', current: '现在在这一步', done: '做完了', failed: '没过', held: '交给人决定' }
 
 /** During a run: the steps in one row, and 现在：… */
-export function FlowStrip({ run }: { run: RunDetail }) {
+export function FlowStrip({ run, onFinding }: { run: RunDetail; onFinding?: () => void }) {
   const f = flowOf(run)
   return (
     <section className="kt-flow" aria-label="流程" data-testid="kt-flow">
@@ -29,7 +29,11 @@ export function FlowStrip({ run }: { run: RunDetail }) {
           </li>
         ))}
       </ol>
-      <p className="kt-flow-now" data-testid="kt-flow-now"><b>现在：</b>{f.now}</p>
+      <p className="kt-flow-now" data-testid="kt-flow-now"><b>现在：</b>{f.now}
+        {onFinding && run.tests.held && f.steps.some((s) => s.state === 'held') && (
+          <> <button type="button" className="kt-btn" onClick={onFinding}>补登发现并交给角色</button></>
+        )}
+      </p>
     </section>
   )
 }

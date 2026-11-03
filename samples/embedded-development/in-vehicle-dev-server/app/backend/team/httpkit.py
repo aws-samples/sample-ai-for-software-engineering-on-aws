@@ -15,10 +15,11 @@ from .constants import APP_NAME
 class AppError(Exception):
     """An error a route answers with ``{"error", "code"}`` and *status*."""
 
-    def __init__(self, message: str, code: str = "bad_request", status: int = 400) -> None:
+    def __init__(self, message: str, code: str = "bad_request", status: int = 400, extra: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
+        self.extra = extra or {}  # more fields of the reply (a refused finding's ``problems``)
 
 
 def host_is_owner(request: Any) -> bool:
@@ -80,6 +81,6 @@ class Kit:
             try:
                 return await fn(request)
             except AppError as exc:
-                return self.err(exc.status, exc.code, str(exc))
+                return self.json({"error": str(exc), "code": exc.code, **exc.extra}, status=exc.status)
 
         return handler

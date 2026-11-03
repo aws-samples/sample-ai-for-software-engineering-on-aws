@@ -286,6 +286,24 @@ class Service:
             raise AppError("没有失败的角色可以重试", "nothing_to_retry", 409)
         return {"ok": True, "run": run.rid, "roles": picked, "status": run.s["status"]}
 
+    async def finding(self, rid: str, body: dict[str, Any]) -> dict[str, Any]:
+        """补登发现 (TR §4.4): a person registers what a check found on a run held for them after the checks, and hands
+        it to a role; with ``continue`` the run carries on (*body* as handlers.finding checked it)."""
+        run = self._run(rid)
+        self._not_imported(run, "补登发现")
+        async with self._creating:
+            active = [r.rid for r in self.runs.values() if not r.ended and r.rid != run.rid]
+            if body["continue"] and active:
+                raise AppError(f"已经有一个运行在跑（{active[0]}），一次只跑一个", "run_active", 409)
+            try:
+                return await run.register_finding(body)
+            except LookupError as exc:
+                raise AppError(str(exc), "not_held", 409)
+            except team_mod.FindingRefused as exc:
+                raise AppError(f"补登以后分诊过不了检查：{exc}", "triage_problems", 400, {"problems": exc.problems})
+            except ValueError as exc:
+                raise AppError(str(exc), "invalid_finding")
+
     async def gate(self, rid: str, role: str, decision: str, note: str = "", delivery: Any = None,
                    answers: Any = None, risk: Any = None, by: str = "") -> dict[str, Any]:
         """A person at a gate: approve, send the role back with what to change, or 讨论 (it answers; the gate stays).

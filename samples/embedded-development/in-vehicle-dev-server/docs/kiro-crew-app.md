@@ -319,6 +319,25 @@ record cannot include its own hash.
 Alternatives considered: a separate audit log the app appends to (a second record that can drift from the events);
 writing the audit into the run repository (a commit `trace.sh` would judge).
 
+### D15. A person registers what a check found and hands it to a role
+
+A check can find a defect that is not in the backlog (TR §4.4), or one whose fix lies outside every role's write
+scope; the run is then held for a person (交给人决定, D7) with nothing for 重试 to change. On a run held after the
+checks, 「补登发现并交给角色」 (on the check wall's held box and the flow strip) opens a dialog filled in from the held
+check: the tool, `file:line` from its first reason, that file as a path, and the next free ID. `POST /runs/{rid}/finding`
+appends the finding to the approved triage with `added: {found_by: "checks/<check>.sh", tool, location}` and the
+person's decision, checks the whole triage by the checks' rules (400 with the problems; nothing changes), and writes
+`triage.json` and its `.sha256` again, `base` unchanged: the person is the one approving it. The role named may write
+the paths given from then on (kept in the run's team, so the merge and the attribution of failures see them; a test
+file given this way does not make the role the test writer), and the audit shows the registration as the person's
+action. With 「接着运行」 the hold ends, the check gets one more round (`granted` in `repair-rounds.json`), the role
+one more attempt, and its session continues with the check's reasons, the findings registered since the hold, the
+paths added and the rule to cite them. Without it the run stays held, so several findings can be registered before
+the run goes on.
+
+Alternatives considered: the person editing `triage.json` and its record by hand (the app would not know the scope or
+send the round); widening the work split at the start gate (the defect is found later).
+
 ## Implementation plan
 
 Each step ends with its verification; a step is done when that verification passes. Steps 1 to 11 run without the

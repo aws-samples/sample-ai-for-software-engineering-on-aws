@@ -42,6 +42,7 @@ import { BacklogPanel } from './board/Backlog'
 import { SignOff } from './board/SignOff'
 import { BenchPanel } from './board/Bench'
 import { FlowStrip } from './board/FlowStrip'
+import { FindingDialog, type FindingBody } from './board/Finding'
 import { AuditPanel, useAudit, type AuditPick } from './board/Audit'
 import { DivisionView } from './board/DivisionGrid'
 import { flowOf } from './board/flow'
@@ -128,6 +129,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
   const [startOpen, setStartOpen] = useState(!!entry?.new)
   const [stopAsk, setStopAsk] = useState(false)
   const [gateAsk, setGateAsk] = useState<{ role: string; decision: GateDecision } | null>(null)
+  const [findingAsk, setFindingAsk] = useState(false)
   const [outputs, setOutputs] = useState<OutputsTarget | null>(null)
   const [retryErr, setRetryErr] = useState('')
   const [folderOpen, setFolderOpen] = useState(false)
@@ -310,6 +312,16 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
     },
     [api, run, gateAsk, reload],
   )
+  const finding = useCallback(
+    async (body: FindingBody) => {
+      if (!run) return
+      await api.post(paths.finding(run.id), body)
+      setFindingAsk(false)
+      reload()
+    },
+    [api, run, reload],
+  )
+  const onFinding = run && run.tests.held && !projection && !inReplay && !run.imported ? () => setFindingAsk(true) : undefined
   const gateLane = gateAsk && run ? run.roles.find((l) => l.key === gateAsk.role) : undefined
   // at a writing role's gate, the documents of its stage (the 启动 gate: architecture, interfaces, design, acceptance)
   const gateDocs = gateLane && run && gateLane.writable.length > 0
@@ -401,11 +413,12 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
         {!projection && !inReplay && startOpen && run && <StartForm onStart={start} onCancel={() => setStartOpen(false)} />}
         {!projection && !inReplay && stopAsk && run && <StopConfirm run={run} onConfirm={stop} onCancel={() => setStopAsk(false)} />}
         {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} askRisk={!!gateLane?.gate_revise_risk} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
+        {findingAsk && run?.tests.held && <FindingDialog key={run.id} run={run} onConfirm={finding} onCancel={() => setFindingAsk(false)} />}
         {board && !run && board.runs.length === 0 && <EmptyStart onStart={start} />}
         {run && lay && (
           <>
             <Kpis key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} reducedMotion={reducedMotion} onRole={onRole} />
-            {run.bench && <FlowStrip run={run} />}
+            {run.bench && <FlowStrip run={run} onFinding={onFinding} />}
             {!projection && live && <DivisionView trail={audit.trail} current={run.bench ? flowOf(run).current : null} onPick={setAuditPick} />}
             {run.roles.some((l) => l.phase) && <ExpertStrip run={run} />}
             {projection && <KnowledgePanel run={run} onRole={onRole} />}
@@ -421,7 +434,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
                 {projection && laneList}
               </div>
               <aside className="kt-side" aria-label={projection ? '测试和事件' : '检查和台架'}>
-                <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} />
+                <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} onFinding={onFinding} />
                 {run.bench && <BenchPanel bench={run.bench} />}
                 {projection && eventFeed}
               </aside>

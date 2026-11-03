@@ -183,7 +183,7 @@ ${toneVars}
   border: 1px solid var(--kt-bad); background: color-mix(in srgb, var(--kt-bad) 9%, var(--card)); }
 .kt-confirm strong { color: var(--text-strong); }
 .kt-gate-dialog { border-color: var(--kt-approve); background: color-mix(in srgb, var(--kt-approve) 9%, var(--card)); }
-.kt-gate-docs, .kt-gate-talk, .kt-gate-questions, .kt-gate-split, .kt-gate-report, .kt-gate-risk { flex: 1 1 100%; }
+.kt-gate-docs, .kt-gate-talk, .kt-gate-questions, .kt-gate-split, .kt-gate-report, .kt-gate-risk, .kt-confirm > .kt-start-row { flex: 1 1 100%; }
 .kt-gate-docs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; font-size: .93em; }
 .kt-gate-docs .kt-chip-link { display: inline-flex; align-items: center; gap: 4px; }
 .kt-gate-talk { list-style: none; margin: 6px 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--kt-glass); display: grid; gap: 6px; max-height: 260px; overflow: auto; font-size: .93em; }
