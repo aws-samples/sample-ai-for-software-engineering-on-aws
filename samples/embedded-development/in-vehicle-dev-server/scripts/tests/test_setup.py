@@ -172,7 +172,8 @@ def test_setup_dry_run_says_what_it_would_do_and_writes_nothing(home):
     assert "would record this folder in" in out and "data/sample.json" in out
     assert "+ embedded-architect-agent" in out and "would add it (" in out
     assert "workspace" not in out.split("[3/5]")[1].split("[4/5]")[0] and "members" not in out  # no members (D6)
-    assert "docker build --platform linux/amd64 -t vstatd-build:amd64 reference-project/tools/" in out
+    arch = "arm64" if platform.machine() in ("arm64", "aarch64") else "amd64"  # the native image (ThreadSanitizer)
+    assert f"docker build --platform linux/{arch} -t vstatd-build:{arch} reference-project/tools/" in out
     assert "bench/build-target.sh" in out and "Dry run: nothing was changed." in out
     assert {c[0] for c in calls(home)} == {"GET"}  # read only
     assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and not (home["home"] / "workplace").exists()

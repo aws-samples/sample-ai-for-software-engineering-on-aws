@@ -16,9 +16,31 @@ from pathlib import Path
 from typing import Any
 
 from . import bench as bench_mod
+from . import checks
 
 IMAGE_TTL_S = 30.0
 IMAGE_TIMEOUT_S = 20.0
+
+
+def runner_here(team: dict[str, Any]) -> dict[str, Any]:
+    """The team's check runner as this machine runs it (checks.resolve_runner; {} without one, or without an image
+    for this machine's architecture)."""
+    runner = team.get("check_runner") or {}
+    try:
+        return checks.resolve_runner(runner) if runner.get("image") else {}
+    except ValueError:
+        return {}
+
+
+def platform_of(runner: dict[str, Any]) -> str:
+    """The ``--platform`` of a resolved runner's docker words, else this machine's (linux/<arch>)."""
+    words = list(runner.get("docker") or [])
+    for i, w in enumerate(words):
+        if w == "--platform" and i + 1 < len(words):
+            return words[i + 1]
+        if w.startswith("--platform="):
+            return w.split("=", 1)[1]
+    return f"linux/{checks.host_arch()}"
 
 
 async def image_exists(docker: str, image: str) -> dict[str, Any]:
@@ -57,7 +79,7 @@ class Probes:
 
     def refresh(self, team: dict[str, Any], *, doctor: bool = False) -> None:
         """Start what is due: the image probe when older than IMAGE_TTL_S, doctor.sh when never run or *doctor*."""
-        runner, spec = team.get("check_runner") or {}, team.get("bench") or {}
+        runner, spec = runner_here(team), team.get("bench") or {}
         if runner.get("image") and not self.running("image") and (
                 self.image is None or time.time() - self.image["at"] >= IMAGE_TTL_S):
             self._start("image", self._image((runner.get("docker") or ["docker"])[0], runner["image"]))
@@ -106,7 +128,7 @@ def items(team: dict[str, Any], probes: Probes, knowledge: dict[str, Any] | None
           sample: Path, now: float) -> list[dict[str, Any]]:
     """The checklist: each item's state (ok True, False, or None when the app cannot tell or has not read it yet),
     what it found, the command a person runs when it is not ready, and from which step the run needs it."""
-    runner, spec = team.get("check_runner") or {}, team.get("bench") or {}
+    runner, spec = runner_here(team), team.get("bench") or {}
     out: list[dict[str, Any]] = []
 
     def add(key: str, label: str, ok: bool | None, detail: str, command: str, needed: str, at: float | None = None,
@@ -130,8 +152,12 @@ def items(team: dict[str, Any], probes: Probes, knowledge: dict[str, Any] | None
         tools = sample / "reference-project" / "tools"
         add("image", f"构建容器镜像 {name}", None if img is None else img["ok"],
             "正在查" if img is None else ("在本机" if img["ok"] else img["why"]),
-            f"docker build --platform linux/amd64 -t {shlex.quote(name)} {shlex.quote(str(tools))}/", "checks",
+            f"docker build --platform {shlex.quote(platform_of(runner))} -t {shlex.quote(name)} {shlex.quote(str(tools))}/",
+            "checks",
             img["at"] if img else None, probes.running("image"))
+    elif (team.get("check_runner") or {}).get("image"):
+        add("image", "构建容器镜像", False, f"团队文件的 check_runner 没有本机架构（{checks.host_arch()}）的镜像",
+            "", "checks")
     if not spec:
         return out
     doc = probes.doctor

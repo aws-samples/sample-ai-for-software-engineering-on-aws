@@ -8,10 +8,13 @@ import sys
 import time
 from types import SimpleNamespace
 
+import pytest
+
 from http_fakes import AppRoute, FakeWeb, call, owner_check
 from teamkit import FakeManager, mod
 
 service, handlers, constants, paths = mod("service"), mod("handlers"), mod("constants"), mod("paths")
+checks_mod = mod("checks")
 
 DOCKER = f"""#!{sys.executable}
 import sys
@@ -75,7 +78,9 @@ def test_readiness_is_owner_only(tmp_path, monkeypatch):
     asyncio.run(go())
 
 
-def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatch):
+@pytest.mark.parametrize("machine, arch", [("arm64", "arm64"), ("x86_64", "amd64")])
+def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatch, machine, arch):
+    monkeypatch.setattr(checks_mod.platform, "machine", lambda: machine)
     svc, routes, sample, state = scenario(tmp_path, monkeypatch, sleep=1.5)
     before = snapshot(state)
 
@@ -97,7 +102,8 @@ def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatc
                                                                    "target": "bench", "baseline": "bench", "console": "bench"}
             assert items["knowledge"]["ok"] is None  # Kiro Crew's sources not read yet
             assert items["image"]["ok"] is False and items["image"]["detail"] == "镜像不在本机"
-            assert items["image"]["command"] == f"docker build --platform linux/amd64 -t vstatd-build:amd64 {sample}/reference-project/tools/"
+            assert items["image"]["label"] == f"构建容器镜像 vstatd-build:{arch}"
+            assert items["image"]["command"] == f"docker build --platform linux/{arch} -t vstatd-build:{arch} {sample}/reference-project/tools/"
             assert items["doctor"]["ok"] is False and not items["doctor"]["running"] and items["doctor"]["age_s"] >= 0
             assert "no target image" in items["doctor"]["detail"] and "the supply is not set" in items["doctor"]["detail"]
             assert items["doctor"]["command"] == f"{sample}/bench/build-target.sh"

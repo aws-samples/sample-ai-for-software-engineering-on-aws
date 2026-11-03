@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import platform
 import re
 import shlex
 import shutil
@@ -36,6 +37,8 @@ DEFAULT_ROUNDS = 2  # repair rounds per check when the team file gives none (TR 
 DEFAULT_TIMEOUT_S = 1800  # one check, in its container
 BENCH_ACTIONS = ("deploy", "restart", "replay")
 BENCH_TOOLS = ("doctor", "build", "start")  # the app runs doctor; build and start are the bench owner's, shown on the board
+ARCHES = ("arm64", "amd64")  # a check runner's image and platform per host architecture, as Docker names them
+MACHINE_ARCH = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "amd64", "amd64": "amd64"}  # from platform.machine()
 
 
 def _words(x: Any) -> bool:
@@ -48,9 +51,8 @@ def check_config(team: dict[str, Any], keys: list[str]) -> None:
     naming no file goes to; none for a release check: a person decides), ``max_rounds`` (DEFAULT_ROUNDS) and
     ``timeout_s`` (DEFAULT_TIMEOUT_S)."""
     runner = team.get("check_runner")
-    if runner is not None and not (isinstance(runner, dict) and _words(runner.get("docker"))
-                                   and isinstance(runner.get("image"), str) and runner["image"]):
-        raise ValueError("team.json：check_runner 要写成 {docker: [命令和参数], image: 镜像名}")
+    if runner is not None:
+        _check_runner(runner)
     items = team.get("checks")
     if items is not None and not isinstance(items, list):
         raise ValueError("team.json：checks 要写成检查的列表")
@@ -92,11 +94,70 @@ def check_config(team: dict[str, Any], keys: list[str]) -> None:
         raise ValueError("team.json：有 bench 就要有 checks（台架之后的检查）")
 
 
+def _per_arch(value: Any) -> bool:
+    return (isinstance(value, dict) and bool(value) and set(value) <= set(ARCHES)
+            and all(isinstance(v, str) and v for v in value.values()))
+
+
+def _check_runner(runner: Any) -> None:
+    """``{docker: [命令和参数], image: 镜像名}``, or with the image per host architecture
+    ``{docker, image: {arm64: …, amd64: …}, platform: {arm64: linux/arm64, amd64: linux/amd64}}`` (the platform is
+    optional and, when given, names the same architectures; ``docker`` then has no ``--platform`` of its own)."""
+    if not (isinstance(runner, dict) and _words(runner.get("docker"))):
+        raise ValueError("team.json：check_runner 要写成 {docker: [命令和参数], image: 镜像名}")
+    image, plat = runner.get("image"), runner.get("platform")
+    if isinstance(image, str) and image:
+        if plat is None:
+            return
+        raise ValueError("team.json：check_runner 的 platform 要按 image 的架构写 {arm64: linux/arm64, amd64: linux/amd64}"
+                         "（image 是一个镜像名时不写 platform，写在 docker 里）")
+    if not _per_arch(image):
+        raise ValueError("team.json：check_runner 的 image 要写成镜像名，或按本机架构写 {arm64: 镜像名, amd64: 镜像名}")
+    if plat is not None and not (_per_arch(plat) and set(plat) == set(image)):
+        raise ValueError("team.json：check_runner 的 platform 要按 image 的架构写 {arm64: linux/arm64, amd64: linux/amd64}")
+    if plat is not None and any(w == "--platform" or w.startswith("--platform=") for w in runner["docker"]):
+        raise ValueError("team.json：check_runner 写了 platform，docker 里就不要再写 --platform")
+
+
+def host_arch(machine: str | None = None) -> str:
+    """This machine's architecture as Docker names it (arm64, amd64); another machine name is returned as it is."""
+    m = (machine if machine is not None else platform.machine()).lower()
+    return MACHINE_ARCH.get(m, m)
+
+
+def resolve_runner(runner: dict[str, Any], machine: str | None = None) -> dict[str, Any]:
+    """The check runner for this machine (*machine*: ``platform.machine()`` by default), as ``{docker, image}`` with
+    the image a name and the platform in ``docker``. Resolved each time a container starts, not when a run is
+    created, so a run made on one machine runs its checks in the native image of the one it runs on. A runner whose
+    image is one name is returned as it is; a ValueError when the team file has no image for this architecture."""
+    image = runner["image"]
+    if isinstance(image, str):
+        return runner
+    arch = host_arch(machine)
+    if arch not in image:
+        raise ValueError(f"team.json：check_runner 没有 {arch} 的镜像（有 {'、'.join(image)}）")
+    plat = (runner.get("platform") or {}).get(arch)
+    return {"docker": list(runner["docker"]) + (["--platform", plat] if plat else []), "image": image[arch]}
+
+
+def adopt_runner(old: Any, current: Any) -> Any:
+    """The check runner a loaded run uses: its own, unless that is one image name the team file now declares per
+    architecture (a run made before the image was per architecture), when it is the team file's declaration."""
+    if (isinstance(old, dict) and isinstance(old.get("image"), str) and isinstance(current, dict)
+            and isinstance(current.get("image"), dict) and old["image"] in current["image"].values()):
+        return current
+    return old
+
+
 def docker_command(runner: dict[str, Any], mounts: list[tuple[str, bool]], cmd: list[str],
                    workdir: str | None = None, name: str | None = None) -> list[str]:
     """``docker run`` of the team's build container with each of *mounts* (path, writable) at the same path inside,
     so that the paths in a result mean the same on both sides; git there accepts the host's repositories. *name*: the
     container's, so that it can be removed when its check is cancelled or times out."""
+    try:
+        runner = resolve_runner(runner)
+    except ValueError as exc:  # no image for this machine: nothing can be checked here, a person fixes the team file
+        raise TestsUnavailable(str(exc)) from exc
     out = list(runner["docker"]) + (["--name", name] if name else [])
     if out[0] == "docker":  # the gateway's PATH may not have it
         out[0] = DOCKER_BIN
@@ -110,7 +171,10 @@ def docker_command(runner: dict[str, Any], mounts: list[tuple[str, bool]], cmd: 
 
 def docker_prefix(runner: dict[str, Any] | None, mounts: list[tuple[str, bool]], workdir: str | None = None) -> str:
     """The same as one shell line ending with the image, for a role's task ("" when the team has no build container)."""
-    return shlex.join(docker_command(runner, mounts, [], workdir)) if runner else ""
+    try:
+        return shlex.join(docker_command(runner, mounts, [], workdir)) if runner else ""
+    except TestsUnavailable:
+        return ""
 
 
 class TestsUnavailable(RuntimeError):

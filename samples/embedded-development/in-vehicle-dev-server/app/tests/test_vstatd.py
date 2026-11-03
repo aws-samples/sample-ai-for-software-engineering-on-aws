@@ -13,6 +13,7 @@ from http_fakes import AppRoute, FakeWeb, call, owner_check
 from teamkit import FakeManager, mod, sh
 
 team_mod, paths, constants, httpkit = mod("team"), mod("paths"), mod("constants"), mod("httpkit")
+checks_mod = mod("checks")
 service, handlers = mod("service"), mod("handlers")
 SAMPLE = constants.APP_ROOT.parent  # the dev checkout: this scenario's folder
 
@@ -53,7 +54,9 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     assert set(t["bench"]) == {"deploy", "restart", "replay", "doctor", "build", "start", "baseline"}
     assert t["bench"]["deploy"] == ["${sample}/bench/cc1.sh", "deploy", "{artifact}"]
     assert t["bench"]["doctor"] == ["${sample}/bench/doctor.sh"] and t["bench"]["baseline"] == "~/workplace/vstatd-team/baseline"
-    assert t["check_runner"]["image"] == "vstatd-build:amd64"
+    assert t["check_runner"]["image"] == {"arm64": "vstatd-build:arm64", "amd64": "vstatd-build:amd64"}
+    assert t["check_runner"]["platform"] == {"arm64": "linux/arm64", "amd64": "linux/amd64"}
+    assert "--platform" not in t["check_runner"]["docker"]  # chosen for the machine each check runs on
     assert (constants.TEAM_FILE.parent / t["task_template"]).is_file()
 
 
@@ -65,6 +68,11 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     (lambda t: t["checks"][0].update(command="checks/build.sh"), "command 要写成命令和参数的列表"),
     (lambda t: t["checks"][0].update(max_rounds=0), "max_rounds 要是 1 到 10 的整数"),
     (lambda t: t.pop("check_runner"), "有 checks 就要写 check_runner"),
+    (lambda t: t["check_runner"]["image"].update(riscv64="x"), "image 要写成镜像名"),
+    (lambda t: t["check_runner"]["image"].update(arm64=""), "image 要写成镜像名"),
+    (lambda t: t["check_runner"]["platform"].pop("amd64"), "platform 要按 image 的架构写"),
+    (lambda t: t["check_runner"].update(image="one-image"), "platform 要按 image 的架构写"),
+    (lambda t: t["check_runner"]["docker"].extend(["--platform", "linux/amd64"]), "docker 里就不要再写 --platform"),
     (lambda t: t["bench"].update(flash=["x"]), "bench 要写成"),
     (lambda t: t["bench"].pop("doctor"), "bench 要写成"),
     (lambda t: t.update(source=""), "source 要写成要改的项目目录"),
@@ -132,10 +140,45 @@ def test_sample_is_replaced_in_every_string_of_the_team():
     assert paths.expand({"n": 3, "b": None, "l": [True]}, "/x") == {"n": 3, "b": None, "l": [True]}
 
 
-def test_a_run_starts_from_the_scenarios_reference_project(tmp_path, monkeypatch):
+@pytest.mark.parametrize("machine, arch", [("arm64", "arm64"), ("aarch64", "arm64"), ("x86_64", "amd64"), ("AMD64", "amd64")])
+def test_the_check_runner_is_the_native_image_of_the_machine_it_runs_on(machine, arch):
+    runner = raw_team()["check_runner"]
+    got = checks_mod.resolve_runner(runner, machine)
+    assert got["image"] == f"vstatd-build:{arch}"
+    assert got["docker"] == [*runner["docker"], "--platform", f"linux/{arch}"]
+    assert runner["image"] == {"arm64": "vstatd-build:arm64", "amd64": "vstatd-build:amd64"}  # not changed
+    one = {"docker": ["docker", "run", "--platform", "linux/amd64"], "image": "img"}
+    assert checks_mod.resolve_runner(one, machine) is one  # one image: as the team file says
+
+
+def test_a_machine_without_an_image_in_the_team_file_cannot_run_the_checks(monkeypatch):
+    runner = raw_team()["check_runner"]
+    with pytest.raises(ValueError, match="没有 riscv64 的镜像"):
+        checks_mod.resolve_runner(runner, "riscv64")
+    monkeypatch.setattr(checks_mod.platform, "machine", lambda: "riscv64")
+    with pytest.raises(checks_mod.TestsUnavailable, match="没有 riscv64 的镜像"):
+        checks_mod.docker_command(runner, [], ["true"])
+    assert checks_mod.docker_prefix(runner, []) == ""
+
+
+def test_a_run_made_with_one_image_takes_the_per_architecture_runner():
+    """A run whose state has the runner from before the image was per architecture (r11037a33) uses the team file's,
+    so its checks run in this machine's image too; any other runner of its own is kept."""
+    current = raw_team()["check_runner"]
+    old = {"docker": ["docker", "run", "--rm", "--platform", "linux/amd64", "--security-opt", "seccomp=unconfined",
+                      "-v", "cc1-sysroot:/opt/cc1-sysroot:ro"], "image": "vstatd-build:amd64"}
+    assert checks_mod.adopt_runner(old, current) is current
+    own = {"docker": ["docker", "run"], "image": "my-build:1"}
+    assert checks_mod.adopt_runner(own, current) is own
+    assert checks_mod.adopt_runner(old, None) is old and checks_mod.adopt_runner(current, current) is current
+
+
+@pytest.mark.parametrize("machine, arch", [("arm64", "arm64"), ("x86_64", "amd64")])
+def test_a_run_starts_from_the_scenarios_reference_project(tmp_path, monkeypatch, machine, arch):
     """The default team: the run repository is a copy of reference-project/, and the first role (triage) gets the
-    knowledge source, the build container and the sample's paths in its task."""
+    knowledge source, the build container of this machine and the sample's paths in its task."""
     monkeypatch.delenv("VSTATD_SAMPLE", raising=False)
+    monkeypatch.setattr(checks_mod.platform, "machine", lambda: machine)
     data = tmp_path / "data"
     data.mkdir()
     (data / paths.SAMPLE_FILE).write_text(json.dumps({"sample": str(SAMPLE)}), encoding="utf-8")
@@ -161,8 +204,9 @@ def test_a_run_starts_from_the_scenarios_reference_project(tmp_path, monkeypatch
             assert f"{SAMPLE}/checks/README.md" in task and "${sample}" not in task
             assert "知识库来源「vstatd」" in task and "[VSTATD-IF p.7 §4.1]" in task
             wt = run.lane("triage")["worktree"]
-            assert f"docker run --rm --platform linux/amd64 --security-opt seccomp=unconfined -v cc1-sysroot:/opt/cc1-sysroot:ro -v {wt}:{wt}:ro" in task
-            assert f"-w {wt} vstatd-build:amd64 sh -c 'cmake -S . -B /tmp/build" in task
+            assert (f"docker run --rm --security-opt seccomp=unconfined -v cc1-sysroot:/opt/cc1-sysroot:ro "
+                    f"--platform linux/{arch} -v {wt}:{wt}:ro") in task
+            assert f"-w {wt} vstatd-build:{arch} sh -c 'cmake -S . -B /tmp/build" in task
             assert "{build_env}" not in task and "`docs/aidlc/triage.json`" in task
         finally:
             await svc.stop()
@@ -186,5 +230,44 @@ def test_without_a_known_sample_folder_no_run_starts(tmp_path, monkeypatch):
             assert not svc.runs and not mgr.spawned
         finally:
             await svc.stop()
+
+    asyncio.run(go())
+
+
+def test_a_stored_run_with_the_amd64_image_runs_its_checks_in_this_machines_image(tmp_path, monkeypatch):
+    """A run whose state snapshots the team from before (one image, --platform linux/amd64 in docker, as r11037a33)
+    takes the team file's per-architecture runner when the app starts again, and resolves it when a check starts."""
+    monkeypatch.delenv("VSTATD_SAMPLE", raising=False)
+    monkeypatch.setattr(checks_mod.platform, "machine", lambda: "arm64")
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / paths.SAMPLE_FILE).write_text(json.dumps({"sample": str(SAMPLE)}), encoding="utf-8")
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(data))
+    legacy = {"docker": ["docker", "run", "--rm", "--platform", "linux/amd64", "--security-opt", "seccomp=unconfined",
+                         "-v", "cc1-sysroot:/opt/cc1-sysroot:ro"], "image": "vstatd-build:amd64"}
+
+    async def go():
+        svc = service.Service(ctx, manager=FakeManager(), work_root=tmp_path / "work", tick_s=60)
+        routes = handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check)
+        await svc.start()
+        try:
+            r = await call(routes, "POST", "/runs", json_body={"requirement": "本批"})
+            rid = r.body["run"]
+        finally:
+            await svc.stop()
+        state_file = data / "runs" / rid / "run.json"
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        state["team"]["check_runner"] = legacy
+        state_file.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        again = service.Service(ctx, manager=FakeManager(), work_root=tmp_path / "work", tick_s=60)
+        await again.start()
+        try:
+            runner = again.runs[rid].team["check_runner"]
+            assert runner == raw_team()["check_runner"]
+            cmd = checks_mod.docker_command(runner, [], ["true"])
+            assert cmd[cmd.index("--platform") + 1] == "linux/arm64" and cmd.count("--platform") == 1
+            assert "vstatd-build:arm64" in cmd and "vstatd-build:amd64" not in cmd
+        finally:
+            await again.stop()
 
     asyncio.run(go())

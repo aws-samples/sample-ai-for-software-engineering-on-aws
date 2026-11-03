@@ -234,7 +234,7 @@ On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
 2. Build the checks' build container and the bench once (setup.sh does not, and prints these commands):
 
    ```bash
-   docker build --platform linux/amd64 -t vstatd-build:amd64 reference-project/tools/
+   docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/   # Apple Silicon; linux/amd64 and vstatd-build:amd64 on Intel
    bench/build-target.sh        # the target image and its sysroot (first build: about 40 min, bench/README.md)
    bench/doctor.sh
    ```
@@ -391,13 +391,18 @@ tested.
 
 The reference project builds in the container of `reference-project/tools/Dockerfile`, based on the `ubuntu:24.04`
 image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own licence, recorded in
-`/usr/share/doc/<package>/copyright` in the image), with these tools from Ubuntu's packages. The versions are those `dpkg-query` reports in the container; GCC 12.4 is Ubuntu's
-`g++-12` and `g++-12-aarch64-linux-gnu` 12.4.0-2ubuntu1~24.04.1 from `noble-updates`:
+`/usr/share/doc/<package>/copyright` in the image), with these tools from Ubuntu's packages. The image builds natively
+for the machine it runs on: `vstatd-build:arm64` (`--platform linux/arm64`) on Apple Silicon and arm64 Linux, where the
+host `g++-12` and `binutils` already target `aarch64-linux-gnu`, and `vstatd-build:amd64` (`--platform linux/amd64`)
+on x86_64, with the cross compiler. The app picks the image of the machine its checks run on. An amd64 image under
+Rosetta cannot run ThreadSanitizer (see [docs/kiro-crew-app.md](docs/kiro-crew-app.md#not-yet-verified)). The versions
+are those `dpkg-query` reports in the container, the same in both images; GCC 12.4 is Ubuntu's `g++-12` (and on amd64
+`g++-12-aarch64-linux-gnu`) 12.4.0-2ubuntu1~24.04.1 from `noble-updates`:
 
 | Tool | Version | Licence |
 | --- | --- | --- |
 | GCC, host and `aarch64-linux-gnu` cross compiler | 12.4 | GPL-3.0-or-later with the GCC Runtime Library Exception |
-| GNU Binutils for `aarch64-linux-gnu` (`binutils-aarch64-linux-gnu`: linker, `strip`) | 2.42 | GPL-3.0-or-later |
+| GNU Binutils for `aarch64-linux-gnu` (linker, `readelf`, `strip`: `binutils` on arm64, `binutils-aarch64-linux-gnu` on amd64) | 2.42 | GPL-3.0-or-later |
 | CMake | 3.28 | BSD-3-Clause |
 | Git (the checks judge committed trees) | 2.43 | GPL-2.0-only |
 | Ninja | 1.11 | Apache-2.0 |

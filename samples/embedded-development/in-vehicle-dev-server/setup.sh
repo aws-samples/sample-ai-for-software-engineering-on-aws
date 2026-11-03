@@ -93,8 +93,9 @@ if [ "$DRY" = 1 ]; then echo "   (dry run) would wait until Kiro Crew has indexe
 fi
 
 step 5/5 "The build container and the bench (not built by setup.sh)"
+case "$(uname -m)" in arm64|aarch64) ARCH=arm64 ;; *) ARCH=amd64 ;; esac  # the build container is native (ThreadSanitizer)
 echo "  The checks run in a build container and the bench is an emulated CC-1. Build them once, from this folder:"
-echo "    docker build --platform linux/amd64 -t vstatd-build:amd64 reference-project/tools/   # the checks' build container"
+echo "    docker build --platform linux/$ARCH -t vstatd-build:$ARCH reference-project/tools/   # the checks' build container"
 echo "    bench/build-target.sh        # target image and sysroot (Buildroot; the first build took about 40 min, bench/README.md)"
 echo "    bench/doctor.sh              # what is still missing"
 echo "  Then: open the operator console in a terminal of its own (python3 bench/console.py), start the target"

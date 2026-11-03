@@ -228,8 +228,9 @@ in D7; the reviewer looks again, and the bench starts over with the new build.
 How (step 10): `setup.sh` checks Docker, git, Python, Node 22 and Kiro Crew, builds the board and installs the app
 with `app/scripts/dev-install.sh`, writes `sample.json` into the app's data directory, and runs
 `scripts/install-team.sh` (knowledge copy, the four templates, the knowledge source
-`vstatd`); it ends with the commands for the build container (`vstatd-build:amd64`, the image the team file's check
-runner names) and the bench. The app's data directory is `~/.kiro/crew/apps/<app>/data/`: on this machine the
+`vstatd`); it ends with the commands for the build container (`vstatd-build:arm64` on Apple Silicon,
+`vstatd-build:amd64` on x86_64: the team file's check runner names one image per architecture and the app picks this
+machine's each time a check container starts, also for a run made before) and the bench. The app's data directory is `~/.kiro/crew/apps/<app>/data/`: on this machine the
 installed agent-team app keeps its `runs/` and `sessions.json` there (2026-11-02). `setup.sh --dry-run` changes
 nothing. Neither script has been run against a real Kiro Crew yet.
 
@@ -359,7 +360,17 @@ bench images; step 12 needs them.
 ## Not yet verified
 
 - Whether the build container's ThreadSanitizer reports give the absolute path of the check's copy, as the adapter
-  expects, or a relative one (D7); both are handled, neither has been seen in a run of the adapter.
+  expects, or a relative one (D7); both are handled, neither has been seen in a run of the adapter. In the native
+  arm64 image, `rehearsal/check-examples/run.py` shows the absolute path (2026-11-03).
+- ThreadSanitizer needs the build container native to the machine (2026-11-03, Apple Silicon, Docker Desktop): in
+  `vstatd-build:amd64` under Rosetta even an empty `int main(){}` built with `-fsanitize=thread` stops with
+  `FATAL: ThreadSanitizer: unexpected memory mapping` (exit 66), also under `setarch -R`, so `checks/unit.sh` always
+  failed and `release.sh` could not pass. The Dockerfile now builds `vstatd-build:arm64` natively, where it works.
+  Not yet seen: a full run of the app's checks on the new image.
+- With the Buildroot sysroot of `bench/build-target.sh` in the volume `cc1-sysroot`, `checks/static.sh` is BLOCKED
+  once the toolchain file sets the sysroot: clang-tidy finds no C++ standard headers (`'chrono' file not found`),
+  because that sysroot has `libstdc++` but not its headers. The same in the amd64 and the arm64 image; with the
+  stand-in sysroot of `tools/make-standin-sysroot.py` the check examples are 23 of 23 (2026-11-03).
 - How long a full check run, the independent rerun (D9) and the Buildroot image build (D10) take on a Mac.
 - Whether write-scope rules in an agent's own configuration are enforced on a machine whose user-level
   `permissions.yaml` does not allow everything (D2).

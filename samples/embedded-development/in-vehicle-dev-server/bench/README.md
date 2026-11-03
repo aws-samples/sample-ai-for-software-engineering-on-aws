@@ -143,8 +143,10 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 - **Repeatability margin.** One of four runs at shift 3 differed by 19 ms against a 20 ms tolerance. More runs are
   needed before the setting is fixed.
 - **Final baseline.** Generated once the reference project is calibrated, on the commit the scenario ships.
-- **Build container on Apple Silicon.** `reference-project/tools/Dockerfile` installs `g++-12-aarch64-linux-gnu`,
-  which Ubuntu does not have for arm64; it builds with `--platform linux/amd64`.
+- **Build container on Apple Silicon (closed 2026-11-03).** `reference-project/tools/Dockerfile` now builds natively
+  for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on
+  Apple Silicon (the host `g++-12` and `binutils` already target `aarch64-linux-gnu`), `linux/amd64` and
+  `vstatd-build:amd64` with the cross compiler on x86_64. The amd64 image under Rosetta cannot run ThreadSanitizer.
 - **SSH host key.** The target makes a new host key on every boot and the bench does not check it; the connection is
   loopback inside the runner container.
 - **QEMU version.** The runner uses Ubuntu 24.04's QEMU 8.2.2, not the QEMU that Buildroot builds for itself.

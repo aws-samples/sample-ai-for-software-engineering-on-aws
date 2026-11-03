@@ -15,9 +15,9 @@
   },
   "test_owners": [],
   "check_runner": {
-    "docker": ["docker", "run", "--rm", "--platform", "linux/amd64", "--security-opt", "seccomp=unconfined",
-               "-v", "cc1-sysroot:/opt/cc1-sysroot:ro"],
-    "image": "vstatd-build:amd64"
+    "docker": ["docker", "run", "--rm", "--security-opt", "seccomp=unconfined", "-v", "cc1-sysroot:/opt/cc1-sysroot:ro"],
+    "image": {"arm64": "vstatd-build:arm64", "amd64": "vstatd-build:amd64"},
+    "platform": {"arm64": "linux/arm64", "amd64": "linux/amd64"}
   },
   "checks": [
     {"name": "build", "command": ["${sample}/checks/build.sh"], "args": ["project"], "when": "before_bench",

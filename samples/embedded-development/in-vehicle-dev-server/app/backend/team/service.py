@@ -90,8 +90,14 @@ class Service:
         if self.started:
             return
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        try:  # a run made before the build image was per architecture takes the team file's (checks.adopt_runner)
+            runner = (await asyncio.to_thread(load_team, self.team_file)).get("check_runner")
+        except (OSError, ValueError):
+            runner = None
         for state, events in await asyncio.to_thread(self._deps.store.load_all):
             try:
+                if isinstance(state.get("team"), dict) and state["team"].get("check_runner") is not None:
+                    state["team"]["check_runner"] = checks.adopt_runner(state["team"]["check_runner"], runner)
                 self.runs[state["id"]] = TeamRun(state, self._deps, events)
             except Exception:  # noqa: BLE001
                 self.log.exception("vstatd-team: run %s cannot be loaded", state.get("id"))
