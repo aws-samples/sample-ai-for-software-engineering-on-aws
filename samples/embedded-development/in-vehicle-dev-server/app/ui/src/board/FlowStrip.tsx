@@ -142,7 +142,7 @@ export function ReadinessPanel({ state }: { state: ReadinessState }) {
                   {i.detail}
                   {i.age_s !== null && <small className="kt-dim">（{fmtAgo(i.age_s)}查的{i.running ? '，正在重查' : ''}）</small>}
                 </span>
-                {i.command && <code className="kt-ready-cmd">{i.command}</code>}
+                {i.command && <Cmd cmd={i.command} />}
               </li>
             )
           })}

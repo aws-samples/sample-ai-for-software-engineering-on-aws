@@ -60,8 +60,9 @@ export function DecideRequest({ id, digest, onDone }: { id: string; digest: stri
   )
 }
 
-/** A console command with the sample's absolute path cut to bench/console.py; the full one is what gets copied. */
-export const shortCmd = (cmd: string) => cmd.replace(/\S*\/bench\/console\.py/g, 'bench/console.py')
+/** A command with the scenario folder's absolute path cut (bench/…, reference-project/…, checks/…); the full one is
+ * what gets copied. */
+export const shortCmd = (cmd: string) => cmd.replace(/(?:\/[^\s/]+)+\/((?:bench|reference-project|checks)\/)/g, '$1')
 
 function useCopy(): [string, (text: string) => void] {
   const [msg, setMsg] = useState('')

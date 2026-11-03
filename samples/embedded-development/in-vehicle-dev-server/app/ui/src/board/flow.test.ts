@@ -112,10 +112,10 @@ describe('where a run is, and who acts next', () => {
   test('7 台架: the deploy waits at the operator console, with the command and the digest', () => {
     const r = at('bench')
     const req = r.bench!.state.pending[0]
-    expect(flowOf(r)).toMatchObject({ current: 'bench', now: `等你在操作台批准部署：${r.bench!.console} approve ${req.id} --digest bc9372` })
+    expect(flowOf(r)).toMatchObject({ current: 'bench', now: '等你批准部署（摘要 bc9372…）：在右边台架面板输入摘要前 6 位，或在操作台上批' })
     expect(states(r)).toMatchObject({ review: 'done', bench: 'current', after: 'todo' })
     r.bench!.console = null
-    expect(flowOf(r).now).toBe(`等你在操作台批准部署（请求 ${req.id}，摘要 bc9372）`)
+    expect(flowOf(r).now).toBe('等你批准部署（摘要 bc9372…）：在右边台架面板输入摘要前 6 位，或在操作台上批')
     r.bench!.state.pending = []
     expect(flowOf(r).now).toBe('app 在请求部署：操作台上会出现请求')
     Object.assign(r.bench!, { step: 'doctor' })

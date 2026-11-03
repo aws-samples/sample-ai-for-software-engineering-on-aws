@@ -506,7 +506,7 @@ export function StartForm({ onStart, onCancel, note }: { onStart: StartFn; onCan
             取消
           </button>
         )}
-        <span className="kt-dim">检查由 app 自己跑，台架上的每个动作在操作台批准，最后你按证据页签字</span>
+        <span className="kt-dim">检查由 app 自己跑，台架上的每个动作要你批准（看板或操作台），最后你按证据页签字</span>
         {note}
       </div>
       {err && (

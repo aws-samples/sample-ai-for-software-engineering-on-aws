@@ -20,7 +20,7 @@ describe('the vstatd board', () => {
     const cells = Object.fromEntries([...flow.querySelectorAll<HTMLElement>('[data-step]')].map((c) => [c.dataset.step, c.dataset.state]))
     expect(cells).toMatchObject({ triage: 'done', 'gate-start': 'done', review: 'done', bench: 'current', after: 'todo', signoff: 'todo' })
     const req = b.run!.bench!.state.pending[0]
-    expect(within(flow).getByTestId('kt-flow-now')).toHaveTextContent(`现在：等你在操作台批准部署：${b.run!.bench!.console} approve ${req.id} --digest bc9372`)
+    expect(within(flow).getByTestId('kt-flow-now')).toHaveTextContent('现在：等你批准部署（摘要 bc9372…）：在右边台架面板输入摘要前 6 位')
   })
 
   test('the check wall shows each check\'s verdict, evidence tier, owner and reasons', async () => {

@@ -126,7 +126,7 @@ export function flowOf(run: RunDetail): Flow {
     const req = action ? bench?.state.pending.find((r) => r.action === step && !r.expired) : undefined
     if (req) {
       const d = req.digest.slice(0, 6)
-      now = bench?.console ? `等你在操作台批准${action}：${bench.console} approve ${req.id} --digest ${d}` : `等你在操作台批准${action}（请求 ${req.id}，摘要 ${d}）`
+      now = `等你批准${action}（摘要 ${d}…）：在右边台架面板输入摘要前 6 位，或在操作台上批`
     } else if (action) now = `app 在请求${action}：操作台上会出现请求`
     else now = step === 'doctor' ? 'app 在跑 bench/doctor.sh' : '马上上台架：先跑 bench/doctor.sh'
   } else if (cur === 'after') {
