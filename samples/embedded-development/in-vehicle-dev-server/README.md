@@ -159,7 +159,8 @@ default profile can be signed off.
 
 Two MCP servers. Their guardrails live in the servers, whatever the agent session allows.
 
-- **`build`**: configure, cross-build, run a check, read its log. Runs only inside the build server's workspace.
+- **`build`**: configure, cross-build, run a check, read its log. Runs only inside the build server's workspace,
+  and runs the project's code only in a container with no network that cannot reach the server's own records.
 - **`bench`**: lease the target, read supply and ignition, request a deploy of a build, request a restart of
   `vstatd`, start the drive replay, fetch the runtime log and memory figures, release the lease.
   - A lease gives one session the target at a time.
@@ -284,7 +285,7 @@ been dry-run once.
    proposed interface with item 3); the facilitators' runs on the reference project are in
    [rehearsal/check-examples/](rehearsal/check-examples/).
 5. MCP servers `build` and `bench`, with their guardrails, the audit log, a test for each guardrail and a smoke test
-   of both.
+   of both. *`build` done:* [mcp/build/](mcp/build/README.md); `bench` follows with item 3.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
@@ -338,6 +339,15 @@ image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own l
 | dpkg (`dpkg -x` for the stand-in sysroot) | 1.22 | GPL-2.0-or-later |
 | `file` | 5.45 | BSD-2-Clause |
 | `ca-certificates` (HTTPS downloads of the stand-in sysroot) | 20260816 | MPL-2.0 (certificate data) |
+
+The `build` MCP server runs on the build server's host, outside that container, and starts the container for each
+build and check. It needs, on the host:
+
+| Tool | Version | Licence |
+| --- | --- | --- |
+| Docker Engine | 29.8 | Apache-2.0 |
+| Python with `venv`, and git | 3.12, 2.43 | PSF-2.0, GPL-2.0-only |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk), installed with pip from `mcp/build/` | 2.3.0 | MIT |
 
 Until the bench's Buildroot build (build plan item 3) provides the CC-1 sysroot, `tools/make-standin-sysroot.py`
 unpacks a stand-in from Ubuntu 24.04 arm64 packages; it is generated on the build server and not committed:

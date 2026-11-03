@@ -1,0 +1,5 @@
+# The repository ignores build/ output; here build/ is the source of the build MCP server.
+!/build/
+# What `pip install mcp/build` leaves next to the source.
+/build/build/
+/build/*.egg-info/
