@@ -1,0 +1,46 @@
+# Configuration of the build MCP server. This file, every path below and the folders above them belong to root or
+# the server's user and are not writable by others (the server refuses to start otherwise); the agents own only the
+# work tree.
+
+[paths]
+# The agents' work tree (a git clone of reference-project/), mounted read-only. The agents own it, not its parents.
+workspace = "/work/vstatd"
+# The server's own: builds/, logs/, results/, run/, repair.json, audit.jsonl.
+state = "/srv/build/state"
+# The approved triage, with its approval record triage.json.sha256 next to it; the folder is mounted read-only.
+triage = "/srv/build/triage/triage.json"
+# The sample's checks/ folder; its parent (the sample) is mounted read-only.
+checks = "/srv/sample/checks"
+# Mounted read-only, for the cross profile and the checks that configure it, where checks/limits.json says.
+sysroot = "/opt/cc1-sysroot"
+
+[sandbox]
+runner = "docker"                 # every build, check and git call on the agents' content runs in a container
+image = "vstatd-build"            # the image of reference-project/tools/Dockerfile
+memory = "16g"                    # optional limits of each container
+cpus = 8
+# docker_host = "unix:///run/user/<uid of buildsrv>/docker.sock"   # for rootless Docker
+
+[sandbox.check_args]              # extra docker options for one check only
+unit = ["--security-opt", "seccomp=unconfined"]   # ThreadSanitizer's `setarch -R` in checks/unit.sh needs it
+
+[roles.developer]
+classes = ["read-only", "controlled-write"]
+
+[roles.reviewer]
+classes = ["read-only"]
+
+[timeouts]                                     # seconds; a timed-out call is killed with its container and not retried
+status = 60
+snapshot = 300                                 # taking HEAD as a bundle and cloning it, before each check
+configure = 600
+build = 1800
+check = 3600
+
+[environment]
+path = "/usr/local/bin:/usr/bin:/bin"          # PATH inside the sandbox
+
+[tools]
+cmake = "cmake"
+ninja = "ninja"
+git = "git"
