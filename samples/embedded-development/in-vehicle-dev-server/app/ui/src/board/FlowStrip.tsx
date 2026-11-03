@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import type { Readiness, ReadinessItem, RunDetail } from '../types'
+import { DecideRequest } from './Bench'
 import { BASE, fmtAgo } from './format'
 import { FLOW, WHO_LABEL, flowOf, type StepState } from './flow'
 import { errorText } from './useBoard'
@@ -101,8 +102,8 @@ export function ReadinessPanel() {
       {!r && !err && <p className="kt-dim">正在读…</p>}
       {r?.pending && r.pending.length > 0 && (
         <div className="kt-ready-pending" role="status" data-testid="kt-ready-pending">
-          <b>✋ 操作台上有 {r.pending.length} 个请求等你批准</b>
-          <span className="kt-dim">在开着操作台的终端里批准（a 序号 摘要前 6 位），或者在任意终端运行下面的命令；看板不能批准。核对摘要再批。</span>
+          <b>✋ 台架上有 {r.pending.length} 个请求等你批准</b>
+          <span className="kt-dim">核对摘要后在这里输入前 6 位批准，或在操作台上批（a 序号 摘要前 6 位）。两边都走台架自己的审批逻辑。</span>
           <ul>
             {r.pending.map((p) => (
               <li key={p.id} data-testid="kt-ready-request" data-id={p.id}>
@@ -113,8 +114,13 @@ export function ReadinessPanel() {
                     {p.left_s !== null && ` · 还剩 ${Math.max(0, p.left_s)} 秒，超时自动拒绝`}
                   </small>
                 </span>
-                <span>批准：<code className="kt-ready-cmd">{p.approve}</code></span>
-                <span>拒绝：<code className="kt-ready-cmd">{p.refuse}</code></span>
+                <span className="kt-dim">完整摘要：<code>{p.digest}</code></span>
+                <DecideRequest id={p.id} digest={p.digest} onDone={() => void load()} />
+                <details className="kt-ready-cli">
+                  <summary>用命令批准或拒绝</summary>
+                  <code className="kt-ready-cmd">{p.approve}</code>
+                  <code className="kt-ready-cmd">{p.refuse}</code>
+                </details>
               </li>
             ))}
           </ul>

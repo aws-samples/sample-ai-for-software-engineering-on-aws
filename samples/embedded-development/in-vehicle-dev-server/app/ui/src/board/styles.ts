@@ -738,7 +738,12 @@ ${legendSwatches}
 .kt-ready-pending > b { color: var(--kt-warn); }
 .kt-ready-pending ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; }
 .kt-ready-pending li { display: grid; gap: 3px; font-size: .9em; }
-.kt-ready-pending .kt-ready-cmd { display: inline-block; }
+.kt-ready-pending .kt-ready-cmd { display: block; margin-top: 4px; }
+.kt-ready-cli summary { cursor: pointer; font-size: .86em; color: var(--muted); }
+.kt-decide { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.kt-decide input { font: inherit; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); min-width: 14em; }
+.kt-decide.is-done { font-weight: 700; color: var(--kt-ok); }
+.kt-decide .kt-error { flex-basis: 100%; margin: 0; }
 .kt-pick { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--border-strong, var(--border)); background: var(--bg); font-size: .92em; }
 .kt-pick.is-empty { color: var(--muted); margin: 0; }
 .kt-pick p { margin: 0; }

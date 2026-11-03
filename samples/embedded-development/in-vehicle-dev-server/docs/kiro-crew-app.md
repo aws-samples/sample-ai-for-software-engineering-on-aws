@@ -50,15 +50,24 @@ Facts found on the way (2026-11-02, kiro-cli 2.37.1, Kiro Crew 0.12.0-rc.3 on ma
 - Kiro Crew's macOS sandbox (Seatbelt, `standard` level) hides `~/.docker` but does not stop connections to the
   Docker socket, and does not hide `~/.cc1-bench`.
 
-### D3. Bench actions are approved at the operator console only
+### D3. Bench actions are approved by a person, at the operator console or on the board
 
 The app calls `bench/cc1.sh` for deploy, restart and replay; each call waits until a person approves that action and
-build digest at `bench/console.py`, as the bench already does. The board adds no gate of its own for bench actions:
-it shows the pending request and its digest, read from the bench state, and the action record. The bench owner
-approves at the console; the release owner signs off on the board.
+build digest, as the bench already does. The board adds no gate of its own: it shows each pending request with its
+digest, the time left before the console's timeout refuses it, and the action record, and offers 批准 and 拒绝 next
+to it (home page 准备情况 and the run's bench panel). The board does not decide: `POST /bench/decide` runs the bench's
+own `benchstate.decide()`, with its rules unchanged: approving needs the first six characters of the digest typed by
+the person, a request is decided once and not after its timeout, a refusal needs a reason, and the physical gate is
+checked again after the approval. The decision is recorded as made on the Kiro Crew board. `bench/console.py` works as
+before; the release owner signs off on the board.
 
-Alternatives considered: a board gate in front of the console (two approvals for one action), and the board writing
-approvals in place of the console (a change to the bench design of build plan item 3, and the console unused).
+Changed on 2026-11-03 at the user's request (the first version approved at the console only). It moves no boundary in
+this app: per D2 an agent's shell can already write the bench state. It does remove "the approval happens outside the
+agents' tools" from what the app shows; that holds only where the agents cannot reach the app's API or the bench state,
+as in the containerised set-up of D2.
+
+Alternatives considered: approvals at the console only, the board showing the commands (the first version); a board gate
+in front of the console (two approvals for one action).
 
 ### D4. The triage gate asks only about the findings that need judgement
 

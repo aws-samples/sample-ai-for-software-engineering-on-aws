@@ -86,7 +86,7 @@ class Probes:
 def pending(team: dict[str, Any], state: dict[str, Any], now: float) -> list[dict[str, Any]]:
     """The bench requests waiting at the operator console now, whoever made them (a run, or a person setting up the
     baseline), with the seconds left before the console's timeout refuses them and the console commands for them. Read
-    from the bench state; the app never approves."""
+    from the bench state; a person decides them on the board (POST /bench/decide) or at the console."""
     spec = team.get("bench") or {}
     console = Path(spec["deploy"][0]).with_name("console.py") if spec.get("deploy") else None
     cmd = shlex.join(["python3", str(console)]) if console else "python3 bench/console.py"

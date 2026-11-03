@@ -2,9 +2,61 @@
  * 台架: the bench of a team that has one (D3, D10), read only. Where the app is on the bench (doctor, deploy, replay,
  * the checks after it, the rerun), what holds it for a person with the commands they run, doctor.sh's result, the
  * emulated target and the simulated supply, each request waiting at the operator console with the digest to approve
- * and the console command for it, and the end of the action record. The board never approves: the console does.
+ * and the console command for it, and the end of the action record. A person approves or refuses a request here or at
+ * the console; either way the bench's own decide() decides (D3).
  */
+import { useState } from 'react'
+import { useAppApi } from '@kirocrew/app-sdk'
 import type { BenchView } from '../types'
+import { BASE } from './format'
+import { errorText } from './useBoard'
+
+/** 批准 / 拒绝 one request waiting at the operator console (D3): the bench's own decide() decides. Approving needs the
+ * first 6 characters of the digest typed by the person, as at the console; refusing needs a reason. */
+export function DecideRequest({ id, digest, onDone }: { id: string; digest: string; onDone?: () => void }) {
+  const api = useAppApi()
+  const [prefix, setPrefix] = useState('')
+  const [refusing, setRefusing] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [done, setDone] = useState('')
+  const send = async (verdict: 'approve' | 'refuse') => {
+    setBusy(true)
+    setErr('')
+    try {
+      await api.post(`${BASE}/bench/decide`, { id, verdict, digest: prefix.trim(), reason: reason.trim() })
+      setDone(verdict === 'approve' ? '已批准' : '已拒绝')
+      onDone?.()
+    } catch (x) {
+      setErr(errorText(x))
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (done) return <span className="kt-decide is-done" data-testid="kt-decide" role="status">✔ {done}</span>
+  const okPrefix = /^[0-9a-fA-F]{6,}$/.test(prefix.trim())
+  return (
+    <span className="kt-decide" data-testid="kt-decide">
+      {refusing ? (
+        <>
+          <input aria-label="拒绝的原因" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="拒绝的原因" autoFocus />
+          <button type="button" className="kt-btn is-solid is-danger" disabled={busy || !reason.trim()} onClick={() => void send('refuse')}>确认拒绝</button>
+          <button type="button" className="kt-btn" disabled={busy} onClick={() => setRefusing(false)}>取消</button>
+        </>
+      ) : (
+        <>
+          <input aria-label="构建摘要的前 6 位" className="kt-mono" value={prefix} maxLength={64} onChange={(e) => setPrefix(e.target.value)}
+            placeholder="核对后输入摘要前 6 位" title={`这次的摘要：${digest}`} />
+          <button type="button" className="kt-btn is-solid is-primary" disabled={busy || !okPrefix} onClick={() => void send('approve')}
+            title="由台架自己的审批逻辑判定：摘要要对得上，没超时，只批一次">批准</button>
+          <button type="button" className="kt-btn" disabled={busy} onClick={() => setRefusing(true)}>拒绝…</button>
+        </>
+      )}
+      {err && <span className="kt-error" role="alert">{err}</span>}
+    </span>
+  )
+}
 
 const STEP: Record<string, string> = {
   doctor: '检查台架（doctor.sh）',
@@ -108,16 +160,17 @@ export function BenchPanel({ bench }: { bench: BenchView }) {
                 <span><b>{r.action}</b> · {r.requested_by}{r.expired ? <span className="kt-bad"> · 已超时</span> : null}</span>
                 <span>构建摘要 <code className="kt-bench-digest">{r.digest}</code></span>
                 {r.detail && <span className="kt-dim">{r.detail}</span>}
+                {!r.expired && <DecideRequest id={r.id} digest={r.digest} />}
                 {bench.console && (
                   <span className="kt-dim">
-                    核对摘要以后批准：<code>{`${bench.console} approve ${r.id} --digest ${r.digest.slice(0, 12)}`}</code>；拒绝：<code>{`${bench.console} refuse ${r.id} --reason <原因>`}</code>
+                    或在操作台：<code>{`${bench.console} approve ${r.id} --digest ${r.digest.slice(0, 12)}`}</code>；拒绝：<code>{`${bench.console} refuse ${r.id} --reason <原因>`}</code>
                   </span>
                 )}
               </li>
             ))}
           </ul>
         )}
-        {bench.console && <p className="kt-dim">操作台在另一个终端里运行：<code>{bench.console}</code>（交互界面里 a 批准、r 拒绝、c 核对）。看板不批准，只显示。</p>}
+        {bench.console && <p className="kt-dim">在这里批准，或在另一个终端里的操作台：<code>{bench.console}</code>（a 批准、r 拒绝、c 核对）。两边都走台架自己的审批逻辑，电源、点火、超时照样拦。</p>}
       </div>
       <div className="kt-bench-record">
         <b>动作记录（最近 {Math.min(ACTION_SHOWN, st.actions.length)} 条）</b>

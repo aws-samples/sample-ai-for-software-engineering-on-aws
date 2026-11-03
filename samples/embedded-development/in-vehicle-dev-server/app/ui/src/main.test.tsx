@@ -189,7 +189,7 @@ describe('the board', () => {
   test('no runs: the work item, the flow from 分诊 to 签字, what this Mac still needs, and the start form', async () => {
     const user = userEvent.setup()
     setApiRoutes({ [BOARD]: () => emptyBoard(), 'GET /api/apps/vstatd-team/readiness': () => readinessOf(),
-      'POST /api/apps/vstatd-team/readiness/doctor': () => readinessOf(), 'POST /api/apps/vstatd-team/runs': () => ({ id: 'r1' }) })
+      'POST /api/apps/vstatd-team/readiness/doctor': () => readinessOf(), 'POST /api/apps/vstatd-team/bench/decide': () => ({ ok: true, decision: { verdict: 'approved' } }), 'POST /api/apps/vstatd-team/runs': () => ({ id: 'r1' }) })
     render(<TeamPage />)
     const empty = await screen.findByTestId('kt-empty')
     expect(within(empty).getByRole('heading', { name: 'vstatd 本批：修待办里的发现，拆分 Service::run()，行为不变' })).toBeInTheDocument()
@@ -209,13 +209,21 @@ describe('the board', () => {
     expect(item('console')).toHaveTextContent('?操作台上台架才要app 看不出操作台开着没有')
     expect(within(empty).getByTestId('kt-ready')).toHaveTextContent('台架没准备好也能先开始')
     const waiting = within(empty).getByTestId('kt-ready-pending')
-    expect(waiting).toHaveTextContent('操作台上有 1 个请求等你批准')
+    expect(waiting).toHaveTextContent('台架上有 1 个请求等你批准')
     expect(waiting).toHaveTextContent('部署 bc93723c0cb0')
     expect(waiting).toHaveTextContent('还剩 168 秒，超时自动拒绝')
     const cmds = Array.from(waiting.querySelectorAll('code.kt-ready-cmd')).map((c) => c.textContent)
     expect(cmds[0]).toMatch(/console\.py approve 20261103T094307-deploy-ac78 --digest bc93723c0cb0$/)
     expect(cmds[1]).toMatch(/console\.py refuse 20261103T094307-deploy-ac78 --reason <原因>$/)
-    expect(within(waiting).queryByRole('button')).toBeNull() // the board never approves
+    // approving needs the digest typed, as at the console; the bench's own decide() then decides
+    const approve = within(waiting).getByRole('button', { name: '批准' })
+    expect(approve).toBeDisabled()
+    await user.type(within(waiting).getByLabelText('构建摘要的前 6 位'), 'bc9372')
+    expect(approve).toBeEnabled()
+    await user.click(approve)
+    await waitFor(() => expect(apiCalls.find((c) => c.path === '/api/apps/vstatd-team/bench/decide')?.body)
+      .toEqual({ id: '20261103T094307-deploy-ac78', verdict: 'approve', digest: 'bc9372', reason: '' }))
+    expect(await within(waiting).findByRole('status')).toHaveTextContent('已批准')
     expect(within(empty).queryByText(/好产品|意图|安卓/)).toBeNull()
     await user.click(within(empty).getByRole('button', { name: '重跑 doctor.sh' }))
     await waitFor(() => expect(apiCalls.some((c) => c.method === 'POST' && c.path === '/api/apps/vstatd-team/readiness/doctor')).toBe(true))

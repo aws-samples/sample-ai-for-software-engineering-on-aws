@@ -56,6 +56,55 @@ def read_state(d: Path | None = None) -> dict[str, Any]:
     return {"dir": str(d), "target": target, "supply": _json(d / "supply.json"), "pending": pending, "actions": actions}
 
 
+REQUEST_ID = re.compile(r"[0-9]{8}T[0-9]{6}-[a-z-]+-[0-9a-f]{4}")
+DECIDED_BY = "Kiro Crew 看板（{user}，vstatd-team）"
+_DECIDE = """import json, sys
+sys.path.insert(0, sys.argv[1])
+import benchstate as bs
+rid, verdict, by, reason, prefix = sys.argv[2:7]
+try:
+    print(json.dumps(bs.decide(rid, verdict, by, reason, digest_prefix=prefix or None)))
+except bs.GateError as e:
+    print(json.dumps({"refused": str(e)}))
+"""
+
+
+async def decide(lib: Path, rid: Any, verdict: Any, digest: Any, reason: Any) -> dict[str, Any]:
+    """A person's decision on a bench request, made on the board (D3): the bench's own ``benchstate.decide`` decides,
+    with its rules (approval needs the first 6+ characters of the digest the person typed, once, before the timeout);
+    the app adds nothing to them and writes the bench state only through it."""
+    from .httpkit import AppError
+
+    if not isinstance(rid, str) or not REQUEST_ID.fullmatch(rid):
+        raise AppError("id 要是操作台上请求的编号", "invalid_id")
+    if verdict not in ("approve", "refuse"):
+        raise AppError("verdict 只能是 approve 或 refuse", "invalid_verdict")
+    prefix = digest if isinstance(digest, str) else ""
+    if verdict == "approve" and not re.fullmatch(r"[0-9a-fA-F]{6,64}", prefix):
+        raise AppError("批准要输入构建摘要的前 6 位（核对过再批）", "digest_required")
+    why = reason.strip()[:200] if isinstance(reason, str) else ""
+    if verdict == "refuse" and not why:
+        raise AppError("拒绝要写原因（会记进动作记录）", "reason_required")
+    by = DECIDED_BY.format(user=os.environ.get("USER") or "dashboard owner")
+    proc = await asyncio.create_subprocess_exec(
+        "/usr/bin/python3", "-c", _DECIDE, str(lib), rid, "approved" if verdict == "approve" else "refused", by, why,
+        prefix.lower() if verdict == "approve" else "", stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), 30)
+    except asyncio.TimeoutError:
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        raise AppError("台架 30 秒没回答", "bench_timeout", 504)
+    try:
+        res = json.loads(out.decode(errors="replace").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        raise AppError(f"台架没给结果：{err.decode(errors='replace').strip()[-200:]}", "bench_failed", 502)
+    if "refused" in res:
+        raise AppError(f"没批成：{res['refused']}", "bench_refused", 409)
+    return {"ok": True, "decision": res}
+
+
 def argv(cmd: list[str], values: dict[str, str]) -> list[str]:
     """A bench command with its ``{artifact}`` and ``{run}`` filled in."""
     return [re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), w) for w in cmd]

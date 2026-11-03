@@ -436,6 +436,15 @@ class Service:
         team, sample = load_team(self.team_file), paths.sample_dir(self.data_dir)
         return paths.expand(team, sample), sample
 
+    async def bench_decide(self, rid: Any, verdict: Any, digest: Any, reason: Any) -> dict[str, Any]:
+        """批准 / 拒绝 a bench request on the board (D3): the bench's own decide() does it, with its rules (the digest
+        prefix a person typed, once, not after the timeout), recording the dashboard owner as who decided."""
+        try:
+            _, sample = await asyncio.to_thread(self._default_team)
+        except (OSError, ValueError) as exc:
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+        return await bench_mod.decide(sample / "bench" / "lib", rid, verdict, digest, reason)
+
     async def readiness(self, doctor: bool = False) -> dict[str, Any]:
         """准备情况 (D10): what the default team needs, from the cached probes; due probes start in the background
         (*doctor*: doctor.sh again) and the answer never waits for them. The bench state is only read."""

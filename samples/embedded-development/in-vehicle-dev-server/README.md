@@ -247,8 +247,8 @@ On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
 4. Open Kiro Crew → Apps → AIDLC-Embedded团队 → 团队看板, choose 新需求 (it is filled in with the work item) and
    hand it to the team.
 5. At the triage gate, answer each question (its citations are shown); then approve build start.
-6. Approve each deploy and replay at the operator console: it shows the request and the build's digest. The board shows
-   the same request and the console command for it, but does not approve.
+6. Approve each deploy and replay, within its timeout: on the board (type the first six characters of the build's
+   digest and press 批准) or at the operator console. Either way the bench's own approval rules decide.
 7. After the independent rerun, read the evidence page in the sign-off dialog and sign off. 评分卡 shows the run's
    figures.
 
@@ -262,8 +262,8 @@ bench state and the baseline alone, and prints the commands that remove them.
 
 What the app enforces: a role after a human gate gets no session until a person approves; the app runs the checks
 itself, so an agent's word that they pass counts for nothing; a role's commits that do not cite a finding are sent back
-before they are merged; each bench action waits for a person at the operator console for that build's digest, behind the
-bench's physical gate, and goes to the action record; sign-off is possible only after `release.sh` passed on the
+before they are merged; each bench action waits for a person to approve that build's digest, on the board or at the
+operator console, through the bench's own approval rules and behind its physical gate, and goes to the action record; sign-off is possible only after `release.sh` passed on the
 independent rerun.
 
 What it does not enforce. If you agree during setup, the app sets **the sessions it opens** to auto-approve their tool
