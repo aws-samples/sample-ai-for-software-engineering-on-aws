@@ -47,6 +47,8 @@ export interface TopBarProps {
   onCleanup?: () => void
   /** 回放: play a finished run again from its record; while it plays the write actions are hidden. */
   onReplay?: () => void
+  /** 交付详情 of the run shown (its value stream) */
+  onDetail?: (rid: string) => void
   replaying?: boolean
   /** inside the app: the app bar carries its name and 投影 */
   inApp?: boolean
@@ -55,7 +57,7 @@ export interface TopBarProps {
 /** What the PR says on the board: 待合并 until a person signs the run off, then merged into main here (or signed only, imported). */
 export const PR_STATE: Record<string, string> = { open: '待合并', merged: '已合并', signed: '已签字放行' }
 
-export function TopBar({ board, run, projection, follow, startOpen, onSelect, onProjection, onFollow, onStart, onStop, onOutputs, onRetry, onFolder, onCleanup, onHide, onReplay, inApp = false, replaying = false, folderOpen = false }: TopBarProps) {
+export function TopBar({ board, run, projection, follow, startOpen, onSelect, onProjection, onFollow, onStart, onStop, onOutputs, onRetry, onFolder, onCleanup, onHide, onReplay, onDetail, inApp = false, replaying = false, folderOpen = false }: TopBarProps) {
   const failed = run ? run.roles.filter((l) => l.status === 'failed') : []
   const meta = run ? runMeta(run.status) : null
   const runs = board?.runs ?? []
@@ -107,6 +109,11 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
         {!projection && !replaying && run && onHide && !isRunActive(run.status) && (
           <button type="button" className="kt-btn kt-btn-icon" onClick={() => onHide(run.id)} title="把这次运行从列表里删掉（记录和代码留在这台 Mac 上）" aria-label="从列表里删除这次运行">
             🗑
+          </button>
+        )}
+        {!projection && !replaying && run && onDetail && (
+          <button type="button" className="kt-btn" onClick={() => onDetail(run.id)} title="这次运行的时间花在哪：agent 在做、等人批准、等操作台、跑检查，每一段都是记录里量出来的">
+            交付详情
           </button>
         )}
         {run && onReplay && !replaying && !isRunActive(run.status) && run.events.length > 0 && (

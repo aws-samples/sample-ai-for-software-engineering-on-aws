@@ -236,6 +236,12 @@ def gist(text: str) -> str | None:
 
 
 
+def _ms(rows: list[dict[str, Any]]) -> int | None:
+    """A round's check time: its checks' own wall times added up (None when a row has none)."""
+    ms = [r.get("ms") for r in rows]
+    return sum(ms) if ms and all(isinstance(m, int) for m in ms) else None
+
+
 def title_of(requirement: str, template: Path) -> str:
     """The first line of the requirement, else the template README's title."""
     for line in (requirement or "").splitlines():
@@ -967,7 +973,8 @@ class TeamRun:
                 note = "：实现还没写，全红"
             # every case's status rides along: a replay of the run turns the test wall cell by cell
             self.emit("tests", f"测试 {t['passed']}/{t['total']}{note}", data={"passed": t["passed"], "total": t["total"],
-                      "cases": [[c["id"], c["status"]] for c in t["cases"]][:400]})
+                      "cases": [[c["id"], c["status"]] for c in t["cases"]][:400],
+                      **({"phase": "before_bench", "ms": _ms(wall["checks"])} if checked else {})})
         s["needs_test"] = False
         if checked:
             await self._check_bounce(mgr)
@@ -1145,11 +1152,12 @@ class TeamRun:
                       else f"回放完了，跑台架之后的检查（{b['run_dir']}）")
         elif step == "after":
             b["after"] = {k: res[k] for k in ("at", "passed", "failed", "total", "checks", "results")}
-            self.emit("tests", f"台架之后的检查 {res['passed']}/{res['total']}", data={"checks": [[r["name"], r["verdict"]] for r in res["checks"]]})
+            self.emit("tests", f"台架之后的检查 {res['passed']}/{res['total']}", data={"checks": [[r["name"], r["verdict"]] for r in res["checks"]],
+                                                                               "phase": "after_bench", "ms": _ms(res["checks"])})
             if not res["failed"]:
                 if any(c["when"] == "release" for c in self.team["checks"]):
                     b["step"] = "rerun"
-                    self.emit("bench", "台架之后的检查都过了：在新的结果目录里从头重跑全部检查，再跑 release.sh")
+                    self.emit("bench", "台架之后的检查都过了：在新的结果目录里从头重跑全部检查，再跑 release.sh", data={"step": "rerun"})
                 else:
                     b["step"] = "done"
                 return
@@ -1167,7 +1175,7 @@ class TeamRun:
             rerun = self.s["rerun"] = res
             self.emit("tests", f"独立重跑：release.sh {rerun['release']['verdict']}" + (
                 f"，和上一轮结果不同的检查：{'、'.join(d['name'] for d in rerun['differs'])}" if rerun["differs"] else ""),
-                data={"checks": [[r["name"], r["verdict"]] for r in rerun["checks"]], "differs": rerun["differs"]})
+                data={"checks": [[r["name"], r["verdict"]] for r in rerun["checks"]], "differs": rerun["differs"], "phase": "rerun"})
             if rerun["release"]["verdict"] != "PASS":
                 self._bench_hold("独立重跑后 release.sh 没通过：" + "；".join(rerun["release"]["reasons"][:3] or [rerun["release"]["summary"]]))
                 return

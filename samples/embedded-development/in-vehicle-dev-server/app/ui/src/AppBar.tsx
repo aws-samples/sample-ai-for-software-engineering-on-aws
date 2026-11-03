@@ -29,7 +29,7 @@ const TABS: [ViewKind, string, string][] = [
   ['score', '评分卡', '量出来的数：分诊、检查、台架、独立重跑，按次和合计'],
 ]
 
-export function AppBar({ view, projection, onView, onProjection }: { view: ViewKind; projection: boolean; onView: (v: ViewKind) => void; onProjection: () => void }) {
+export function AppBar({ view, projection, onView, onProjection }: { view: ViewKind | 'item'; projection: boolean; onView: (v: ViewKind) => void; onProjection: () => void }) {
   return (
     <header className="kt-appbar" data-testid="kt-appbar">
       <h1>AIDLC-Embedded团队</h1>

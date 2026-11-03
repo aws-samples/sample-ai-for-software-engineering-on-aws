@@ -46,6 +46,7 @@ import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
 import { parseView, searchOf, type BoardEntry, type View } from './nav'
 import { ScorecardView } from './scorecard/ScorecardView'
+import { ItemView } from './item/ItemView'
 
 interface Effects {
   run: string | null
@@ -99,6 +100,8 @@ type TeamPageProps = {
   entry?: BoardEntry
   /** a run picked in the board's picker: the URL's entry says that run now */
   onPick?: (rid: string) => void
+  /** 交付详情 of a run (the app's item view) */
+  onDetail?: (rid: string) => void
   /** opened again by back or forward: the app puts the page back where it was left, so it does not scroll here */
   returning?: boolean
   /** inside the app: 投影 is the app's (its bar has the button); the page follows it and asks it to end (Esc) */
@@ -106,7 +109,7 @@ type TeamPageProps = {
   onProjection?: (on: boolean) => void
 }
 
-export function TeamPage({ pollMs = POLL_MS, entry, onPick, returning = false, projection: appProjection, onProjection }: TeamPageProps = {}) {
+export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning = false, projection: appProjection, onProjection }: TeamPageProps = {}) {
   const api = useAppApi()
   const reducedMotion = useReducedMotion()
   const [selected, setSelected] = useState<string | null>(entry?.run ?? null)
@@ -355,6 +358,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, returning = false, p
           onCleanup={() => void cleanup()}
           onHide={(id) => void hide(id)}
           onReplay={rp.start}
+          onDetail={onDetail}
           inApp={inApp}
           replaying={!!rp.id}
           folderOpen={folderOpen}
@@ -572,13 +576,15 @@ export default function VstatdTeamApp({ pollMs }: { pollMs?: number } = {}) {
   }, [])
   const onProjection = useCallback((on: boolean) => void project(on), [project])
   const onPick = useCallback((rid: string) => replace({ kind: 'board', run: rid }), [replace])
+  const onDetail = useCallback((rid: string) => go({ kind: 'item', run: rid }), [go])
   const { n, returning } = view
   return (
     <div ref={rootRef} className={`kt-app${projection ? ' is-projection' : ''}`} data-testid="kt-app">
       <style>{APP_CSS}</style>
       <AppBar view={view.kind} projection={projection} onView={(k) => go({ kind: k })} onProjection={() => onProjection(!projection)} />
-      {view.kind === 'score' ? <ScorecardView key={n} />
-        : <TeamPage key={n} pollMs={pollMs} entry={entryOf(view)} returning={returning} onPick={onPick} projection={projection} onProjection={onProjection} />}
+      {view.kind === 'score' ? <ScorecardView key={n} onDetail={onDetail} />
+        : view.kind === 'item' ? <ItemView key={n} run={view.run} onBoard={(e) => go({ kind: 'board', ...e })} />
+        : <TeamPage key={n} pollMs={pollMs} entry={entryOf(view)} returning={returning} onPick={onPick} onDetail={onDetail} projection={projection} onProjection={onProjection} />}
     </div>
   )
 }

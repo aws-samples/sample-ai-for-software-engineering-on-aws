@@ -24,6 +24,7 @@ const SC_CSS = `
 .sc-table th, .sc-table td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
 .sc-table th { color: var(--muted); font-weight: 650; font-size: .93em; }
 .sc-wide { overflow-x: auto; }
+.sc-detail { margin-top: 4px; font-size: 12px; padding: 3px 10px; }
 .sc-root section.cto-card > h3 { margin: 0 0 10px; font-size: 1.1em; color: var(--text-strong); }
 .sc-notes { color: var(--muted); font-size: 13px; }
 .sc-notes summary { cursor: pointer; color: var(--text); }
@@ -54,12 +55,13 @@ function caughtText(c: Record<string, number> | null): string {
   return failed.length ? failed.map(([k, v]) => `${k} ${v}`).join('、') : '0'
 }
 
-function RunRow({ r }: { r: ScoreRun }) {
+function RunRow({ r, onDetail }: { r: ScoreRun; onDetail?: (rid: string) => void }) {
   return (
     <tr data-testid="sc-run" data-run={r.id}>
       <td>
         <b>{r.title || r.id}</b>
         <div className="kt-dim">{r.id} · {runMeta(r.status).label}{r.signed ? ' · 已签字' : ''}</div>
+        {onDetail && <button type="button" className="kt-btn sc-detail" onClick={() => onDetail(r.id)} aria-label={`交付详情：${r.title || r.id}`}>交付详情</button>}
       </td>
       <td>{r.findings ? `${r.findings.fixed} / ${r.findings.justified} / ${r.findings.deferred}` : EMPTY}</td>
       <td title={r.overturned ? `人：${r.overturned.by_person.join('、') || '无'}；评审：${r.overturned.by_reviewer.join('、') || '无'}` : undefined}>
@@ -77,7 +79,7 @@ function RunRow({ r }: { r: ScoreRun }) {
   )
 }
 
-export function ScorecardView({ pollMs = SCORE_POLL_MS }: { pollMs?: number }) {
+export function ScorecardView({ pollMs = SCORE_POLL_MS, onDetail }: { pollMs?: number; onDetail?: (rid: string) => void }) {
   const api = useAppApi()
   const [data, setData] = useState<Scorecard | null>(null)
   const [error, setError] = useState('')
@@ -146,7 +148,7 @@ export function ScorecardView({ pollMs = SCORE_POLL_MS }: { pollMs?: number }) {
                       <th>构建修复轮数</th><th>台架之前拦下</th><th>日志差异</th><th>台架：批准 / 拒绝 / 核对</th><th>重跑结果不同</th>
                     </tr>
                   </thead>
-                  <tbody>{data.runs.map((r) => <RunRow key={r.id} r={r} />)}</tbody>
+                  <tbody>{data.runs.map((r) => <RunRow key={r.id} r={r} onDetail={onDetail} />)}</tbody>
                 </table>
               </div>
             ) : <p className="kt-dim">还没有运行。在团队看板上用「新需求」开始一次。</p>}

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import board, checks, library, outputs, paths, readiness, roster, scorecard
+from . import board, checks, flow, library, outputs, paths, readiness, roster, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -394,6 +394,17 @@ class Service:
         run = self._run(rid)
         evs = await asyncio.to_thread(store_mod.all_events, self.data_dir / "runs" / run.rid / "events.jsonl")
         return {"run": run.rid, "events": [{**e, "text": self.scrub(str(e.get("text", "")))} for e in evs]}
+
+    async def flow(self, rid: str) -> dict[str, Any]:
+        """交付详情: where the run's time went, from its state, its events and the bench's action record."""
+        run = self._run(rid)
+
+        def read() -> dict[str, Any]:
+            evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
+            out = flow.build(run.s, evs, scorecard.records(), time.time())
+            out["marks"] = [{**m, "label": self.scrub(m["label"])} for m in out["marks"]]  # event text, as /events sends it
+            return out
+        return await asyncio.to_thread(read)
 
     async def role_output(self, rid: str, role: str) -> dict[str, Any]:
         return await outputs.role_output(self._run(rid), role, mgr=self.manager(), scrub=self.scrub)

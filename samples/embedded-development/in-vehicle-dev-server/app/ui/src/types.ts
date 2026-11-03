@@ -223,6 +223,48 @@ export type TeamPreview = {
   error: string
 }
 
+/** One measured span of a run (seconds from its start); open: still going (to is now). */
+export type FlowSegment = {
+  kind: 'agent' | 'gate' | 'console' | 'checks' | 'rerun'
+  from: number
+  to: number
+  role: string | null // agent, gate: the role
+  label: string
+  result: string | null // gate: 批准 | 退回; console: 批准 | 拒绝 | 超时; checks: 通过 | 不过; rerun: 一致 | 不同
+  open: boolean
+}
+
+/** A moment of a run: a send-back, a round with a failing check, an approval, the sign-off. */
+export type FlowMark = { at: number; kind: 'bounce' | 'check_fail' | 'approved' | 'signoff'; role: string | null; label: string }
+
+/** 交付详情's figures; null: nothing recorded for it. person_s: gates and the console, overlaps counted once. */
+export type FlowTotals = {
+  elapsed_s: number
+  agent_s: number | null // some agent working (parallel roles counted once)
+  person_s: number | null
+  gate_s: number | null
+  console_s: number | null
+  check_s: number | null
+  credits: number | null
+  check_rounds: number | null
+  send_backs: number
+}
+
+/** GET /runs/<id>/flow: 交付详情, where one run's time went. */
+export type RunFlow = {
+  run: string
+  title: string
+  status: string
+  started_at: number
+  end: number // seconds from the start to the sign-off, else the end, else now
+  live: boolean
+  signed: boolean
+  segments: FlowSegment[]
+  marks: FlowMark[]
+  roles: { key: string; title: string; icon: string }[]
+  totals: FlowTotals
+}
+
 /** A row of the findings backlog (findings-backlog.md); label fix puts it in this batch. */
 export type BacklogRow = { id: string; tool: string; check: string; location: string; message: string; label: string }
 
@@ -410,6 +452,9 @@ export type EventData = {
   passed?: number // tests
   total?: number // tests
   paths?: string[] // conflict / violation: the files involved
+  phase?: 'before_bench' | 'after_bench' | 'rerun' // tests: which round of the team file's checks
+  ms?: number | null // tests: the round's check time, its checks' wall times added up
+  step?: string // bench: the step that starts (rerun)
 }
 
 /**

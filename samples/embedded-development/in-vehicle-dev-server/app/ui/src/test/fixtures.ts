@@ -13,10 +13,11 @@
  *   (the check wall green, a deploy waiting at the operator console), or ended with the release check (the
  *   independent rerun, a check that differed, the evidence page);
  * - readinessOf: GET /readiness on a Mac with the build image but no bench yet;
- * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file; backlogOf: GET /backlog; teamOf: GET /team.
+ * - knowledgeOf, knowledgeTextOf: GET /knowledge and /knowledge/file; backlogOf: GET /backlog; teamOf: GET /team;
+ *   flowOf: GET /runs/<id>/flow (交付详情) of the vstatd run that ended with the release check.
  */
 import raw from './fixtures/board-running.json'
-import type { BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, TeamEventKind, TestCase, TriageRow } from '../types'
+import type { BacklogIndex, BacklogRow, BacklogView, Board, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, RunFlow, FlowSegment, TeamEventKind, TestCase, TriageRow } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -779,5 +780,30 @@ export function teamOf(missing: string[] = []): TeamPreview {
       check('logdiff', 'after_bench', 'dev-fix'), check('release', 'release', null)],
     templates: [...new Set(roles.map((r) => r.template))].sort().map((name) => ({ name, present: !missing.includes(name) })),
     knowledge: { name: 'vstatd', present: true, items: 14, status: 'synced', files_total: 14, files_done: 14, path: '~/workplace/vstatd/knowledge' },
+  }
+}
+
+/** GET /runs/<id>/flow: the vstatd run (vstatdBoard('release')) from its requirement to the sign-off it waits for. */
+export function flowOf(b: Board = vstatdBoard('release')): RunFlow {
+  const r = b.run!
+  const seg = (kind: FlowSegment['kind'], from: number, to: number, label: string, role: string | null = null, result: string | null = null, open = false): FlowSegment =>
+    ({ kind, from, to, role, label, result, open })
+  const segments = [
+    seg('agent', 20, 1500, '分诊 · 第 1 轮', 'triage'), seg('gate', 1510, 1800, '等人批准 · 分诊', 'triage', '批准'),
+    seg('agent', 1810, 2600, '架构师 · 第 1 轮', 'architect'), seg('gate', 2610, 2700, '等人批准 · 开工', 'architect', '批准'),
+    seg('agent', 2710, 3300, '测试 · 第 1 轮', 'tester'), seg('agent', 3310, 4300, '开发 · 修复 · 第 1 轮', 'dev-fix'),
+    seg('agent', 3315, 4500, '开发 · 重构 · 第 1 轮', 'dev-refactor'), seg('checks', 4520, 4900, '检查 第 1 轮', null, '不过'),
+    seg('agent', 4910, 5200, '开发 · 修复 · 修复 build', 'dev-fix'), seg('checks', 5210, 5400, '检查 第 2 轮', null, '通过'),
+    seg('agent', 5410, 5800, '评审 · 第 1 轮', 'reviewer'), seg('console', 5900, 5960, '操作台 · deploy', null, '批准'),
+    seg('console', 6100, 6160, '操作台 · replay', null, '批准'), seg('checks', 6600, 6800, '台架之后的检查', null, '通过'),
+    seg('rerun', 6810, 7300, '独立重跑全部检查', null, '不同'),
+  ]
+  return {
+    run: r.id, title: r.title, status: r.status, started_at: r.started_at, end: 7300, live: false, signed: !!r.signoff,
+    segments,
+    marks: [{ at: 1800, kind: 'approved', role: 'triage', label: '人批准了分诊' }, { at: 2700, kind: 'approved', role: 'architect', label: '人批准了开工' },
+      { at: 4900, kind: 'check_fail', role: null, label: '检查不过：build' }, { at: 4901, kind: 'bounce', role: 'dev-fix', label: 'build 失败，打回开发 · 修复' }],
+    roles: r.roles.map((l) => ({ key: l.key, title: l.title, icon: l.icon })),
+    totals: { elapsed_s: 7300, agent_s: 4705, person_s: 510, gate_s: 390, console_s: 120, check_s: 1260, credits: 18.4, check_rounds: 3, send_backs: 1 },
   }
 }

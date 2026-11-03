@@ -90,6 +90,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     async def events(request: Any) -> Any:
         return kit.json(await svc.events(str(request.match_info.get("rid", ""))))
 
+    async def run_flow(request: Any) -> Any:
+        return kit.json(await svc.flow(str(request.match_info.get("rid", ""))))
+
     async def gate(request: Any) -> Any:
         body = await kit.body(request)
         role, decision, note = body.get("role"), body.get("decision"), body.get("note")
@@ -156,6 +159,7 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         AppRoute("POST", "/runs/{rid}/signoff", kit.guarded(signoff)),
         AppRoute("POST", "/runs/{rid}/hide", kit.guarded(hide_run)),
         AppRoute("GET", "/runs/{rid}/events", kit.guarded(events)),
+        AppRoute("GET", "/runs/{rid}/flow", kit.guarded(run_flow)),
         AppRoute("POST", "/runs/{rid}/open", kit.guarded(open_folder)),
         AppRoute("GET", "/runs/{rid}/roles/{role}", kit.guarded(role_output)),
         AppRoute("GET", "/runs/{rid}/roles/{role}/file", kit.guarded(file_view)),

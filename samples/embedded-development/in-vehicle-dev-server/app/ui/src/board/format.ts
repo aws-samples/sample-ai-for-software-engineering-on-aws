@@ -25,6 +25,7 @@ export const paths = {
   signoff: (run: string) => `${BASE}/runs/${enc(run)}/signoff`,
   hide: (run: string) => `${BASE}/runs/${enc(run)}/hide`,
   events: (run: string) => `${BASE}/runs/${enc(run)}/events`,
+  flow: (run: string) => `${BASE}/runs/${enc(run)}/flow`,
 }
 
 export type Tone = 'run' | 'fix' | 'ok' | 'done' | 'queue' | 'warn' | 'approve' | 'bad' | 'idle' | 'handoff' | 'info'
