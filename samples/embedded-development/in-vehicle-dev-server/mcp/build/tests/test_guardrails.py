@@ -155,6 +155,13 @@ class DenyByDefault(Env):
             with self.assertRaises(Refused):
                 s.call(tool, **args)
 
+    def test_arguments_named_like_the_call_itself_are_refused_and_audited(self):
+        s = self.service()
+        for args in ({"tool": "x"}, {"self": "x"}):
+            with self.assertRaisesRegex(Refused, "unexpected arguments"):
+                s.call("workspace_status", **args)
+        self.assertEqual(self.outcomes(), [("workspace_status", "refused")] * 2)
+
     def test_unknown_tool_extra_and_missing_arguments_are_refused_and_audited(self):
         s = self.service()
         for tool, args, why in (("git_push", {}, "unknown tool"), ("configure", {"profile": "host", "extra": "-DX=1"},
@@ -645,6 +652,8 @@ class Screen(Env):
         async def nxt(ctx):
             return "passed on"
         cases = [{"name": ["git_push"]}, {"name": "workspace_status", "arguments": []},
+                 {"name": "workspace_status", "arguments": {"tool": "x"}},
+                 {"name": "read_result", "arguments": {"check": "build", "self": "x"}},
                  {"name": "workspace_status", "arguments": ""}, {"name": "workspace_status", "arguments": 0},
                  {"name": "workspace_status", "arguments": False}, {"name": "configure", "arguments": {"profile": 1}}]
         for params in cases:

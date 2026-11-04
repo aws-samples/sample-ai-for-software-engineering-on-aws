@@ -96,8 +96,8 @@ class Settings(unittest.TestCase):
         pn = (SAMPLE / "knowledge" / "cc1-platform-notes.md").read_text()
         tr = (SAMPLE / "knowledge" / "team-rules.md").read_text()
         lim = c.limits()
-        self.assertEqual(lim["peak_rss_kib"], 8 * 1024)
-        self.assertIn("| Peak resident memory (RSS) during the recorded drive | 8 MiB |", pn)
+        self.assertEqual(lim["peak_rss_kib"], 6400)
+        self.assertIn("| Peak resident memory (RSS) during the recorded drive | 6,400 KiB |", pn)
         self.assertIn("| Threads at the end of the replay | at most 4 |", pn)
         self.assertEqual(lim["stripped_size_bytes"], int(1.5 * 1024 * 1024))
         self.assertIn("| Binary size, stripped | 1.5 MiB |", pn)
@@ -491,7 +491,7 @@ BASELINE = [
 RESULT = {"replay_id": "drive-01", "target": "emulated-cc1",
           "qemu_command": "qemu-system-aarch64 -M virt -cpu cortex-a57 -smp 4 -m 512 -icount shift=3,sleep=off",
           "replay_finished": True, "replay_end": "player-end-of-drive",
-          "figures_after_replay_end": True, "vm_hwm_kib": 7400, "threads_at_end": 3, "cpu_ms": 2100,
+          "figures_after_replay_end": True, "vm_hwm_kib": 5900, "threads_at_end": 3, "cpu_ms": 2100,
           "approved_digest": DIGEST, "readback_digest": DIGEST}
 
 
@@ -506,7 +506,7 @@ class RunChecks(Tmp):
         return d
 
     def go(self, check_name, run=None, result=None, lines=None, triage=None, baseline_result=None, extra=(), env=None):
-        b = self.write("baseline", BASELINE, baseline_result or dict(RESULT, vm_hwm_kib=7300, cpu_ms=2000))
+        b = self.write("baseline", BASELINE, baseline_result or dict(RESULT, vm_hwm_kib=5850, cpu_ms=2000))
         r = self.write("run", BASELINE if run is None else run, dict(RESULT, **(result or {})), lines)
         args = ["--run", r, "--baseline", b, "--results", self.results, *extra]
         if check_name == "logdiff":
@@ -521,7 +521,8 @@ class RuntimeLimits(RunChecks):
         self.assertIn("emulation", out)
 
     def test_over_peak_rss_or_threads_fails(self):
-        self.assertEqual(self.go("runtime-limits", result={"vm_hwm_kib": 8193})[0], 1)
+        self.assertEqual(self.go("runtime-limits", result={"vm_hwm_kib": 6401})[0], 1)
+        self.assertEqual(self.go("runtime-limits", result={"vm_hwm_kib": 6400})[0], 0)
         self.assertEqual(self.go("runtime-limits", result={"threads_at_end": 5})[0], 1)
 
     def test_run_not_ended_is_blocked(self):
