@@ -159,7 +159,8 @@ default profile can be signed off.
 
 Two MCP servers. Their guardrails live in the servers, whatever the agent session allows.
 
-- **`build`**: configure, cross-build, run a check, read its log. Runs only inside the build server's workspace.
+- **`build`**: configure, cross-build, run a check, read its log. Runs only inside the build server's workspace,
+  and runs the project's code only in a container with no network that cannot reach the server's own records.
 - **`bench`**: lease the target, read supply and ignition, request a deploy of a build, request a restart of
   `vstatd`, start the drive replay, fetch the runtime log and memory figures, release the lease.
   - A lease gives one session the target at a time.
@@ -218,7 +219,7 @@ the generated code and recorded model results are committed and the agents canno
 | Part | In Kiro (IDE or CLI) | In Kiro Crew |
 | --- | --- | --- |
 | `knowledge/` | Steering files | A knowledge source the agents search and cite |
-| `mcp/build`, `mcp/bench` | MCP configuration | Not used: the app runs the checks and the bench actions itself |
+| `mcp/build`, `mcp/bench` | MCP configuration | Not used yet: the app runs the checks and the bench actions itself, with the gaps listed under [Guardrails](#guardrails) |
 | `checks/` | Hooks that block the next tool call on failure; a hook on raw target commands as defence in depth; the guardrails themselves are in the MCP servers | Run by the [Kiro Crew app](#the-kiro-crew-app) after each merge and before the bench, as in the [agent-team sample](../../agent-team-on-kiro-crew/) |
 | `bench/` | Through the `bench` MCP server | `bench/cc1.sh`, run by the app; each action approved at the operator console |
 | Roles (optional) | Custom agents | Team members |
@@ -310,19 +311,13 @@ operator console, through the bench's own approval rules and behind its physical
 independent rerun.
 
 What it does not enforce. If you agree during setup, the app sets **the sessions it opens** to auto-approve their tool
-calls, and the roles' templates allow file reads and writes and shell commands. An agent's shell then has four paths
+calls, and the roles' templates allow file reads and writes and shell commands. An agent's shell then has three paths
 around the bench's guardrails:
 
 1. It can reach the emulated target without the app or the console: `docker exec` into the bench's runner container,
    whose volume `cc1-bench-secrets` holds the target's SSH key.
 2. It can write the bench state in `~/.cc1-bench`, including approval decisions.
 3. It can write the check results of a round under `~/workplace/vstatd-team/runs/<run>/results/`, which the app reads.
-4. With Kiro Crew's sandbox off, it can run `kirocrew token` to sign in as the dashboard owner and then call every route
-   of the app: approve a bench request (`POST /bench/decide`), pass a gate (`/gate`), sign off (`/signoff`). In the
-   first delivery (2026-11-03), the 重试 at 18:17 CST (10:17 UTC in the audit trail) was sent this way from a Kiro session.
-
-A consequence of the fourth path: with the sandbox off, an entry the audit trail shows as a person's says only that a
-route was called with the owner's sign-in, not that the person did it.
 
 **In a demo on one machine** without the containerised build server, approve the bench requests at
 `bench/console.py`, not on the board. When you present it, say that this version shows how the guardrails work; the
@@ -402,9 +397,12 @@ been dry-run once.
    proposed interface with item 3); the facilitators' runs on the reference project are in
    [rehearsal/check-examples/](rehearsal/check-examples/).
 5. MCP servers `build` and `bench`, with their guardrails, the audit log, a test for each guardrail and a smoke test
-   of both. They are for Kiro; the Kiro Crew app does not need them.
+   of both. *`build` done:* [mcp/build/](mcp/build/README.md), and one batch walked through it in
+   [rehearsal/build-server-run/](rehearsal/build-server-run/README.md); `bench` follows. The Kiro Crew app (item 8)
+   does not use them yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting it to them is
+   open.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
-   Kiro Crew app (item 8) needs neither the MCP servers nor this item's configurations.
+   Kiro Crew app (item 8) does not need this item's configurations.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
    Record the time and credits it used.
@@ -476,6 +474,15 @@ are those `dpkg-query` reports in the container, the same in both images; GCC 12
 | dpkg (`dpkg -x` for the stand-in sysroot) | 1.22 | GPL-2.0-or-later |
 | `file` | 5.45 | BSD-2-Clause |
 | `ca-certificates` (HTTPS downloads of the stand-in sysroot) | 20260816 | MPL-2.0 (certificate data) |
+
+The `build` MCP server runs on the build server's host, outside that container, and starts the container for each
+build and check. It needs, on the host:
+
+| Tool | Version | Licence |
+| --- | --- | --- |
+| Docker Engine | 29.8 | Apache-2.0 |
+| Python with `venv`, and git | 3.12, 2.43 | PSF-2.0, GPL-2.0-only |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk), installed with pip from `mcp/build/` | 2.3.0 | MIT |
 
 Until the bench's Buildroot build (build plan item 3) provides the CC-1 sysroot, `tools/make-standin-sysroot.py`
 unpacks a stand-in from Ubuntu 24.04 arm64 packages; it is generated on the build server and not committed. The app's
