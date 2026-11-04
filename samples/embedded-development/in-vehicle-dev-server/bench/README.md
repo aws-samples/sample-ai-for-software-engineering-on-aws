@@ -129,7 +129,7 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 | Cross build against the sysroot | As committed: fails on `<systemd/sd-daemon.h>` (the seed). With `-DCMAKE_SYSROOT`: builds; needs at most GLIBC_2.38 and GLIBCXX_3.4.22, the sysroot has 2.42 and 3.4.33 |
 | Boot to SSH | 17 to 111 s wall clock, depending on host load |
 | One replay | 8 to 54 s wall clock, 36 s of guest time |
-| Repeatability | shift 5, one baseline and four runs: largest difference per entry 16 to 28 ms, logdiff FAIL 3 of 4. shift 3, 14 runs in two batches on 2026-10-29: one baseline and four runs, 4, 5, 5 and 19 ms, logdiff PASS 4 of 4; one baseline and ten runs, 3 to 11 ms (median 7 ms), logdiff PASS 10 of 10, with the host's 1-minute load average between 9.7 and 27.9 and the differences not growing with it. shift 1, one baseline and four runs: 1, 7, 12 and 18 ms, PASS 4 of 4 |
+| Repeatability, one baseline and four runs | shift 5: largest difference per entry 16 to 28 ms, logdiff FAIL 3 of 4. shift 3: 4, 5, 5 and 19 ms, PASS 4 of 4. shift 1: 1, 7, 12 and 18 ms, PASS 4 of 4 |
 | F-008 wrong fix A (condition removed) | logdiff FAIL: `SIGNAL_TIMEOUT` and `SIGNAL_RECOVERED` for `VCU_Speed` and `VCU_Gear` at start-up |
 | F-008 wrong fix B (flag not set) | logdiff FAIL: the baseline's `BCM_Exterior` timeout and recovery are missing |
 | F-021 (`lines_{}`) | **Not caught**: peak RSS 5,944 → 6,752 KiB (+808), limit 8,192 KiB |
@@ -140,8 +140,8 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 - **F-021 calibration (item 2).** On the emulated CC-1 the baseline's peak RSS with 16 clients is about 5.8 MiB, about
   2.2 MiB under the limit; facilitator-notes ask for about 0.5 MiB, so that `lines_{}` passes it. The bench has nothing
   to tune here.
-- **Repeatability margin.** At shift 3, 13 of 14 runs differed from their baseline by at most 11 ms and one by
-  19 ms, against a 20 ms tolerance. Why that run differed by 19 ms was not found.
+- **Repeatability margin.** One of four runs at shift 3 differed by 19 ms against a 20 ms tolerance. More runs are
+  needed before the setting is fixed.
 - **Final baseline.** Generated once the reference project is calibrated, on the commit the scenario ships.
 - **Build container on Apple Silicon (closed 2026-11-03).** `reference-project/tools/Dockerfile` now builds natively
   for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on
