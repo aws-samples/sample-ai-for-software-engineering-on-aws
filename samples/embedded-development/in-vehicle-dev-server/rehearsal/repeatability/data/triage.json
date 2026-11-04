@@ -1,0 +1,301 @@
+{
+  "batch": "vstatd: 待办 fix 发现 + 拆分 Service::run() 信号解码",
+  "base": "240596ff377f03c53c9f1744be62b4797f4bfe6a",
+  "findings": [
+    {
+      "id": "F-001",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "buf 来自 unique_ptr，构造后不会为空；nullptr 判断写在解引用之后，是死代码，删掉。"
+    },
+    {
+      "id": "F-002",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "检查 fcntl 的返回值，失败时关闭 fd 并返回 false，由重连逻辑照常重试。fcntl 在新建的套接字上不会失败，没有可观察的后果，不写单元测试。"
+    },
+    {
+      "id": "F-003",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "unit-test",
+      "note": "路径超过 sun_path 时 connect() 直接返回，socket() 打开的 fd 没关，每次重连泄漏一个。把长度检查移到 socket() 之前。测试：用超长路径调用 connect()，返回 false 且 /proc/self/fd 数量不变。"
+    },
+    {
+      "id": "F-004",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "dlc 改用 unsigned long 接 strtoul 的结果，不再窄化成 int；前面的 end 检查已保证只有一位数字，数值不变。"
+    },
+    {
+      "id": "F-005",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "last_error_ 放进构造函数的初始化列表，去掉通过 this 别名赋值的写法；声明顺序已是 records_、rejected_、decoded_、last_error_。"
+    },
+    {
+      "id": "F-006",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "hex_nibble 里先转 unsigned char 再转 int。不小于 0x80 的字节原来是负数，现在是 128 到 255，两种情况都不在任何十六进制范围内，仍返回 -1，解析结果不变。"
+    },
+    {
+      "id": "F-007",
+      "decision": "justify",
+      "cites": [
+        "[VSTATD-IF p.6 §3.3]"
+      ],
+      "facts": [
+        "DEC-INTEGER-PRODUCT"
+      ],
+      "note": "误报。规范保证 raw 最多 24 位、整数因子最大 100，乘积最大 1677721400，小于 2^32，32 位无符号乘法不会溢出，之后再扩成 64 位。在该行加 // NOLINT(bugprone-implicit-widening-of-multiplication-result) F-007 justified。"
+    },
+    {
+      "id": "F-008",
+      "decision": "justify",
+      "cites": [
+        "[VSTATD-IF p.7 §4.2]"
+      ],
+      "facts": [
+        "SUP-GRACE"
+      ],
+      "note": "误报。check() 把 supervised 置 true 之后调用 hook_->apply()，启动宽限期的钩子（GracePeriod）通过 attach 拿到的指针把它改回 false，分析器看不穿虚函数调用。删掉这个条件会让宽限期失效，改变 §4.2 的行为。在该行加 // cppcheck-suppress knownConditionTrueFalse ; F-008 justified。"
+    },
+    {
+      "id": "F-010",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "status 初始化为 Status::kUnavailable；switch 的每个分支（含 default）本来就会赋值，行为不变。"
+    },
+    {
+      "id": "F-011",
+      "decision": "fix",
+      "behaviour": true,
+      "evidence": "unit-test",
+      "cites": [
+        "[VSTATD-IF p.9 §6.1]"
+      ],
+      "facts": [
+        "ERR-CODES"
+      ],
+      "note": "find() 的循环在 i 等于 24 时读 entries_[24]，越界一个元素；路径不在表里时必然触发。改为 i < kSignalCount。测试：用堆上的 SignalTable 查一个不存在的路径，应返回 kNotFound（ASan 构建下修复前会报越界），GET 该路径仍回 E02。"
+    },
+    {
+      "id": "F-012",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "update() 的 path 参数改为 const std::string&（signal_table.h 和 .cpp）。没有子类重写它，调用方不用改。"
+    },
+    {
+      "id": "F-013",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "broadcast() 的 line 参数改为 const OutLine&（ipc_server.h 和 .cpp）。"
+    },
+    {
+      "id": "F-014",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "unit-test",
+      "note": "unlink 失败（errno 不是 ENOENT）时直接 return false，listen_fd 没关。补上 close(listen_fd)。测试：把 IPC 路径设为一个目录，open_listener() 返回 false 且 /proc/self/fd 数量不变。启动时无法建 IPC 套接字仍按 §6.4 退出，不变。"
+    },
+    {
+      "id": "F-015",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "检查 fcntl 的返回值，失败就关闭 client_fd 并返回，放在 ++next_id_ 之前，不占用客户端编号。fcntl 在刚 accept 的套接字上不会失败，没有可观察的后果，不写单元测试。"
+    },
+    {
+      "id": "F-016",
+      "decision": "fix",
+      "behaviour": true,
+      "evidence": "unit-test",
+      "cites": [
+        "[VSTATD-IF p.8 §5.2]",
+        "[VSTATD-IF p.9 §6.1]"
+      ],
+      "facts": [
+        "IPC-REQUESTS",
+        "ERR-CODES"
+      ],
+      "note": "handle_sub 先判断 interval 有没有值，没有就回 E05。现在 parse_interval 不会返回空值，但 F-018 的修法会让它返回空值，两处要一起改（同一文件、同一人，提交里两个编号都写）。测试：SUB 带非数字间隔回 E05 且连接保持打开。"
+    },
+    {
+      "id": "F-017",
+      "decision": "fix",
+      "behaviour": true,
+      "evidence": "unit-test",
+      "cites": [
+        "[VSTATD-IF p.9 §6.1]"
+      ],
+      "facts": [
+        "ERR-CODES"
+      ],
+      "note": "不带路径的 GET、SUB、UNSUB 只有一个词，却读了 words[1]，是越界读。删掉 missing_path_bytes_ += words[1].size() 这一行（该计数器只有访问函数，没人使用）；这类请求仍回 E02，不变。测试：发 GET 和 SUB 不带路径，回 E02（ASan 构建下修复前会报堆越界）。"
+    },
+    {
+      "id": "F-018",
+      "decision": "fix",
+      "behaviour": true,
+      "evidence": "unit-test",
+      "cites": [
+        "[VSTATD-IF p.8 §5.2]",
+        "[VSTATD-IF p.9 §6.1]"
+      ],
+      "facts": [
+        "IPC-REQUESTS",
+        "ERR-CODES"
+      ],
+      "note": "parse_interval 改用 strtol，检查 endptr 和 errno，不是完整数字或超出范围就返回空值，由 handle_sub 回 E05。范围 50 到 10000 不变。唯一变化的输入：数字后面跟别的字符（例如 100x），原来 atoi 取 100 并订阅成功，现在回 E05；规范没有描述这种输入。测试：abc、100x、很长的数字回 E05，50、100、10000 正常。"
+    },
+    {
+      "id": "F-021",
+      "decision": "justify",
+      "cites": [
+        "[VSTATD-IF p.8 §5.4]",
+        "[CC1-PN §3]"
+      ],
+      "facts": [
+        "IPC-LIMITS"
+      ],
+      "note": "无害。lines_ 是每个客户端 256 行 × 256 字节的环形队列，只有 enqueue 写过的槽才会被读，有效行数由 head_、count_ 和已清零的 lengths_ 决定，不会读到未初始化的数据。给它清零要多触碰 64 KiB，16 个客户端共约 1 MiB，占 8 MiB RSS 限额的八分之一；知识库里没有基线 RSS 数值，余量不明。在构造函数上加 // NOLINT(cppcoreguidelines-pro-type-member-init) F-021 justified。"
+    },
+    {
+      "id": "F-023",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "case 0 里 lv == 6 和 lv > 5 的分支体完全一样（都是 kFlagError）。删掉 lv == 6 这一支，由 lv > 5 覆盖，结果仍是 INVALID。这段代码要被拆出 Service::run()，所以先单独提交这一处，再拆。"
+    },
+    {
+      "id": "F-025",
+      "decision": "defer",
+      "reason": "这个 catch 吞掉解码一步里的所有 std::exception。去掉它，异常会跑出网关线程，违反 TR §1.3；改成记录日志，需要 VSTATD-IF §7.1 里没有的事件，会改变运行日志；bad_alloc 按 §6.4 应记 SERVICE_STOP（out_of_memory）并以非零状态退出，要改 main 和线程之间的协作。三种修法都超出本批的范围，需要先改规范。",
+      "pick_up_when": "VSTATD-IF 写明解码一步失败时怎么记录、怎么退出（包括 bad_alloc 走 §6.4 的路径）之后；拆分后的 decode_signals() 不改这个 try/catch，留在原位。"
+    },
+    {
+      "id": "F-027",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "note": "grace_ms_ 在初始化列表里用 kGraceMs 初始化，去掉只做这件事的 read_grace_ms()。宽限期仍是 2000 ms。"
+    },
+    {
+      "id": "F-028",
+      "decision": "justify",
+      "cites": [
+        "[VSTATD-IF p.9 §6.4]",
+        "[VSTATD-IF p.11 §8.1]",
+        "[CC1-PN §4.2]"
+      ],
+      "note": "无法改成检查。sd_notify 失败时 vstatd 没有别的可做：§6.4 只允许在 IPC 套接字建不起来或内存不足时非零退出；§7.1 没有可记录它的事件，加一个会改变运行日志；不在 systemd 下运行时它返回 0。Type=notify 下 systemd 自己会因收不到 READY 而超时重启（CC1-PN §4.2）。在该行加 // NOLINT(bugprone-unused-return-value) F-028 justified。"
+    },
+    {
+      "id": "F-031",
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "build",
+      "added": {
+        "found_by": "工作项：拆分 Service::run()",
+        "tool": "work item",
+        "location": "src/service.cpp › Service::run"
+      },
+      "note": "把 switch (m) 里 message 0 到 8 的信号解码拆成 service.cpp 匿名命名空间里的 decode_signals()。F-022、F-024、F-026 和 F-025 的 try/catch 留在 Service::run() 原位，静态检查按文件和函数名对待办。行为不变，由台架回放的日志对比证明。"
+    },
+    {
+      "id": "F-032",
+      "decision": "fix",
+      "evidence": "build",
+      "behaviour": false,
+      "added": {
+        "found_by": "checks/build.sh",
+        "tool": "gcc",
+        "location": "src/main.cpp:12"
+      }
+    },
+    {
+      "id": "F-033",
+      "decision": "fix",
+      "evidence": "build",
+      "behaviour": false,
+      "added": {
+        "found_by": "checks/build.sh",
+        "tool": "gcc",
+        "location": "src/main.cpp:12"
+      }
+    },
+    {
+      "id": "F-034",
+      "decision": "fix",
+      "evidence": "build",
+      "behaviour": false,
+      "added": {
+        "found_by": "checks/build.sh",
+        "tool": "gcc",
+        "location": "src/main.cpp:12"
+      }
+    },
+    {
+      "id": "F-035",
+      "decision": "fix",
+      "evidence": "unit-test",
+      "behaviour": false,
+      "note": "F-032/F-033/F-034 是同一个 build 失败，根因在 cmake/cc1-aarch64.cmake 没设 CMAKE_SYSROOT /opt/cc1-sysroot（CC1-PN §7.2），这一轮一并修，提交说明写 F-032 F-033 F-034；F-035 修 SignalTable::get 与解码线程的数据竞争",
+      "added": {
+        "found_by": "checks/unit.sh",
+        "tool": "ThreadSanitizer",
+        "location": "src/signal_table.cpp:90"
+      }
+    }
+  ],
+  "allowed_log_differences": [],
+  "requirements": [
+    {
+      "id": "REQ-FIX-BACKLOG",
+      "real_target_only": false,
+      "evidence": [
+        "static",
+        "unit",
+        "trace"
+      ]
+    },
+    {
+      "id": "REQ-SPLIT-RUN",
+      "real_target_only": false,
+      "evidence": [
+        "build",
+        "static",
+        "unit",
+        "trace"
+      ]
+    },
+    {
+      "id": "REQ-BEHAVIOUR-UNCHANGED",
+      "real_target_only": false,
+      "evidence": [
+        "logdiff"
+      ]
+    },
+    {
+      "id": "REQ-MEMORY-LIMIT",
+      "real_target_only": false,
+      "evidence": [
+        "runtime-limits",
+        "size"
+      ]
+    }
+  ],
+  "approved": {
+    "by": "负责人",
+    "at": "2026-11-03T06:20:33Z"
+  }
+}

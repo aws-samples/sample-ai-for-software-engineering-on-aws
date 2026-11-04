@@ -87,7 +87,7 @@
       "phase": "inception",
       "stage": "重构方案 · 分工",
       "stage_en": "Refactor plan · division of work",
-      "mission": "定 Service::run() 的拆分方案，按源文件给开发分工",
+      "mission": "定 Service::run() 的拆分方案，按源文件和构建文件给开发分工",
       "depends_on": ["triage"],
       "writable": ["docs/aidlc/refactor-plan.md", "docs/aidlc/work-split.json", "docs/aidlc/plan.json"],
       "outputs": ["docs/aidlc/refactor-plan.md", "docs/aidlc/work-split.json", "docs/aidlc/plan.json"],
@@ -95,7 +95,7 @@
       "gate_label": "开工",
       "gate_label_en": "Start",
       "plan": "docs/aidlc/plan.json",
-      "brief": "读批准的 `docs/aidlc/triage.json`（人在关卡上的意见以人为准）和 `src/service.cpp` 的 `Service::run()`。写 `docs/aidlc/refactor-plan.md`：把信号表的处理从 `Service::run()` 拆出去的方案（新的函数或类、放在哪个文件、每一步怎么保证行为不变：同样的信号、值、超时和错误，按 VSTATD-IF 的哪几节），一页以内。再写分工文件 `docs/aidlc/work-split.json`，格式：`{\"roles\": {\"dev-fix\": [\"src/gateway_client.*\", \"src/frame_decoder.*\"], \"dev-refactor\": [\"src/service.*\"]}}`：只用 dev-fix 和 dev-refactor 这两个 key，值是它能改的源文件（不能给 `tests/`，不能给整个仓库）；每个文件只分给一个人，`Service::run()` 所在文件里的修复归重构开发；分诊里要修的每个发现所在的文件都要分出去。最后写 `docs/aidlc/plan.json`：`{\"tester\": \"…\", \"dev-fix\": \"…\", \"dev-refactor\": \"…\", \"reviewer\": \"…\"}`，每人一句话（40 字以内）这次做什么。只写文档，不改代码。"
+      "brief": "读批准的 `docs/aidlc/triage.json`（人在关卡上的意见以人为准）和 `src/service.cpp` 的 `Service::run()`。写 `docs/aidlc/refactor-plan.md`：把信号表的处理从 `Service::run()` 拆出去的方案（新的函数或类、放在哪个文件、每一步怎么保证行为不变：同样的信号、值、超时和错误，按 VSTATD-IF 的哪几节），一页以内。再写分工文件 `docs/aidlc/work-split.json`，格式：`{\"roles\": {\"dev-fix\": [\"src/gateway_client.*\", \"src/frame_decoder.*\"], \"dev-refactor\": [\"src/service.*\"]}}`：只用 dev-fix 和 dev-refactor 这两个 key，值是它能改的文件：源文件，也可以是 `cmake/**` 和 `CMakeLists.txt`，这两个可以分给 dev-fix（不能给 `tests/`，不能给整个仓库）；每个文件只分给一个人，`Service::run()` 所在文件里的修复归重构开发；分诊里要修的每个发现所在的文件都要分出去。最后写 `docs/aidlc/plan.json`：`{\"tester\": \"…\", \"dev-fix\": \"…\", \"dev-refactor\": \"…\", \"reviewer\": \"…\"}`，每人一句话（40 字以内）这次做什么。只写文档，不改代码。"
     },
     {
       "key": "tester",
