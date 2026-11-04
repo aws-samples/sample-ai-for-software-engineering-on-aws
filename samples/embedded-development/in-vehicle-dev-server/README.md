@@ -324,6 +324,11 @@ around the bench's guardrails:
 A consequence of the fourth path: with the sandbox off, an entry the audit trail shows as a person's says only that a
 route was called with the owner's sign-in, not that the person did it.
 
+**In a demo on one machine** without the containerised build server, approve the bench requests at
+`bench/console.py`, not on the board. When you present it, say that this version shows how the guardrails work; the
+real boundary is a containerised build server in which the agents cannot reach Docker, the bench state or the app's
+API.
+
 So in this app the physical gate, the operator console and the action record show how the guardrails work; they are not
 a boundary against the agents. "Only `bench` can reach the target" holds only where the agents' shell has no Docker
 access and no write access to the bench state, such as Kiro Crew in a build-server container without a Docker socket
