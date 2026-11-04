@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from pathlib import Path
 
 from teamkit import FakeManager, FakeTests, act, finish, make_run, mod, read
 
@@ -106,6 +107,44 @@ def test_ownership_problems_are_named():
     problem = team_mod.ownership_problem
     assert team_mod.ok_glob("server/**") and not team_mod.ok_glob("**") and not team_mod.ok_glob("../x")
     assert not team_mod.ok_glob("tests/enterprise/**")
+
+
+def test_the_split_may_give_a_developer_the_build_files_and_its_change_to_them_is_no_violation(tmp_path):
+    split = tmp_path / "split.json"
+    split.write_text(json.dumps({"roles": {"backend": ["src/main.cpp", "cmake/cc1-aarch64.cmake", "CMakeLists.txt"]}}))
+    assert team_mod.ownership_problem(split, ["backend", "mobile"]) is None
+    for bad in (["tests/**"], ["**"], ["../cmake/x.cmake"], ["/abs/x"]):  # still refused: the tests, everything, outside
+        split.write_text(json.dumps({"roles": {"backend": bad}}))
+        assert "不能是 tests/、整个仓库或含 .." in team_mod.ownership_problem(split, ["backend", "mobile"])
+    tests = FakeTests([("t.test.js#AC-1", "backend", lambda wt: "SYSTEM" in read(wt, "cmake/cc1-aarch64.cmake"))])
+
+    async def go():
+        mgr = FakeManager()
+        run = make_run(tmp_path / "run", mgr, tests, team=phased_team(), requirement="交叉构建")
+        await run.tick()
+        act(mgr.by_role("scope"), {"docs/ideation/scope.md": "B-1\n"})
+        finish(mgr.by_role("scope"))
+        await run.tick()
+        assert await run.gate("scope", "approve")
+        await run.tick()
+        act(mgr.by_role("architect"), own({"backend": ["src/main.cpp", "cmake/cc1-aarch64.cmake", "CMakeLists.txt"], "mobile": []}))
+        finish(mgr.by_role("architect"))
+        await run.tick()
+        await run.tick()
+        assert run.roles["backend"]["writable"] == ["src/main.cpp", "cmake/cc1-aarch64.cmake", "CMakeLists.txt"]
+        be = mgr.by_role("backend")
+        act(be, {"cmake/cc1-aarch64.cmake": "set(CMAKE_SYSTEM_NAME Linux)\n"})
+        finish(be)
+        for _ in range(4):
+            await run.tick()
+            for a in mgr.live():
+                if mgr.role_of(a) == "reviewer":
+                    finish(a, "可以交付")
+        assert run.lane("backend")["violations"] == [] and not any(e["kind"] == "violation" for e in run.events)
+        assert run.s["status"] == "done"
+        assert "SYSTEM" in read(Path(run.s["run_wt"]), "cmake/cc1-aarch64.cmake")
+
+    asyncio.run(go())
 
 
 def test_every_event_of_a_run_and_each_test_run_with_its_cases(tmp_path):

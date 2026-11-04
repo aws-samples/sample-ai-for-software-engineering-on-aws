@@ -423,13 +423,15 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   `FATAL: ThreadSanitizer: unexpected memory mapping` (exit 66), also under `setarch -R`, so `checks/unit.sh` always
   failed and `release.sh` could not pass. The Dockerfile now builds `vstatd-build:arm64` natively, where it works;
   the first delivery ran all the app's checks on it (2026-11-03).
-- With the Buildroot sysroot of `bench/build-target.sh` in the volume `cc1-sysroot`, `checks/static.sh` is BLOCKED
-  once the toolchain file sets the sysroot: clang-tidy finds no C++ standard headers (`'chrono' file not found`),
-  because that sysroot has `libstdc++` but not its headers. The same in the amd64 and the arm64 image; with the
-  stand-in sysroot of `tools/make-standin-sysroot.py` the check examples are 23 of 23 (2026-11-03). The app's checks
-  therefore mount the stand-in from the volume `vstatd-standin-sysroot` (team file `check_runner.sysroot`, resolved
-  when a container starts, so a stored run takes it too); the first delivery passed every check with it.
-- How long the Buildroot image build (D10) takes on a Mac. A check round took 47 to 120 s and the independent rerun
-  75 s in the first delivery.
+- The Buildroot sysroot in the volume `cc1-sysroot` now carries the C++ headers (2026-11-04, `bench/build-target.sh`
+  exports them from the toolchain, see bench/README.md). Before, `checks/static.sh` was BLOCKED with it (clang-tidy:
+  `'array' file not found`). With the new one, `rehearsal/check-examples/` is 23 of 23 in the native arm64 image, as
+  with the stand-in sysroot of `tools/make-standin-sysroot.py`; the amd64 image was not tried. The app's checks still
+  mount the stand-in from `vstatd-standin-sysroot` (team file `check_runner.sysroot`), with which the first delivery
+  passed every check. Not decided: whether to switch them to `cc1-sysroot`. A difference to weigh: clang-tidy then
+  reads the GCC 14.3 headers of the target's toolchain, while the build still compiles with the build container's
+  GCC 12; with the stand-in both are GCC 12. No app run has been made with `cc1-sysroot`.
+- How long a first Buildroot image build (D10) takes on a Mac; a rebuild on an existing build took 61 s (2026-11-04).
+  A check round took 47 to 120 s and the independent rerun 75 s in the first delivery.
 - Whether write-scope rules in an agent's own configuration are enforced on a machine whose user-level
   `permissions.yaml` does not allow everything (D2).
