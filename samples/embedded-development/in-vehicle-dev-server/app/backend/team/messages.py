@@ -288,6 +288,18 @@ def clean(params: dict[str, Any] | None) -> dict[str, Any] | None:
     return {k: one(v) for k, v in params.items() if v is not None} if params else None
 
 
+def scrubbed(params: Any, scrub: Callable[[str], str]) -> Any:
+    """*params* with every string in them (in lists and nested messages too) passed through *scrub*: the board says
+    an event from its params in English, so they go out redacted as its text does."""
+    if isinstance(params, str):
+        return scrub(params)
+    if isinstance(params, list):
+        return [scrubbed(x, scrub) for x in params]
+    if isinstance(params, dict):
+        return {k: scrubbed(v, scrub) for k, v in params.items()}
+    return params
+
+
 def render(code: str, params: dict[str, Any] | None = None, title: Callable[[str], str] = str,
            gate: Callable[[str], str] | None = None, lang: str = "zh") -> str:
     """The text of *code* with *params* in *lang* (Chinese by default: the event's text); *title* and *gate* name a

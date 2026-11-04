@@ -189,7 +189,10 @@ export type AuditEntry = {
   step: string // a FlowKey of board/flow.ts; '' when no step applies
   what: string
   evidence: string // '' when there is none
+  flags: AuditFlags
 }
+/** What the board counts in an entry, so that it reads none of its words (audit.py). */
+export type AuditFlags = { differs?: number; where?: 'board' | 'console'; result?: string }
 export type AuditTrail = {
   run: string
   title: string

@@ -559,6 +559,8 @@ export type DeliveryPick = Pick<Delivery, 'name' | 'kind' | 'size' | 'line'>
 const DELIVERY_KINDS: Delivery['kind'][] = ['新应用', '新功能', '修复']  // i18n-keep: values the backend stores
 const DELIVERY_SIZES: Delivery['size'][] = ['小', '中', '大']  // i18n-keep: values the backend stores
 const DELIVERY_LINES: Delivery['line'][] = ['电商', '移动应用', '客户关系管理', '供应链', '内部系统']  // i18n-keep: values the backend stores
+/** A stored delivery value shown in the board's language (the value sent back stays the stored one). */
+const deliveryLabel = (group: 'kind' | 'size' | 'line', values: readonly string[], v: string) => tr(`board.Header.delivery.${group}.${values.indexOf(v)}`)
 
 /** A person at a gate, inside the page (the desktop app has no window.prompt): approve with an optional note for
  * everyone after it, or send it back with what to change. *skips*: the optional members the proposal leaves out (they
@@ -624,7 +626,7 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
   const lead = discuss
     ? tr('board.Header.138', { p0: who || tr('common.it') })
     : overrule ? (approve ? tr('board.Header.139') : tr('board.Header.140'))
-      : report !== undefined ? (approve ? tr('board.Header.141') : tr('board.Header.142'))
+      : report !== undefined ? (approve ? tr('board.Header.141') : tr('board.Header.reviseHint'))
         : approve ? (asking ? tr('board.Header.143') : tr('board.Header.144'))
           : tr('board.Header.145')
   return (
@@ -726,13 +728,13 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
           <legend title={tr('board.Header.170')}>{tr('board.Header.171')}{delivery.why ? tr('board.Header.172', { p0: delivery.why }) : ''}</legend>
           <input aria-label={tr('board.Header.173')} value={pick.name} maxLength={20} onChange={(e) => setPick({ ...pick, name: e.target.value })} />
           <select aria-label={tr('board.Header.174')} value={pick.kind} onChange={(e) => setPick({ ...pick, kind: e.target.value as Delivery['kind'] })}>
-            {DELIVERY_KINDS.map((k) => <option key={k}>{k}</option>)}
+            {DELIVERY_KINDS.map((k) => <option key={k} value={k}>{deliveryLabel('kind', DELIVERY_KINDS, k)}</option>)}
           </select>
           <select aria-label={tr('board.Header.175')} value={pick.size} onChange={(e) => setPick({ ...pick, size: e.target.value as Delivery['size'] })}>
-            {DELIVERY_SIZES.map((k) => <option key={k}>{k}</option>)}
+            {DELIVERY_SIZES.map((k) => <option key={k} value={k}>{deliveryLabel('size', DELIVERY_SIZES, k)}</option>)}
           </select>
           <select aria-label={tr('board.Header.176')} value={pick.line} onChange={(e) => setPick({ ...pick, line: e.target.value as Delivery['line'] })}>
-            {DELIVERY_LINES.map((k) => <option key={k}>{k}</option>)}
+            {DELIVERY_LINES.map((k) => <option key={k} value={k}>{deliveryLabel('line', DELIVERY_LINES, k)}</option>)}
           </select>
         </fieldset>
       )}

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import audit, board, checks, flow, library, outputs, paths, readiness, roster, scorecard
+from . import audit, board, checks, flow, library, messages, outputs, paths, readiness, roster, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -321,7 +321,7 @@ class Service:
         if (decision == "revise" and pending and not spec.get("writable")
                 and not team_mod.review_targets(note, run.team["roles"])
                 and not team_mod.review_targets(run.overrule_review(role), run.team["roles"])):
-            raise AppError("退回要写明打回给谁，比如「打回：前端开发 #2」", "no_target")
+            raise AppError("退回要写明打回给谁，比如「打回：前端开发 #2」（也可以写 Send back: 和角色的英文名）", "no_target")
         if not await run.gate(role, decision, note, delivery, answers, risk if decision == "revise" else None, by=by):
             raise AppError("这个角色现在没有在等人批准", "not_gated", 409)
         return {"ok": True, "run": run.rid, "role": role, "decision": decision, "status": run.s["status"]}
@@ -453,7 +453,8 @@ class Service:
         """Every event of a run, for the replay (the board carries only the latest ones)."""
         run = self._run(rid)
         evs = await asyncio.to_thread(store_mod.all_events, self.data_dir / "runs" / run.rid / "events.jsonl")
-        return {"run": run.rid, "events": [{**e, "text": self.scrub(str(e.get("text", "")))} for e in evs]}
+        return {"run": run.rid, "events": [{**e, "text": self.scrub(str(e.get("text", ""))),
+                                            "params": messages.scrubbed(e.get("params"), self.scrub)} for e in evs]}
 
     async def flow(self, rid: str) -> dict[str, Any]:
         """交付详情: where the run's time went, from its state, its events and the bench's action record."""
@@ -462,7 +463,11 @@ class Service:
         def read() -> dict[str, Any]:
             evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
             out = flow.build(run.s, evs, scorecard.records(), time.time())
-            out["marks"] = [{**m, "label": self.scrub(m["label"])} for m in out["marks"]]  # event text, as /events sends it
+            # event text and params, as /events sends them
+            out["marks"] = [{**m, "label": self.scrub(m["label"]), "params": messages.scrubbed(m.get("params"), self.scrub)}
+                            for m in out["marks"]]
+            out["segments"] = [{**x, "label": self.scrub(x["label"]), "params": messages.scrubbed(x.get("params"), self.scrub)}
+                               for x in out["segments"]]
             return out
         return await asyncio.to_thread(read)
 

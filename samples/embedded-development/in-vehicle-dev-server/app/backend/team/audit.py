@@ -3,7 +3,9 @@
 (``requested_by == "vstatd-team <rid>"``). Nothing is inferred: a field with no record behind it is ``""`` (shown —).
 
 Each entry: ``at`` (epoch), ``iso``, ``seq`` (the event's, None for a bench record), ``actor`` (``person`` | ``agent`` | ``app`` | ``bench``), ``who``, ``step`` (a
-step key of ui/src/board/flow.ts, ``""`` where none applies), ``what`` (one line) and ``evidence``.
+step key of ui/src/board/flow.ts, ``""`` where none applies), ``what`` (one line), ``evidence`` and ``flags``: what the
+board counts, so that it reads no words of ``what`` or ``evidence`` (``differs``: the answers at a gate that differ
+from the proposal; ``where``: ``board`` or ``console`` for a bench decision; ``result``: a bench action's).
 
 ``bench_only`` lists the bench's request, decision and action records whose request no run made (setting up the
 baseline at the console or on the board).
@@ -81,9 +83,10 @@ def _epoch(text: Any) -> float | None:
         return None
 
 
-def _entry(at: float, actor: str, who: str, step: str, what: str, evidence: str = "") -> dict[str, Any]:
+def _entry(at: float, actor: str, who: str, step: str, what: str, evidence: str = "",
+           flags: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"at": round(float(at), 3), "iso": iso_of(float(at)), "seq": None, "actor": actor, "who": who,
-            "step": step or "", "what": what, "evidence": evidence}
+            "step": step or "", "what": what, "evidence": evidence, "flags": dict(flags or {})}
 
 
 def _verdicts(data: dict[str, Any]) -> str:
@@ -116,12 +119,14 @@ def _bench_entry(r: dict[str, Any], app_who: str, lang: str = "zh") -> dict[str,
         if by.startswith("bench"):  # the console's own timeout
             return _entry(at, "bench", bench, "bench", _w(lang, "timed", act=act, verdict=verdict, reason=reason or _w(lang, "timeout")), ref)
         return _entry(at, "person", by or "—", "bench", _w(lang, "decision", where=where(by, lang), verdict=verdict, act=act)
-                      + (_w(lang, "detail", detail=reason) if reason else ""), ref)
+                      + (_w(lang, "detail", detail=reason) if reason else ""), ref,
+                      {"where": "board" if BOARD_MARK in by else "console"})
     if ev == "gate":
         return _entry(at, "bench", bench, "bench", _w(lang, "gate", stage=r.get("stage") or "",
                       passed=_w(lang, "passed" if r.get("passed") else "not_passed"), why=r.get("why") or ""), ref)
     if ev == "action":
-        return _entry(at, "bench", bench, "bench", _w(lang, "result", act=act, result=r.get("result") or "—", detail=r.get("detail") or ""), ref)
+        return _entry(at, "bench", bench, "bench", _w(lang, "result", act=act, result=r.get("result") or "—", detail=r.get("detail") or ""), ref,
+                      {"result": str(r.get("result") or "")})
     if ev == "target":
         return _entry(at, "bench", bench, "bench", _w(lang, "target", state=r.get("state") or "—", why=r.get("why") or ""), ref)
     return None
@@ -212,7 +217,7 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
     for e in sorted(events, key=lambda x: (float(x.get("at") or 0), int(x.get("seq") or 0))):
         if e.get("at") is None:
             continue
-        key, extra = str(e.get("role") or ""), ""
+        key, extra, flags = str(e.get("role") or ""), "", {}
         if e.get("kind") == "merged" and key in merges:
             n = seen_merge[key] = seen_merge.get(key, 0) + 1
             if n <= len(merges[key]):
@@ -224,6 +229,7 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
         elif e.get("kind") == "approved" and last_approved.get(key) == e.get("seq") and answers.get(key):
             extra = ("；" if lang == "zh" else "; ").join(f"{a.get('id')}={a.get('choice')}" + (_w(lang, "differs") if a.get("differs") else "")
                                                           for a in answers[key])
+            flags = {"differs": sum(1 for a in answers[key] if a.get("differs"))}
         elif e.get("kind") == "bounce" and isinstance((e.get("data") or {}).get("answers"), list):
             extra = _w(lang, "changed", ids=" ".join(map(str, e["data"]["answers"])))
         code = e.get("code")
@@ -231,7 +237,8 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
                 if en and code in messages.EN else "")
         entry = _event_entry(e, s, titles, extra, lang, said)
         if entry:
-            out.append({**entry, "seq": int(e["seq"]) if e.get("seq") is not None else None})
+            out.append({**entry, "seq": int(e["seq"]) if e.get("seq") is not None else None,
+                        "flags": {**entry["flags"], **flags}})
     me = f"{APP_NAME} {rid}"
     mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") == me}
     for r in recs:

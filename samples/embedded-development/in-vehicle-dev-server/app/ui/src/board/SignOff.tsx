@@ -146,20 +146,20 @@ export function SignOff({ run, onSign }: { run: RunDetail; onSign?: (by: string,
         <div>
           <dt>{tr('board.SignOff.24')}</dt>
           <dd>
-            {members.length} {tr('board.SignOff.25')} {commits} {tr('board.SignOff.26')} {fmtSpan(run.wall_s)} · {fmtCredits(run.credits)} credits
+            {tr('board.SignOff.work', { members: members.length, commits, time: fmtSpan(run.wall_s), credits: fmtCredits(run.credits) })}
           </dd>
         </div>
       </dl>
       {rel && (
         <details className="kt-sign-evidence" open={!run.signoff} data-testid="kt-sign-evidence">
           <summary>{tr('board.SignOff.27')}</summary>
-          {rel.evidence ? <pre className="kt-evidence">{rel.evidence}</pre> : <p className="kt-dim">{tr('board.SignOff.28')} {rel.results}{tr('board.SignOff.29')}</p>}
+          {rel.evidence ? <pre className="kt-evidence">{rel.evidence}</pre> : <p className="kt-dim">{tr('board.SignOff.noEvidence', { results: rel.results })}</p>}
         </details>
       )}
       {run.signoff ? (
         <p className="kt-sign-done" role="status">
-          <RoleIcon role="sign" size={16} /> <b>{run.signoff.by}</b> {tr('board.SignOff.30')} {new Date(run.signoff.at * 1000).toLocaleString(locale(), { hour12: false })} {tr('board.SignOff.31')}
-          {run.signoff.note ? tr('board.SignOff.32', { p0: run.signoff.note }) : ''}{tr('board.SignOff.33')} {run.signoff.tests}{tr('board.SignOff.29')}
+          <RoleIcon role="sign" size={16} /> <b>{run.signoff.by}</b> {tr('board.SignOff.signed', { at: new Date(run.signoff.at * 1000).toLocaleString(locale(), { hour12: false }),
+            note: run.signoff.note ? tr('board.SignOff.32', { p0: run.signoff.note }) : '', tests: run.signoff.tests })}
         </p>
       ) : run.sign_block && !rel ? (
         <p className="kt-sign-blocked" role="status" data-testid="kt-sign-blocked">

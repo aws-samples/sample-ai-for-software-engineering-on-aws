@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import gitwork, library
+from . import gitwork, library, messages
 from .sessions import agent_fields, find_agent
 from .team import ACTIVE, TeamRun, clean_risk, live_status
 from .toollog import short
@@ -77,7 +77,8 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
                   "held": {**t["held"], "suggest": run.path_suggestions()} if t.get("held") else None, "round": int(t.get("round") or 0),
                   "running": bool(s.get("needs_test"))},
         "merges": [{k: m.get(k) for k in ("role", "sha", "at", "status", "files", "note")} for m in s["merges"]],
-        "events": [{**e, "code": e.get("code"), "params": e.get("params"), "data": e.get("data")} for e in run.events if not (e.get("kind") == "violation" and any(p in str(e.get("text", "")) for p in gitwork.HOST_PREFIXES))],
+        "events": [{**e, "text": scrub(str(e.get("text", ""))), "code": e.get("code"),
+                    "params": messages.scrubbed(e.get("params"), scrub), "data": e.get("data")} for e in run.events if not (e.get("kind") == "violation" and any(p in str(e.get("text", "")) for p in gitwork.HOST_PREFIXES))],
         "imported": dict(s["imported"]) if s.get("imported") else None,
         "signoff": dict(s["signoff"]) if s.get("signoff") else None,
         "risks": [{k: r.get(k) for k in ("what", "amount", "gate", "role", "at")} for r in s.get("risks") or [] if isinstance(r, dict)],

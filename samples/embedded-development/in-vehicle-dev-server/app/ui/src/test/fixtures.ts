@@ -913,8 +913,16 @@ export function flowOf(b: Board = vstatdBoard('release')): RunFlow {
 }
 
 const BOARD_BY = 'Kiro Crew 看板（you，vstatd-team）'
+// the flags audit.py gives these entries: answers that differ from the proposal, where a bench decision was made, an action's result
+const flagsOf = (actor: AuditActor, who: string, step: string, what: string, evidence: string): AuditEntry['flags'] => {
+  const differs = evidence.split('与建议不同').length - 1
+  const result = /结果 (\w+)/.exec(what)?.[1]
+  return { ...(differs ? { differs } : {}), ...(actor === 'person' && step === 'bench' ? { where: who.includes('看板') ? 'board' as const : 'console' as const } : {}),
+    ...(result ? { result } : {}) }
+}
 const audit = (t0: number, rows: [number, AuditActor, string, string, string, string?][]): AuditEntry[] =>
-  rows.map(([dt, actor, who, step, what, evidence = '']) => ({ at: t0 + dt, iso: new Date((t0 + dt) * 1000).toISOString().slice(0, 19) + 'Z', seq: null, actor, who, step, what, evidence }))
+  rows.map(([dt, actor, who, step, what, evidence = '']) => ({ at: t0 + dt, iso: new Date((t0 + dt) * 1000).toISOString().slice(0, 19) + 'Z', seq: null, actor, who, step, what, evidence,
+    flags: flagsOf(actor, who, step, what, evidence) }))
 
 /** GET /runs/<id>/audit: the vstatd run (vstatdBoard('release')), every decision and action as audit.py records them. */
 export function auditOf(b: Board = vstatdBoard('release')): AuditTrail {

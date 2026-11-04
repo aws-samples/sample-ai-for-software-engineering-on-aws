@@ -15,7 +15,7 @@ import type { Board, RunDetail } from '../types'
 import { diffRuns, type BoardDiff } from './diff'
 import { POLL_MS, paths } from './format'
 import { useLatest } from './hooks'
-import { t as tr } from '../i18n'
+import { lang, has, t as tr } from '../i18n'
 
 export interface BoardState {
   board: Board | null
@@ -39,8 +39,10 @@ export function errorText(e: unknown): string {
   if (!m) return raw
   const [, status, body] = m
   try {
-    const data = JSON.parse(body) as { error?: unknown }
-    if (data && typeof data.error === 'string' && data.error) return tr('board.useBoard.1', { p0: data.error, p1: status })
+    const data = JSON.parse(body) as { error?: unknown; code?: unknown }
+    // in English, an error the dictionary knows by its code (err.<code>) is said from there; else the app's own words
+    const said = lang() === 'en' && typeof data?.code === 'string' && has(`err.${data.code}`) ? tr(`err.${data.code}`) : data?.error
+    if (data && typeof said === 'string' && said) return tr('board.useBoard.1', { p0: said, p1: status })
   } catch {
     /* not JSON */
   }

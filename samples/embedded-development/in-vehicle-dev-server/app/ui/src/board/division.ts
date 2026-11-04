@@ -32,10 +32,10 @@ function notesOf(actor: AuditActor, rows: AuditEntry[]): string[] {
   const ev = rows.map((r) => r.evidence).join(' ')
   if (actor === 'person') {
     const answers = ev.match(/\bQ\d+=/g)?.length ?? 0
-    const differ = ev.match(/与建议不同/g)?.length ?? 0 // i18n-keep: parses the backend's Chinese evidence
+    const differ = rows.reduce((n, r) => n + (r.flags?.differs ?? 0), 0)
     if (answers) out.push(tr('board.division.1', { p0: answers, p1: differ ? tr('board.division.changed', { p0: differ }) : '' }))
-    if (rows[0]?.step === 'bench') { // a bench decision says where it was made in its who
-      const board = rows.filter((r) => r.who.includes('Kiro Crew 看板')).length // i18n-keep: parses the backend's Chinese who
+    if (rows[0]?.step === 'bench') { // a bench decision says where it was made
+      const board = rows.filter((r) => r.flags?.where === 'board').length
       if (board) out.push(tr('board.division.2', { p0: board }))
       if (rows.length > board) out.push(tr('board.division.3', { p0: rows.length - board }))
     }
@@ -48,7 +48,7 @@ function notesOf(actor: AuditActor, rows: AuditEntry[]): string[] {
     const commits = ev.match(/\bcommit [0-9a-f]+/g)?.length ?? 0
     if (commits) out.push(tr('board.division.6', { p0: commits }))
   } else {
-    const ok = rows.filter((r) => /结果 ok/.test(r.what)).length // i18n-keep: parses the backend's Chinese what
+    const ok = rows.filter((r) => r.flags?.result === 'ok').length
     if (ok) out.push(tr('board.division.7', { p0: ok }))
   }
   return out

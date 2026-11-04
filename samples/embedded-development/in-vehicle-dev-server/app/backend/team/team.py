@@ -66,8 +66,10 @@ def _ids_in(text: str) -> set[str]:
     for a, b in re.findall(r"F-(\d{3})\s*[~～–-]\s*F-(\d{3})", text):
         ids.update(f"F-{n:03d}" for n in range(int(a), min(int(b), int(a) + 50) + 1))
     return ids
-# A review names who fixes what: its own `打回：` line (role keys or titles), else every 归X it writes.
-_BOUNCE_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*打回[*_`]*\s*[:：]\s*(.+)$", re.M)  # a list item too
+# A review names who fixes what: its own `打回：` line (`Send back:` from the English board; role keys, titles or
+# English titles), else every 归X it writes.
+_BOUNCE_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*(?:打回|send back)[*_`]*\s*[:：]\s*(.+)$",
+                             re.M | re.I)  # a list item too
 _OWNER_RE = re.compile(r"归([^）)，,；;。\n]{1,40})")
 _ROLE_ALIASES = {"后端": "backend", "服务端": "backend", "前端": "frontend", "网页": "frontend", "网页前端": "frontend",
                  "移动端": "mobile", "安卓": "mobile", "Android": "mobile", "运维": "ops", "合规": "compliance",
@@ -218,14 +220,16 @@ def money(amount: float | None) -> str:
 
 
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
-    """The writing roles a 要改 review sends back, in team order: its ``打回：`` lines (one per role is fine), else every
-    归X it names."""
+    """The writing roles a 要改 review sends back, in team order: its ``打回：`` (or ``Send back:``) lines (one per role
+    is fine), else every 归X it names."""
     writers = [r["key"] for r in roles if r.get("writable")]
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
     chunks = lines or _OWNER_RE.findall(text or "")
     found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
+    found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
+              and any(r["title_en"].lower() in chunk.lower() for chunk in chunks)}
     return [k for k in writers if k in found]
 
 

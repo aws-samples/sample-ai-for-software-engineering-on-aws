@@ -79,7 +79,7 @@ function Downloads({ path, name, trail }: { path: string; name: string; trail: A
       const body = api.raw ? await (await api.raw(`${path}?format=${fmt}${lang() === 'en' ? '&lang=en' : ''}`)).text() : JSON.stringify(trail, null, 2)
       const a = document.createElement('a')
       a.href = URL.createObjectURL(new Blob([body], { type: fmt === 'md' ? 'text/markdown' : 'application/json' }))
-      a.download = `${name}.${fmt}`
+      a.download = `${name}${lang() === 'en' ? '.en' : ''}.${fmt}` // not audit.md: the signed one is Chinese, checked by its sha256
       a.click()
       URL.revokeObjectURL(a.href)
       setErr('')
@@ -89,10 +89,10 @@ function Downloads({ path, name, trail }: { path: string; name: string; trail: A
   }
   return (
     <span className="kt-audit-dl">
-      {tr('board.Audit.3')}
+      {tr('board.Audit.download')}
       <button type="button" className="kt-out-btn" disabled={!api.raw} title={api.raw ? '' : tr('board.Audit.4')} onClick={() => void save('md')}>Markdown</button>
       {' / '}
-      <button type="button" className="kt-out-btn" onClick={() => void save('json')}>JSON</button>{tr('board.Audit.5')}
+      <button type="button" className="kt-out-btn" onClick={() => void save('json')}>JSON</button>
       {err && <span className="kt-error" role="alert">{err}</span>}
     </span>
   )

@@ -354,6 +354,12 @@ the `audit.md` written at sign-off stays Chinese, because its sha256 is on the s
 its roles' names, stages and gate labels in English (`title_en`, `stage_en`, `gate_label_en`) and its working
 language (`"language": "zh"`).
 
+The params go out through the same redaction as the text (`/events`, `/flow` and the board), since the English board
+says an event from them. Sending work back at a review gate takes `打回：` or `Send back:`, with a role's key, its
+name or its English name. The board's counts in the work-split grid come from `flags` on the audit entries, not from
+their words, so the English trail counts the same. The English audit downloads as `audit-<run>.en.md`, so it is not
+taken for the signed `audit.md`.
+
 Not translated: finding IDs, check names, file paths, commits and commands; what people and agents write (notes,
 summaries, replies, the agents' documents); the reasons the app passes on from the checks and the bench; the roles'
 briefs, the task template and the default request, which are what the agents read.

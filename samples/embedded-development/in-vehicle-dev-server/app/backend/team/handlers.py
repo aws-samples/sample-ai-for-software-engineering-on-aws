@@ -190,7 +190,7 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
             return kit.json(trail)
         text = audit_mod.markdown(trail, lang) if fmt == "md" else audit_mod.as_json(trail)
         return web.Response(text=text, content_type="text/markdown" if fmt == "md" else "application/json", charset="utf-8",
-                            headers={"Content-Disposition": f'attachment; filename="{name}.{fmt}"'})
+                            headers={"Content-Disposition": f'attachment; filename="{name}{".en" if lang == "en" else ""}.{fmt}"'})
 
     async def gate(request: Any) -> Any:
         body = await kit.body(request)

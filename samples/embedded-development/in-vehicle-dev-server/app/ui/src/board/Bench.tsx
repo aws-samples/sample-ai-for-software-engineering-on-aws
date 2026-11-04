@@ -223,8 +223,8 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
         )}
       </div>
       <div className="kt-bench-record">
-        <b>{tr('board.Bench.57')} {Math.min(ACTION_SHOWN, st.actions.length)} {tr('board.Bench.58')}</b>
-        {recent.length === 0 ? <p className="kt-dim">{tr('board.Bench.59')}{st.dir}{tr('board.Bench.60')}</p> : (
+        <b>{tr('board.Bench.recent', { n: Math.min(ACTION_SHOWN, st.actions.length) })}</b>
+        {recent.length === 0 ? <p className="kt-dim">{tr('board.Bench.emptyRecord', { dir: st.dir })}</p> : (
           <ol data-testid="kt-bench-record">
             {recent.map((a, i) => (
               <li key={`${str(a.at)}-${i}`}>

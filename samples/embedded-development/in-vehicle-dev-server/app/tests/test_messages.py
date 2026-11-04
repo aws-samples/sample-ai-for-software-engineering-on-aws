@@ -113,3 +113,47 @@ def test_the_audit_trail_in_english_and_an_older_event_without_a_code():
     md = audit.markdown(en, "en")
     assert md.startswith("# Audit trail · r1") and "| Time (UTC) | Who | What | Evidence |" in md and "## Gate: triage" in md
     assert audit.markdown(zh).startswith("# 审计记录 · r1")  # the audit.md written at sign-off: Chinese, as before
+
+
+def test_params_go_out_redacted_as_the_text_does(tmp_path, monkeypatch):
+    """The English board says an event from its params: /events, /flow and the board send them through the same
+    redaction as the text, so a token in a note is hidden in both languages."""
+    import asyncio
+    import logging
+    from types import SimpleNamespace
+
+    from http_fakes import AppRoute, FakeWeb, call, owner_check
+    from teamkit import FakeManager, make_run
+    from test_flow import recorded
+
+    service, handlers, board = mod("service"), mod("handlers"), mod("board")
+    secret = "sk-ABCDEFGHIJKLMNOPQRSTUV"
+    assert messages.scrubbed({"note": f"key {secret}", "why": {"code": "hold.release", "params": {"why": secret}},
+                              "cases": [secret], "n": 3}, service.basic_scrub) == {
+        "note": service.basic_scrub(f"key {secret}"),
+        "why": {"code": "hold.release", "params": {"why": service.basic_scrub(secret)}},
+        "cases": [service.basic_scrub(secret)], "n": 3}
+
+    s, events, recs = recorded(tmp_path)
+    events.append({"seq": 99, "at": events[-1]["at"] + 1, "kind": "approved", "role": "triage", "from": "person", "to": "triage",
+                   "text": "人批准了分诊", "data": None, "code": "approved", "params": {"g_gate": "triage", "note": secret}})
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(tmp_path / "data"))
+    svc = service.Service(ctx, manager=FakeManager(), work_root=tmp_path / "work", tick_s=60)
+    svc.runs[s["id"]] = SimpleNamespace(rid=s["id"], s=s)
+    d = tmp_path / "data" / "runs" / s["id"]
+    d.mkdir(parents=True)
+    (d / "events.jsonl").write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events), encoding="utf-8")
+    monkeypatch.setattr(mod("scorecard"), "records", lambda d=None: recs)
+    routes = handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check)
+
+    async def go():
+        for path in (f"/runs/{s['id']}/events", f"/runs/{s['id']}/flow"):
+            out = json.dumps((await call(routes, "GET", path)).body, ensure_ascii=False)
+            assert secret not in out and "[已隐去]" in out, path
+    asyncio.run(go())
+
+    run = make_run(tmp_path / "b", FakeManager())
+    run.say("approved", "approved", {"g_gate": run.order[0], "note": f"token={secret}"}, role=run.order[0], frm="person")
+    out = board.build({run.rid: run}, None, mgr=None, scrub=service.basic_scrub, now=1.0)["run"]
+    assert secret not in json.dumps(out["events"], ensure_ascii=False)
+    assert out["events"][-1]["params"]["note"] == "token=[已隐去]"

@@ -24,7 +24,7 @@ describe('the dictionaries', () => {
   })
 
   test('en.json is English: no Chinese outside the protocol words a person types or the language names', () => {
-    const KEEP = new Set(['AppBar.lang.zh', 'board.Header.142'])
+    const KEEP = new Set(['AppBar.lang.zh'])
     expect(Object.entries(en).filter(([k, v]) => !KEEP.has(k) && CJK.test(v)).map(([k]) => k)).toEqual([])
   })
 

@@ -13,6 +13,8 @@ vi.hoisted(() => localStorage.setItem('vstatd-team:lang', 'en'))
 import { apiCalls, setApiRoutes } from '../test/stubs/app-sdk'
 import { auditOf, clone, runningBoard, scorecardOf, vstatdBoard } from '../test/fixtures'
 import VstatdTeamApp from '../main'
+import { errorText } from '../board/useBoard'
+import { GateDialog } from '../board/Header'
 import { lang, LANG_KEY, locale } from './index'
 import type { Board } from '../types'
 
@@ -76,6 +78,36 @@ describe('the board in English', () => {
     const feed = await screen.findByTestId('kt-feed')
     expect(feed).toHaveTextContent('运行开始：活动报名小站')
     expect(within(await screen.findByTestId('kt-appbar')).getByRole('tab', { name: 'Team board' })).toBeInTheDocument()
+  })
+
+  test('an error the dictionary knows is said by its code; others keep the app\'s words', () => {
+    const said = errorText(new Error('API 400: {"error": "退回要写明打回给谁", "code": "no_target"}'))
+    expect(said).toContain('Send back: Developer · fix')
+    expect(said).not.toContain('退回')
+    expect(errorText(new Error('API 409: {"error": "已经签过了", "code": "signed"}'))).toContain('已经签过了')
+  })
+
+  test('the English audit trail downloads as audit-<run>.en.*, not as the signed audit.md', async () => {
+    const b = vstatdBoard('release')
+    b.run!.status = 'done'
+    b.run!.ended_at = b.at
+    serve(b)
+    const names: string[] = []
+    Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download) })
+    render(<VstatdTeamApp pollMs={60_000} />)
+    const audit = await screen.findByTestId('kt-audit')
+    await userEvent.click(await within(audit).findByRole('button', { name: 'JSON' }))
+    await waitFor(() => expect(names).toEqual([`audit-${b.run!.id}.en.json`]))
+  })
+
+  test('the delivery labels at a gate are English, the values sent stay the stored ones', async () => {
+    const onConfirm = vi.fn(async () => {})
+    render(<GateDialog label="Scope" decision="approve" delivery={{ name: 'x', kind: '修复', size: '中', line: '内部系统', why: '', confirmed: false }}
+      onConfirm={onConfirm} onCancel={() => {}} />)
+    const kind = screen.getByRole('combobox', { name: /kind|type/i }) as HTMLSelectElement
+    expect([...kind.options].map((o) => [o.value, o.textContent])).toEqual([['新应用', 'New app'], ['新功能', 'New feature'], ['修复', 'Fix']])
+    expect(kind.value).toBe('修复')
   })
 
   test('中文 / English: the choice is kept in this browser (the page reloads in it)', async () => {
