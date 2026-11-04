@@ -35,13 +35,14 @@ reconciles: that stays at the operator console. The bench owner's commands of `b
 | --- | --- |
 | Deny by default | A call runs only when the server's role grants the tool's permission class (`read-only`, `controlled-write`, `physical`). The role is the `--role` of the command line that the agent configuration sets, never part of a request; an unknown role is granted nothing |
 | Closed arguments | Only `run_check` takes an argument, from a fixed list. An unknown tool, an extra or missing argument or a value that is not a string is refused and audited before the SDK would reject it |
-| A lease | Physical calls and `run_check` need the lease. One session holds it at a time; it lapses after `lease.ttl_s` without a call and is renewed by each physical call. The holder is the server process, so two agent sessions never share it |
+| A lease | Physical calls and `run_check` need the lease. One session holds it at a time; it lapses after `lease.ttl_s` without a call and is renewed by each physical call. The holder is the server process, so two agent sessions never share it; a lease whose holder process is gone can be taken at once |
 | Only a judged build | `request_deploy` takes the build from the `build` server's published results: `build.json` with verdict PASS, not `--local`, and `artifacts/vstatd` whose SHA-256 is that result's digest. It copies the file into its own state before `cc1.sh` sees it, so nothing can swap it between the check and the deploy |
 | A person approves each action | `cc1.sh` passes the physical gate, writes a request with the digest, and waits for a decision at the console; no answer before the timeout is a refusal. The request names the server and its role as the requester (`CC1_REQUESTER`) |
 | No retries | A refusal, a timeout or a failure is returned as it is. After an interrupted or failed action the bench reports the target `unknown` and refuses everything but reads until a person reconciles it at the console |
 | Results that are this run's | The after-bench checks read what the agents' build produced on the target, so they run in a container like the `build` server's (no network, read-only root, no capabilities, only the run, the baseline, the triage and the sample mounted read-only). A result is published only when it names the check, agrees with the exit status, and recorded the run and baseline the server gave it, with their SHA-256 unchanged; otherwise an `ERROR` record is published in its place |
 | The server's paths are not the agents' | The server refuses to start when its configuration, state, the bench state, the sample, the baseline or the triage folder could be written or replaced by someone other than root or the server's user |
 | Audit | Every call appends a `started` line and an outcome line (`ok`, `failed`, `timeout`, `refused`, `error`) to `audit.jsonl`: time, role, tool, class, arguments, exit status, duration, and for an action its request ID and digest. A refusal before the call starts has the outcome line only. The bench's action record holds the approvals |
+| A session that ends ends its actions | When the server exits or gets SIGTERM, SIGHUP or SIGINT (an MCP client that goes away closes stdin, then terminates the server), it stops the `cc1.sh` and container clients it started, audits the call in progress as `error`, gives the lease back and exits without waiting for the call. A request still waiting at the console is then answered by nobody and expires; an approved action in progress is ended, and the bench marks the target `unknown` until a person reconciles it |
 | One call at a time | Calls hold one lock across threads and processes; malformed calls are refused without waiting for it |
 | Clean environment | `cc1.sh` gets `PATH`, `HOME`, `LANG`, the bench state, the approval timeout, the requester and what the docker client needs; nothing else of the server's environment |
 
@@ -124,7 +125,7 @@ is refused a deploy; with `--checks`, as a developer, it takes the lease and run
 container on the last run in the server's state.
 
 Last run on 2026-11-04 on an Apple Silicon Mac with Docker Desktop, Python 3.13 and MCP Python SDK 2.3.0, as the
-user who owns the bench: 26 guardrail tests OK (24 and 2 skipped without the SDK). The smoke test over stdio read the
+user who owns the bench: 29 guardrail tests OK (26 and 3 skipped without the SDK). The smoke test over stdio read the
 running emulated CC-1 (target `known`, supply 13.5 V and KL15 on, the installed digest), was refused `request_deploy`
 as a reviewer, and with a copy of the first delivery's replay (`r11032637`) in its state ran `runtime-limits` (PASS,
 peak RSS 5896 of 8192 KiB) and `logdiff` (PASS, 328 of 328 entries paired) in the `vstatd-build:arm64` container, in
@@ -140,10 +141,12 @@ and `logdiff` PASS (328 of 328 entries paired, no difference). `audit.jsonl` has
 calls with the two request IDs and the digest; the deploy and the replay each took about 72 s, most of it the wait
 for the approval.
 
-Seen on a first attempt, before the run above: when the MCP client went away while `request_deploy` waited for the
-approval, the server exited but its `cc1.sh deploy` stayed alive and still waiting, so an approval then would have
-deployed with nobody recording the outcome; the request was refused at the console. The lease of that session stayed
-in `lease.json` until its expiry (30 minutes), so a new session was refused until it was removed by hand.
+Seen on a first attempt, before the run above, and fixed since (*A session that ends ends its actions*, and the
+lease row): when the MCP client went away while `request_deploy` waited for the approval, the server ended but its
+`cc1.sh deploy` stayed alive and still waiting, so an approval then would have deployed with nobody recording the
+outcome; the request was refused at the console. The lease of that session stayed in `lease.json` until its expiry
+(30 minutes), so a new session was refused until it was removed by hand. Two tests reproduce it: a client over stdio
+that gives up mid-deploy, and a server terminated mid-deploy; both failed before the fix.
 
 ## Not yet verified
 
@@ -163,8 +166,6 @@ in `lease.json` until its expiry (30 minutes), so a new session was refused unti
   not a tool.
 - **The Kiro Crew app.** It calls `cc1.sh` itself today. Switching it to these tools, and the Kiro Crew members to
   the `build` and `bench` servers, is the trust-boundary question of the sync.
-- **A session that goes away mid-action.** Proposed: the server ends the `cc1.sh` it started when it exits (the
-  request then expires unanswered), and a lease whose holder process is gone can be taken at once.
 - **Approval on the board.** The board approved this server's requests as it approves the app's own: it is open to
   any request at the console, which is what the scenario page's demo advice says.
 - **Repeated replays** for the repeatability runs: each one is a separate approval; whether a person may approve a

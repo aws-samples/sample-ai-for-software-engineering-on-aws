@@ -8,6 +8,7 @@ lease, the build that may be deployed (the one the `build` server judged PASS), 
 checks in a container, with their results published only when they are this run's.
 """
 
+import atexit
 import contextlib
 import datetime
 import fcntl
@@ -22,6 +23,7 @@ import re
 import secrets
 import shlex
 import shutil
+import signal
 import stat
 import subprocess
 import tempfile
@@ -229,6 +231,38 @@ class Sandbox:
                           cleanup=home)
 
 
+# The process groups this server started that are still running (cc1.sh, a check's container client): stopped when the
+# session ends, so that no action goes on, or waits for an approval, with nobody to record its outcome.
+RUNNING = set()
+RUNNING_LOCK = threading.Lock()
+
+
+def stop_running():
+    """Sends SIGTERM to every process group in RUNNING; returns how many. Does not wait: cc1.sh's own exit handler
+    marks an approved action in progress as failed (the target becomes unknown until a person reconciles it)."""
+    with RUNNING_LOCK:
+        pids = list(RUNNING)
+    for pid in pids:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(pid, signal.SIGTERM)
+    return len(pids)
+
+
+def alive(holder):
+    """Whether the process named in a lease holder (``role:pid:token``) is still running on this host."""
+    try:
+        pid = int(str(holder).split(":")[1])
+    except (IndexError, ValueError):
+        return True  # not a holder this server wrote: left to expire
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def run_logged(argv, env, log, timeout, header=None, kill=None, cleanup=None):
     """Runs argv with its output in `log`; a timeout kills it (and `kill`), nothing is retried."""
     fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o640)
@@ -242,6 +276,8 @@ def run_logged(argv, env, log, timeout, header=None, kill=None, cleanup=None):
             except FileNotFoundError as e:
                 f.write(f"{e}\n")
                 return {"outcome": "error", "exit_status": 127}
+            with RUNNING_LOCK:
+                RUNNING.add(proc.pid)
             try:
                 rc = proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -256,6 +292,9 @@ def run_logged(argv, env, log, timeout, header=None, kill=None, cleanup=None):
                 proc.wait()
                 f.write(f"\n[stopped after {timeout} s; not retried]\n")
                 return {"outcome": "timeout", "exit_status": None}
+            finally:
+                with RUNNING_LOCK:
+                    RUNNING.discard(proc.pid)
         return {"outcome": "ok" if rc == 0 else "failed", "exit_status": rc}
     finally:
         if cleanup:
@@ -319,6 +358,7 @@ class BenchService:
         label = hashlib.sha256(str(self.state).encode()).hexdigest()[:16]
         self.sandbox = Sandbox(cfg.get("sandbox", {}), env_path, label)
         self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"  # this session's lease identity
+        self.current = None  # the call in progress, for the audit if the session ends during it
         self.lock = threading.Lock()
         self.lock_path = self.state / "lock"
 
@@ -369,6 +409,7 @@ class BenchService:
         with self.exclusive():
             started = time.monotonic()
             self.audit({**entry, "outcome": "started"})
+            self.current = entry
             try:
                 if tool in NEEDS_LEASE:
                     self.need_lease()
@@ -380,6 +421,8 @@ class BenchService:
             except Exception as e:  # noqa: BLE001 - audited, then reported without internals
                 self.audit({**entry, "outcome": "error", "detail": f"{type(e).__name__}: {e}"})
                 raise RuntimeError(f"{tool} failed on the server; see the audit log") from e
+            finally:
+                self.current = None
             self.audit({**entry, "outcome": result.get("outcome", "ok"), "exit_status": result.get("exit_status"),
                         "duration_ms": int((time.monotonic() - started) * 1000),
                         **{k: result[k] for k in ("verdict", "digest", "request") if result.get(k)}})
@@ -445,8 +488,10 @@ class BenchService:
     # ------------------------------------------------------------------------------------------ lease
 
     def lease(self):
+        """The lease in force: not expired, and its holder's process still running (a session that died without
+        releasing it does not keep the target until the lease lapses)."""
         data = read_json(self.lease_file)
-        if not data or float(data.get("expires", 0)) <= time.time():
+        if not data or float(data.get("expires", 0)) <= time.time() or not alive(data.get("holder")):
             return None
         return data
 
@@ -480,13 +525,20 @@ class BenchService:
         os.unlink(self.lease_file)
         return {"released": True}
 
-    def release_on_exit(self):
-        with contextlib.suppress(Exception), self.exclusive():
-            held = self.lease()
+    def end_session(self, why="the session ended"):
+        """When the server ends (its client went away, a signal): stops what it started that is still running,
+        audits the call in progress, and gives the lease back. Takes neither lock, since the call in progress may
+        hold them; the lease file is this session's, so removing it races with nobody."""
+        with contextlib.suppress(Exception):
+            current, stopped = self.current, stop_running()
+            if current:
+                self.audit({**current, "outcome": "error",
+                            "detail": f"{why} during the call; stopped {stopped} process(es) it had started"})
+            held = read_json(self.lease_file)
             if held and held.get("holder") == self.holder:
                 os.unlink(self.lease_file)
                 self.audit({"tool": "lease_release", "class": CONTROLLED_WRITE, "args": {}, "outcome": "ok",
-                            "detail": "released when the session ended"})
+                            "detail": f"released: {why}"})
 
     # ------------------------------------------------------------------------------------------ reads
 
@@ -645,3 +697,16 @@ class BenchService:
                 if inp.get("sha256") != hashes[name] or sha256(path) != hashes[name]:
                     return None, f"{name} changed during the check"
         return data, None
+
+
+def end_on_exit(service):
+    """The server's exit handlers: on a normal exit and on SIGTERM, SIGHUP and SIGINT (an MCP client that goes away
+    closes stdin and then terminates the server), end the session and exit at once, without waiting for the call in
+    progress."""
+    atexit.register(service.end_session)
+
+    def on_signal(signum, _frame):
+        service.end_session(f"the server got signal {signal.Signals(signum).name}")
+        os._exit(128 + signum)
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, on_signal)

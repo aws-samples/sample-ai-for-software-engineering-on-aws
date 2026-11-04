@@ -14,7 +14,9 @@ import json
 import os
 import pathlib
 import shutil
+import signal
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -36,6 +38,7 @@ case $1 in
   supply) echo '{"voltage_v": 13.5, "kl15": "on"}' ;;
   probe)  echo '{"qemu_running": true, "reachable": true}' ;;
   deploy|restart|replay)
+    echo $$ > "$F/pid"
     printf '{"at": "2026-11-04T00:00:00Z", "event": "request", "id": "req-%s-%s", "action": "%s", "requested_by": "%s"}\n' \
       "$1" "$RANDOM" "$1" "$CC1_REQUESTER" >> "$S/actions.jsonl"
     case $mode in
@@ -269,9 +272,50 @@ class Lease(Env):
 
     def test_the_lease_goes_when_the_session_ends(self):
         s = self.with_lease()
-        s.release_on_exit()
+        s.end_session()
         self.assertFalse((self.st / "lease.json").exists())
-        self.assertEqual(self.audit()[-1]["detail"], "released when the session ended")
+        self.assertEqual(self.audit()[-1]["detail"], "released: the session ended")
+
+    def test_a_lease_whose_session_died_can_be_taken_at_once(self):
+        self.with_lease()
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()
+        data = json.loads((self.st / "lease.json").read_text())
+        data["holder"] = f"developer:{gone.pid}:0123456789abcdef"  # expires in 10 minutes, its process is gone
+        (self.st / "lease.json").write_text(json.dumps(data))
+        b = self.service()
+        self.assertTrue(b.call("lease_acquire")["yours"])
+        self.assertEqual(json.loads((self.st / "lease.json").read_text())["holder"], b.holder)
+
+    def test_a_server_that_is_terminated_mid_action_stops_its_cc1_and_gives_the_lease_back(self):
+        self.publish_build()
+        (self.fake / "mode").write_text("hang")  # cc1.sh waits as for an approval
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); from benchserver.core import BenchService, end_on_exit; "
+                "s = BenchService(sys.argv[2], 'developer'); end_on_exit(s); s.call('lease_acquire'); "
+                "s.call('request_deploy')")
+        server = subprocess.Popen([sys.executable, "-c", code, str(pathlib.Path(__file__).resolve().parents[1]),
+                                   str(self.config)])
+        pid_file = self.fake / "pid"
+        for _ in range(100):
+            if pid_file.exists():
+                break
+            time.sleep(0.05)
+        cc1 = int(pid_file.read_text())
+        server.send_signal(signal.SIGTERM)
+        self.assertEqual(server.wait(timeout=10), 128 + signal.SIGTERM)
+        for _ in range(100):  # the stand-in cc1.sh and its sleep end
+            try:
+                os.kill(cc1, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            self.fail("cc1.sh still running after the server ended")
+        self.assertFalse((self.st / "lease.json").exists())
+        ended = [e for e in self.audit() if e["tool"] == "request_deploy"]
+        self.assertEqual([e["outcome"] for e in ended], ["started", "error"])
+        self.assertIn("SIGTERM during the call; stopped 1 process(es)", ended[-1]["detail"])
+        self.assertEqual(self.audit()[-1]["detail"], "released: the server got signal SIGTERM")
 
 
 class Deploy(Env):
@@ -449,6 +493,39 @@ class McpLayer(Env):
         self.assertTrue(all(o[0] == "raised" or o[1] for o in out[1:]))
         self.assertEqual([o for _, o in self.outcomes() if o != "started"], ["refused"] * 4)
         self.assertEqual(self.calls(), [])
+
+    def test_a_client_that_goes_away_mid_action_leaves_no_cc1_and_no_lease(self):
+        """Over stdio, as an agent starts the server: the client gives up while request_deploy waits as for an
+        approval, and the SDK ends the server (stdin closed, then SIGTERM)."""
+        import asyncio
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+        self.publish_build()
+        (self.fake / "mode").write_text("hang")
+        params = StdioServerParameters(command=sys.executable, args=["-m", "benchserver", "--config", str(self.config),
+                                                                     "--role", "developer"],
+                                       cwd=str(pathlib.Path(__file__).resolve().parents[1]), env=dict(os.environ))
+
+        async def go():
+            async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
+                await s.initialize()
+                await s.call_tool("lease_acquire", {})
+                try:
+                    await s.call_tool("request_deploy", {}, read_timeout_seconds=1.0)
+                except Exception:  # noqa: BLE001 - the client gives up
+                    pass
+        asyncio.run(go())
+        cc1 = int((self.fake / "pid").read_text())
+        for _ in range(100):
+            try:
+                os.kill(cc1, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            self.fail("cc1.sh still running after the client went away")
+        self.assertFalse((self.st / "lease.json").exists())
+        self.assertEqual([e["outcome"] for e in self.audit() if e["tool"] == "request_deploy"], ["started", "error"])
 
 
 if __name__ == "__main__":

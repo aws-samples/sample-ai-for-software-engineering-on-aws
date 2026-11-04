@@ -9,14 +9,13 @@ tool or with an argument a tool does not take is refused and audited before the 
 """
 
 import argparse
-import atexit
 import sys
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.shared.exceptions import MCPError
 
-from .core import CHECKS, BenchService, ConfigError, Refused
+from .core import CHECKS, BenchService, ConfigError, Refused, end_on_exit
 
 INVALID_PARAMS = -32602
 
@@ -119,6 +118,6 @@ def main(argv=None):
     except ConfigError as e:
         print(f"benchserver: {e}", file=sys.stderr)
         return 2
-    atexit.register(service.release_on_exit)  # a session that ends gives the target back
+    end_on_exit(service)  # a session that ends stops what it started and gives the target back
     make_server(service).run("stdio")
     return 0
