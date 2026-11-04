@@ -1,0 +1,83 @@
+{
+  "check": "logdiff",
+  "verdict": "FAIL",
+  "commit": null,
+  "local": false,
+  "tier": "emulation",
+  "inputs": {
+    "triage": {
+      "path": "/m/triage.json",
+      "sha256": "cc599f2917598333de8af2369374b2930454007149fd969ccf4716a96e5e344b"
+    },
+    "run_result": {
+      "path": "/m/runs/b1-r19/run-result.json",
+      "sha256": "8a2d89e6c7cbb7e8604f2cb52e0ccda3b23cb9881b2d8af2171cd0ad2761f1de"
+    },
+    "run_log": {
+      "path": "/m/runs/b1-r19/run.jsonl",
+      "sha256": "16a03848c1ea2fadd7c17efe9fc00b37c2153cd9d67d33d56569d480a0914889"
+    },
+    "baseline_result": {
+      "path": "/m/baseline/baseline-result.json",
+      "sha256": "41752eae10e4c1af75ced6c896195d79c3d28fa39a1977c07a070529d004ad40"
+    },
+    "baseline_log": {
+      "path": "/m/baseline/baseline.jsonl",
+      "sha256": "b74b1f258010ab915dd732775c61f7e77f9a5f8eb7b23fc9d4bccb8d7e0b32cf"
+    }
+  },
+  "details": {
+    "replay_id": "drive-01@39a3d0dec2ab+62abaaf5",
+    "target": "emulated-cc1",
+    "deployed_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+    "approved_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+    "baseline_entries": 328,
+    "run_entries": 328,
+    "paired": 312,
+    "differences": 32,
+    "allowed": [],
+    "unexplained": 32,
+    "order_changes": 0,
+    "allowed_not_seen": [],
+    "window_ms": 20,
+    "diff": "/m/results/b1-r19/logdiff.diff"
+  },
+  "reasons": [
+    "only in the baseline: {\"t_ms\":1238,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"1\"}",
+    "only in the baseline: {\"t_ms\":1258,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"2\"}",
+    "only in the run: {\"t_ms\":1260,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"1\"}",
+    "only in the baseline: {\"t_ms\":1278,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"3\"}",
+    "only in the run: {\"t_ms\":1280,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"2\"}",
+    "only in the baseline: {\"t_ms\":1299,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"4\"}",
+    "only in the run: {\"t_ms\":1300,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"3\"}",
+    "only in the baseline: {\"t_ms\":1319,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"5\"}",
+    "only in the run: {\"t_ms\":1320,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"4\"}",
+    "only in the baseline: {\"t_ms\":1338,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"6\"}",
+    "only in the run: {\"t_ms\":1340,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"5\"}",
+    "only in the baseline: {\"t_ms\":1358,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"7\"}",
+    "only in the run: {\"t_ms\":1360,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"6\"}",
+    "only in the baseline: {\"t_ms\":1378,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"8\"}",
+    "only in the run: {\"t_ms\":1380,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"7\"}",
+    "only in the baseline: {\"t_ms\":1399,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"9\"}",
+    "only in the run: {\"t_ms\":1400,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"8\"}",
+    "only in the baseline: {\"t_ms\":1418,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"10\"}",
+    "only in the run: {\"t_ms\":1420,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"9\"}",
+    "only in the baseline: {\"t_ms\":1438,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"11\"}",
+    "only in the run: {\"t_ms\":1440,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"10\"}",
+    "only in the baseline: {\"t_ms\":1459,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"12\"}",
+    "only in the run: {\"t_ms\":1461,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"11\"}",
+    "only in the baseline: {\"t_ms\":1479,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"13\"}",
+    "only in the run: {\"t_ms\":1480,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"12\"}",
+    "only in the baseline: {\"t_ms\":1499,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"14\"}",
+    "only in the run: {\"t_ms\":1500,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"13\"}",
+    "only in the baseline: {\"t_ms\":1519,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"15\"}",
+    "only in the run: {\"t_ms\":1521,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"14\"}",
+    "only in the baseline: {\"t_ms\":1539,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"16\"}",
+    "only in the run: {\"t_ms\":1540,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"15\"}",
+    "only in the run: {\"t_ms\":1560,\"ev\":\"CLIENT_CONNECTED\",\"client\":\"16\"}"
+  ],
+  "tools": {},
+  "started": "2026-11-04T05:04:02Z",
+  "ended": "2026-11-04T05:04:03Z",
+  "summary": "312 of 328 baseline entries paired; 32 unexplained difference(s), 0 allowed, 0 order change(s); emulation"
+}
