@@ -80,5 +80,6 @@ build. Widening the window, or pairing `CLIENT_CONNECTED` by client rather than 
 - The wrong fix adds 664 to 1,228 KiB (its minimum less the normal maximum, its maximum less the normal minimum);
   the medians differ by 962 KiB.
 - With a 6,400 KiB limit: no normal run would exceed it (largest 5,944, 456 KiB under); every wrong-fix run would
-  (smallest 6,608, 208 KiB over). Today's limit of 8,192 KiB passes all 70.
+  (smallest 6,608, 208 KiB over). The limit of 8,192 KiB at the time passed all 70; it was lowered to 6,400 KiB
+  after this measurement (CC1-PN §3).
 - `threads_at_end` was 3 in every run.

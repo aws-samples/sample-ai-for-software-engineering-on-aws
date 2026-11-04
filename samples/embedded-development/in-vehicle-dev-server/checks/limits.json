@@ -1,8 +1,8 @@
 {
   "_comment": "Limits the checks apply. Each value cites its source in the knowledge; checks/test verifies that the source states it. No command-line option or environment variable changes them.",
   "peak_rss_kib": {
-    "value": 8192,
-    "source": "[CC1-PN §3] Peak resident memory (RSS) during the recorded drive: 8 MiB"
+    "value": 6400,
+    "source": "[CC1-PN §3] Peak resident memory (RSS) during the recorded drive: 6,400 KiB"
   },
   "threads_at_end": {
     "value": 4,

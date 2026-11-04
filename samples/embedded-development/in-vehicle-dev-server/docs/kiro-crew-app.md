@@ -407,7 +407,8 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
 - **What it confirmed.** The arm64 image runs ThreadSanitizer, `unit.sh` reported the seeded race in
   `SignalTable::get` with the absolute path of the check's copy, and with the stand-in sysroot every check passed
   on the final commit: 53 tests in each of plain, ThreadSanitizer and AddressSanitizer builds, peak RSS 5896 of
-  8192 KiB on the emulated CC-1, 328 of 328 log entries paired with no unexplained difference.
+  8192 KiB (the limit then; 6,400 KiB since 2026-11-04) on the emulated CC-1, 328 of 328 log entries paired with no
+  unexplained difference.
 - **Justifications overturned.** The scorecard first counted F-007, F-008, F-021 and F-028 as overturned by the
   reviewer: it counted every justification a 要改 review named, and that review named them to confirm them. The
   reviewer now writes an overturn on a line of its own, `推翻说明：F-007` (team file brief), and only that line

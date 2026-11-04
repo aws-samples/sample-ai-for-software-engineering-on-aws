@@ -133,14 +133,14 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 | Repeatability at shift 3, 2026-11-04 | One baseline and 60 runs over three boots: largest difference per entry 2 to 24 ms (median 5), logdiff PASS 58 of 60; both FAILs (23, 24 ms) a `CLIENT_CONNECTED` when the replay's clients connect. [rehearsal/repeatability/](../rehearsal/repeatability/README.md) |
 | F-008 wrong fix A (condition removed) | logdiff FAIL: `SIGNAL_TIMEOUT` and `SIGNAL_RECOVERED` for `VCU_Speed` and `VCU_Gear` at start-up |
 | F-008 wrong fix B (flag not set) | logdiff FAIL: the baseline's `BCM_Exterior` timeout and recovery are missing |
-| F-021 (`lines_{}`) | **Not caught**: peak RSS 5,944 → 6,752 KiB (+808), limit 8,192 KiB. On 2026-11-04, 60 normal runs 5,644 to 5,944 KiB and 10 wrong-fix runs 6,608 to 6,872 KiB ([rehearsal/repeatability/](../rehearsal/repeatability/README.md)) |
+| F-021 (`lines_{}`) | Not caught at the first limit of 8,192 KiB: peak RSS 5,944 → 6,752 KiB (+808). On 2026-11-04, 60 normal runs 5,644 to 5,944 KiB and 10 wrong-fix runs 6,608 to 6,872 KiB ([rehearsal/repeatability/](../rehearsal/repeatability/README.md)); the limit is now 6,400 KiB (CC1-PN §3), which every wrong-fix run exceeds |
 | Gate, end to end | KL15 off and 10.5 V refused without a request; a refusal and three approvals at the console; a kill during a replay left the target unknown; replay, `stop-vstatd` and `stop` were then refused until a reconcile |
 
 ## Open
 
-- **F-021 calibration (item 2).** On the emulated CC-1 the baseline's peak RSS with 16 clients is about 5.8 MiB, about
-  2.2 MiB under the limit; facilitator-notes ask for about 0.5 MiB, so that `lines_{}` passes it. The bench has nothing
-  to tune here.
+- **F-021 calibration (closed 2026-11-04).** The peak-RSS limit of CC1-PN §3 is now 6,400 KiB, set from the 70 runs
+  of [rehearsal/repeatability/](../rehearsal/repeatability/README.md): 456 KiB above the largest normal run, 208 KiB
+  under the smallest wrong-fix run. On another host, see [facilitator-notes](../rehearsal/facilitator-notes.md).
 - **Repeatability margin.** At shift 3, 2 of 60 runs of the same build failed the 20 ms window (23 and 24 ms), both
   on a client's connection time ([rehearsal/repeatability/](../rehearsal/repeatability/README.md), 2026-11-04). Not
   decided: a wider window, or pairing `CLIENT_CONNECTED` by client (checks, item 4).

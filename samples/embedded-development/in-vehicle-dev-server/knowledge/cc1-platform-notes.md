@@ -25,7 +25,7 @@
 
 | Limit | Value | How it is checked |
 | --- | --- | --- |
-| Peak resident memory (RSS) during the recorded drive | 8 MiB | `checks/runtime-limits.sh` on the emulated CC-1 |
+| Peak resident memory (RSS) during the recorded drive | 6,400 KiB | `checks/runtime-limits.sh` on the emulated CC-1 |
 | Memory limit of the service unit (`MemoryMax`) | 12 MiB | Set in the unit file; exceeding it kills the service |
 | Binary size, stripped | 1.5 MiB | `checks/size.sh` |
 | Threads at the end of the replay | at most 4 | `checks/runtime-limits.sh` |

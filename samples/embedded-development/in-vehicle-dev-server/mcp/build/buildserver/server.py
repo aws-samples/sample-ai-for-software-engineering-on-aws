@@ -54,7 +54,7 @@ def make_server(service):
         middleware=[make_screen(service)],
     )
 
-    def guarded(tool, **args):
+    def guarded(tool, /, **args):
         try:
             return service.call(tool, **args)
         except Refused as e:
