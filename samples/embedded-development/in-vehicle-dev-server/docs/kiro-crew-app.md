@@ -24,6 +24,8 @@ What this does not enforce, and the README must say so:
 - An agent's shell can reach the emulated target without the app: `docker exec` into the bench runner, whose volume
   `cc1-bench-secrets` holds the target's SSH key.
 - An agent can write the bench state in `~/.cc1-bench`, including approval decisions.
+- With Kiro Crew's sandbox off, an agent's shell can sign in to the app's API as the dashboard owner and approve a
+  bench request, pass a gate or sign off (see the facts below); the audit trail then records it as the person's.
 
 So in this app the physical gate, the operator console and the action record show how the guardrails work; they are
 not a boundary against the agents. The claim "only `bench` can reach the target" holds only in a set-up where the
@@ -49,6 +51,11 @@ Facts found on the way (2026-11-02, kiro-cli 2.37.1, Kiro Crew 0.12.0-rc.3 on ma
   [kirodotdev/Kiro#7799](https://github.com/kirodotdev/Kiro/issues/7799).
 - Kiro Crew's macOS sandbox (Seatbelt, `standard` level) hides `~/.docker` but does not stop connections to the
   Docker socket, and does not hide `~/.cc1-bench`.
+- With `agent.sandbox off` (2026-11-03, first delivery): a shell started from a Kiro session ran `kirocrew token`, which
+  mints a sign-in for the dashboard owner, and called the app's routes with it; the 重试 at 18:17 CST (10:17 UTC) of run `r11032637`
+  was sent this way. Every route is open to it, `/bench/decide`, `/gate` and `/signoff` included, and the audit trail
+  shows such a call as the person's: with the sandbox off, a person's entry proves only that the owner's sign-in was
+  used. Versions installed when this was written down (2026-11-04): Kiro Crew 0.12.0-rc.4, kiro-cli 3.0.0.
 
 ### D3. Bench actions are approved by a person, at the operator console or on the board
 
@@ -63,8 +70,9 @@ before; the release owner signs off on the board.
 
 Changed on 2026-11-03 at the user's request (the first version approved at the console only). It moves no boundary in
 this app: per D2 an agent's shell can already write the bench state. It does remove "the approval happens outside the
-agents' tools" from what the app shows; that holds only where the agents cannot reach the app's API or the bench state,
-as in the containerised set-up of D2.
+agents' tools" from what the app shows; that holds only where the agents cannot reach the app's API (with Kiro
+Crew's sandbox off they can, through `kirocrew token`: see the facts under D2) or the bench state, as in the
+containerised set-up of D2.
 
 Alternatives considered: approvals at the console only, the board showing the commands (the first version); a board gate
 in front of the console (two approvals for one action).
@@ -371,7 +379,7 @@ bench images; step 12 needs them.
 10. **Members, setup and cleanup.** `agents/kiro-crew/make_templates.py`, `vendor/aidlc-workflows/`, `setup.sh`,
     `cleanup.sh`, `scripts/`. *Verify:* setup runs twice without change the second time; `cleanup.sh --dry-run`
     lists exactly what setup recorded; a template with the same name is backed up and put back.
-11. **Documentation.** The scenario README (the app, the three paths around the guardrails, prerequisites) and
+11. **Documentation.** The scenario README (the app, the four paths around the guardrails, prerequisites) and
     `app/README.md`. *Verify:* links resolve; the README's claims match these notes.
 12. **One delivery end to end.** With the bench images built: from the triage gate to sign-off, approving bench
     actions at the console. Record the time and credits it used and how long the checks, the rerun and the image

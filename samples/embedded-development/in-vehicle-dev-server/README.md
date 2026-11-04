@@ -310,13 +310,19 @@ operator console, through the bench's own approval rules and behind its physical
 independent rerun.
 
 What it does not enforce. If you agree during setup, the app sets **the sessions it opens** to auto-approve their tool
-calls, and the roles' templates allow file reads and writes and shell commands. An agent's shell then has three paths
+calls, and the roles' templates allow file reads and writes and shell commands. An agent's shell then has four paths
 around the bench's guardrails:
 
 1. It can reach the emulated target without the app or the console: `docker exec` into the bench's runner container,
    whose volume `cc1-bench-secrets` holds the target's SSH key.
 2. It can write the bench state in `~/.cc1-bench`, including approval decisions.
 3. It can write the check results of a round under `~/workplace/vstatd-team/runs/<run>/results/`, which the app reads.
+4. With Kiro Crew's sandbox off, it can run `kirocrew token` to sign in as the dashboard owner and then call every route
+   of the app: approve a bench request (`POST /bench/decide`), pass a gate (`/gate`), sign off (`/signoff`). In the
+   first delivery (2026-11-03), the 重试 at 18:17 CST (10:17 UTC in the audit trail) was sent this way from a Kiro session.
+
+A consequence of the fourth path: with the sandbox off, an entry the audit trail shows as a person's says only that a
+route was called with the owner's sign-in, not that the person did it.
 
 So in this app the physical gate, the operator console and the action record show how the guardrails work; they are not
 a boundary against the agents. "Only `bench` can reach the target" holds only where the agents' shell has no Docker
