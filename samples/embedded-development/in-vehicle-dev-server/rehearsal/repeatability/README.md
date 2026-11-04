@@ -36,9 +36,20 @@ For facilitators, not for the agents' workspace. Answers two questions from the 
 
 [`data/runs.csv`](data/runs.csv) has one row per run (boot, replay in the boot, build, the two verdicts, the largest
 and 99th-percentile |dt|, the entries over 10, 15 and 20 ms, the entry with the largest |dt|, `vm_hwm_kib`,
-`threads_at_end`, `cpu_ms`, wall clock, load, host in use); [`data/runs/`](data/runs/) has each run's
-`run-result.json` and [`data/baseline-result.json`](data/baseline-result.json) the baseline's. The run logs
-(`run.jsonl`) are not kept here.
+`threads_at_end`, `cpu_ms`, wall clock, load, host in use). Everything it was computed from is here:
+
+- [`data/runs/`](data/runs/): each run's `run-result.json` (`<boot>-<run>.json`) and its runtime log `run.jsonl`
+  (`<boot>-<run>.jsonl`), as `cc1-bench finish` wrote them;
+- [`data/baseline.jsonl`](data/baseline.jsonl) and [`data/baseline-result.json`](data/baseline-result.json): the
+  baseline replay every run is compared with;
+- [`data/checks/`](data/checks/): per run, the results of `checks/logdiff.sh` and `checks/runtime-limits.sh`
+  (`logdiff.diff` for the two runs logdiff failed); [`data/triage.json`](data/triage.json) is the triage logdiff was given;
+- [`data/measure.log`](data/measure.log): what `measure.py` ran and printed, in order (the repository's path is written
+  `<repo>`, the home directory `~`).
+
+Recomputing the table from these files with `dt_stats()` of `measure.py` gives the same largest and 99th-percentile
+|dt|, counts over 10, 15 and 20 ms, entry with the largest |dt| and unpaired entries for all 70 runs; the
+`vm_hwm_kib` and both verdicts match the run results and the check results.
 
 ## Results
 

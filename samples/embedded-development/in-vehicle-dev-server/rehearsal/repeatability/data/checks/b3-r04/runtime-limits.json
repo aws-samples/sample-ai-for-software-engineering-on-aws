@@ -1,0 +1,46 @@
+{
+  "check": "runtime-limits",
+  "verdict": "PASS",
+  "commit": null,
+  "local": false,
+  "tier": "emulation",
+  "inputs": {
+    "run_result": {
+      "path": "/m/runs/b3-r04/run-result.json",
+      "sha256": "e5080eacb0a734a27a27a6132c7f06f117d5a6d9cb4d10fa277c1f03e31e1917"
+    },
+    "run_log": {
+      "path": "/m/runs/b3-r04/run.jsonl",
+      "sha256": "4f106b1e00dd6a09b5a8fecde97b29715a79d0511206f2bd964447a5d68354a9"
+    },
+    "baseline_result": {
+      "path": "/m/baseline/baseline-result.json",
+      "sha256": "41752eae10e4c1af75ced6c896195d79c3d28fa39a1977c07a070529d004ad40"
+    },
+    "baseline_log": {
+      "path": "/m/baseline/baseline.jsonl",
+      "sha256": "b74b1f258010ab915dd732775c61f7e77f9a5f8eb7b23fc9d4bccb8d7e0b32cf"
+    }
+  },
+  "details": {
+    "replay_id": "drive-01@39a3d0dec2ab+62abaaf5",
+    "target": "emulated-cc1",
+    "deployed_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+    "approved_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+    "vm_hwm_kib": 5804,
+    "peak_rss_limit_kib": 8192,
+    "baseline_vm_hwm_kib": 5900,
+    "threads_at_end": 3,
+    "threads_limit": 4,
+    "cpu_ms": 2440,
+    "baseline_cpu_ms": 2640,
+    "cpu_relative_to_baseline": 0.924,
+    "note": "CPU time is reported, not judged (CC1-PN \u00a73)",
+    "vstatd_restarts": 0
+  },
+  "reasons": [],
+  "tools": {},
+  "started": "2026-11-04T05:33:36Z",
+  "ended": "2026-11-04T05:33:36Z",
+  "summary": "peak RSS 5804 of 8192 KiB (baseline 5900), 3 threads, CPU x0.924 of baseline; emulation"
+}
