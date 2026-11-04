@@ -130,9 +130,10 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 | Boot to SSH | 17 to 111 s wall clock, depending on host load |
 | One replay | 8 to 54 s wall clock, 36 s of guest time |
 | Repeatability, one baseline and four runs | shift 5: largest difference per entry 16 to 28 ms, logdiff FAIL 3 of 4. shift 3: 4, 5, 5 and 19 ms, PASS 4 of 4. shift 1: 1, 7, 12 and 18 ms, PASS 4 of 4 |
+| Repeatability at shift 3, 2026-11-04 | One baseline and 60 runs over three boots: largest difference per entry 2 to 24 ms (median 5), logdiff PASS 58 of 60; both FAILs (23, 24 ms) a `CLIENT_CONNECTED` when the replay's clients connect. [rehearsal/repeatability/](../rehearsal/repeatability/README.md) |
 | F-008 wrong fix A (condition removed) | logdiff FAIL: `SIGNAL_TIMEOUT` and `SIGNAL_RECOVERED` for `VCU_Speed` and `VCU_Gear` at start-up |
 | F-008 wrong fix B (flag not set) | logdiff FAIL: the baseline's `BCM_Exterior` timeout and recovery are missing |
-| F-021 (`lines_{}`) | **Not caught**: peak RSS 5,944 → 6,752 KiB (+808), limit 8,192 KiB |
+| F-021 (`lines_{}`) | **Not caught**: peak RSS 5,944 → 6,752 KiB (+808), limit 8,192 KiB. On 2026-11-04, 60 normal runs 5,644 to 5,944 KiB and 10 wrong-fix runs 6,608 to 6,872 KiB ([rehearsal/repeatability/](../rehearsal/repeatability/README.md)) |
 | Gate, end to end | KL15 off and 10.5 V refused without a request; a refusal and three approvals at the console; a kill during a replay left the target unknown; replay, `stop-vstatd` and `stop` were then refused until a reconcile |
 
 ## Open
@@ -140,8 +141,9 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 - **F-021 calibration (item 2).** On the emulated CC-1 the baseline's peak RSS with 16 clients is about 5.8 MiB, about
   2.2 MiB under the limit; facilitator-notes ask for about 0.5 MiB, so that `lines_{}` passes it. The bench has nothing
   to tune here.
-- **Repeatability margin.** One of four runs at shift 3 differed by 19 ms against a 20 ms tolerance. More runs are
-  needed before the setting is fixed.
+- **Repeatability margin.** At shift 3, 2 of 60 runs of the same build failed the 20 ms window (23 and 24 ms), both
+  on a client's connection time ([rehearsal/repeatability/](../rehearsal/repeatability/README.md), 2026-11-04). Not
+  decided: a wider window, or pairing `CLIENT_CONNECTED` by client (checks, item 4).
 - **Final baseline.** Generated once the reference project is calibrated, on the commit the scenario ships.
 - **Build container on Apple Silicon (closed 2026-11-03).** `reference-project/tools/Dockerfile` now builds natively
   for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on

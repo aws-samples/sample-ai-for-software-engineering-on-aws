@@ -1,0 +1,16 @@
+{
+ "replay_id": "drive-01@39a3d0dec2ab+62abaaf5",
+ "target": "emulated-cc1",
+ "qemu_command": "qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 4 -m 512M -icount shift=3,sleep=off -kernel /images/Image -append root=/dev/vda rw rootwait console=ttyAMA0 -drive file=/state/rootfs.ext4,if=none,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -netdev user,id=eth0,hostfwd=tcp:127.0.0.1:2222-:22 -device virtio-net-device,netdev=eth0 -fw_cfg name=opt/cc1/authorized_keys,file=/secrets/id_ed25519.pub -display none -serial file:/state/console.log -monitor unix:/state/monitor.sock,server,nowait",
+ "replay_finished": true,
+ "replay_end": "player-end-of-drive",
+ "figures_after_replay_end": true,
+ "vm_hwm_kib": 5916,
+ "threads_at_end": 3,
+ "cpu_ms": 2470,
+ "approved_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+ "readback_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+ "vstatd_restarts": 0,
+ "journal_marker": "cc1-bench marker dd56a4bc-32e4-47e7-9aa2-83b83eb00520",
+ "approval_request": "20261104T133533-replay-eeaa"
+}
