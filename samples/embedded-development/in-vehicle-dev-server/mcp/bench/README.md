@@ -130,10 +130,25 @@ as a reviewer, and with a copy of the first delivery's replay (`r11032637`) in i
 peak RSS 5896 of 8192 KiB) and `logdiff` (PASS, 328 of 328 entries paired) in the `vstatd-build:arm64` container, in
 7 s.
 
+A deploy and a replay through the server on the real bench, 2026-11-04, same machine and user: an MCP client over
+stdio with the developer role took the lease, called `request_deploy` with the first delivery's signed-off build
+(the `build` result of `r11032637`'s rerun, PASS, digest `4cbb3cb4b7ad…`), then `request_replay`, then both
+after-bench checks on that replay, then released the lease. A person approved each request (on the Kiro Crew board,
+which records itself as the decider in the action record); the deploy read the digest back, the replay wrote
+`run-1` into the server's state, `runtime-limits` gave PASS (peak RSS 5844 of 8192 KiB, baseline 5860, 3 threads)
+and `logdiff` PASS (328 of 328 entries paired, no difference). `audit.jsonl` has an `ok` line for each of the nine
+calls with the two request IDs and the digest; the deploy and the replay each took about 72 s, most of it the wait
+for the approval.
+
+Seen on a first attempt, before the run above: when the MCP client went away while `request_deploy` waited for the
+approval, the server exited but its `cc1.sh deploy` stayed alive and still waiting, so an approval then would have
+deployed with nobody recording the outcome; the request was refused at the console. The lease of that session stayed
+in `lease.json` until its expiry (30 minutes), so a new session was refused until it was removed by hand.
+
 ## Not yet verified
 
-- A deploy, a restart and a replay through the server on the real bench, each approved at the operator console. The
-  tests cover them with a stand-in `cc1.sh`; the smoke test requests no physical action.
+- A restart through the server on the real bench. The tests cover it with a stand-in `cc1.sh`.
+- An approval at `bench/console.py` of a request from this server (the run above was approved on the board).
 - The server as a user of its own (`benchsrv`), started by the agents' user through sudo; the run above was as the
   bench owner's own user, so the path checks only met that user's folders.
 - A Linux bench host.
@@ -148,5 +163,9 @@ peak RSS 5896 of 8192 KiB) and `logdiff` (PASS, 328 of 328 entries paired) in th
   not a tool.
 - **The Kiro Crew app.** It calls `cc1.sh` itself today. Switching it to these tools, and the Kiro Crew members to
   the `build` and `bench` servers, is the trust-boundary question of the sync.
+- **A session that goes away mid-action.** Proposed: the server ends the `cc1.sh` it started when it exits (the
+  request then expires unanswered), and a lease whose holder process is gone can be taken at once.
+- **Approval on the board.** The board approved this server's requests as it approves the app's own: it is open to
+  any request at the console, which is what the scenario page's demo advice says.
 - **Repeated replays** for the repeatability runs: each one is a separate approval; whether a person may approve a
   batch for one digest is not decided.
