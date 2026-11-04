@@ -39,11 +39,15 @@ case $1 in
   probe)  echo '{"qemu_running": true, "reachable": true}' ;;
   deploy|restart|replay)
     echo $$ > "$F/pid"
-    printf '{"at": "2026-11-04T00:00:00Z", "event": "request", "id": "req-%s-%s", "action": "%s", "requested_by": "%s"}\n' \
-      "$1" "$RANDOM" "$1" "$CC1_REQUESTER" >> "$S/actions.jsonl"
+    rid="req-$1-$RANDOM"
+    printf '{"at": "2026-11-04T00:00:00Z", "event": "request", "id": "%s", "action": "%s", "requested_by": "%s"}\n' \
+      "$rid" "$1" "$CC1_REQUESTER" >> "$S/actions.jsonl"
     case $mode in
       refuse) echo "deploy of x: approve or refuse it at the operator console" >&2
+              printf '{"event": "decision", "id": "%s", "verdict": "refused", "by": "%s", "reason": "%s"}\n' \
+                "$rid" "alice@bench (ttys001)" "not this build" >> "$S/actions.jsonl"
               echo "refused: refused (alice@bench (ttys001)): not this build" >&2; exit 1 ;;
+      target-says-refused) echo "refused: printed by the agents' vstatd on the target" >&2; exit 1 ;;
       fail)   echo "$1 failed" >&2; exit 1 ;;
       hang)   sleep 30 ;;
     esac
@@ -96,7 +100,7 @@ sys.exit({"PASS": 0, "FAIL": 1, "BLOCKED": 3}[v])
 
 class Env(unittest.TestCase):
     def setUp(self):
-        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="benchserver-test-"))
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="benchserver-test-")).resolve()  # macOS: /var is /private/var
         os.chmod(self.tmp, 0o700)
         self.fake = self.tmp / "fake"
         self.fake.mkdir()
@@ -221,6 +225,51 @@ class ClosedArguments(Env):
                                                       "request_restart", "request_replay"]))
 
 
+class Calls(Env):
+    def test_arguments_named_like_the_call_itself_are_refused_and_audited(self):
+        s = self.service()
+        for args in ({"tool": "x"}, {"self": "x"}):
+            with self.assertRaisesRegex(Refused, "unexpected arguments"):
+                s.call("bench_status", **args)
+        self.assertEqual(self.outcomes(), [("bench_status", "refused")] * 2)
+
+    def test_the_raw_arguments_of_a_malformed_call_are_capped_in_the_audit(self):
+        with self.assertRaises(Refused):
+            self.service().call("x" * 5000, **{"y" * 5000: "z" * 5000, **{f"a{i}": i for i in range(50)}})
+        line = (self.st / "audit.jsonl").read_text()
+        self.assertLess(len(line), 4000)
+        self.assertEqual(len(self.audit()[-1]["args"]), 20)
+
+    def test_reads_do_not_wait_for_a_call_in_progress(self):
+        """A read-only call takes no lock: another session sees the request waiting at the console."""
+        import threading
+        a, b = self.with_lease(), self.service("reviewer")
+        held, done = threading.Event(), threading.Event()
+
+        def hold():
+            with a.exclusive():
+                held.set()
+                done.wait(10)
+        t = threading.Thread(target=hold)
+        t.start()
+        held.wait(5)
+        t0 = time.monotonic()
+        try:
+            b.call("bench_status")
+            b.call("read_actions")
+        finally:
+            done.set()
+            t.join()
+        self.assertLess(time.monotonic() - t0, 3)
+
+    def test_only_run_check_reaps_containers(self):
+        s = self.with_lease()
+        s.sandbox.reap = lambda: (_ for _ in ()).throw(RuntimeError("no docker"))
+        s.call("bench_status")  # needs no Docker
+        with self.assertRaises(RuntimeError):
+            s.call("run_check", check="logdiff")
+
+
 class Paths(Env):
     def test_the_state_may_not_lie_in_the_sample(self):
         self.write_config(state=self.bench.parent / "state")
@@ -230,6 +279,37 @@ class Paths(Env):
     def test_a_folder_others_can_write_stops_the_server(self):
         os.chmod(self.baseline, 0o777)
         with self.assertRaises(ConfigError):
+            self.service()
+
+    def test_the_triage_and_the_baseline_files_themselves_are_checked(self):
+        for f in (self.triage, self.baseline / "baseline.jsonl"):
+            os.chmod(f, 0o666)
+            with self.assertRaisesRegex(ConfigError, "writable by other users", msg=f):
+                self.service()
+            os.chmod(f, 0o644)
+
+    def test_trusted_readers_own_the_build_results_and_the_triage_only(self):
+        """Two uids: the server runs as another user (os.getuid patched) than the one who owns the test's folders,
+        who stands for buildsrv."""
+        import pwd
+        owner = pwd.getpwuid(os.getuid()).pw_name
+        real = os.getuid
+        for path, name in ((self.results, "build_results"), (self.triage.parent, "triage")):
+            core.check_trusted(path, name, (real(),))
+        try:
+            core.os.getuid = lambda: real() + 4242
+            for path, name in ((self.results, "build_results"), (self.triage.parent, "triage"),
+                               (self.triage, "triage")):
+                with self.assertRaisesRegex(ConfigError, "not root, the server's user"):
+                    core.check_trusted(path, name)
+                core.check_trusted(path, name, (real(),))  # a trusted reader's
+            self.config = self.write_config(f'[trust]\nreaders = ["{owner}"]\n')
+            with self.assertRaisesRegex(ConfigError, "paths.state"):  # the server's own paths are not the readers'
+                self.service()
+        finally:
+            core.os.getuid = real
+        self.config = self.write_config('[trust]\nreaders = ["no-such-user-here"]\n')
+        with self.assertRaisesRegex(ConfigError, "trust.readers"):
             self.service()
 
     def test_running_checks_without_a_container_needs_the_test_flag(self):
@@ -344,6 +424,31 @@ class Deploy(Env):
         self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
         last = self.audit()[-1]
         self.assertEqual((last["outcome"], last["digest"], last["request"]), ("ok", digest, out["request"]))
+
+    def test_a_result_of_another_check_is_not_a_build(self):
+        s = self.with_lease()
+        self.publish_build()
+        data = json.loads((self.results / "build.json").read_text())
+        (self.results / "build.json").write_text(json.dumps({**data, "check": "static"}))
+        with self.assertRaisesRegex(Refused, "no result of checks/build.sh"):
+            s.call("request_deploy")
+
+    def test_the_target_printing_refused_is_a_failure_not_a_refusal(self):
+        s = self.with_lease()
+        self.publish_build()
+        (self.fake / "mode").write_text("target-says-refused")
+        out = s.call("request_deploy")
+        self.assertEqual(out["outcome"], "failed")
+        self.assertTrue(out["request"].startswith("req-deploy-"))
+
+    def test_the_request_is_found_in_a_large_action_record(self):
+        s = self.with_lease()
+        self.publish_build()
+        self.bstate.mkdir(parents=True, exist_ok=True)
+        old = json.dumps({"event": "action", "id": "old", "detail": "x" * 200}) + "\n"
+        (self.bstate / "actions.jsonl").write_text(old * 2000)  # about 450 KiB, more than the 256 KiB read for status
+        out = s.call("request_deploy")
+        self.assertTrue(out["request"].startswith("req-deploy-"))
 
     def test_a_refusal_at_the_console_is_final_and_not_retried(self):
         s = self.with_lease()
@@ -481,7 +586,8 @@ class McpLayer(Env):
         async def f(c):
             out = []
             for name, args in (("request_deploy", {}), ("request_deploy", {"path": "/x"}), ("approve", {}),
-                               ("run_check", {})):
+                               ("run_check", {}), ("bench_status", {"tool": "x"}),
+                               ("read_result", {"check": "logdiff", "self": "x"})):
                 try:
                     r = await c.call_tool(name, args)
                     out.append(("result", r.is_error))
@@ -491,7 +597,7 @@ class McpLayer(Env):
         out = self.run_client(f)
         self.assertEqual(out[0], ("result", True))  # no lease
         self.assertTrue(all(o[0] == "raised" or o[1] for o in out[1:]))
-        self.assertEqual([o for _, o in self.outcomes() if o != "started"], ["refused"] * 4)
+        self.assertEqual([o for _, o in self.outcomes() if o != "started"], ["refused"] * 6)
         self.assertEqual(self.calls(), [])
 
     def test_a_client_that_goes_away_mid_action_leaves_no_cc1_and_no_lease(self):

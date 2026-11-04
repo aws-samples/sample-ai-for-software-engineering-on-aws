@@ -64,12 +64,14 @@ def main():
     print("probe:", status["probe"])
     print("pending:", len(status["pending_requests"]), "| last run:", status["last_run"])
     print("action record entries read:", len(actions["actions"]))
-    print("reviewer request_deploy refused:", deploy.is_error, "-", "".join(getattr(c, "text", "") for c in deploy.content)[:120])
+    said = "".join(getattr(c, "text", "") for c in deploy.content)[:120]
+    print("reviewer request_deploy refused:", deploy.is_error, "-", said)
     ok = deploy.is_error and len(tools) == 9
     if a.checks:
         out = asyncio.run(session(a.config, "developer", developer))
         print(json.dumps(out, indent=1))
-        ok = ok and all(not out[c]["is_error"] and out[c]["verdict"] in ("PASS", "FAIL") for c in ("runtime-limits", "logdiff"))
+        ok = ok and all(not out[c]["is_error"] and out[c]["verdict"] in ("PASS", "FAIL")
+                        for c in ("runtime-limits", "logdiff"))
     print("smoke:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

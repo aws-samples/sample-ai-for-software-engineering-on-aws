@@ -50,6 +50,16 @@ NEEDS_LEASE = {"run_check", "request_deploy", "request_restart", "request_replay
 VERDICTS = {0: "PASS", 1: "FAIL", 2: "USAGE", 3: "BLOCKED"}
 TAIL_BYTES = 8192
 ACTIONS_SHOWN = 30
+AUDIT_ARG_MAX = 200  # characters of a malformed call's raw argument kept in its audit line
+
+
+def capped(args):
+    """A call's arguments as the audit keeps them: at most 20, each name and value cut to AUDIT_ARG_MAX."""
+    out = {}
+    for k, v in list(args.items())[:20]:
+        v = v if isinstance(v, (str, int, float, bool, type(None))) else repr(v)
+        out[str(k)[:AUDIT_ARG_MAX]] = v[:AUDIT_ARG_MAX] if isinstance(v, str) else v
+    return out
 DOCKER_CLIENT_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH",
                      "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
 RUN_NAME = re.compile(r"run-(\d{1,6})")
@@ -68,7 +78,8 @@ def now():
 
 
 def read_nofollow(path, limit=16 * 1024 * 1024, start=None):
-    """Bytes of a regular file, or None. Never follows a symlink at the last step and never blocks on a FIFO."""
+    """Bytes of a regular file, or None (*start*: "tail" for its last *limit* bytes, or a byte offset). Never follows
+    a symlink at the last step and never blocks on a FIFO."""
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
@@ -80,6 +91,8 @@ def read_nofollow(path, limit=16 * 1024 * 1024, start=None):
             size = f.seek(0, os.SEEK_END)
             f.seek(max(0, size - limit))
             return (b"[... truncated ...]\n" if size > limit else b"") + f.read(limit)
+        if isinstance(start, int):  # from this byte on
+            f.seek(start)
         return f.read(limit)
 
 
@@ -147,16 +160,18 @@ def private_group(gid):
     return members <= {me}
 
 
-def check_trusted(path, name):
-    """Refuses a path that someone other than root or the server's user could replace: every folder from the root
-    down must be theirs and not writable by others (a sticky folder may hold one of theirs)."""
+def check_trusted(path, name, readers=()):
+    """Refuses a path that someone other than root or the server's user (or one of *readers*, the uids trusted for
+    this path) could replace: every folder from the root down must be theirs and not writable by others (a sticky
+    folder may hold one of theirs)."""
     path = pathlib.Path(path).resolve()
     chain = [d for d in [*reversed(path.parents), path] if os.path.lexists(d)]
-    trusted = (0, os.getuid())
+    trusted = (0, os.getuid(), *readers)
     for i, d in enumerate(chain):
         st = os.lstat(d)
         if st.st_uid not in trusted:
-            raise ConfigError(f"paths.{name}: {d} belongs to uid {st.st_uid}, not root or the server's user")
+            who = "root, the server's user" + (" or a trusted reader" if readers else "")
+            raise ConfigError(f"paths.{name}: {d} belongs to uid {st.st_uid}, not {who}")
         if st.st_mode & stat.S_IWOTH or (st.st_mode & stat.S_IWGRP and not private_group(st.st_gid)):
             nxt = chain[i + 1] if i + 1 < len(chain) else None
             if not (st.st_mode & stat.S_ISVTX and nxt is not None and os.lstat(nxt).st_uid in trusted):
@@ -335,10 +350,25 @@ class BenchService:
             raise ConfigError(f"the folder of paths.triage, {self.triage.parent}, does not exist")
         self.state.mkdir(parents=True, exist_ok=True)
         self.bench_state.mkdir(mode=0o700, parents=True, exist_ok=True)
-        for name, path in (("state", self.state), ("bench_state", self.bench_state), ("bench", self.sample),
-                           ("build_results", self.build_results), ("baseline", self.baseline),
-                           ("triage", self.triage.parent), ("config", config_path)):
-            check_trusted(path, name)
+        # The build server's published results and the approved triage are the build server's user's (buildsrv):
+        # trusted.readers names the users trusted for these two paths only.
+        readers = []
+        for user in cfg.get("trust", {}).get("readers", []):
+            try:
+                readers.append(pwd.getpwnam(str(user)).pw_uid)
+            except KeyError:
+                raise ConfigError(f"trust.readers: no user {user!r}") from None
+        for name, path, extra in (("state", self.state, ()), ("bench_state", self.bench_state, ()),
+                                  ("bench", self.sample, ()), ("build_results", self.build_results, readers),
+                                  ("baseline", self.baseline, ()), ("triage", self.triage.parent, readers),
+                                  ("config", config_path, ())):
+            check_trusted(path, name, extra)
+        # the files themselves too, where they are already there
+        for name, path, extra in (("triage", self.triage, readers),
+                                  ("baseline", self.baseline / "baseline-result.json", ()),
+                                  ("baseline", self.baseline / "baseline.jsonl", ())):
+            if os.path.lexists(path):
+                check_trusted(path, name, extra)
         check_trusted(pathlib.Path(__file__).resolve().parent, "the server's own code")
         for d in ("builds", "runs", "results", "logs"):
             (self.state / d).mkdir(exist_ok=True)
@@ -396,24 +426,29 @@ class BenchService:
         return (f"unexpected arguments {extra}" if extra else f"missing arguments {missing}" if missing else
                 f"arguments that are not strings {wrong}" if wrong else None)
 
-    def call(self, tool, **args):
+    def call(self, tool, /, **args):
         """One tool call through the guardrails, audited before and after. Raises Refused, or RuntimeError on an
-        unexpected failure (also audited)."""
+        unexpected failure (also audited). `self` and `tool` are positional-only, so that an argument of the request
+        named `tool` or `self` is one more argument to refuse, not a clash before the audit. Read-only calls take no
+        lock, so the bench can be read while another session's action waits for its approval."""
         cls = TOOLS.get(tool, (None,))[0] if isinstance(tool, str) else None
-        entry = {"tool": tool if isinstance(tool, str) else repr(tool), "class": cls, "args": args}
+        entry = {"tool": (tool if isinstance(tool, str) else repr(tool))[:AUDIT_ARG_MAX], "class": cls,
+                 "args": capped(args)}
         why = self.malformed(tool, args) or (None if cls in self.granted else
                                              f"role {self.role!r} is not granted {cls}")
         if why:
             self.audit({**entry, "outcome": "refused", "detail": why})
             raise Refused(why if why != "unknown tool" else f"unknown tool {entry['tool']}")
-        with self.exclusive():
+        with contextlib.nullcontext() if cls == READ_ONLY else self.exclusive():
             started = time.monotonic()
             self.audit({**entry, "outcome": "started"})
-            self.current = entry
+            if cls != READ_ONLY:
+                self.current = entry
             try:
                 if tool in NEEDS_LEASE:
                     self.need_lease()
-                self.sandbox.reap()
+                if tool == "run_check":
+                    self.sandbox.reap()
                 result = getattr(self, "_" + tool)(**args)
             except Refused as e:
                 self.audit({**entry, "outcome": "refused", "detail": str(e)})
@@ -422,7 +457,8 @@ class BenchService:
                 self.audit({**entry, "outcome": "error", "detail": f"{type(e).__name__}: {e}"})
                 raise RuntimeError(f"{tool} failed on the server; see the audit log") from e
             finally:
-                self.current = None
+                if cls != READ_ONLY:
+                    self.current = None
             self.audit({**entry, "outcome": result.get("outcome", "ok"), "exit_status": result.get("exit_status"),
                         "duration_ms": int((time.monotonic() - started) * 1000),
                         **{k: result[k] for k in ("verdict", "digest", "request") if result.get(k)}})
@@ -449,7 +485,7 @@ class BenchService:
 
     def cc1(self, args, timeout, log_name):
         log = self.state / "logs" / f"{log_name}.log"
-        r = run_logged(["bash", self.cc1_script, *args], self.cc1_env(), log, timeout)
+        r = run_logged(["/bin/bash", self.cc1_script, *args], self.cc1_env(), log, timeout)
         return {**r, "log": log}
 
     def cc1_read(self, what):
@@ -472,7 +508,8 @@ class BenchService:
 
     def pending_requests(self):
         out = []
-        for p in sorted((self.bench_state / "requests").glob("*.json")) if real_dir(self.bench_state / "requests") else []:
+        requests = self.bench_state / "requests"
+        for p in sorted(requests.glob("*.json")) if real_dir(requests) else []:
             req = read_json(p)
             if req and not os.path.lexists(self.bench_state / "decisions" / p.name):
                 out.append({k: req.get(k) for k in ("id", "action", "digest", "detail", "requested_at",
@@ -563,19 +600,41 @@ class BenchService:
 
     # ------------------------------------------------------------------------------------------ physical actions
 
+    def records_from(self, offset):
+        """The action record's entries written from byte *offset* on (the whole file is not read)."""
+        blob = read_nofollow(self.bench_state / "actions.jsonl", start=offset) or b""
+        out = []
+        for line in blob.decode(errors="replace").splitlines():
+            with contextlib.suppress(ValueError):
+                out.append(json.loads(line))
+        return out
+
     def physical(self, action, args, timeout):
-        seen = len(self.bench_records(10 ** 6))
+        """One action through cc1.sh. This call's request and whether the console refused it are read from the
+        action record written during the call (from its size before the call), not from the log, which also holds
+        what the target printed."""
+        record = self.bench_state / "actions.jsonl"
+        offset = os.path.getsize(record) if os.path.isfile(record) else 0
         r = self.cc1(args, timeout + self.timeouts["approval"], action)
-        text = (read_nofollow(r["log"]) or b"").decode(errors="replace")
-        rid = next((e.get("id") for e in self.bench_records(10 ** 6)[seen:]  # this call's request, not an older one
-                    if e.get("event") == "request" and e.get("action") == action), None)
+        new = self.records_from(offset)
+        rid = next((e.get("id") for e in new if e.get("event") == "request" and e.get("action") == action), None)
         out = {**{k: v for k, v in r.items() if k != "log"}, "action": action, "request": rid,
                "log_tail": tail(r["log"], 2048)}
         if r["outcome"] == "ok":
             return out
-        refused = [ln for ln in text.splitlines() if ln.startswith("refused")]
-        if refused:
-            raise Refused(f"{refused[-1]} (not retried)")
+        decision = next((e for e in new if e.get("event") == "decision" and e.get("id") == rid), None)
+        if decision and decision.get("verdict") != "approved":
+            by, reason = decision.get("by") or "the console", decision.get("reason") or "no reason given"
+            raise Refused(f"refused ({by}): {reason} (not retried)")
+        gate = next((e for e in new if e.get("event") == "gate" and e.get("action") == action and not e.get("passed")),
+                    None)
+        if gate:
+            raise Refused(f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)")
+        if rid is None:  # refused before any request (the target is unknown, the supply is off): nothing ran on it
+            text = (read_nofollow(r["log"]) or b"").decode(errors="replace")
+            lines = [ln for ln in text.splitlines() if ln.strip()]
+            if lines and lines[-1].startswith("refused"):
+                raise Refused(f"{lines[-1]} (not retried)")
         if r["outcome"] == "timeout":
             raise Refused(f"{action} did not finish within its timeout; the bench marks the target unknown until a "
                           "person reconciles it at the operator console (not retried)")
@@ -584,7 +643,7 @@ class BenchService:
     def judged_build(self):
         """The build the `build` server's checks/build.sh judged PASS: (path, digest), else Refused."""
         res = read_json(self.build_results / "build.json")
-        if not res:
+        if not res or res.get("check") != "build":
             raise Refused("the build server has published no result of checks/build.sh")
         if res.get("verdict") != "PASS" or res.get("local"):
             raise Refused(f"the published build result is {res.get('verdict')!r}" +

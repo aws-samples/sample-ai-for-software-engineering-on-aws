@@ -4,11 +4,15 @@
 [paths]
 bench = "/srv/sample/bench"                       # the sample's bench/: cc1.sh and its gate
 checks = "/srv/sample/checks"                     # the sample's checks/: runtime-limits.sh and logdiff.sh
-state = "/srv/bench/state"                        # the server's own: builds/, runs/, results/, logs/, lease.json, audit.jsonl
+# the server's own: builds/, runs/, results/, logs/, lease.json, audit.jsonl
+state = "/srv/bench/state"
 bench_state = "/srv/bench/cc1-bench"              # CC1_BENCH_STATE: supply, target, requests, decisions, action record
 build_results = "/srv/build/state/results"        # the build server's published results, read-only for this server
 baseline = "/srv/bench/baseline"                  # recorded by the bench owner (cc1.sh replay --kind baseline)
 triage = "/srv/build/triage/triage.json"          # the approved triage, for logdiff's allowed differences
+
+[trust]
+readers = ["buildsrv"]                            # may also own build_results and the triage (the build server)
 
 [sandbox]                                         # for the after-bench checks only
 runner = "docker"
