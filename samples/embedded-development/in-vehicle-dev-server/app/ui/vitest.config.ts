@@ -25,5 +25,6 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     globals: false,
     restoreMocks: true,
+    testTimeout: 30_000, // the board tests time out at the 5 s default on a busy machine
   },
 })

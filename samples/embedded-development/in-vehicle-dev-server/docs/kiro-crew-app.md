@@ -24,6 +24,9 @@ What this does not enforce, and the README must say so:
 - An agent's shell can reach the emulated target without the app: `docker exec` into the bench runner, whose volume
   `cc1-bench-secrets` holds the target's SSH key.
 - An agent can write the bench state in `~/.cc1-bench`, including approval decisions.
+- With Kiro Crew's sandbox off, an agent's shell can sign in to the app's API as the dashboard owner (`kirocrew
+  token`) and approve a bench request, pass a gate or sign off. Seen on 2026-11-03: a 重试 of the first delivery was
+  sent that way from a Kiro session, and the audit trail records it as the person's.
 
 So in this app the physical gate, the operator console and the action record show how the guardrails work; they are
 not a boundary against the agents. The claim "only `bench` can reach the target" holds only in a set-up where the
@@ -371,7 +374,7 @@ bench images; step 12 needs them.
 10. **Members, setup and cleanup.** `agents/kiro-crew/make_templates.py`, `vendor/aidlc-workflows/`, `setup.sh`,
     `cleanup.sh`, `scripts/`. *Verify:* setup runs twice without change the second time; `cleanup.sh --dry-run`
     lists exactly what setup recorded; a template with the same name is backed up and put back.
-11. **Documentation.** The scenario README (the app, the three paths around the guardrails, prerequisites) and
+11. **Documentation.** The scenario README (the app, the paths around the guardrails, prerequisites) and
     `app/README.md`. *Verify:* links resolve; the README's claims match these notes.
 12. **One delivery end to end.** With the bench images built: from the triage gate to sign-off, approving bench
     actions at the console. Record the time and credits it used and how long the checks, the rerun and the image

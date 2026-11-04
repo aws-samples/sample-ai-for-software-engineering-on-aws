@@ -59,6 +59,17 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     assert "--platform" not in t["check_runner"]["docker"]  # chosen for the machine each check runs on
     assert (constants.TEAM_FILE.parent / t["task_template"]).is_file()
 
+def test_the_work_split_may_give_a_developer_the_build_files_but_not_the_tests(tmp_path):
+    """The cross build's cause can be the toolchain file (r11032637): the architect may hand out cmake/ and CMakeLists.txt."""
+    brief = next(r for r in raw_team()["roles"] if r["key"] == "architect")["brief"]
+    assert "`cmake/**`、`CMakeLists.txt` 也可以分" in brief
+    split = tmp_path / "work-split.json"
+    split.write_text(json.dumps({"roles": {"dev-fix": ["src/main.cpp", "cmake/**", "CMakeLists.txt"], "dev-refactor": ["src/service.*"]}}))
+    assert team_mod.ownership_problem(split, ["dev-fix", "dev-refactor"]) is None
+    split.write_text(json.dumps({"roles": {"dev-fix": ["tests/**"]}}))
+    assert "不能是 tests/" in team_mod.ownership_problem(split, ["dev-fix", "dev-refactor"])
+
+
 
 @pytest.mark.parametrize("change, message", [
     (lambda t: t["checks"][0].update(when="later"), "when 只能是"),
