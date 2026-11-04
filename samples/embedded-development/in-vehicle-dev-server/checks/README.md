@@ -128,7 +128,8 @@ A finding entry:
 | `added` | For a finding added during the batch (TR §4.4): `found_by`, `tool`, `location`. Added findings take the next free IDs in turn, from F-031. A change the work item asks for that no finding covers, such as the refactor, is added the same way with `found_by` naming the work item |
 
 An allowed log difference: `{"finding": "F-nnn", "side": "baseline" or "run", "entry": {<the whole entry>},
-"count": 1}`. The entry gives `ev` and every compared field; `t_ms`, if given, matches within the comparison window.
+"count": 1}`. The entry gives `ev` and every compared field; `t_ms`, if given, matches within the window of its event
+(CC1-PN §6.3).
 
 ## Run and baseline directories
 

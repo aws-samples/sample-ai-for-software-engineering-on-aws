@@ -59,16 +59,22 @@ Recomputing the table from these files with `dt_stats()` of `measure.py` gives t
   20 ms is 41 runs (boot 1 run 20 to the end of boot 3).
 - Largest |dt| per run: minimum 2, median 5, maximum 24 ms. Runs with an entry over 10 ms: 10; over 15 ms: 5; over
   20 ms: 2.
-- In the normal runs every entry over 15 ms is a `CLIENT_CONNECTED` 1.38 to 1.52 s into the drive, when the 16
-  replay clients connect (clients 8, 11 and 15; 16 to 24 ms): boot 1 runs 4, 14 and 19 (load 7.9 to 10.2, host in
-  use) and boot 3 runs 8 and 12 (load 118 and 66, host not in use). In the F-021 runs the three over 15 ms are
-  `SERVICE_STOP` at the end of the drive (18 and 19 ms) and client 7's `CLIENT_CONNECTED` at 1.36 s (20 ms).
+- In the normal runs every entry over 15 ms is a `CLIENT_CONNECTED` 1.24 to 1.54 s into the drive, when the 16
+  replay clients connect, apart from one `SERVICE_STOP` (18 ms, boot 1 run 4). In four runs all 16 connections are
+  late by the same amount (16 to 24 ms): boot 1 runs 4, 14 and 19 (load 7.9 to 10.2, host in use) and boot 3 run 8
+  (load 118, host not in use); in boot 3 run 12 (load 66), clients 3 and 8 are 16 ms late. In the F-021 runs the
+  three over 15 ms are `SERVICE_STOP` at the end of the drive (18 and 19 ms) and client 7's `CLIENT_CONNECTED` at
+  1.36 s (20 ms).
 - The first replay after a boot did not differ more: 3, 8 and 4 ms in boots 1 to 3 (3 ms in boot 4).
 - Load did not explain it: the two FAILs came at load 8, while boot 3 ran at load 9 to 230 with no FAIL.
 
 So at shift 3 the 20 ms window is too tight for the clients' connection times: about 1 run in 30 fails on the same
 build. Widening the window, or pairing `CLIENT_CONNECTED` by client rather than by time, is a decision for the checks
 (item 4); this measurement changes neither.
+
+Since this measurement, CC1-PN §6.3 gives `CLIENT_CONNECTED` and `SERVICE_STOP` a 50 ms window and keeps 20 ms for
+the drive's events, which differed by at most 9 ms here. Judged again with it, all 60 runs of the normal build pass;
+the smallest margin of any paired entry to its window is 11 ms.
 
 **Memory (`vm_hwm_kib`).**
 

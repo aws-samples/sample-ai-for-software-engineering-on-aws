@@ -71,7 +71,9 @@ def page(results, triage, agent):
     if ld:
         lines += ["## Log comparison", "",
                   f"{ld.get('paired')} of {ld.get('baseline_entries')} baseline entries paired within "
-                  f"{ld.get('window_ms')} ms; {ld.get('unexplained')} unexplained difference(s); "
+                  f"{ld.get('window_ms')} ms"
+                  + "".join(f", {ev} {ms} ms" for ev, ms in sorted((ld.get("window_ms_by_event") or {}).items()))
+                  + f"; {ld.get('unexplained')} unexplained difference(s); "
                   f"{len(ld.get('allowed', []))} allowed.", ""]
         for a in ld.get("allowed", []):
             lines.append(f"- Allowed ({a['finding']}), only in the {a['side']}: `{json.dumps(a['entry'])}`")

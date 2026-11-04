@@ -102,6 +102,8 @@ class Settings(unittest.TestCase):
         self.assertEqual(lim["stripped_size_bytes"], int(1.5 * 1024 * 1024))
         self.assertIn("| Binary size, stripped | 1.5 MiB |", pn)
         self.assertIn("differ by at most 20 ms", " ".join(pn.split()))
+        self.assertEqual(lim["log_time_window_ms_by_event"], {"CLIENT_CONNECTED": 50, "SERVICE_STOP": 50})
+        self.assertIn("for `CLIENT_CONNECTED` and `SERVICE_STOP`, at most 50 ms", " ".join(pn.split()))
         self.assertIn("the `version` field of `SERVICE_START`", pn)
         self.assertIn("`" + " ".join(lim["cross_flags"]) + "`", tr)
         self.assertIn("cppcheck 2.13", tr)
@@ -578,6 +580,25 @@ class LogDiff(RunChecks):
         run[7]["t_ms"] += 21
         rc, out = self.go("logdiff", run=run)
         self.assertEqual(rc, 1, out)
+
+    def test_client_connections_and_the_stop_have_a_wider_window_than_the_drive(self):
+        run = copy.deepcopy(BASELINE)
+        for e in run:
+            if e["ev"] in ("CLIENT_CONNECTED", "SERVICE_STOP"):
+                e["t_ms"] += 50
+        self.assertEqual(self.go("logdiff", run=run)[0], 0)
+        for ev in ("CLIENT_CONNECTED", "SERVICE_STOP"):
+            run = copy.deepcopy(BASELINE)
+            next(e for e in run if e["ev"] == ev)["t_ms"] += 51
+            self.assertEqual(self.go("logdiff", run=run)[0], 1, ev)
+        run = copy.deepcopy(BASELINE)
+        next(e for e in run if e["ev"] == "SIGNAL_VALUE")["t_ms"] += 21  # the drive's events keep 20 ms
+        self.assertEqual(self.go("logdiff", run=run)[0], 1)
+        connect = next(e for e in BASELINE if e["ev"] == "CLIENT_CONNECTED")
+        run = [e for e in BASELINE if e is not connect]
+        t = self.triage("0" * 40, allowed_log_differences=[
+            {"finding": "F-018", "side": "baseline", "entry": dict(connect, t_ms=connect["t_ms"] + 30)}])
+        self.assertEqual(self.go("logdiff", run=run, triage=t)[0], 0)  # an allowed difference uses its event's window
 
     def test_extra_timeout_fails_and_is_shown(self):
         run = copy.deepcopy(BASELINE)
