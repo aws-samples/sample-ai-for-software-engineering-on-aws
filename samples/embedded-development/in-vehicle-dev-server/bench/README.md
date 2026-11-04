@@ -130,27 +130,36 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 | Boot to SSH | 17 to 111 s wall clock, depending on host load |
 | One replay | 8 to 54 s wall clock, 36 s of guest time |
 | Repeatability, one baseline and four runs | shift 5: largest difference per entry 16 to 28 ms, logdiff FAIL 3 of 4. shift 3: 4, 5, 5 and 19 ms, PASS 4 of 4. shift 1: 1, 7, 12 and 18 ms, PASS 4 of 4 |
+| Repeatability at shift 3, 2026-11-04 | One baseline and 60 runs over three boots: largest difference per entry 2 to 24 ms (median 5), logdiff PASS 58 of 60; both FAILs (23, 24 ms) a `CLIENT_CONNECTED` when the replay's clients connect. [rehearsal/repeatability/](../rehearsal/repeatability/README.md) |
 | F-008 wrong fix A (condition removed) | logdiff FAIL: `SIGNAL_TIMEOUT` and `SIGNAL_RECOVERED` for `VCU_Speed` and `VCU_Gear` at start-up |
 | F-008 wrong fix B (flag not set) | logdiff FAIL: the baseline's `BCM_Exterior` timeout and recovery are missing |
-| F-021 (`lines_{}`) | **Not caught**: peak RSS 5,944 → 6,752 KiB (+808), limit 8,192 KiB |
+| F-021 (`lines_{}`) | Not caught at the first limit of 8,192 KiB: peak RSS 5,944 → 6,752 KiB (+808). On 2026-11-04, 60 normal runs 5,644 to 5,944 KiB and 10 wrong-fix runs 6,608 to 6,872 KiB ([rehearsal/repeatability/](../rehearsal/repeatability/README.md)); the limit is now 6,400 KiB (CC1-PN §3), which every wrong-fix run exceeds |
 | Gate, end to end | KL15 off and 10.5 V refused without a request; a refusal and three approvals at the console; a kill during a replay left the target unknown; replay, `stop-vstatd` and `stop` were then refused until a reconcile |
 
 ## Open
 
-- **F-021 calibration (item 2).** On the emulated CC-1 the baseline's peak RSS with 16 clients is about 5.8 MiB, about
-  2.2 MiB under the limit; facilitator-notes ask for about 0.5 MiB, so that `lines_{}` passes it. The bench has nothing
-  to tune here.
-- **Repeatability margin.** One of four runs at shift 3 differed by 19 ms against a 20 ms tolerance. More runs are
-  needed before the setting is fixed.
+- **F-021 calibration (closed 2026-11-04).** The peak-RSS limit of CC1-PN §3 is now 6,400 KiB, set from the 70 runs
+  of [rehearsal/repeatability/](../rehearsal/repeatability/README.md): 456 KiB above the largest normal run, 208 KiB
+  under the smallest wrong-fix run. On another host, see [facilitator-notes](../rehearsal/facilitator-notes.md).
+- **Repeatability margin (closed 2026-11-04).** At shift 3, 2 of 60 runs of the same build failed the 20 ms window
+  (23 and 24 ms), both on a client's connection time ([rehearsal/repeatability/](../rehearsal/repeatability/README.md)).
+  CC1-PN §6.3 now gives `CLIENT_CONNECTED` and `SERVICE_STOP` 50 ms and keeps 20 ms for every other event; with that,
+  all 60 runs pass, the smallest margin to a window is 11 ms, and the F-008 wrong fixes are caught as before, since
+  they add or remove timeouts rather than shift them.
 - **Final baseline.** Generated once the reference project is calibrated, on the commit the scenario ships.
 - **Build container on Apple Silicon (closed 2026-11-03).** `reference-project/tools/Dockerfile` now builds natively
   for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on
   Apple Silicon (the host `g++-12` and `binutils` already target `aarch64-linux-gnu`), `linux/amd64` and
   `vstatd-build:amd64` with the cross compiler on x86_64. The amd64 image under Rosetta cannot run ThreadSanitizer.
-- **C++ headers in the sysroot.** Export the toolchain's libstdc++ headers (`usr/include/c++`) into `cc1-sysroot`:
-  Buildroot keeps them in its toolchain, so with this sysroot `checks/static.sh` is BLOCKED (clang-tidy:
-  `'array' file not found`) while g++ builds. Until then the app's checks mount the stand-in sysroot of
-  `reference-project/tools/make-standin-sysroot.py` from the volume `vstatd-standin-sysroot`.
+- **C++ headers in the sysroot (closed 2026-11-04).** Buildroot keeps the libstdc++ headers and GCC's own directory
+  with its cross toolchain in `output/host/` (`aarch64-buildroot-linux-gnu/include/c++/14.3.0`,
+  `lib/gcc/aarch64-buildroot-linux-gnu/14.3.0`), not in staging, and clang-tidy takes the C++ headers only from a GCC
+  installation it finds in the sysroot under a target name it knows. `image/build-image.sh` now exports them into
+  `cc1-sysroot` in the multiarch layout (`usr/lib/gcc/aarch64-linux-gnu/14.3.0`, `usr/include/c++/14.3.0`,
+  `usr/include/aarch64-linux-gnu/c++/14.3.0`). With it, `rehearsal/check-examples/` is 23 of 23, as with the stand-in.
+  Rebuilding with `bench/build-target.sh` on an existing build took 61 s (38 s for a second rebuild); a first build
+  was not timed. The app's checks still mount the stand-in (`vstatd-standin-sysroot`), see
+  [docs/kiro-crew-app.md](../docs/kiro-crew-app.md#not-yet-verified).
 - **SSH host key.** The target makes a new host key on every boot and the bench does not check it; the connection is
   loopback inside the runner container.
 - **QEMU version.** The runner uses Ubuntu 24.04's QEMU 8.2.2, not the QEMU that Buildroot builds for itself.

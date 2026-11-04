@@ -41,9 +41,24 @@ make -C "$OUT"
 
 # Export. The sysroot is Buildroot's staging directory: glibc, the libsystemd headers and libraries, the C++ runtime.
 rsync -a --delete "$OUT/staging/" /export/sysroot/
+# The C++ standard library headers and GCC's own directory are not in staging: Buildroot keeps them with the cross
+# toolchain in the host directory. The checks' clang-tidy finds the C++ headers only through a GCC installation in
+# the sysroot, under a target name it knows (aarch64-linux-gnu, not Buildroot's aarch64-buildroot-linux-gnu), in the
+# multiarch layout: usr/lib/gcc/<target>/<version>, usr/include/c++/<version>, usr/include/<target>/c++/<version>.
+gcc_ver=$("$OUT/host/bin/aarch64-buildroot-linux-gnu-gcc" -dumpfullversion)
+br_tuple=aarch64-buildroot-linux-gnu
+gcc_lib=$OUT/host/lib/gcc/$br_tuple/$gcc_ver
+cxx_inc=$OUT/host/$br_tuple/include/c++/$gcc_ver
+for d in "$gcc_lib" "$cxx_inc" "$cxx_inc/$br_tuple"; do
+  [[ -d $d ]] || { echo "build: not found: $d" >&2; exit 1; }
+done
+mkdir -p "/export/sysroot/usr/lib/gcc/aarch64-linux-gnu/$gcc_ver" "/export/sysroot/usr/include/c++/$gcc_ver" \
+  "/export/sysroot/usr/include/aarch64-linux-gnu/c++/$gcc_ver"
+rsync -a --delete --exclude plugin --exclude install-tools "$gcc_lib/" "/export/sysroot/usr/lib/gcc/aarch64-linux-gnu/$gcc_ver/"
+rsync -a --delete --exclude "$br_tuple" "$cxx_inc/" "/export/sysroot/usr/include/c++/$gcc_ver/"
+rsync -a --delete "$cxx_inc/$br_tuple/" "/export/sysroot/usr/include/aarch64-linux-gnu/c++/$gcc_ver/"
 install -m 0644 "$OUT/images/Image" "$OUT/images/rootfs.ext4" /export/images/
 ver() { sed -n "s/^$1_VERSION = //p" "$BR_SRC/package/$2/$2.mk" | head -1; }
-gcc_ver=$("$OUT/host/bin/aarch64-buildroot-linux-gnu-gcc" -dumpfullversion)
 cat > /export/images/manifest.json <<EOF
 {
   "buildroot": "${BR_VERSION}",

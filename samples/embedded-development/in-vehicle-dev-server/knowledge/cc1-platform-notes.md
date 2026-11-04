@@ -25,7 +25,7 @@
 
 | Limit | Value | How it is checked |
 | --- | --- | --- |
-| Peak resident memory (RSS) during the recorded drive | 8 MiB | `checks/runtime-limits.sh` on the emulated CC-1 |
+| Peak resident memory (RSS) during the recorded drive | 6,400 KiB | `checks/runtime-limits.sh` on the emulated CC-1 |
 | Memory limit of the service unit (`MemoryMax`) | 12 MiB | Set in the unit file; exceeding it kills the service |
 | Binary size, stripped | 1.5 MiB | `checks/size.sh` |
 | Threads at the end of the replay | at most 4 | `checks/runtime-limits.sh` |
@@ -63,9 +63,11 @@ baseline log.
 - **§6.1 Compared:** the sequence of entries, each with `ev` and all its fields.
 - **§6.2 Ignored:** the `version` field of `SERVICE_START`.
 - **§6.3 Matching:** two entries match when `ev` and every compared field are equal and their `t_ms` differ by at
-  most 20 ms. The comparison takes the baseline entries in order and pairs each with the first unpaired run entry
-  that matches it. Entries with the same baseline `t_ms` (one decoding step) shall also keep their order in the run.
-  Every entry left unpaired on either side is a difference.
+  most 20 ms; for `CLIENT_CONNECTED` and `SERVICE_STOP`, at most 50 ms. Those two are set by the replay's clients
+  connecting and by the bench stopping `vstatd`, not by the drive, and in 60 replays of the same build they differed
+  by up to 24 and 18 ms, while every other event stayed within 9 ms. The comparison takes the baseline entries in
+  order and pairs each with the first unpaired run entry that matches it. Entries with the same baseline `t_ms` (one
+  decoding step) shall also keep their order in the run. Every entry left unpaired on either side is a difference.
 - **§6.4 Allowed differences:** only those listed in the approved triage, each with the finding it belongs to.
 
 ## §7 Toolchain and build

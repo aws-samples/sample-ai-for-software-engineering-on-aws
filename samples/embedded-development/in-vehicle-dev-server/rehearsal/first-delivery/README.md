@@ -6,7 +6,8 @@ fixed.
 Run `r11032637` of the [Kiro Crew app](../../app/README.md), 2026-11-03, on an Apple Silicon Mac. It went from the
 triage gate to a signed-off evidence page. What the run showed, and the app fixes made during it, are in
 [docs/kiro-crew-app.md](../../docs/kiro-crew-app.md#seen-in-the-first-delivery). The measured cost is in the scenario
-README's [Cost](../../README.md#cost) section.
+README's [Cost](../../README.md#cost) section. The peak-RSS limit was 8,192 KiB at the time; it is 6,400 KiB since
+2026-11-04 (CC1-PN §3), and this run's 5,896 KiB is within both.
 
 | File | What it is |
 | --- | --- |

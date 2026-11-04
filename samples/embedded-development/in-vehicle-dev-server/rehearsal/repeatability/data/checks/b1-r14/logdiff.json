@@ -1,0 +1,50 @@
+{
+  "check": "logdiff",
+  "verdict": "PASS",
+  "commit": null,
+  "local": false,
+  "tier": "emulation",
+  "inputs": {
+    "triage": {
+      "path": "/m/triage.json",
+      "sha256": "cc599f2917598333de8af2369374b2930454007149fd969ccf4716a96e5e344b"
+    },
+    "run_result": {
+      "path": "/m/runs/b1-r14/run-result.json",
+      "sha256": "4ca46e33be9166b336bd2376b29d11c90e076fb5a2082e23c1e3feb9d07d4a83"
+    },
+    "run_log": {
+      "path": "/m/runs/b1-r14/run.jsonl",
+      "sha256": "81a17696bc3bb6d006c6016125800cc4f9f3b8c70c7821589d7c884aee78d7c4"
+    },
+    "baseline_result": {
+      "path": "/m/baseline/baseline-result.json",
+      "sha256": "41752eae10e4c1af75ced6c896195d79c3d28fa39a1977c07a070529d004ad40"
+    },
+    "baseline_log": {
+      "path": "/m/baseline/baseline.jsonl",
+      "sha256": "b74b1f258010ab915dd732775c61f7e77f9a5f8eb7b23fc9d4bccb8d7e0b32cf"
+    }
+  },
+  "details": {
+    "replay_id": "drive-01@39a3d0dec2ab+62abaaf5",
+    "target": "emulated-cc1",
+    "deployed_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+    "approved_digest": "bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98",
+    "baseline_entries": 328,
+    "run_entries": 328,
+    "paired": 328,
+    "differences": 0,
+    "allowed": [],
+    "unexplained": 0,
+    "order_changes": 0,
+    "allowed_not_seen": [],
+    "window_ms": 20,
+    "diff": "/m/results/b1-r14/logdiff.diff"
+  },
+  "reasons": [],
+  "tools": {},
+  "started": "2026-11-04T05:03:04Z",
+  "ended": "2026-11-04T05:03:04Z",
+  "summary": "328 of 328 baseline entries paired; 0 unexplained difference(s), 0 allowed, 0 order change(s); emulation"
+}

@@ -1,0 +1,322 @@
+12:59:31 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh stop
+12:59:31   stopped
+12:59:31 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh start --shift 3
+12:59:32   started cc1-bench, icount shift=3
+12:59:32 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh wait 900
+12:59:54   target up after 22s (wall clock)
+12:59:54 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh deploy ~/workplace/cc1-repeatability/vstatd-normal
+12:59:58   deployed bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98, read back bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98
+12:59:58   deploy of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+12:59:58 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind baseline --out ~/workplace/cc1-repeatability/data/baseline
+13:00:10   ~/workplace/cc1-repeatability/data/baseline
+13:00:10   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:00:10 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r01
+13:00:21   ~/workplace/cc1-repeatability/data/runs/b1-r01
+13:00:21   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:00:22 boot 1 run 1: logdiff PASS, max |dt| 3 ms, VmHWM 5820 KiB, runtime-limits PASS
+13:00:22 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r02
+13:00:32   ~/workplace/cc1-repeatability/data/runs/b1-r02
+13:00:32   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:00:33 boot 1 run 2: logdiff PASS, max |dt| 4 ms, VmHWM 5840 KiB, runtime-limits PASS
+13:00:33 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r03
+13:00:46   ~/workplace/cc1-repeatability/data/runs/b1-r03
+13:00:46   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:00:47 boot 1 run 3: logdiff PASS, max |dt| 7 ms, VmHWM 5836 KiB, runtime-limits PASS
+13:00:47 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r04
+13:00:57   ~/workplace/cc1-repeatability/data/runs/b1-r04
+13:00:57   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:00:57 boot 1 run 4: logdiff FAIL, max |dt| 24 ms, VmHWM 5860 KiB, runtime-limits PASS
+13:00:57 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r05
+13:01:07   ~/workplace/cc1-repeatability/data/runs/b1-r05
+13:01:07   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:01:08 boot 1 run 5: logdiff PASS, max |dt| 4 ms, VmHWM 5916 KiB, runtime-limits PASS
+13:01:08 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r06
+13:01:18   ~/workplace/cc1-repeatability/data/runs/b1-r06
+13:01:18   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:01:19 boot 1 run 6: logdiff PASS, max |dt| 4 ms, VmHWM 5904 KiB, runtime-limits PASS
+13:01:19 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r07
+13:01:32   ~/workplace/cc1-repeatability/data/runs/b1-r07
+13:01:32   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:01:33 boot 1 run 7: logdiff PASS, max |dt| 5 ms, VmHWM 5876 KiB, runtime-limits PASS
+13:01:33 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r08
+13:01:45   ~/workplace/cc1-repeatability/data/runs/b1-r08
+13:01:45   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:01:46 boot 1 run 8: logdiff PASS, max |dt| 3 ms, VmHWM 5644 KiB, runtime-limits PASS
+13:01:46 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r09
+13:02:03   ~/workplace/cc1-repeatability/data/runs/b1-r09
+13:02:03   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:02:04 boot 1 run 9: logdiff PASS, max |dt| 4 ms, VmHWM 5812 KiB, runtime-limits PASS
+13:02:04 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r10
+13:02:16   ~/workplace/cc1-repeatability/data/runs/b1-r10
+13:02:16   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:02:17 boot 1 run 10: logdiff PASS, max |dt| 4 ms, VmHWM 5768 KiB, runtime-limits PASS
+13:02:17 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r11
+13:02:27   ~/workplace/cc1-repeatability/data/runs/b1-r11
+13:02:27   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:02:28 boot 1 run 11: logdiff PASS, max |dt| 6 ms, VmHWM 5908 KiB, runtime-limits PASS
+13:02:28 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r12
+13:02:41   ~/workplace/cc1-repeatability/data/runs/b1-r12
+13:02:41   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:02:41 boot 1 run 12: logdiff PASS, max |dt| 3 ms, VmHWM 5876 KiB, runtime-limits PASS
+13:02:41 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r13
+13:02:51   ~/workplace/cc1-repeatability/data/runs/b1-r13
+13:02:51   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:02:52 boot 1 run 13: logdiff PASS, max |dt| 7 ms, VmHWM 5916 KiB, runtime-limits PASS
+13:02:52 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r14
+13:03:03   ~/workplace/cc1-repeatability/data/runs/b1-r14
+13:03:03   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:03:04 boot 1 run 14: logdiff PASS, max |dt| 18 ms, VmHWM 5844 KiB, runtime-limits PASS
+13:03:04 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r15
+13:03:14   ~/workplace/cc1-repeatability/data/runs/b1-r15
+13:03:14   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:03:15 boot 1 run 15: logdiff PASS, max |dt| 7 ms, VmHWM 5816 KiB, runtime-limits PASS
+13:03:15 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r16
+13:03:25   ~/workplace/cc1-repeatability/data/runs/b1-r16
+13:03:25   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:03:26 boot 1 run 16: logdiff PASS, max |dt| 8 ms, VmHWM 5832 KiB, runtime-limits PASS
+13:03:26 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r17
+13:03:36   ~/workplace/cc1-repeatability/data/runs/b1-r17
+13:03:36   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:03:37 boot 1 run 17: logdiff PASS, max |dt| 14 ms, VmHWM 5864 KiB, runtime-limits PASS
+13:03:37 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r18
+13:03:48   ~/workplace/cc1-repeatability/data/runs/b1-r18
+13:03:48   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:03:49 boot 1 run 18: logdiff PASS, max |dt| 7 ms, VmHWM 5900 KiB, runtime-limits PASS
+13:03:49 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r19
+13:04:02   ~/workplace/cc1-repeatability/data/runs/b1-r19
+13:04:02   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:04:03 boot 1 run 19: logdiff FAIL, max |dt| 23 ms, VmHWM 5808 KiB, runtime-limits PASS
+13:04:03 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b1-r20
+13:04:16   ~/workplace/cc1-repeatability/data/runs/b1-r20
+13:04:16   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:04:16 boot 1 run 20: logdiff PASS, max |dt| 3 ms, VmHWM 5840 KiB, runtime-limits PASS
+13:04:16 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh stop
+13:04:17   stopped
+13:04:17 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh start --shift 3
+13:04:19   started cc1-bench, icount shift=3
+13:04:19 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh wait 900
+13:04:39   target up after 20s (wall clock)
+13:04:39 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh deploy ~/workplace/cc1-repeatability/vstatd-normal
+13:04:45   deployed bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98, read back bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98
+13:04:45   deploy of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:04:45 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r01
+13:05:00   ~/workplace/cc1-repeatability/data/runs/b2-r01
+13:05:00   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:05:01 boot 2 run 1: logdiff PASS, max |dt| 8 ms, VmHWM 5808 KiB, runtime-limits PASS
+13:05:01 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r02
+13:05:12   ~/workplace/cc1-repeatability/data/runs/b2-r02
+13:05:12   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:05:13 boot 2 run 2: logdiff PASS, max |dt| 4 ms, VmHWM 5832 KiB, runtime-limits PASS
+13:05:13 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r03
+13:05:24   ~/workplace/cc1-repeatability/data/runs/b2-r03
+13:05:24   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:05:26 boot 2 run 3: logdiff PASS, max |dt| 4 ms, VmHWM 5808 KiB, runtime-limits PASS
+13:05:26 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r04
+13:05:35   ~/workplace/cc1-repeatability/data/runs/b2-r04
+13:05:35   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:05:36 boot 2 run 4: logdiff PASS, max |dt| 10 ms, VmHWM 5944 KiB, runtime-limits PASS
+13:05:36 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r05
+13:05:47   ~/workplace/cc1-repeatability/data/runs/b2-r05
+13:05:47   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:05:47 boot 2 run 5: logdiff PASS, max |dt| 4 ms, VmHWM 5644 KiB, runtime-limits PASS
+13:05:47 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r06
+13:05:58   ~/workplace/cc1-repeatability/data/runs/b2-r06
+13:05:58   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:05:58 boot 2 run 6: logdiff PASS, max |dt| 5 ms, VmHWM 5840 KiB, runtime-limits PASS
+13:05:58 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r07
+13:06:09   ~/workplace/cc1-repeatability/data/runs/b2-r07
+13:06:09   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:06:10 boot 2 run 7: logdiff PASS, max |dt| 12 ms, VmHWM 5904 KiB, runtime-limits PASS
+13:06:10 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r08
+13:06:21   ~/workplace/cc1-repeatability/data/runs/b2-r08
+13:06:21   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:06:22 boot 2 run 8: logdiff PASS, max |dt| 4 ms, VmHWM 5728 KiB, runtime-limits PASS
+13:06:22 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r09
+13:06:34   ~/workplace/cc1-repeatability/data/runs/b2-r09
+13:06:34   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:06:35 boot 2 run 9: logdiff PASS, max |dt| 4 ms, VmHWM 5836 KiB, runtime-limits PASS
+13:06:35 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r10
+13:06:45   ~/workplace/cc1-repeatability/data/runs/b2-r10
+13:06:45   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:06:46 boot 2 run 10: logdiff PASS, max |dt| 4 ms, VmHWM 5836 KiB, runtime-limits PASS
+13:06:46 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r11
+13:06:59   ~/workplace/cc1-repeatability/data/runs/b2-r11
+13:06:59   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:06:59 boot 2 run 11: logdiff PASS, max |dt| 9 ms, VmHWM 5812 KiB, runtime-limits PASS
+13:06:59 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r12
+13:07:12   ~/workplace/cc1-repeatability/data/runs/b2-r12
+13:07:12   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:07:13 boot 2 run 12: logdiff PASS, max |dt| 5 ms, VmHWM 5828 KiB, runtime-limits PASS
+13:07:13 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r13
+13:07:26   ~/workplace/cc1-repeatability/data/runs/b2-r13
+13:07:26   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:07:27 boot 2 run 13: logdiff PASS, max |dt| 6 ms, VmHWM 5816 KiB, runtime-limits PASS
+13:07:27 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r14
+13:07:36   ~/workplace/cc1-repeatability/data/runs/b2-r14
+13:07:36   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:07:37 boot 2 run 14: logdiff PASS, max |dt| 5 ms, VmHWM 5832 KiB, runtime-limits PASS
+13:07:37 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r15
+13:07:47   ~/workplace/cc1-repeatability/data/runs/b2-r15
+13:07:47   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:07:48 boot 2 run 15: logdiff PASS, max |dt| 4 ms, VmHWM 5864 KiB, runtime-limits PASS
+13:07:48 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r16
+13:07:58   ~/workplace/cc1-repeatability/data/runs/b2-r16
+13:07:58   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:07:58 boot 2 run 16: logdiff PASS, max |dt| 5 ms, VmHWM 5812 KiB, runtime-limits PASS
+13:07:58 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r17
+13:08:11   ~/workplace/cc1-repeatability/data/runs/b2-r17
+13:08:11   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:08:12 boot 2 run 17: logdiff PASS, max |dt| 2 ms, VmHWM 5876 KiB, runtime-limits PASS
+13:08:12 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r18
+13:08:22   ~/workplace/cc1-repeatability/data/runs/b2-r18
+13:08:22   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:08:23 boot 2 run 18: logdiff PASS, max |dt| 4 ms, VmHWM 5744 KiB, runtime-limits PASS
+13:08:23 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r19
+13:08:34   ~/workplace/cc1-repeatability/data/runs/b2-r19
+13:08:34   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:08:35 boot 2 run 19: logdiff PASS, max |dt| 5 ms, VmHWM 5712 KiB, runtime-limits PASS
+13:08:35 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b2-r20
+13:08:47   ~/workplace/cc1-repeatability/data/runs/b2-r20
+13:08:47   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:08:47 boot 2 run 20: logdiff PASS, max |dt| 4 ms, VmHWM 5852 KiB, runtime-limits PASS
+13:08:47 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh stop
+13:08:48   stopped
+13:08:48 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh start --shift 3
+13:08:49   started cc1-bench, icount shift=3
+13:08:49 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh wait 900
+13:09:08   target up after 19s (wall clock)
+13:09:08 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh deploy ~/workplace/cc1-repeatability/vstatd-normal
+13:09:11   deployed bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98, read back bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98
+13:09:11   deploy of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:09:11 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r01
+13:09:22   ~/workplace/cc1-repeatability/data/runs/b3-r01
+13:09:22   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:09:22 boot 3 run 1: logdiff PASS, max |dt| 4 ms, VmHWM 5844 KiB, runtime-limits PASS
+13:09:22 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r02
+13:09:37   ~/workplace/cc1-repeatability/data/runs/b3-r02
+13:09:37   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:09:38 boot 3 run 2: logdiff PASS, max |dt| 6 ms, VmHWM 5844 KiB, runtime-limits PASS
+13:09:38 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r03
+13:33:13   ~/workplace/cc1-repeatability/data/runs/b3-r03
+13:33:13   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:33:16 boot 3 run 3: logdiff PASS, max |dt| 11 ms, VmHWM 5752 KiB, runtime-limits PASS
+13:33:16 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r04
+13:33:34   ~/workplace/cc1-repeatability/data/runs/b3-r04
+13:33:34   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:33:36 boot 3 run 4: logdiff PASS, max |dt| 7 ms, VmHWM 5804 KiB, runtime-limits PASS
+13:33:36 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r05
+13:33:52   ~/workplace/cc1-repeatability/data/runs/b3-r05
+13:33:52   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:33:53 boot 3 run 5: logdiff PASS, max |dt| 3 ms, VmHWM 5916 KiB, runtime-limits PASS
+13:33:53 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r06
+13:34:12   ~/workplace/cc1-repeatability/data/runs/b3-r06
+13:34:12   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:34:13 boot 3 run 6: logdiff PASS, max |dt| 3 ms, VmHWM 5832 KiB, runtime-limits PASS
+13:34:13 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r07
+13:34:29   ~/workplace/cc1-repeatability/data/runs/b3-r07
+13:34:29   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:34:30 boot 3 run 7: logdiff PASS, max |dt| 8 ms, VmHWM 5828 KiB, runtime-limits PASS
+13:34:30 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r08
+13:34:51   ~/workplace/cc1-repeatability/data/runs/b3-r08
+13:34:51   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:34:52 boot 3 run 8: logdiff PASS, max |dt| 20 ms, VmHWM 5900 KiB, runtime-limits PASS
+13:34:52 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r09
+13:35:01   ~/workplace/cc1-repeatability/data/runs/b3-r09
+13:35:01   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:35:03 boot 3 run 9: logdiff PASS, max |dt| 12 ms, VmHWM 5832 KiB, runtime-limits PASS
+13:35:03 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r10
+13:35:15   ~/workplace/cc1-repeatability/data/runs/b3-r10
+13:35:15   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:35:15 boot 3 run 10: logdiff PASS, max |dt| 13 ms, VmHWM 5852 KiB, runtime-limits PASS
+13:35:15 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r11
+13:35:24   ~/workplace/cc1-repeatability/data/runs/b3-r11
+13:35:24   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:35:24 boot 3 run 11: logdiff PASS, max |dt| 5 ms, VmHWM 5832 KiB, runtime-limits PASS
+13:35:24 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r12
+13:35:32   ~/workplace/cc1-repeatability/data/runs/b3-r12
+13:35:32   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:35:32 boot 3 run 12: logdiff PASS, max |dt| 16 ms, VmHWM 5808 KiB, runtime-limits PASS
+13:35:32 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r13
+13:35:41   ~/workplace/cc1-repeatability/data/runs/b3-r13
+13:35:41   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:35:42 boot 3 run 13: logdiff PASS, max |dt| 7 ms, VmHWM 5916 KiB, runtime-limits PASS
+13:35:42 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r14
+13:35:50   ~/workplace/cc1-repeatability/data/runs/b3-r14
+13:35:50   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:35:50 boot 3 run 14: logdiff PASS, max |dt| 4 ms, VmHWM 5816 KiB, runtime-limits PASS
+13:35:50 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r15
+13:35:59   ~/workplace/cc1-repeatability/data/runs/b3-r15
+13:35:59   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:35:59 boot 3 run 15: logdiff PASS, max |dt| 5 ms, VmHWM 5736 KiB, runtime-limits PASS
+13:35:59 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r16
+13:36:08   ~/workplace/cc1-repeatability/data/runs/b3-r16
+13:36:08   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:36:08 boot 3 run 16: logdiff PASS, max |dt| 4 ms, VmHWM 5940 KiB, runtime-limits PASS
+13:36:08 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r17
+13:36:16   ~/workplace/cc1-repeatability/data/runs/b3-r17
+13:36:16   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:36:17 boot 3 run 17: logdiff PASS, max |dt| 2 ms, VmHWM 5820 KiB, runtime-limits PASS
+13:36:17 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r18
+13:36:25   ~/workplace/cc1-repeatability/data/runs/b3-r18
+13:36:25   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:36:26 boot 3 run 18: logdiff PASS, max |dt| 5 ms, VmHWM 5896 KiB, runtime-limits PASS
+13:36:26 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r19
+13:36:34   ~/workplace/cc1-repeatability/data/runs/b3-r19
+13:36:34   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:36:35 boot 3 run 19: logdiff PASS, max |dt| 4 ms, VmHWM 5828 KiB, runtime-limits PASS
+13:36:35 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b3-r20
+13:36:43   ~/workplace/cc1-repeatability/data/runs/b3-r20
+13:36:43   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+13:36:43 boot 3 run 20: logdiff PASS, max |dt| 5 ms, VmHWM 5940 KiB, runtime-limits PASS
+13:36:43 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh stop
+13:36:44   stopped
+13:36:44 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh start --shift 3
+13:36:45   started cc1-bench, icount shift=3
+13:36:45 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh wait 900
+13:37:00   target up after 15s (wall clock)
+13:37:00 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh deploy ~/workplace/cc1-repeatability/vstatd-f021
+13:37:03   deployed 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a, read back 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a
+13:37:03   deploy of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:37:03 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r01
+13:37:12   ~/workplace/cc1-repeatability/data/runs/b4-r01
+13:37:12   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:37:12 boot 4 run 1: logdiff PASS, max |dt| 3 ms, VmHWM 6872 KiB, runtime-limits PASS
+13:37:12 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r02
+13:37:21   ~/workplace/cc1-repeatability/data/runs/b4-r02
+13:37:21   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:37:22 boot 4 run 2: logdiff PASS, max |dt| 18 ms, VmHWM 6740 KiB, runtime-limits PASS
+13:37:22 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r03
+13:37:30   ~/workplace/cc1-repeatability/data/runs/b4-r03
+13:37:30   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:37:30 boot 4 run 3: logdiff PASS, max |dt| 4 ms, VmHWM 6796 KiB, runtime-limits PASS
+13:37:30 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r04
+13:37:38   ~/workplace/cc1-repeatability/data/runs/b4-r04
+13:37:38   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:37:39 boot 4 run 4: logdiff PASS, max |dt| 19 ms, VmHWM 6848 KiB, runtime-limits PASS
+13:37:39 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r05
+13:37:47   ~/workplace/cc1-repeatability/data/runs/b4-r05
+13:37:47   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:37:47 boot 4 run 5: logdiff PASS, max |dt| 20 ms, VmHWM 6608 KiB, runtime-limits PASS
+13:37:47 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r06
+13:37:55   ~/workplace/cc1-repeatability/data/runs/b4-r06
+13:37:55   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:37:55 boot 4 run 6: logdiff PASS, max |dt| 5 ms, VmHWM 6816 KiB, runtime-limits PASS
+13:37:55 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r07
+13:38:04   ~/workplace/cc1-repeatability/data/runs/b4-r07
+13:38:04   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:38:04 boot 4 run 7: logdiff PASS, max |dt| 4 ms, VmHWM 6808 KiB, runtime-limits PASS
+13:38:04 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r08
+13:38:12   ~/workplace/cc1-repeatability/data/runs/b4-r08
+13:38:12   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:38:13 boot 4 run 8: logdiff PASS, max |dt| 7 ms, VmHWM 6788 KiB, runtime-limits PASS
+13:38:13 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r09
+13:38:21   ~/workplace/cc1-repeatability/data/runs/b4-r09
+13:38:21   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:38:22 boot 4 run 9: logdiff PASS, max |dt| 3 ms, VmHWM 6796 KiB, runtime-limits PASS
+13:38:22 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh replay --kind run --out ~/workplace/cc1-repeatability/data/runs/b4-r10
+13:38:30   ~/workplace/cc1-repeatability/data/runs/b4-r10
+13:38:30   replay of 0d8cfee207ea9305165eee6fbcde8c96d75e0324fb8b958d0f591de89a84334a: approve or refuse it at the operator console (bench/console.py)
+13:38:31 boot 4 run 10: logdiff PASS, max |dt| 8 ms, VmHWM 6768 KiB, runtime-limits PASS
+13:38:31 $ bash <repo>/samples/embedded-development/in-vehicle-dev-server/bench/cc1.sh stop
+13:38:31   stopped
+13:38:31 done in 39.0 min

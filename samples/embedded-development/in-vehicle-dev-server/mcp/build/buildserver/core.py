@@ -424,9 +424,10 @@ class BuildService:
         return (f"unexpected arguments {extra}" if extra else f"missing arguments {missing}" if missing else
                 f"arguments that are not strings {wrong}" if wrong else None)
 
-    def call(self, tool, **args):
+    def call(self, tool, /, **args):
         """One tool call through the guardrails. Audited before and after; raises Refused, or RuntimeError on an
-        unexpected failure (also audited)."""
+        unexpected failure (also audited). `self` and `tool` are positional-only, so that an argument of the request
+        named `tool` or `self` is one more argument to refuse, not a clash before the audit."""
         cls = TOOLS.get(tool, (None,))[0] if isinstance(tool, str) else None
         entry = {"tool": tool if isinstance(tool, str) else repr(tool), "class": cls, "args": args}
         why = self.malformed(tool, args) or (None if cls in self.granted else
@@ -473,7 +474,7 @@ class BuildService:
         except (ValueError, KeyError, TypeError) as e:
             if strict:
                 raise Refused(f"repair count unreadable ({e}); a person resets it "
-                              f"(python -m buildserver.admin reset-repair)") from None
+                              f"(buildserver.admin reset-repair, see mcp/build/README.md, Running)") from None
             return {"cross_build": {"failures_in_a_row": 0, "total_failures": 0}}
 
     def save_repair(self, state):
@@ -489,7 +490,7 @@ class BuildService:
         if c["failures_in_a_row"] > self.repair_limit:
             raise Refused(f"cross attempts failed {c['failures_in_a_row']} times in a row: the first attempt and "
                           f"the {self.repair_limit} retries of TR §5.1. A person decides, then resets the count "
-                          f"(python -m buildserver.admin reset-repair)")
+                          f"(buildserver.admin reset-repair, see mcp/build/README.md, Running)")
         c["failures_in_a_row"] += 1
         c["total_failures"] += 1
         self.save_repair(state)
