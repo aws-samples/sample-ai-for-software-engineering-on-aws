@@ -141,9 +141,11 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
 - **F-021 calibration (closed 2026-11-04).** The peak-RSS limit of CC1-PN §3 is now 6,400 KiB, set from the 70 runs
   of [rehearsal/repeatability/](../rehearsal/repeatability/README.md): 456 KiB above the largest normal run, 208 KiB
   under the smallest wrong-fix run. On another host, see [facilitator-notes](../rehearsal/facilitator-notes.md).
-- **Repeatability margin.** At shift 3, 2 of 60 runs of the same build failed the 20 ms window (23 and 24 ms), both
-  on a client's connection time ([rehearsal/repeatability/](../rehearsal/repeatability/README.md), 2026-11-04). Not
-  decided: a wider window, or pairing `CLIENT_CONNECTED` by client (checks, item 4).
+- **Repeatability margin (closed 2026-11-04).** At shift 3, 2 of 60 runs of the same build failed the 20 ms window
+  (23 and 24 ms), both on a client's connection time ([rehearsal/repeatability/](../rehearsal/repeatability/README.md)).
+  CC1-PN §6.3 now gives `CLIENT_CONNECTED` and `SERVICE_STOP` 50 ms and keeps 20 ms for every other event; with that,
+  all 60 runs pass, the smallest margin to a window is 11 ms, and the F-008 wrong fixes are caught as before, since
+  they add or remove timeouts rather than shift them.
 - **Final baseline.** Generated once the reference project is calibrated, on the commit the scenario ships.
 - **Build container on Apple Silicon (closed 2026-11-03).** `reference-project/tools/Dockerfile` now builds natively
   for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on

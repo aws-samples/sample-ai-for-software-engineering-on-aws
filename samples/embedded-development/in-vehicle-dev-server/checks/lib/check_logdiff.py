@@ -4,10 +4,12 @@
 """checks/logdiff.sh: the runtime log of the run against the baseline log of the same replay [CC1-PN §6].
 
 Matching (§6.3): two entries match when `ev` and every compared field are equal and their `t_ms` differ by at most
-the window of limits.json (20 ms). Baseline entries are taken in order; each is paired with the first unpaired run
-entry that matches it. Baseline entries with the same `t_ms` (one decoding step) must keep their order in the run.
-Every entry left unpaired on either side is a difference. §6.2 fields are ignored. Pass: every difference is an
-allowed difference of the approved triage (§6.4). Nothing is filtered out before the comparison.
+the window of limits.json (20 ms; 50 ms for the events listed per event). Baseline entries are taken in order; each
+is paired with the first unpaired run entry that matches it. Baseline entries with the same `t_ms` (one decoding
+step) must keep their order in the run. Every entry left unpaired on either side is a difference. §6.2 fields are
+ignored. Pass: every difference is an allowed difference of the approved triage (§6.4). Nothing is filtered out
+before the comparison. The order rule covers the drive's events only: the events with a window of their own are set
+by the clients and the bench, not by a decoding step.
 """
 
 import json
@@ -22,7 +24,12 @@ def key(entry, ignored):
     return (entry["ev"],) + tuple(sorted((k, v) for k, v in entry.items() if k not in ("t_ms", "ev") and k not in skip))
 
 
-def compare(baseline, run, window, ignored):
+def window_of(entry, window, by_event):
+    """The time window for an entry's event: the per-event value of limits.json, else the default."""
+    return by_event.get(entry["ev"], window) if by_event else window
+
+
+def compare(baseline, run, window, ignored, by_event=None):
     """Returns (pairs, unpaired baseline indices, unpaired run indices, order violations)."""
     by_key = {}
     for j, e in enumerate(run):
@@ -33,7 +40,7 @@ def compare(baseline, run, window, ignored):
         for j in by_key.get(key(b, ignored), []):
             if used[j]:
                 continue
-            if abs(run[j]["t_ms"] - b["t_ms"]) <= window:
+            if abs(run[j]["t_ms"] - b["t_ms"]) <= window_of(b, window, by_event):
                 used[j] = True
                 pairs[i] = j
                 break
@@ -43,7 +50,7 @@ def compare(baseline, run, window, ignored):
         k = i
         while k + 1 < len(baseline) and baseline[k + 1]["t_ms"] == baseline[i]["t_ms"]:
             k += 1
-        paired = [(n, pairs[n]) for n in range(i, k + 1) if n in pairs]
+        paired = [(n, pairs[n]) for n in range(i, k + 1) if n in pairs and baseline[n]["ev"] not in (by_event or {})]
         for (n1, j1), (n2, j2) in zip(paired, paired[1:]):
             if j2 < j1:
                 order.append((n1, n2, j1, j2))
@@ -51,12 +58,12 @@ def compare(baseline, run, window, ignored):
     return pairs, [i for i in range(len(baseline)) if i not in pairs], [j for j in range(len(run)) if not used[j]], order
 
 
-def allowed_match(spec, entry, window, ignored):
+def allowed_match(spec, entry, window, ignored, by_event=None):
     """An allowed difference names the whole entry (ev and every compared field); t_ms, if given, within the window."""
     want = spec["entry"]
     if key(dict(want, t_ms=0), ignored) != key(entry, ignored):
         return False
-    return "t_ms" not in want or abs(want["t_ms"] - entry["t_ms"]) <= window
+    return "t_ms" not in want or abs(want["t_ms"] - entry["t_ms"]) <= window_of(entry, window, by_event)
 
 
 def fmt(e):
@@ -66,6 +73,7 @@ def fmt(e):
 def body(args, r):
     lim = c.limits()
     window, ignored = lim["log_time_window_ms"], lim["log_ignored_fields"]
+    by_event = lim.get("log_time_window_ms_by_event", {})
     triage, problems = c.load_triage(args.triage)
     r.input("triage", args.triage)
     if problems:
@@ -80,12 +88,13 @@ def body(args, r):
         r.reason(str(p))
         return p.verdict, "cannot judge the run" if p.verdict == c.BLOCKED else "wrong run"
 
-    pairs, only_base, only_run, order = compare(baseline, run, window, ignored)
+    pairs, only_base, only_run, order = compare(baseline, run, window, ignored, by_event)
     diffs = [("baseline", baseline[i]) for i in only_base] + [("run", run[j]) for j in only_run]
     budget = [dict(spec, left=spec.get("count", 1)) for spec in triage.get("allowed_log_differences", [])]
     allowed, unexplained = [], []
     for side, e in diffs:
-        spec = next((s for s in budget if s["left"] > 0 and s["side"] == side and allowed_match(s, e, window, ignored)), None)
+        spec = next((s for s in budget if s["left"] > 0 and s["side"] == side
+                     and allowed_match(s, e, window, ignored, by_event)), None)
         if spec:
             spec["left"] -= 1
             allowed.append({"side": side, "entry": e, "finding": spec["finding"]})
@@ -105,7 +114,7 @@ def body(args, r):
         "differences": len(diffs), "allowed": allowed, "unexplained": len(unexplained), "order_changes": len(order),
         "allowed_not_seen": [{k: s[k] for k in ("finding", "side", "entry")} | {"missing": s["left"]}
                              for s in budget if s["left"] > 0],
-        "window_ms": window, "diff": str(r.dir / "logdiff.diff")})
+        "window_ms": window, "window_ms_by_event": by_event, "diff": str(r.dir / "logdiff.diff")})
     summary = (f"{len(pairs)} of {len(baseline)} baseline entries paired; {len(unexplained)} unexplained "
                f"difference(s), {len(allowed)} allowed, {len(order)} order change(s); {r.data['tier']}")
     return (c.FAIL if unexplained or order else c.PASS), summary

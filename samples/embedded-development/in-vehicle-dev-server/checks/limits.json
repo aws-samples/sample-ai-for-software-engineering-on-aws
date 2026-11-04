@@ -16,6 +16,10 @@
     "value": 20,
     "source": "[CC1-PN §6.3] t_ms differ by at most 20 ms"
   },
+  "log_time_window_ms_by_event": {
+    "value": {"CLIENT_CONNECTED": 50, "SERVICE_STOP": 50},
+    "source": "[CC1-PN §6.3] for CLIENT_CONNECTED and SERVICE_STOP, at most 50 ms"
+  },
   "log_ignored_fields": {
     "value": {
       "SERVICE_START": [
