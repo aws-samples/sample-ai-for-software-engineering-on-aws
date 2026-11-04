@@ -1,0 +1,455 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT-0
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+"""Tests of the bench MCP server's guardrails, one or more per row of the README's table. No QEMU, no Docker: a
+stand-in bench/cc1.sh answers like the real one (a request in the action record, `refused: ...` on stderr), and
+stand-in after-bench checks run without a container (sandbox.runner = "none").
+
+    python3 tests/test_guardrails.py
+
+The MCP-layer tests need the MCP SDK the server pins and are skipped without it.
+"""
+import hashlib
+import json
+import os
+import pathlib
+import shutil
+import stat
+import sys
+import tempfile
+import time
+import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+os.environ["BENCHSERVER_UNSANDBOXED_FOR_TESTS"] = "1"
+from benchserver import core  # noqa: E402
+from benchserver.core import BenchService, ConfigError, Refused  # noqa: E402
+
+# A stand-in cc1.sh: records its argv and environment; a physical action writes its request to the action record
+# and then does what $FAKE/mode says (refuse, fail, hang), else succeeds.
+FAKE_CC1 = r"""#!/usr/bin/env bash
+F=__FAKE__; S=$CC1_BENCH_STATE
+printf '%s\n' "$*" >> "$F/calls"; env > "$F/env-cc1"
+mode=$(cat "$F/mode" 2>/dev/null)
+case $1 in
+  target) echo '{"state": "known", "why": "booted"}' ;;
+  supply) echo '{"voltage_v": 13.5, "kl15": "on"}' ;;
+  probe)  echo '{"qemu_running": true, "reachable": true}' ;;
+  deploy|restart|replay)
+    printf '{"at": "2026-11-04T00:00:00Z", "event": "request", "id": "req-%s-%s", "action": "%s", "requested_by": "%s"}\n' \
+      "$1" "$RANDOM" "$1" "$CC1_REQUESTER" >> "$S/actions.jsonl"
+    case $mode in
+      refuse) echo "deploy of x: approve or refuse it at the operator console" >&2
+              echo "refused: refused (alice@bench (ttys001)): not this build" >&2; exit 1 ;;
+      fail)   echo "$1 failed" >&2; exit 1 ;;
+      hang)   sleep 30 ;;
+    esac
+    if [[ $1 == deploy ]]; then cp "$2" "$F/deployed-file"; echo "$2" > "$F/deployed-from"; fi
+    if [[ $1 == replay ]]; then
+      while (( $# )); do [[ $1 == --out ]] && out=$2; shift; done
+      mkdir -p "$out"; echo '{"msg": "SERVICE_START"}' > "$out/run.jsonl"
+      printf '{"replay_id": "drive-01@x", "replay_finished": true, "vm_hwm_kib": 5896, "approved_digest": "%s"}\n' \
+        "$(cat "$F/digest" 2>/dev/null)" > "$out/run-result.json"
+    fi
+    echo "$1 ok" ;;
+  *) exit 2 ;;
+esac
+"""
+
+# A stand-in after-bench check: records its argv and environment, and writes a result naming its inputs with their
+# SHA-256, the verdict in $FAKE/verdict (default PASS); $FAKE/check-mode makes it misbehave.
+FAKE_CHECK = r"""#!/usr/bin/env python3
+import hashlib, json, os, pathlib, sys, time
+F = pathlib.Path("__FAKE__")
+name = pathlib.Path(sys.argv[0]).name[:-3]
+(F / f"argv-{name}").write_text("\n".join(sys.argv[1:]))
+(F / f"env-{name}").write_text("\n".join(f"{k}={v}" for k, v in os.environ.items()))
+a = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+r, run, base = pathlib.Path(a["--results"]), pathlib.Path(a["--run"]), pathlib.Path(a["--baseline"])
+v = (F / "verdict").read_text().strip() if (F / "verdict").exists() else "PASS"
+mode = (F / "check-mode").read_text().strip() if (F / "check-mode").exists() else ""
+h = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+inputs = {"run_result": run / "run-result.json", "run_log": run / "run.jsonl",
+          "baseline_result": base / "baseline-result.json", "baseline_log": base / "baseline.jsonl"}
+if "--triage" in a:
+    inputs["triage"] = pathlib.Path(a["--triage"])
+rec = {k: {"path": str(p), "sha256": h(p)} for k, p in inputs.items()}
+started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+if mode == "stale":
+    started = "2000-01-01T00:00:00Z"
+if mode == "other-run":
+    rec["run_result"]["path"] = "/elsewhere/run-result.json"
+if mode == "wrong-hash":
+    rec["baseline_log"]["sha256"] = "0" * 64
+out = {"check": name, "verdict": "PASS" if mode == "lie" else v, "commit": None, "local": mode == "local",
+       "started": started, "inputs": rec, "details": {"approved_digest": "d"}, "summary": "", "reasons": []}
+if mode != "silent":
+    (r / f"{name}.json").write_text(json.dumps(out))
+(r / f"{name}.log").write_text(f"{name}: {v}\n")
+print(f"{name}: {v}")
+sys.exit({"PASS": 0, "FAIL": 1, "BLOCKED": 3}[v])
+"""
+
+
+class Env(unittest.TestCase):
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="benchserver-test-"))
+        os.chmod(self.tmp, 0o700)
+        self.fake = self.tmp / "fake"
+        self.fake.mkdir()
+        sample = self.tmp / "sample"
+        self.bench, self.checks = sample / "bench", sample / "checks"
+        self.bench.mkdir(parents=True)
+        self.checks.mkdir()
+        (self.bench / "cc1.sh").write_text(FAKE_CC1.replace("__FAKE__", str(self.fake)))
+        for c in core.CHECKS:
+            (self.checks / f"{c}.sh").write_text(FAKE_CHECK.replace("__FAKE__", str(self.fake)))
+            (self.checks / f"{c}.sh").chmod(0o755)
+        self.st = self.tmp / "srv" / "state"
+        self.bstate = self.tmp / "srv" / "cc1-bench"
+        self.results = self.tmp / "build" / "results"
+        (self.results / "artifacts").mkdir(parents=True)
+        self.baseline = self.tmp / "srv" / "baseline"
+        self.baseline.mkdir(parents=True)
+        (self.baseline / "baseline-result.json").write_text('{"vm_hwm_kib": 5860}\n')
+        (self.baseline / "baseline.jsonl").write_text('{"msg": "SERVICE_START"}\n')
+        (self.tmp / "srv" / "triage").mkdir()
+        self.triage = self.tmp / "srv" / "triage" / "triage.json"
+        self.triage.write_text('{"findings": []}\n')
+        self.config = self.write_config()
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "not-a-real-secret"
+
+    def tearDown(self):
+        os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def write_config(self, extra="", **paths):
+        p = {"bench": self.bench, "checks": self.checks, "state": self.st, "bench_state": self.bstate,
+             "build_results": self.results, "baseline": self.baseline, "triage": self.triage, **paths}
+        cfg = self.tmp / "config.toml"
+        cfg.write_text("[paths]\n" + "".join(f'{k} = "{v}"\n' for k, v in p.items()) + f"""
+[sandbox]
+runner = "none"
+[lease]
+ttl_s = 600
+[roles.developer]
+classes = ["read-only", "controlled-write", "physical"]
+[roles.reviewer]
+classes = ["read-only"]
+[timeouts]
+approval = 2
+deploy = 3
+restart = 3
+replay = 3
+check = 20
+[environment]
+path = "{os.environ['PATH']}"
+""" + extra)
+        return cfg
+
+    def service(self, role="developer"):
+        return BenchService(self.config, role)
+
+    def audit(self):
+        return [json.loads(line) for line in (self.st / "audit.jsonl").read_text().splitlines()]
+
+    def outcomes(self):
+        return [(e["tool"], e["outcome"]) for e in self.audit()]
+
+    def calls(self):
+        p = self.fake / "calls"
+        return p.read_text().splitlines() if p.exists() else []
+
+    def publish_build(self, verdict="PASS", local=False, content=b"vstatd binary", digest=None):
+        (self.results / "artifacts" / "vstatd").write_bytes(content)
+        d = digest or hashlib.sha256(content).hexdigest()
+        (self.results / "build.json").write_text(json.dumps({
+            "check": "build", "verdict": verdict, "local": local, "commit": "c0ffee",
+            "details": {"digest": d, "artifact": str(self.results / "artifacts" / "vstatd")}}))
+        (self.fake / "digest").write_text(d)
+        return d
+
+    def with_lease(self, role="developer"):
+        s = self.service(role)
+        s.call("lease_acquire")
+        return s
+
+
+class Roles(Env):
+    def test_an_unknown_role_is_granted_nothing_and_every_refusal_is_audited(self):
+        s = self.service("intruder")
+        for tool in ("bench_status", "lease_acquire", "request_deploy"):
+            with self.assertRaises(Refused):
+                s.call(tool)
+        self.assertEqual(self.outcomes(), [("bench_status", "refused"), ("lease_acquire", "refused"),
+                                           ("request_deploy", "refused")])
+        self.assertEqual(self.calls(), [])
+
+    def test_a_reviewer_reads_but_takes_no_lease_and_requests_nothing(self):
+        s = self.service("reviewer")
+        status = s.call("bench_status")
+        self.assertEqual(status["target"]["state"], "known")
+        for tool in ("lease_acquire", "request_replay"):
+            with self.assertRaises(Refused):
+                s.call(tool)
+        self.assertNotIn("replay", " ".join(self.calls()))
+
+    def test_unknown_permission_classes_stop_the_server(self):
+        self.write_config('[roles.ops]\nclasses = ["admin"]\n')
+        with self.assertRaises(ConfigError):
+            BenchService(self.config, "ops")
+
+
+class ClosedArguments(Env):
+    def test_tools_take_no_path_command_or_digest(self):
+        s = self.service()
+        cases = [("request_deploy", {"path": "/tmp/evil"}), ("request_replay", {"drive": "x.rec"}),
+                 ("run_check", {}), ("run_check", {"check": "release"}), ("run_check", {"check": ["logdiff"]}),
+                 ("reconcile", {}), ("approve", {"id": "x"})]
+        for tool, args in cases:
+            with self.assertRaises(Refused, msg=(tool, args)):
+                s.call(tool, **args)
+        self.assertEqual([o for _, o in self.outcomes() if o != "started"], ["refused"] * len(cases))
+        self.assertEqual(self.calls(), [])
+
+    def test_the_exact_tools_of_the_readme(self):
+        self.assertEqual(sorted(core.TOOLS), sorted(["bench_status", "read_actions", "read_result", "lease_acquire",
+                                                      "lease_release", "run_check", "request_deploy",
+                                                      "request_restart", "request_replay"]))
+
+
+class Paths(Env):
+    def test_the_state_may_not_lie_in_the_sample(self):
+        self.write_config(state=self.bench.parent / "state")
+        with self.assertRaises(ConfigError):
+            self.service()
+
+    def test_a_folder_others_can_write_stops_the_server(self):
+        os.chmod(self.baseline, 0o777)
+        with self.assertRaises(ConfigError):
+            self.service()
+
+    def test_running_checks_without_a_container_needs_the_test_flag(self):
+        os.environ.pop("BENCHSERVER_UNSANDBOXED_FOR_TESTS")
+        try:
+            with self.assertRaises(ConfigError):
+                self.service()
+        finally:
+            os.environ["BENCHSERVER_UNSANDBOXED_FOR_TESTS"] = "1"
+
+
+class Lease(Env):
+    def test_physical_calls_and_checks_need_the_lease(self):
+        s = self.service()
+        self.publish_build()
+        for tool, args in (("request_deploy", {}), ("request_restart", {}), ("request_replay", {}),
+                           ("run_check", {"check": "logdiff"})):
+            with self.assertRaises(Refused, msg=tool):
+                s.call(tool, **args)
+        self.assertEqual(self.calls(), [])
+
+    def test_one_session_at_a_time_and_only_the_holder_releases(self):
+        a, b = self.with_lease(), self.service()
+        with self.assertRaises(Refused):
+            b.call("lease_acquire")
+        with self.assertRaises(Refused):
+            b.call("lease_release")
+        self.publish_build()
+        with self.assertRaises(Refused):
+            b.call("request_deploy")
+        self.assertTrue(a.call("lease_release")["released"])
+        self.assertTrue(b.call("lease_acquire")["yours"])
+
+    def test_a_lapsed_lease_can_be_taken(self):
+        self.with_lease()
+        data = json.loads((self.st / "lease.json").read_text())
+        data["expires"] = time.time() - 1
+        (self.st / "lease.json").write_text(json.dumps(data))
+        self.assertTrue(self.service().call("lease_acquire")["yours"])
+
+    def test_the_lease_goes_when_the_session_ends(self):
+        s = self.with_lease()
+        s.release_on_exit()
+        self.assertFalse((self.st / "lease.json").exists())
+        self.assertEqual(self.audit()[-1]["detail"], "released when the session ended")
+
+
+class Deploy(Env):
+    def test_only_a_build_the_build_server_judged_pass(self):
+        s = self.with_lease()
+        with self.assertRaises(Refused):  # nothing published
+            s.call("request_deploy")
+        for kw in ({"verdict": "FAIL"}, {"local": True}, {"digest": "0" * 64}):
+            self.publish_build(**kw)
+            with self.assertRaises(Refused, msg=kw):
+                s.call("request_deploy")
+        self.assertNotIn("deploy", " ".join(self.calls()))
+
+    def test_the_server_deploys_its_own_copy_of_the_judged_build_and_names_itself_as_requester(self):
+        s = self.with_lease()
+        digest = self.publish_build()
+        out = s.call("request_deploy")
+        self.assertEqual(out["digest"], digest)
+        self.assertTrue(out["request"].startswith("req-deploy-"))
+        src = (self.fake / "deployed-from").read_text().strip()
+        self.assertEqual(pathlib.Path(src), self.st / "builds" / digest)  # not the build server's file
+        env = (self.fake / "env-cc1").read_text()
+        self.assertIn("CC1_REQUESTER=bench MCP server (role developer)", env)
+        self.assertIn(f"CC1_BENCH_STATE={self.bstate}", env)
+        self.assertIn("CC1_APPROVAL_TIMEOUT_S=2", env)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
+        last = self.audit()[-1]
+        self.assertEqual((last["outcome"], last["digest"], last["request"]), ("ok", digest, out["request"]))
+
+    def test_a_refusal_at_the_console_is_final_and_not_retried(self):
+        s = self.with_lease()
+        self.publish_build()
+        (self.fake / "mode").write_text("refuse")
+        with self.assertRaises(Refused) as e:
+            s.call("request_deploy")
+        self.assertIn("not this build", str(e.exception))
+        self.assertIn("not retried", str(e.exception))
+        self.assertEqual([c.split()[0] for c in self.calls()].count("deploy"), 1)
+        self.assertEqual(self.audit()[-1]["outcome"], "refused")
+
+    def test_an_action_that_does_not_finish_is_stopped_and_not_retried(self):
+        s = self.with_lease()
+        self.publish_build()
+        (self.fake / "mode").write_text("hang")
+        t0 = time.monotonic()
+        with self.assertRaises(Refused) as e:
+            s.call("request_deploy")
+        self.assertLess(time.monotonic() - t0, 25)
+        self.assertIn("unknown", str(e.exception))
+        self.assertEqual([c.split()[0] for c in self.calls()].count("deploy"), 1)
+
+
+class Replay(Env):
+    def test_each_replay_gets_a_new_run_folder_in_the_servers_state(self):
+        s = self.with_lease()
+        self.publish_build()
+        self.assertEqual(s.call("request_replay")["run"], "run-1")
+        self.assertEqual(s.call("request_replay")["run"], "run-2")
+        self.assertIn(f"replay --kind run --out {self.st / 'runs' / 'run-2'}", self.calls()[-1])
+        self.assertEqual(s.call("bench_status")["last_run"]["run"], "run-2")
+
+    def test_a_failed_action_is_reported_and_not_retried(self):
+        s = self.with_lease()
+        (self.fake / "mode").write_text("fail")
+        out = s.call("request_replay")
+        self.assertEqual(out["outcome"], "failed")
+        self.assertEqual([c.split()[0] for c in self.calls()].count("replay"), 1)
+
+
+class Checks(Env):
+    def replayed(self):
+        s = self.with_lease()
+        self.publish_build()
+        s.call("request_replay")
+        return s
+
+    def test_no_check_before_a_replay(self):
+        with self.assertRaises(Refused):
+            self.with_lease().call("run_check", check="runtime-limits")
+
+    def test_fixed_arguments_and_a_clean_environment(self):
+        s = self.replayed()
+        out = s.call("run_check", check="logdiff")
+        self.assertEqual(out["verdict"], "PASS")
+        argv = (self.fake / "argv-logdiff").read_text().splitlines()
+        run = self.st / "runs" / "run-1"
+        self.assertEqual(argv[0::2], ["--results", "--run", "--baseline", "--triage"])
+        self.assertEqual(argv[3:8:2], [str(run), str(self.baseline), str(self.triage)])
+        self.assertNotIn("--triage", (self.fake / "argv-runtime-limits").read_text() if
+                         (self.fake / "argv-runtime-limits").exists() else "--results")
+        s.call("run_check", check="runtime-limits")
+        self.assertNotIn("--triage", (self.fake / "argv-runtime-limits").read_text())
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", (self.fake / "env-logdiff").read_text())
+        published = json.loads((self.st / "results" / "logdiff.json").read_text())
+        self.assertEqual(published["verdict"], "PASS")
+        self.assertEqual(s.call("read_result", check="logdiff")["result"]["verdict"], "PASS")
+
+    def test_a_result_that_is_not_this_runs_is_published_as_error(self):
+        s = self.replayed()
+        for mode in ("lie", "stale", "other-run", "wrong-hash", "local", "silent"):
+            (self.fake / "verdict").write_text("FAIL")
+            (self.fake / "check-mode").write_text(mode)
+            out = s.call("run_check", check="runtime-limits")
+            self.assertEqual(out["verdict"], "ERROR", mode)
+            published = json.loads((self.st / "results" / "runtime-limits.json").read_text())
+            self.assertEqual(published["verdict"], "ERROR", mode)
+            self.assertTrue(published["reasons"][0].startswith("bench server:"), mode)
+
+    def test_a_fail_is_published_as_it_is(self):
+        s = self.replayed()
+        (self.fake / "verdict").write_text("FAIL")
+        self.assertEqual(s.call("run_check", check="runtime-limits")["verdict"], "FAIL")
+        self.assertEqual(json.loads((self.st / "results" / "runtime-limits.json").read_text())["verdict"], "FAIL")
+
+
+class Reads(Env):
+    def test_status_shows_pending_requests_and_the_lease_without_its_holder(self):
+        s = self.with_lease()
+        (self.bstate / "requests").mkdir(exist_ok=True)
+        (self.bstate / "requests" / "r1.json").write_text(json.dumps({
+            "id": "r1", "action": "deploy", "digest": "d" * 64, "expires": time.time() + 100,
+            "requested_by": "someone"}))
+        st = s.call("bench_status")
+        self.assertEqual([r["id"] for r in st["pending_requests"]], ["r1"])
+        self.assertTrue(st["lease"]["yours"])
+        self.assertNotIn("holder", st["lease"])
+        self.assertEqual(st["supply"]["kl15"], "on")
+
+    def test_the_action_record_is_read_not_written(self):
+        s = self.service("reviewer")
+        (self.bstate / "actions.jsonl").write_text('{"event": "decision", "verdict": "approved"}\nnot json\n')
+        before = (self.bstate / "actions.jsonl").read_bytes()
+        self.assertEqual(s.call("read_actions")["actions"], [{"event": "decision", "verdict": "approved"}])
+        self.assertEqual((self.bstate / "actions.jsonl").read_bytes(), before)
+
+
+class McpLayer(Env):
+    def setUp(self):
+        super().setUp()
+        try:
+            from mcp import Client  # noqa: F401
+            from benchserver.server import make_server  # noqa: F401
+        except ImportError:
+            self.skipTest("MCP SDK 2.x not installed")
+
+    def run_client(self, fn, role="developer"):
+        import asyncio
+        from mcp import Client
+        from benchserver.server import make_server
+        server = make_server(self.service(role))
+
+        async def go():
+            async with Client(server) as client:
+                return await fn(client)
+        return asyncio.run(go())
+
+    def test_exactly_the_documented_tools(self):
+        async def f(c):
+            return sorted(t.name for t in (await c.list_tools()).tools)
+        self.assertEqual(self.run_client(f), sorted(core.TOOLS))
+
+    def test_refusals_are_errors_and_audited_including_what_the_sdk_would_reject(self):
+        async def f(c):
+            out = []
+            for name, args in (("request_deploy", {}), ("request_deploy", {"path": "/x"}), ("approve", {}),
+                               ("run_check", {})):
+                try:
+                    r = await c.call_tool(name, args)
+                    out.append(("result", r.is_error))
+                except Exception as e:  # noqa: BLE001
+                    out.append(("raised", type(e).__name__))
+            return out
+        out = self.run_client(f)
+        self.assertEqual(out[0], ("result", True))  # no lease
+        self.assertTrue(all(o[0] == "raised" or o[1] for o in out[1:]))
+        self.assertEqual([o for _, o in self.outcomes() if o != "started"], ["refused"] * 4)
+        self.assertEqual(self.calls(), [])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=1)
