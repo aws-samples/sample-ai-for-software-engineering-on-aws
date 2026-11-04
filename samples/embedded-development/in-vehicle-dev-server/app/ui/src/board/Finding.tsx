@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import type { RunDetail, TestCase, TriageRow } from '../types'
 import { errorText } from './useBoard'
+import { t as tr } from '../i18n'
 
 const SIGNER_KEY = 'vstatd-team:signer' // the sign-off's: the same person signs and registers
 
@@ -26,7 +27,7 @@ export function nextFindingId(run: RunDetail): string {
 
 /** file:line of a check's first reason, without the results/…/work/<check>/tree/ prefix of the checks' own copy. */
 export function locationOf(message: string | null): string {
-  const first = (message ?? '').split('；')[0]
+  const first = (message ?? '').split('；')[0] // i18n-keep: the checks join their reasons with ；
   const m = /([\w./-]+\.[A-Za-z0-9]+):(\d+)/.exec(first)
   return m ? `${m[1].replace(/^.*\/work\/[^/]+\/tree\//, '')}:${m[2]}` : ''
 }
@@ -92,7 +93,7 @@ function implementers(run: RunDetail) {
   return run.roles.filter((l) => l.writable.length > 0 && l.status !== 'skipped' && !l.writable.every((g) => g.startsWith('docs/') || g.startsWith('tests/')))
 }
 
-const list = (s: string) => s.split(/[\s,，、]+/).map((x) => x.trim()).filter(Boolean)
+const list = (s: string) => s.split(/[\s,，、]+/).map((x) => x.trim()).filter(Boolean) // i18n-keep: what a person types, in either language
 /** Citations hold spaces (`[VSTATD-IF p.11 §8.4]`): one per bracket. */
 const citesOf = (s: string) => s.match(/\[[^\]]+\]/g) ?? []
 
@@ -108,13 +109,13 @@ export function SuggestAgree({ run, onConfirm }: { run: RunDetail; onConfirm: Co
   if (!items.length) return null
   const title = (k: string) => run.roles.find((l) => l.key === k)?.title ?? k
   const agree = async () => {
-    if (!by.trim()) return setErr('写下你的名字（谁同意的）')
+    if (!by.trim()) return setErr(tr('board.Finding.1'))
     setBusy(true)
     setErr('')
     localStorage.setItem(SIGNER_KEY, by.trim())
     try {
       for (const [i, s] of items.entries()) {
-        await onConfirm({ extend: s.extend, role: s.role, paths: s.paths, note: `同意 app 的建议：${s.note}`, by: by.trim(), continue: i === items.length - 1 })
+        await onConfirm({ extend: s.extend, role: s.role, paths: s.paths, note: tr('board.Finding.2', { p0: s.note }), by: by.trim(), continue: i === items.length - 1 })
       }
     } catch (x) {
       setErr(errorText(x))
@@ -123,15 +124,15 @@ export function SuggestAgree({ run, onConfirm }: { run: RunDetail; onConfirm: Co
   }
   return (
     <div className="kt-ready-pending" data-testid="kt-suggest">
-      <b>app 的建议：给已补登的发现加路径，不新加编号</b>
+      <b>{tr('board.Finding.3')}</b>
       <ul>
         {items.map((s) => (
-          <li key={s.extend}>{s.extend}（{s.check}）交给{title(s.role)}，加可写 <code className="kt-mono">{s.paths.join(' ')}</code>：<span className="kt-dim">{s.note}</span></li>
+          <li key={s.extend}>{s.extend}{tr('board.Finding.4')}{s.check}{tr('board.Finding.5')}{title(s.role)}{tr('board.Finding.6')} <code className="kt-mono">{s.paths.join(' ')}</code>{tr('board.Finding.7')}<span className="kt-dim">{s.note}</span></li>
         ))}
       </ul>
       <span className="kt-start-actions">
-        <label className="kt-start-field is-narrow"><span>同意人</span><input aria-label="同意人" value={by} maxLength={60} onChange={(e) => setBy(e.target.value)} /></label>
-        <button type="button" className="kt-btn is-solid is-primary" onClick={agree} disabled={busy}>{busy ? '正在提交…' : '同意建议并接着运行'}</button>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.8')}</span><input aria-label={tr('board.Finding.8')} value={by} maxLength={60} onChange={(e) => setBy(e.target.value)} /></label>
+        <button type="button" className="kt-btn is-solid is-primary" onClick={agree} disabled={busy}>{busy ? tr('board.Finding.9') : tr('board.Finding.10')}</button>
       </span>
       {err && <p className="kt-error" role="alert">{err}</p>}
     </div>
@@ -141,9 +142,9 @@ export function SuggestAgree({ run, onConfirm }: { run: RunDetail; onConfirm: Co
 /** 要做什么: a new finding, or more paths for one added already. */
 function ModePick({ extending, onPick }: { extending: boolean; onPick: (extending: boolean) => void }) {
   return (
-    <label className="kt-start-field is-narrow"><span>要做什么</span>
-      <select aria-label="要做什么" value={extending ? 'extend' : 'new'} onChange={(e) => onPick(e.target.value === 'extend')}>
-        <option value="new">登记新发现（新编号）</option><option value="extend">给已补登的发现加路径</option>
+    <label className="kt-start-field is-narrow"><span>{tr('board.Finding.11')}</span>
+      <select aria-label={tr('board.Finding.11')} value={extending ? 'extend' : 'new'} onChange={(e) => onPick(e.target.value === 'extend')}>
+        <option value="new">{tr('board.Finding.12')}</option><option value="extend">{tr('board.Finding.13')}</option>
       </select>
     </label>
   )
@@ -170,8 +171,8 @@ function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
   const set = (x: Partial<ExtendBody>) => setB((o) => ({ ...o, ...x }))
   const pick = ids.find((f) => f.id === b.extend)
   const confirm = async () => {
-    if (!b.by.trim()) return setErr('写下你的名字（谁补登的）')
-    if (!list(paths).length) return setErr('写明要加的可写路径（根因所在的文件）')
+    if (!b.by.trim()) return setErr(tr('board.Finding.14'))
+    if (!list(paths).length) return setErr(tr('board.Finding.15'))
     setBusy(true)
     setErr('')
     try {
@@ -184,12 +185,12 @@ function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
   }
   return (
     <div className="kt-confirm kt-gate-dialog" role="dialog" aria-labelledby="kt-finding-title" data-testid="kt-finding-dialog">
-      <strong id="kt-finding-title">给已补登的发现加可写路径</strong>
-      <span>不新加编号：选一个已补登的发现，给交给的角色加上根因所在的文件，它所在的检查再修一轮（{held.why}）。要给几个发现加时，前面的先取消「接着运行」，最后一个再勾上。</span>
+      <strong id="kt-finding-title">{tr('board.Finding.16')}</strong>
+      <span>{tr('board.Finding.17')}{held.why}{tr('board.Finding.18')}</span>
       <div className="kt-start-row">
         <ModePick extending onPick={onMode} />
-        <label className="kt-start-field"><span>发现</span>
-          <select aria-label="发现" value={b.extend} onChange={(e) => {
+        <label className="kt-start-field"><span>{tr('board.Finding.19')}</span>
+          <select aria-label={tr('board.Finding.19')} value={b.extend} onChange={(e) => {
             const s = proposed(e.target.value)
             set({ extend: e.target.value, note: s?.note ?? '', ...(s ? { role: s.role } : {}) })
             setPaths(s?.paths.join(' ') ?? '')
@@ -197,22 +198,22 @@ function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
             {ids.map((f) => <option key={f.id} value={f.id}>{f.id} · {CHECK_OF.exec(f.found_by ?? '')?.[1]} · {f.location}</option>)}
           </select>
         </label>
-        <label className="kt-start-field is-narrow"><span>交给</span>
-          <select aria-label="交给" value={b.role} onChange={(e) => set({ role: e.target.value })}>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.20')}</span>
+          <select aria-label={tr('board.Finding.20')} value={b.role} onChange={(e) => set({ role: e.target.value })}>
             {roles.map((l) => <option key={l.key} value={l.key}>{l.title}</option>)}
           </select>
         </label>
       </div>
-      {pick && <p className="kt-dim">{pick.id} 是 {pick.found_by} 在 {pick.location} 发现的；交给的角色现在可以改：{roles.find((l) => l.key === b.role)?.writable.join(' ') || '—'}</p>}
+      {pick && <p className="kt-dim">{pick.id} {tr('board.Finding.21')} {pick.found_by} {tr('board.Finding.22')} {pick.location} {tr('board.Finding.23')}{roles.find((l) => l.key === b.role)?.writable.join(' ') || '—'}</p>}
       <div className="kt-start-row">
-        <label className="kt-start-field"><span>加可写路径</span><input aria-label="加可写路径" value={paths} onChange={(e) => setPaths(e.target.value)} placeholder="例如 cmake/cc1-aarch64.cmake tests/test_concurrency.cpp" /></label>
-        <label className="kt-start-field is-narrow"><span>补登人</span><input aria-label="补登人" value={b.by} maxLength={60} onChange={(e) => set({ by: e.target.value })} /></label>
+        <label className="kt-start-field"><span>{tr('board.Finding.24')}</span><input aria-label={tr('board.Finding.24')} value={paths} onChange={(e) => setPaths(e.target.value)} placeholder={tr('board.Finding.25')} /></label>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.26')}</span><input aria-label={tr('board.Finding.26')} value={b.by} maxLength={60} onChange={(e) => set({ by: e.target.value })} /></label>
       </div>
-      <textarea className="kt-gate-note" rows={2} value={b.note} onChange={(e) => set({ note: e.target.value })} aria-label="备注" placeholder="例如：根因在 cmake/cc1-aarch64.cmake，没设 CMAKE_SYSROOT（CC1-PN §7.2）" />
+      <textarea className="kt-gate-note" rows={2} value={b.note} onChange={(e) => set({ note: e.target.value })} aria-label={tr('board.Finding.27')} placeholder={tr('board.Finding.28')} />
       <span className="kt-confirm-actions">
-        <label><input type="checkbox" checked={b.continue} onChange={(e) => set({ continue: e.target.checked })} /> 接着运行</label>
-        <button type="button" className="kt-btn is-solid is-primary" onClick={confirm} disabled={busy}>{busy ? '正在提交…' : b.continue ? '加路径并接着运行' : '加路径'}</button>
-        <button type="button" className="kt-btn" onClick={onCancel}>取消</button>
+        <label><input type="checkbox" checked={b.continue} onChange={(e) => set({ continue: e.target.checked })} /> {tr('board.Finding.29')}</label>
+        <button type="button" className="kt-btn is-solid is-primary" onClick={confirm} disabled={busy}>{busy ? tr('board.Finding.9') : b.continue ? tr('board.Finding.30') : tr('board.Finding.31')}</button>
+        <button type="button" className="kt-btn" onClick={onCancel}>{tr('board.Finding.32')}</button>
       </span>
       {err && <p className="kt-error" role="alert">{err}</p>}
     </div>
@@ -231,8 +232,8 @@ function NewFinding({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
   const roles = implementers(run)
   const dup = registeredAs(run, f.check, f.location.trim())
   const confirm = async () => {
-    if (!f.by.trim()) return setErr('写下你的名字（谁补登的）')
-    if (!f.location.trim() || !f.tool.trim()) return setErr('写明发现它的工具和位置')
+    if (!f.by.trim()) return setErr(tr('board.Finding.14'))
+    if (!f.location.trim() || !f.tool.trim()) return setErr(tr('board.Finding.33'))
     setBusy(true)
     setErr('')
     try {
@@ -247,69 +248,69 @@ function NewFinding({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
   }
   return (
     <div className="kt-confirm kt-gate-dialog" role="dialog" aria-labelledby="kt-finding-title" data-testid="kt-finding-dialog">
-      <strong id="kt-finding-title">补登发现 {nextFindingId(run)} 并交给角色</strong>
-      <span>按 TR §4.4 把检查发现、待办里没有的问题记进批准的分诊（{held.why}）。交给的角色从此可以改下面的路径，提交说明要写这个编号。</span>
+      <strong id="kt-finding-title">{tr('board.Finding.34')} {nextFindingId(run)} {tr('board.Finding.35')}</strong>
+      <span>{tr('board.Finding.36')}{held.why}{tr('board.Finding.37')}</span>
       <div className="kt-start-row">
         {extendable(run).length > 0 && <ModePick extending={false} onPick={onMode} />}
-        <label className="kt-start-field is-narrow"><span>检查</span>
-          <select aria-label="检查" value={f.check} onChange={(e) => setF({ ...findingPreset(run, e.target.value)!, by: f.by, note: f.note, continue: f.continue })}>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.38')}</span>
+          <select aria-label={tr('board.Finding.38')} value={f.check} onChange={(e) => setF({ ...findingPreset(run, e.target.value)!, by: f.by, note: f.note, continue: f.continue })}>
             {held.checks.map((c) => <option key={c}>{c}</option>)}
           </select>
         </label>
-        <label className="kt-start-field is-narrow"><span>工具</span><input aria-label="工具" value={f.tool} maxLength={80} onChange={(e) => set({ tool: e.target.value })} /></label>
-        <label className="kt-start-field"><span>位置</span><input aria-label="位置" value={f.location} maxLength={200} onChange={(e) => set({ location: e.target.value })} placeholder="文件:行" /></label>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.39')}</span><input aria-label={tr('board.Finding.39')} value={f.tool} maxLength={80} onChange={(e) => set({ tool: e.target.value })} /></label>
+        <label className="kt-start-field"><span>{tr('board.Finding.40')}</span><input aria-label={tr('board.Finding.40')} value={f.location} maxLength={200} onChange={(e) => set({ location: e.target.value })} placeholder={tr('board.Finding.41')} /></label>
       </div>
       {dup.length > 0 && (
         <p className="kt-warn" role="status" data-testid="kt-finding-dup">
-          {f.check} 在 {f.location.trim()} 已经补登过：{dup.join('、')}。交出去还没修好，多半是根因不在这个文件：在「要做什么」里选「给已补登的发现加路径」，给它根因所在的文件。
+          {f.check} {tr('board.Finding.22')} {f.location.trim()} {tr('board.Finding.42')}{dup.join(tr('board.Finding.43'))}{tr('board.Finding.44')}
         </p>
       )}
       <div className="kt-start-row">
-        <label className="kt-start-field is-narrow"><span>决定</span>
-          <select aria-label="决定" value={f.decision} onChange={(e) => set({ decision: e.target.value as FindingBody['decision'] })}>
-            <option value="fix">修复（fix）</option><option value="justify">说明（justify）</option><option value="defer">延后（defer）</option>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.45')}</span>
+          <select aria-label={tr('board.Finding.45')} value={f.decision} onChange={(e) => set({ decision: e.target.value as FindingBody['decision'] })}>
+            <option value="fix">{tr('board.Finding.46')}</option><option value="justify">{tr('board.Finding.47')}</option><option value="defer">{tr('board.Finding.48')}</option>
           </select>
         </label>
         {f.decision === 'fix' && (
-          <label className="kt-start-field is-narrow"><span>证据</span>
-            <select aria-label="证据" value={f.evidence ?? 'build'} onChange={(e) => set({ evidence: e.target.value as FindingBody['evidence'] })}>
+          <label className="kt-start-field is-narrow"><span>{tr('board.Finding.49')}</span>
+            <select aria-label={tr('board.Finding.49')} value={f.evidence ?? 'build'} onChange={(e) => set({ evidence: e.target.value as FindingBody['evidence'] })}>
               <option value="unit-test">unit-test</option><option value="static-analysis">static-analysis</option><option value="build">build</option>
             </select>
           </label>
         )}
         {f.decision === 'fix' && (
-          <label className="kt-start-field is-narrow"><span>涉及行为</span>
-            <select aria-label="涉及行为" value={f.behaviour ? 'true' : 'false'} onChange={(e) => set({ behaviour: e.target.value === 'true' })}>
-              <option value="false">否</option><option value="true">是（要写事实条目）</option>
+          <label className="kt-start-field is-narrow"><span>{tr('board.Finding.50')}</span>
+            <select aria-label={tr('board.Finding.50')} value={f.behaviour ? 'true' : 'false'} onChange={(e) => set({ behaviour: e.target.value === 'true' })}>
+              <option value="false">{tr('board.Finding.51')}</option><option value="true">{tr('board.Finding.52')}</option>
             </select>
           </label>
         )}
-        <label className="kt-start-field is-narrow"><span>交给</span>
-          <select aria-label="交给" value={f.role} onChange={(e) => set({ role: e.target.value })}>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.20')}</span>
+          <select aria-label={tr('board.Finding.20')} value={f.role} onChange={(e) => set({ role: e.target.value })}>
             {roles.map((l) => <option key={l.key} value={l.key}>{l.title}</option>)}
           </select>
         </label>
       </div>
       <div className="kt-start-row">
-        <label className="kt-start-field"><span>引用（cites）</span><input aria-label="引用" value={cites} onChange={(e) => setCites(e.target.value)} placeholder="[VSTATD-IF p.11 §8.4]、[CC1-PN §7.2]" /></label>
-        <label className="kt-start-field is-narrow"><span>事实条目（facts）</span><input aria-label="事实条目" value={facts} onChange={(e) => setFacts(e.target.value)} placeholder="RES-THREADS" /></label>
+        <label className="kt-start-field"><span>{tr('board.Finding.53')}</span><input aria-label={tr('board.Finding.54')} value={cites} onChange={(e) => setCites(e.target.value)} placeholder={tr('board.Finding.55')} /></label>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.56')}</span><input aria-label={tr('board.Finding.57')} value={facts} onChange={(e) => setFacts(e.target.value)} placeholder="RES-THREADS" /></label>
       </div>
       {f.decision === 'defer' && (
         <div className="kt-start-row">
-          <label className="kt-start-field"><span>为什么延后</span><input aria-label="为什么延后" value={f.reason} onChange={(e) => set({ reason: e.target.value })} /></label>
-          <label className="kt-start-field"><span>什么时候再处理</span><input aria-label="什么时候再处理" value={f.pick_up_when} onChange={(e) => set({ pick_up_when: e.target.value })} /></label>
+          <label className="kt-start-field"><span>{tr('board.Finding.58')}</span><input aria-label={tr('board.Finding.58')} value={f.reason} onChange={(e) => set({ reason: e.target.value })} /></label>
+          <label className="kt-start-field"><span>{tr('board.Finding.59')}</span><input aria-label={tr('board.Finding.59')} value={f.pick_up_when} onChange={(e) => set({ pick_up_when: e.target.value })} /></label>
         </div>
       )}
       <div className="kt-start-row">
-        <label className="kt-start-field"><span>可写路径</span><input aria-label="可写路径" value={f.paths.join(' ')} onChange={(e) => set({ paths: list(e.target.value) })} /></label>
-        <label className="kt-start-field"><span>再加路径</span><input aria-label="再加路径" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="例如 tests/test_signal_table.cpp" /></label>
-        <label className="kt-start-field is-narrow"><span>补登人</span><input aria-label="补登人" value={f.by} maxLength={60} onChange={(e) => set({ by: e.target.value })} /></label>
+        <label className="kt-start-field"><span>{tr('board.Finding.60')}</span><input aria-label={tr('board.Finding.60')} value={f.paths.join(' ')} onChange={(e) => set({ paths: list(e.target.value) })} /></label>
+        <label className="kt-start-field"><span>{tr('board.Finding.61')}</span><input aria-label={tr('board.Finding.61')} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder={tr('board.Finding.62')} /></label>
+        <label className="kt-start-field is-narrow"><span>{tr('board.Finding.26')}</span><input aria-label={tr('board.Finding.26')} value={f.by} maxLength={60} onChange={(e) => set({ by: e.target.value })} /></label>
       </div>
-      <textarea className="kt-gate-note" rows={2} value={f.note} onChange={(e) => set({ note: e.target.value })} aria-label="备注" placeholder="例如：工具链文件要设 CMAKE_SYSROOT（CC1-PN §7.2）" />
+      <textarea className="kt-gate-note" rows={2} value={f.note} onChange={(e) => set({ note: e.target.value })} aria-label={tr('board.Finding.27')} placeholder={tr('board.Finding.63')} />
       <span className="kt-confirm-actions">
-        <label><input type="checkbox" checked={f.continue} onChange={(e) => set({ continue: e.target.checked })} /> 接着运行</label>
-        <button type="button" className="kt-btn is-solid is-primary" onClick={confirm} disabled={busy}>{busy ? '正在提交…' : f.continue ? '补登并接着运行' : '补登'}</button>
-        <button type="button" className="kt-btn" onClick={onCancel}>取消</button>
+        <label><input type="checkbox" checked={f.continue} onChange={(e) => set({ continue: e.target.checked })} /> {tr('board.Finding.29')}</label>
+        <button type="button" className="kt-btn is-solid is-primary" onClick={confirm} disabled={busy}>{busy ? tr('board.Finding.9') : f.continue ? tr('board.Finding.64') : tr('board.Finding.65')}</button>
+        <button type="button" className="kt-btn" onClick={onCancel}>{tr('board.Finding.32')}</button>
       </span>
       {err && <p className="kt-error" role="alert">{err}</p>}
     </div>

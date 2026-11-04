@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import type { RunDetail } from '../types'
 import { errorText } from './useBoard'
+import { t as tr } from '../i18n'
 
 const SIGNER_KEY = 'vstatd-team:signer'
 
@@ -16,8 +17,8 @@ export function redoNote(run: RunDetail): string {
   const ids = [...new Set(said.match(/F-\d{3}/g) ?? [])]
   const rows = (run.backlog?.triage?.findings ?? []).filter((f) => ids.includes(f.id) && f.decision === 'justify' && f.cites.length > 0)
   if (!rows.length) return ''
-  return ['不改写已经合入运行分支的提交（不 amend、不 rebase）。',
-    ...rows.map((f) => `${f.id}：追加一个空提交（git commit --allow-empty），提交说明写 ${f.id} 和分诊里它的引用 ${f.cites.join(' ')}；代码和已有的 NOLINT 不用改。`)].join('\n')
+  return [tr('board.ReviewRedo.1'),
+    ...rows.map((f) => tr('board.ReviewRedo.2', { p0: f.id, p1: f.id, p2: f.cites.join(' ') }))].join('\n')
 }
 
 export function ReviewRedoBox({ run, onConfirm }: { run: RunDetail; onConfirm: (body: { note: string; by: string }) => Promise<void> }) {
@@ -28,7 +29,7 @@ export function ReviewRedoBox({ run, onConfirm }: { run: RunDetail; onConfirm: (
   const [err, setErr] = useState('')
   const title = (k: string) => run.roles.find((l) => l.key === k)?.title ?? k
   const confirm = async () => {
-    if (!by.trim()) return setErr('写下你的名字（谁做的决定）')
+    if (!by.trim()) return setErr(tr('board.ReviewRedo.3'))
     setBusy(true)
     setErr('')
     try {
@@ -41,13 +42,13 @@ export function ReviewRedoBox({ run, onConfirm }: { run: RunDetail; onConfirm: (
   }
   return (
     <div className="kt-ready-pending" role="status" data-testid="kt-review-redo">
-      <b>✋ 评审还是要改，交给你决定</b>
-      <span>{title(redo.role)}：{redo.summary}</span>
-      <span className="kt-dim">按评审意见再改一轮，交给 {redo.targets.map(title).join('、')}；你写的决定和评审意见冲突时以你的为准。不同意评审就停止这次运行。</span>
-      <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} aria-label="你的决定" placeholder="评审留给人决定的事，你怎么定" />
+      <b>{tr('board.ReviewRedo.4')}</b>
+      <span>{title(redo.role)}{tr('board.ReviewRedo.5')}{redo.summary}</span>
+      <span className="kt-dim">{tr('board.ReviewRedo.6')} {redo.targets.map(title).join(tr('board.ReviewRedo.7'))}{tr('board.ReviewRedo.8')}</span>
+      <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} aria-label={tr('board.ReviewRedo.9')} placeholder={tr('board.ReviewRedo.10')} />
       <span className="kt-start-actions">
-        <label className="kt-start-field is-narrow"><span>决定人</span><input aria-label="决定人" value={by} maxLength={60} onChange={(e) => setBy(e.target.value)} /></label>
-        <button type="button" className="kt-btn is-solid is-primary" onClick={confirm} disabled={busy}>{busy ? '正在提交…' : '同意，按评审意见再改一轮'}</button>
+        <label className="kt-start-field is-narrow"><span>{tr('board.ReviewRedo.11')}</span><input aria-label={tr('board.ReviewRedo.11')} value={by} maxLength={60} onChange={(e) => setBy(e.target.value)} /></label>
+        <button type="button" className="kt-btn is-solid is-primary" onClick={confirm} disabled={busy}>{busy ? tr('board.ReviewRedo.12') : tr('board.ReviewRedo.13')}</button>
       </span>
       {err && <p className="kt-error" role="alert">{err}</p>}
     </div>

@@ -5,12 +5,14 @@
  * and the console command for it, and the end of the action record. A person approves or refuses a request here or at
  * the console; either way the bench's own decide() decides (D3).
  */
+import { evText } from '../i18n/events'
 import { useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import type { BenchView } from '../types'
 import { auditChanged } from './Audit'
 import { BASE } from './format'
 import { errorText } from './useBoard'
+import { t as tr } from '../i18n'
 
 /** 批准 / 拒绝 one request waiting at the operator console (D3): the bench's own decide() decides. Approving needs the
  * first 6 characters of the digest typed by the person, as at the console; refusing needs a reason. */
@@ -27,7 +29,7 @@ export function DecideRequest({ id, digest, onDone }: { id: string; digest: stri
     setErr('')
     try {
       await api.post(`${BASE}/bench/decide`, { id, verdict, digest: prefix.trim(), reason: reason.trim() })
-      setDone(verdict === 'approve' ? '已批准' : '已拒绝')
+      setDone(verdict === 'approve' ? tr('board.Bench.1') : tr('board.Bench.2'))
       auditChanged()
       onDone?.()
     } catch (x) {
@@ -42,17 +44,17 @@ export function DecideRequest({ id, digest, onDone }: { id: string; digest: stri
     <span className="kt-decide" data-testid="kt-decide">
       {refusing ? (
         <>
-          <input aria-label="拒绝的原因" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="拒绝的原因" autoFocus />
-          <button type="button" className="kt-btn is-solid is-danger" disabled={busy || !reason.trim()} onClick={() => void send('refuse')}>确认拒绝</button>
-          <button type="button" className="kt-btn" disabled={busy} onClick={() => setRefusing(false)}>取消</button>
+          <input aria-label={tr('board.Bench.3')} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder={tr('board.Bench.3')} autoFocus />
+          <button type="button" className="kt-btn is-solid is-danger" disabled={busy || !reason.trim()} onClick={() => void send('refuse')}>{tr('board.Bench.4')}</button>
+          <button type="button" className="kt-btn" disabled={busy} onClick={() => setRefusing(false)}>{tr('board.Bench.5')}</button>
         </>
       ) : (
         <>
-          <input aria-label="构建摘要的前 6 位" className="kt-mono" value={prefix} maxLength={64} onChange={(e) => setPrefix(e.target.value)}
-            placeholder="核对后输入摘要前 6 位" title={`这次的摘要：${digest}`} />
+          <input aria-label={tr('board.Bench.6')} className="kt-mono" value={prefix} maxLength={64} onChange={(e) => setPrefix(e.target.value)}
+            placeholder={tr('board.Bench.7')} title={tr('board.Bench.8', { p0: digest })} />
           <button type="button" className="kt-btn is-solid is-primary" disabled={busy || !okPrefix} onClick={() => void send('approve')}
-            title="由台架自己的审批逻辑判定：摘要要对得上，没超时，只批一次">批准</button>
-          <button type="button" className="kt-btn" disabled={busy} onClick={() => setRefusing(true)}>拒绝…</button>
+            title={tr('board.Bench.9')}>{tr('board.Bench.10')}</button>
+          <button type="button" className="kt-btn" disabled={busy} onClick={() => setRefusing(true)}>{tr('board.Bench.11')}</button>
         </>
       )}
       {err && <span className="kt-error" role="alert">{err}</span>}
@@ -67,9 +69,9 @@ export const shortCmd = (cmd: string) => cmd.replace(/(?:\/[^\s/]+)+\/((?:bench|
 function useCopy(): [string, (text: string) => void] {
   const [msg, setMsg] = useState('')
   const copy = (text: string) => {
-    const fail = () => setMsg('复制不了：请手动选中复制')
+    const fail = () => setMsg(tr('board.Bench.12'))
     if (!navigator.clipboard) return fail()
-    navigator.clipboard.writeText(text).then(() => setMsg('已复制'), fail)
+    navigator.clipboard.writeText(text).then(() => setMsg(tr('board.Bench.13')), fail)
   }
   return [msg, copy]
 }
@@ -80,7 +82,7 @@ export function Cmd({ cmd }: { cmd: string }) {
   return (
     <span className="kt-cli" data-testid="kt-cli">
       <code className="kt-ready-cmd" title={cmd}>{shortCmd(cmd)}</code>
-      <button type="button" className="kt-btn is-small" onClick={() => copy(cmd)}>复制命令</button>
+      <button type="button" className="kt-btn is-small" onClick={() => copy(cmd)}>{tr('board.Bench.14')}</button>
       {msg && <small className="kt-dim" role="status">{msg}</small>}
     </span>
   )
@@ -92,21 +94,21 @@ export function Digest({ digest }: { digest: string }) {
   return (
     <span data-testid="kt-digest">
       <code className="kt-bench-digest" title={digest}>{digest.slice(0, 12)}</code>{' '}
-      <button type="button" className="kt-btn is-small" onClick={() => copy(digest)} title="复制完整摘要">复制</button>
+      <button type="button" className="kt-btn is-small" onClick={() => copy(digest)} title={tr('board.Bench.15')}>{tr('board.Bench.16')}</button>
       {msg && <small className="kt-dim" role="status">{msg}</small>}
     </span>
   )
 }
 
 const STEP: Record<string, string> = {
-  doctor: '检查台架（doctor.sh）',
-  deploy: '部署：等操作台批准',
-  replay: '回放录制的行驶数据：等操作台批准',
-  after: '台架之后的检查',
-  rerun: '独立重跑全部检查和 release.sh',
-  done: '台架上的事做完了',
+  doctor: tr('board.Bench.17'),
+  deploy: tr('board.Bench.18'),
+  replay: tr('board.Bench.19'),
+  after: tr('board.Bench.20'),
+  rerun: tr('board.Bench.21'),
+  done: tr('board.Bench.22'),
 }
-const TARGET: Record<string, string> = { known: '状态已知', off: '没开机', busy: '有动作在做', unknown: '状态未知：要在操作台核对' }
+const TARGET: Record<string, string> = { known: tr('board.Bench.23'), off: tr('board.Bench.24'), busy: tr('board.Bench.25'), unknown: tr('board.Bench.26') }
 const ACTION_SHOWN = 8
 
 const str = (x: unknown) => (x === null || x === undefined ? '' : String(x))
@@ -114,22 +116,22 @@ const str = (x: unknown) => (x === null || x === undefined ? '' : String(x))
 /** One line of the action record (bench/lib/benchstate.py: event and its fields). */
 export function actionLine(a: Record<string, unknown>): string {
   const ev = str(a.event)
-  const who = a.by ? `（${str(a.by)}）` : ''
+  const who = a.by ? tr('board.Bench.27', { p0: str(a.by) }) : ''
   switch (ev) {
     case 'request':
-      return `请求 ${str(a.action)} ${str(a.digest).slice(0, 12)}，${str(a.requested_by)}`
+      return tr('board.Bench.28', { p0: str(a.action), p1: str(a.digest).slice(0, 12), p2: str(a.requested_by) })
     case 'decision':
-      return `${a.verdict === 'approved' ? '批准' : '拒绝'} ${str(a.action)} ${str(a.digest).slice(0, 12)}${who}${a.reason ? `：${str(a.reason)}` : ''}`
+      return `${a.verdict === 'approved' ? tr('board.Bench.10') : tr('board.Bench.29')} ${str(a.action)} ${str(a.digest).slice(0, 12)}${who}${a.reason ? tr('board.Bench.30', { p0: str(a.reason) }) : ''}`
     case 'action':
-      return `动作 ${str(a.action)} ${a.result === 'ok' ? '完成' : '失败'}${a.detail ? `：${str(a.detail)}` : ''}`
+      return tr('board.Bench.31', { p0: str(a.action), p1: a.result === 'ok' ? tr('board.Bench.ok') : tr('board.Bench.failed'), p2: a.detail ? tr('common.detail', { p0: str(a.detail) }) : '' })
     case 'gate':
-      return `物理门 ${str(a.action)} ${a.passed ? '通过' : '不通过'}${a.why ? `：${str(a.why)}` : ''}`
+      return tr('board.Bench.32', { p0: str(a.action), p1: a.passed ? tr('board.Bench.passed') : tr('board.Bench.notPassed'), p2: a.why ? tr('common.detail', { p0: str(a.why) }) : '' })
     case 'supply':
-      return `电源 ${str(a.voltage_v)} V，KL15 ${str(a.kl15)}${who}`
+      return tr('board.Bench.33', { p0: str(a.voltage_v), p1: str(a.kl15), p2: who })
     case 'target':
-      return `目标 ${str(a.state)}${a.why ? `：${str(a.why)}` : ''}`
+      return tr('board.Bench.34', { p0: str(a.state), p1: a.why ? tr('common.detail', { p0: str(a.why) }) : '' })
     case 'reconcile':
-      return `核对目标状态${who}`
+      return tr('board.Bench.35', { p0: who })
     default:
       return ev || JSON.stringify(a)
   }
@@ -142,42 +144,42 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
   const recent = st.actions.slice(-ACTION_SHOWN).reverse()
   const doc = bench.doctor
   return (
-    <section className="kt-card kt-bench" aria-label="台架" data-testid="kt-bench">
+    <section className="kt-card kt-bench" aria-label={tr('board.Bench.36')} data-testid="kt-bench">
       <header className="kt-card-head">
-        <h2>台架</h2>
+        <h2>{tr('board.Bench.36')}</h2>
         <span className="kt-dim" data-testid="kt-bench-step">
-          {bench.step ? `${STEP[bench.step] ?? bench.step}${bench.running ? ' · 进行中' : ''}` : '台架之前的检查都过了、评审放行以后才上台架'}
+          {bench.step ? `${STEP[bench.step] ?? bench.step}${bench.running ? tr('board.Bench.37') : ''}` : tr('board.Bench.38')}
         </span>
       </header>
       {bench.held && (
         <div className="kt-bench-held" role="status" data-testid="kt-bench-held">
-          <b>要人处理：</b>{bench.held.why}
+          <b>{tr('board.Bench.39')}</b>{evText({ text: bench.held.why, code: bench.held.code, params: bench.held.params })}
           {bench.held.commands.length > 0 && (
             <ul>
               {bench.held.commands.map((c) => <li key={c}><code>{c}</code></li>)}
             </ul>
           )}
-          <span className="kt-dim">处理好以后点「重试」，从「{STEP[bench.held.step] ?? bench.held.step}」接着做。</span>
-          {onRetry && <span><button type="button" className="kt-btn is-solid is-primary" onClick={() => void onRetry()}>重试，从「{STEP[bench.held.step] ?? bench.held.step}」接着做</button></span>}
+          <span className="kt-dim">{tr('board.Bench.40')}{STEP[bench.held.step] ?? bench.held.step}{tr('board.Bench.41')}</span>
+          {onRetry && <span><button type="button" className="kt-btn is-solid is-primary" onClick={() => void onRetry()}>{tr('board.Bench.42')}{STEP[bench.held.step] ?? bench.held.step}{tr('board.Bench.43')}</button></span>}
         </div>
       )}
       <dl className="kt-bench-grid">
         <div>
-          <dt>CC-1（模拟目标）</dt>
+          <dt>{tr('board.Bench.44')}</dt>
           <dd className={target === 'known' ? 'kt-ok' : target === 'unknown' ? 'kt-bad' : ''}>
             {TARGET[target] ?? target}{st.target.why ? <span className="kt-dim"> · {str(st.target.why)}</span> : null}
           </dd>
         </div>
         <div>
-          <dt>电源（模拟）</dt>
-          <dd>{supply ? `${str(supply.voltage_v) || '—'} V · KL15 ${str(supply.kl15) || '—'}` : <span className="kt-warn">还没设：在操作台上设（v 13.5、k on），否则物理动作都会被拒</span>}</dd>
+          <dt>{tr('board.Bench.45')}</dt>
+          <dd>{supply ? `${str(supply.voltage_v) || '—'} V · KL15 ${str(supply.kl15) || '—'}` : <span className="kt-warn">{tr('board.Bench.46')}</span>}</dd>
         </div>
         <div>
           <dt>doctor.sh</dt>
           <dd data-testid="kt-bench-doctor">
             {doc ? (
               <>
-                <b className={doc.ok ? 'kt-ok' : 'kt-bad'}>{doc.ok ? '通过' : '没通过'}</b>
+                <b className={doc.ok ? 'kt-ok' : 'kt-bad'}>{doc.ok ? tr('board.Bench.47') : tr('board.Bench.48')}</b>
                 {doc.summary ? ` · ${doc.summary}` : ''}
                 {doc.fails.length + doc.warns.length > 0 && (
                   <ul>
@@ -186,20 +188,20 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
                   </ul>
                 )}
               </>
-            ) : '还没跑'}
+            ) : tr('board.Bench.49')}
           </dd>
         </div>
       </dl>
       <div className="kt-bench-pending" data-testid="kt-bench-pending">
-        <b>等操作台批准的请求</b>
+        <b>{tr('board.Bench.50')}</b>
         {st.pending.length === 0 ? (
-          <p className="kt-dim">没有</p>
+          <p className="kt-dim">{tr('board.Bench.51')}</p>
         ) : (
           <ul>
             {st.pending.map((r) => (
               <li key={r.id}>
-                <span><b>{r.action}</b> · {r.requested_by}{r.expired ? <span className="kt-bad"> · 已超时</span> : null}</span>
-                <span>构建摘要 <Digest digest={r.digest} /></span>
+                <span><b>{r.action}</b> · {r.requested_by}{r.expired ? <span className="kt-bad"> {tr('board.Bench.52')}</span> : null}</span>
+                <span>{tr('board.Bench.53')} <Digest digest={r.digest} /></span>
                 {r.detail && <span className="kt-dim">{r.detail}</span>}
                 {!r.expired && <DecideRequest id={r.id} digest={r.digest} />}
               </li>
@@ -208,21 +210,21 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
         )}
         {bench.console && (
           <details className="kt-ready-cli">
-            <summary>用命令批准或拒绝</summary>
-            <span className="kt-dim">在另一个终端里开操作台（a 批准、r 拒绝、c 核对）。两边都走台架自己的审批逻辑，电源、点火、超时照样拦。</span>
+            <summary>{tr('board.Bench.54')}</summary>
+            <span className="kt-dim">{tr('board.Bench.55')}</span>
             <Cmd cmd={bench.console} />
             {st.pending.filter((r) => !r.expired).map((r) => (
               <div key={r.id}>
                 <Cmd cmd={`${bench.console} approve ${r.id} --digest ${r.digest.slice(0, 12)}`} />
-                <Cmd cmd={`${bench.console} refuse ${r.id} --reason <原因>`} />
+                <Cmd cmd={tr('board.Bench.56', { p0: bench.console, p1: r.id })} />
               </div>
             ))}
           </details>
         )}
       </div>
       <div className="kt-bench-record">
-        <b>动作记录（最近 {Math.min(ACTION_SHOWN, st.actions.length)} 条）</b>
-        {recent.length === 0 ? <p className="kt-dim">动作记录是空的（{st.dir}/actions.jsonl）</p> : (
+        <b>{tr('board.Bench.57')} {Math.min(ACTION_SHOWN, st.actions.length)} {tr('board.Bench.58')}</b>
+        {recent.length === 0 ? <p className="kt-dim">{tr('board.Bench.59')}{st.dir}{tr('board.Bench.60')}</p> : (
           <ol data-testid="kt-bench-record">
             {recent.map((a, i) => (
               <li key={`${str(a.at)}-${i}`}>

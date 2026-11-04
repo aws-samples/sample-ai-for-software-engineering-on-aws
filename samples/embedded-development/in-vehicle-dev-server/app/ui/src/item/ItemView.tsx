@@ -4,6 +4,7 @@
  * check rounds, the independent rerun) and the moments; every segment and moment opens the board's replay there.
  * A figure with no record behind it is —. Refreshed every 10 s while the run is going.
  */
+import { localizeFlow } from '../i18n/events'
 import { useEffect, useState } from 'react'
 import { useAppApi } from '@kirocrew/app-sdk'
 import { BOARD_CSS } from '../board/styles'
@@ -12,7 +13,8 @@ import { RoleIcon } from '../board/RoleIcon'
 import { errorText } from '../board/useBoard'
 import { KIT_CSS } from '../kit'
 import type { BoardEntry } from '../nav'
-import type { FlowMark, FlowSegment, RunFlow } from '../types'
+import type { FlowMark, FlowResult, FlowSegment, RunFlow } from '../types'
+import { t as tr } from '../i18n'
 
 export const ITEM_POLL_MS = 10000
 const EMPTY = '—'
@@ -43,8 +45,8 @@ const IT_CSS = `
 .it-root section.cto-card > h3 { margin: 0 0 10px; font-size: 1.1em; color: var(--text-strong); }
 `
 
-const KIND_NAME: Record<FlowSegment['kind'], string> = { agent: 'agent 在做', gate: '等人批准', console: '等操作台', checks: '跑检查', rerun: '独立重跑' }
-const MARK_NAME: Record<FlowMark['kind'], string> = { bounce: '打回', check_fail: '检查不过', approved: '批准', signoff: '签字' }
+const KIND_NAME: Record<FlowSegment['kind'], string> = { agent: tr('item.ItemView.1'), gate: tr('item.ItemView.2'), console: tr('item.ItemView.3'), checks: tr('item.ItemView.4'), rerun: tr('item.ItemView.5') }
+const MARK_NAME: Record<FlowMark['kind'], string> = { bounce: tr('item.ItemView.6'), check_fail: tr('item.ItemView.7'), approved: tr('item.ItemView.8'), signoff: tr('item.ItemView.9') }
 const STEPS = [30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400]
 
 const span = (x: number | null) => (x === null ? EMPTY : fmtSpan(x))
@@ -70,22 +72,24 @@ function Card({ label, value, of }: { label: string; value: string; of?: string 
   )
 }
 
+const BAD = new Set<FlowResult>(['fail', 'sent_back', 'refused', 'timeout', 'differs'])
+
 function Track({ segs, marks = [], total, run, onBoard }: { segs: FlowSegment[]; marks?: FlowMark[]; total: number; run: string; onBoard: (e: BoardEntry) => void }) {
   const pct = (t: number) => `${(Math.min(Math.max(t, 0), total) / total) * 100}%`
   return (
     <div className="it-track">
       {segs.map((s) => {
-        const what = `${s.label} · ${fmtClock(s.from)}–${fmtClock(s.to)} · ${fmtSpan(s.to - s.from)}${s.result ? ` · ${s.result}` : ''}${s.open ? ' · 还在进行' : ''}`
+        const what = `${s.label} · ${fmtClock(s.from)}–${fmtClock(s.to)} · ${fmtSpan(s.to - s.from)}${s.result ? ` · ${s.result}` : ''}${s.open ? tr('item.ItemView.10') : ''}`
         return (
           <button key={`${s.kind}-${s.from}-${s.role ?? ''}`} type="button" data-testid="it-seg" data-kind={s.kind}
-            className={`it-seg k-${s.kind}${s.open ? ' is-open' : ''}${s.result === '不过' || s.result === '退回' || s.result === '拒绝' || s.result === '超时' || s.result === '不同' ? ' is-bad' : ''}`}
-            style={{ left: pct(s.from), width: `calc(${pct(s.to)} - ${pct(s.from)})` }} title={what} aria-label={`${what}：在看板上回放到这一刻`}
+            className={`it-seg k-${s.kind}${s.open ? ' is-open' : ''}${s.result_code && BAD.has(s.result_code) ? ' is-bad' : ''}`}
+            style={{ left: pct(s.from), width: `calc(${pct(s.to)} - ${pct(s.from)})` }} title={what} aria-label={tr('item.ItemView.11', { p0: what })}
             onClick={() => onBoard(boardAt(run, s))} />
         )
       })}
       {marks.map((m) => (
         <button key={`${m.kind}-${m.at}-${m.label}`} type="button" data-testid="it-mark" data-kind={m.kind} className={`it-mark k-${m.kind}`} style={{ left: pct(m.at) }}
-          title={`${fmtClock(m.at)} ${m.label}`} aria-label={`${fmtClock(m.at)} ${MARK_NAME[m.kind]}：${m.label}：在看板上回放到这一刻`} onClick={() => onBoard(markAt(run, m))} />
+          title={`${fmtClock(m.at)} ${m.label}`} aria-label={tr('item.ItemView.12', { p0: fmtClock(m.at), p1: MARK_NAME[m.kind], p2: m.label })} onClick={() => onBoard(markAt(run, m))} />
       ))}
     </div>
   )
@@ -107,15 +111,15 @@ export function Stream({ flow, onBoard }: { flow: RunFlow; onBoard: (e: BoardEnt
           </div>
         ))}
         <div style={{ display: 'contents' }} data-testid="it-row" data-row="person">
-          <span className="it-row-name"><RoleIcon role="wait" size={14} /> 等人</span>
+          <span className="it-row-name"><RoleIcon role="wait" size={14} /> {tr('item.ItemView.13')}</span>
           <Track segs={of('gate', 'console')} total={total} run={flow.run} onBoard={onBoard} />
         </div>
         <div style={{ display: 'contents' }} data-testid="it-row" data-row="checks">
-          <span className="it-row-name"><RoleIcon role="tester" size={14} /> 检查</span>
+          <span className="it-row-name"><RoleIcon role="tester" size={14} /> {tr('item.ItemView.14')}</span>
           <Track segs={of('checks', 'rerun')} total={total} run={flow.run} onBoard={onBoard} />
         </div>
         <div style={{ display: 'contents' }} data-testid="it-row" data-row="marks">
-          <span className="it-row-name">时刻</span>
+          <span className="it-row-name">{tr('item.ItemView.15')}</span>
           <Track segs={[]} marks={flow.marks} total={total} run={flow.run} onBoard={onBoard} />
         </div>
         <span />
@@ -123,9 +127,9 @@ export function Stream({ flow, onBoard }: { flow: RunFlow; onBoard: (e: BoardEnt
           {ticks.map((t) => <span key={t} style={{ left: `${(t / total) * 100}%` }}>{fmtClock(t)}</span>)}
         </div>
       </div>
-      <ul className="it-legend" aria-label="图例">
+      <ul className="it-legend" aria-label={tr('item.ItemView.16')}>
         {(Object.keys(KIND_NAME) as FlowSegment['kind'][]).map((k) => <li key={k} className={`k-${k}`}><i />{KIND_NAME[k]}</li>)}
-        <li>斜纹：还在进行；红框：退回、不过、拒绝、超时或重跑结果不同</li>
+        <li>{tr('item.ItemView.17')}</li>
       </ul>
     </div>
   )
@@ -141,7 +145,7 @@ export function ItemView({ run, onBoard, pollMs = ITEM_POLL_MS }: { run: string;
     const pull = async () => {
       let again = true
       try {
-        const f = await api.get<RunFlow>(paths.flow(run))
+        const f = localizeFlow(await api.get<RunFlow>(paths.flow(run)))
         if (!alive) return
         setFlow(f)
         setError('')
@@ -164,29 +168,29 @@ export function ItemView({ run, onBoard, pollMs = ITEM_POLL_MS }: { run: string;
       <style>{KIT_CSS}</style>
       <style>{IT_CSS}</style>
       <header className="it-head">
-        <h2>交付详情</h2>
+        <h2>{tr('item.ItemView.18')}</h2>
         {flow && <b>{flow.title || flow.run}</b>}
-        {flow && <span className="kt-dim">{flow.run} · {runMeta(flow.status).label}{flow.signed ? ' · 已签字' : ''}</span>}
+        {flow && <span className="kt-dim">{flow.run} · {runMeta(flow.status).label}{flow.signed ? tr('item.ItemView.19') : ''}</span>}
         <span className="kt-grow" />
-        <button type="button" className="kt-btn" onClick={() => onBoard({ run })}>到团队看板</button>
+        <button type="button" className="kt-btn" onClick={() => onBoard({ run })}>{tr('item.ItemView.20')}</button>
       </header>
-      <p className="kt-dim">每一段都取自运行记录、检查结果和台架的动作记录；没有记录的数空着（{EMPTY}）。点一段或一个时刻，看板就回放到那一刻。</p>
-      {error && <div className="kt-banner" role="status">交付详情读不到：{error}{flow ? '，显示的是上一次拿到的数据' : ''}</div>}
-      {!flow && !error && <p className="kt-loading">正在读交付详情…</p>}
+      <p className="kt-dim">{tr('item.ItemView.21')}{EMPTY}{tr('item.ItemView.22')}</p>
+      {error && <div className="kt-banner" role="status">{tr('item.ItemView.23')}{error}{flow ? tr('item.ItemView.24') : ''}</div>}
+      {!flow && !error && <p className="kt-loading">{tr('item.ItemView.25')}</p>}
       {flow && t && (
         <>
           <div className="cto-cards">
-            <Card label={flow.signed ? '到签字' : flow.live ? '到现在' : '到结束'} value={fmtSpan(t.elapsed_s)} />
-            <Card label="agent 在做" value={span(t.agent_s)} />
-            <Card label="等人" value={span(t.person_s)} of={t.person_s === null ? undefined : `关卡 ${span(t.gate_s)} · 操作台 ${span(t.console_s)}`} />
-            <Card label="跑检查" value={span(t.check_s)} />
+            <Card label={flow.signed ? tr('item.ItemView.26') : flow.live ? tr('item.ItemView.27') : tr('item.ItemView.28')} value={fmtSpan(t.elapsed_s)} />
+            <Card label={tr('item.ItemView.1')} value={span(t.agent_s)} />
+            <Card label={tr('item.ItemView.13')} value={span(t.person_s)} of={t.person_s === null ? undefined : tr('item.ItemView.29', { p0: span(t.gate_s), p1: span(t.console_s) })} />
+            <Card label={tr('item.ItemView.4')} value={span(t.check_s)} />
             <Card label="credits" value={fmtCredits(t.credits)} />
-            <Card label="检查轮数" value={t.check_rounds === null ? EMPTY : String(t.check_rounds)} />
-            <Card label="打回" value={String(t.send_backs)} />
+            <Card label={tr('item.ItemView.30')} value={t.check_rounds === null ? EMPTY : String(t.check_rounds)} />
+            <Card label={tr('item.ItemView.6')} value={String(t.send_backs)} />
           </div>
-          <section className="cto-card" aria-label="价值流">
-            <h3>时间花在哪</h3>
-            {flow.segments.length || flow.marks.length ? <Stream flow={flow} onBoard={onBoard} /> : <p className="kt-dim">{EMPTY} 这次运行还没有记录下来的时间段</p>}
+          <section className="cto-card" aria-label={tr('item.ItemView.31')}>
+            <h3>{tr('item.ItemView.32')}</h3>
+            {flow.segments.length || flow.marks.length ? <Stream flow={flow} onBoard={onBoard} /> : <p className="kt-dim">{EMPTY} {tr('item.ItemView.33')}</p>}
           </section>
         </>
       )}

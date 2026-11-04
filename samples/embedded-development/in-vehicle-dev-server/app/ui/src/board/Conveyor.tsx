@@ -9,6 +9,7 @@ import { mergeKey } from './diff'
 import { fmtAgo } from './format'
 import { useServerNow } from './hooks'
 import { RoleIcon } from './RoleIcon'
+import { t as tr } from '../i18n'
 
 export interface ConveyorProps {
   run: RunDetail
@@ -32,32 +33,32 @@ export function Conveyor({ run, fresh, focus, onRole }: ConveyorProps) {
     setOlder(el.scrollLeft > 4)
   }, [run.merges.length, pending.length])
   return (
-    <section className="kt-card kt-conveyor" data-testid="kt-conveyor" aria-label="合并传送带">
+    <section className="kt-card kt-conveyor" data-testid="kt-conveyor" aria-label={tr('board.Conveyor.1')}>
       <header className="kt-card-head">
-        <h2>合并传送带</h2>
+        <h2>{tr('board.Conveyor.1')}</h2>
         <span className="kt-dim">
-          {run.merges.filter((m) => m.status === 'merged').length} 次合入{conflicts ? ` · ` : ''}
-          {conflicts ? <span className="tone-bad">{conflicts} 次冲突</span> : null}
+          {run.merges.filter((m) => m.status === 'merged').length} {tr('board.Conveyor.2')}{conflicts ? ` · ` : ''}
+          {conflicts ? <span className="tone-bad">{conflicts} {tr('board.Conveyor.3')}</span> : null}
         </span>
       </header>
       <ol className={`kt-belt${older ? ' has-older' : ''}`} ref={belt} onScroll={(e) => setOlder(e.currentTarget.scrollLeft > 4)}>
-        <li className="kt-belt-end is-base" title="每个角色都从这个提交开分支">
-          基线 <code>{run.base}</code>
+        <li className="kt-belt-end is-base" title={tr('board.Conveyor.4')}>
+          {tr('board.Conveyor.5')} <code>{run.base}</code>
         </li>
         {run.merges.map((m) => {
           const lane = byKey.get(m.role)
           const key = mergeKey(m)
           return (
             <li key={key} className={`kt-belt-chip is-${m.status}${fresh.has(key) ? ' is-new' : ''}${focus && focus !== m.role ? ' is-dim' : ''}`}>
-              <button type="button" className="kt-belt-role" onClick={() => onRole(m.role)} title={`只看${lane?.title ?? m.role}`}>
+              <button type="button" className="kt-belt-role" onClick={() => onRole(m.role)} title={tr('board.Conveyor.6', { p0: lane?.title ?? m.role })}>
                 {lane && <RoleIcon role={lane.icon || lane.key} size={14} />} {lane?.title ?? m.role}
               </button>
               <span className="kt-belt-meta">
-                <code>{m.sha}</code> · {m.files} 文件 · {fmtAgo(now - m.at)}
+                <code>{m.sha}</code> · {m.files} {tr('board.Conveyor.7')} {fmtAgo(now - m.at)}
               </span>
               {m.status === 'conflict' && (
                 <span className="kt-belt-note">
-                  ⚡ 冲突：<code>{m.note ?? '没有给出路径'}</code>
+                  {tr('board.Conveyor.8')}<code>{m.note ?? tr('board.Conveyor.9')}</code>
                 </span>
               )}
             </li>
@@ -68,10 +69,10 @@ export function Conveyor({ run, fresh, focus, onRole }: ConveyorProps) {
             <button type="button" className="kt-belt-role" onClick={() => onRole(l.key)}>
               <RoleIcon role={l.icon || l.key} size={14} /> {l.title}
             </button>
-            <span className="kt-belt-meta">完成 · 待合并</span>
+            <span className="kt-belt-meta">{tr('board.Conveyor.10')}</span>
           </li>
         ))}
-        <li className="kt-belt-end is-head" title="运行分支：各角色的分支依次合进来，app 在这里跑测试">
+        <li className="kt-belt-end is-head" title={tr('board.Conveyor.11')}>
           <code>{run.branch}</code>
         </li>
       </ol>

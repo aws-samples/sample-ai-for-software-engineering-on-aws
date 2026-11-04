@@ -18,7 +18,7 @@
  * - auditOf: GET /runs/<id>/audit of that run; benchAuditOf: GET /audit/bench (a baseline replay approved on the board).
  */
 import raw from './fixtures/board-running.json'
-import type { AuditActor, AuditEntry, AuditTrail, BacklogIndex, BacklogRow, BacklogView, Board, EventData, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, RunFlow, FlowSegment, TeamEventKind, TestCase, TriageRow } from '../types'
+import type { AuditActor, AuditEntry, AuditTrail, BacklogIndex, BacklogRow, BacklogView, Board, EventData, FileChange, KnowledgeDoc, KnowledgeIndex, KnowledgeText, Lane, Readiness, RunDetail, ScoreRun, Scorecard, TeamEvent, TeamPreview, RunFlow, FlowResult, FlowSegment, Msg, MsgParams, TeamEventKind, TestCase, TriageRow } from '../types'
 
 export const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 
@@ -65,7 +65,7 @@ export function setCase(b: Board, id: string, status: TestCase['status'], messag
 export function withEvent(b: Board, e: Partial<TeamEvent> & { kind: TeamEventKind }): Board {
   const r = b.run!
   const seq = r.events.reduce((m, x) => Math.max(m, x.seq), 0) + 1
-  r.events.push({ seq, at: e.at ?? b.at, kind: e.kind, role: e.role ?? null, text: e.text ?? e.kind, from: e.from ?? null, to: e.to ?? null, data: e.data ?? null })
+  r.events.push({ seq, at: e.at ?? b.at, kind: e.kind, role: e.role ?? null, text: e.text ?? e.kind, code: e.code ?? null, params: e.params ?? null, from: e.from ?? null, to: e.to ?? null, data: e.data ?? null })
   return b
 }
 
@@ -596,52 +596,60 @@ function backlogView(approved: boolean): BacklogView {
 
 /** The vstatd run's event log up to *stage*: triage to its gate, then the build and checks, then the bench and the release check. */
 function vstatdEvents(id: string, title: string, t: number, stage: 'triage' | 'bench' | 'release'): TeamEvent[] {
-  type Row = [number, TeamEventKind, string | null, string, string | null, string | null, EventData | null]
-  const ev = (dt: number, kind: TeamEventKind, role: string | null, text: string, from: string | null = null, to: string | null = null, data: EventData | null = null): Row =>
-    [dt, kind, role, text, from, to, data]
+  // each with the code and params the backend gives it (messages.py), so that the English board says it too
+  type Row = [number, TeamEventKind, string | null, string, string | null, string | null, EventData | null, Msg | null]
+  const ev = (dt: number, kind: TeamEventKind, role: string | null, text: string, from: string | null = null, to: string | null = null, data: EventData | null = null, msg: Msg | null = null): Row =>
+    [dt, kind, role, text, from, to, data, msg]
+  const m = (code: string, params: MsgParams | null = null): Msg => ({ code, params })
   const triage: Row[] = [
-    ev(0, 'run', null, `运行开始：${title}`),
-    ev(20, 'spawned', 'triage', '分诊开工：读 findings-backlog.md 和接口规范'),
-    ev(1480, 'committed', 'triage', '分诊提交 4b7e1d2：F-001..F-030 定了修、说明或延后，按 TR §4.4 加 F-031'),
-    ev(1490, 'done', 'triage', '分诊完成：22 个 fix、3 个 justify、5 个 defer，加 F-031 重构'),
-    ev(1510, 'gate', 'triage', '分诊交给人：F-008 说明、F-021 延后要你决定', 'triage', 'person'),
+    ev(0, 'run', null, `运行开始：${title}`, null, null, null, m('run.start', { title })),
+    ev(20, 'spawned', 'triage', '分诊开工：读 findings-backlog.md 和接口规范', null, null, null, m('spawned.dispatch', { r_role: 'triage', task: '读 findings-backlog.md 和接口规范' })),
+    ev(1480, 'committed', 'triage', '分诊提交 4b7e1d2：F-001..F-030 定了修、说明或延后，按 TR §4.4 加 F-031', null, null, null, m('committed', { r_role: 'triage', subject: '4b7e1d2 triage: F-001..F-030 decided, F-031 added under TR §4.4' })),
+    ev(1490, 'done', 'triage', '分诊完成：22 个 fix、3 个 justify、5 个 defer，加 F-031 重构', null, null, null, m('plan.triage', { r_role: 'triage', n: 2, listed: 28 })),
+    ev(1510, 'gate', 'triage', '分诊交给人：F-008 说明、F-021 延后要你决定', 'triage', 'person', null, m('gate.wait', { g_gate: 'triage' })),
   ]
   const build: Row[] = [
-    ev(1800, 'approved', 'triage', '人批准了分诊（李工）', 'person', 'triage'),
-    ev(1805, 'handoff', 'architect', '分诊交给架构师', 'triage', 'architect', { carry: '分诊' }),
-    ev(2600, 'done', 'architect', '架构师完成：Service::run() 拆成 4 个函数，两个开发按源文件分工'),
-    ev(2610, 'gate', 'architect', '开工方案交给人', 'architect', 'person'),
-    ev(2700, 'approved', 'architect', '人批准了开工', 'person', 'architect'),
-    ev(2705, 'handoff', 'tester', '重构方案交给测试', 'architect', 'tester', { carry: '重构方案' }),
-    ev(3000, 'tests', null, '测试先行：3 个新测试在基线提交上都失败（应当如此）', null, null, { passed: 0, total: 3 }),
-    ev(3305, 'handoff', 'dev-fix', '测试交给开发 · 修复', 'tester', 'dev-fix', { carry: '测试' }),
-    ev(3305, 'handoff', 'dev-refactor', '测试交给开发 · 重构', 'tester', 'dev-refactor', { carry: '测试' }),
-    ev(3620, 'committed', 'dev-fix', '开发 · 修复提交 3c9a1f0：F-003: close fd on connect failure'),
-    ev(4100, 'committed', 'dev-refactor', '开发 · 重构提交 5f6b2e9：F-031: move signal table handling out of Service::run()'),
-    ev(4200, 'tests', null, '检查第 2 轮 3/5：static、unit FAIL', null, null, { passed: 3, total: 5, phase: 'before_bench' }),
-    ev(4201, 'bounce', 'dev-fix', '检查第 2 轮 static FAIL（F-018 还在报）、unit FAIL，退回开发 · 修复', 'tests', 'dev-fix', { cases: ['static', 'unit'] }),
-    ev(4210, 'spawned', 'dev-fix', '开发 · 修复第 2 轮：修 static、unit'),
-    ev(5120, 'committed', 'dev-fix', '开发 · 修复提交 d8e3a71：F-018: strtol with a range check in parse_interval'),
-    ev(5400, 'tests', null, '检查第 3 轮 5/5：build、static、unit、size、trace 都 PASS', null, null, { passed: 5, total: 5, phase: 'before_bench' }),
-    ev(5410, 'handoff', 'reviewer', '改动交给评审', 'dev-fix', 'reviewer', { carry: '改动' }),
-    ev(5800, 'done', 'reviewer', '评审：可以交付'),
-    ev(5460, 'bench', null, '台架自检 doctor.sh 通过'),
-    ev(5890, 'bench', null, '向操作台请求部署：vstatd 133240 bytes，摘要 bc93723c5a1f'),
+    ev(1800, 'approved', 'triage', '人批准了分诊（李工）', 'person', 'triage', null, m('approved', { g_gate: 'triage' })),
+    ev(1805, 'handoff', 'architect', '分诊交给架构师', 'triage', 'architect', { carry: '分诊' }, m('handoff', { r_from: 'triage', outs: ['triage.json', 'triage.md'], r_role: 'architect' })),
+    ev(2600, 'done', 'architect', '架构师完成：Service::run() 拆成 4 个函数，两个开发按源文件分工', null, null, null, m('done', { r_role: 'architect', summary: 'Service::run() → 4 functions; two developers split by source file' })),
+    ev(2610, 'gate', 'architect', '开工方案交给人', 'architect', 'person', null, m('gate.wait', { g_gate: 'architect' })),
+    ev(2700, 'approved', 'architect', '人批准了开工', 'person', 'architect', null, m('approved', { g_gate: 'architect' })),
+    ev(2705, 'handoff', 'tester', '重构方案交给测试', 'architect', 'tester', { carry: '重构方案' }, m('handoff', { r_from: 'architect', outs: ['refactor-plan.md'], r_role: 'tester' })),
+    ev(3000, 'tests', null, '测试先行：3 个新测试在基线提交上都失败（应当如此）', null, null, { passed: 0, total: 3 }, m('tests.first_ok', { r_role: 'tester' })),
+    ev(3305, 'handoff', 'dev-fix', '测试交给开发 · 修复', 'tester', 'dev-fix', { carry: '测试' }, m('handoff', { r_from: 'tester', outs: ['tests.md'], r_role: 'dev-fix' })),
+    ev(3305, 'handoff', 'dev-refactor', '测试交给开发 · 重构', 'tester', 'dev-refactor', { carry: '测试' }, m('handoff', { r_from: 'tester', outs: ['tests.md'], r_role: 'dev-refactor' })),
+    ev(3620, 'committed', 'dev-fix', '开发 · 修复提交 3c9a1f0：F-003: close fd on connect failure', null, null, null, m('committed', { r_role: 'dev-fix', subject: '3c9a1f0 F-003: close fd on connect failure' })),
+    ev(4100, 'committed', 'dev-refactor', '开发 · 重构提交 5f6b2e9：F-031: move signal table handling out of Service::run()', null, null, null, m('committed', { r_role: 'dev-refactor', subject: '5f6b2e9 F-031: move signal table handling out of Service::run()' })),
+    ev(4200, 'tests', null, '检查第 2 轮 3/5：static、unit FAIL', null, null, { passed: 3, total: 5, phase: 'before_bench' }, m('tests.score', { passed: 3, total: 5 })),
+    ev(4201, 'bounce', 'dev-fix', '检查第 2 轮 static FAIL（F-018 还在报）、unit FAIL，退回开发 · 修复', 'tests', 'dev-fix', { cases: ['static', 'unit'] }, m('bounce.checks', { cases: ['static', 'unit'], r_role: 'dev-fix' })),
+    ev(4210, 'spawned', 'dev-fix', '开发 · 修复第 2 轮：修 static、unit', null, null, null, m('spawned.round', { r_role: 'dev-fix', n: 2, label: 'static, unit' })),
+    ev(5120, 'committed', 'dev-fix', '开发 · 修复提交 d8e3a71：F-018: strtol with a range check in parse_interval', null, null, null, m('committed', { r_role: 'dev-fix', subject: 'd8e3a71 F-018: strtol with a range check in parse_interval' })),
+    ev(5400, 'tests', null, '检查第 3 轮 5/5：build、static、unit、size、trace 都 PASS', null, null, { passed: 5, total: 5, phase: 'before_bench' }, m('tests.score', { passed: 5, total: 5, green: true })),
+    ev(5410, 'handoff', 'reviewer', '改动交给评审', 'dev-fix', 'reviewer', { carry: '改动' }, m('handoff', { r_from: 'dev-fix', outs: [], r_role: 'reviewer' })),
+    ev(5800, 'done', 'reviewer', '评审：可以交付', null, null, null, m('done', { r_role: 'reviewer', summary: 'ready to deliver' })),
+    ev(5460, 'bench', null, '台架自检 doctor.sh 通过', null, null, null, m('bench.go', { n: 1 })),
+    ev(5890, 'bench', null, '向操作台请求部署：vstatd 133240 bytes，摘要 bc93723c5a1f', null, null, null, m('bench.deploy', { artifact: 'vstatd' })),
   ]
   const release: Row[] = [
     ev(5960, 'bench', null, '看板批准部署（李工）'),
-    ev(5990, 'bench', null, '部署结果 ok：installed'),
-    ev(6160, 'bench', null, '操作台批准回放，回放 drive-01'),
-    ev(6800, 'tests', null, '台架之后的检查 2/2：logdiff、runtime-limits PASS', null, null, { passed: 2, total: 2, phase: 'after_bench' }),
-    ev(7300, 'tests', null, '独立重跑 7/7：release.sh PASS，可以签字', null, null, { passed: 7, total: 7, phase: 'rerun' }),
+    ev(5990, 'bench', null, '部署结果 ok：installed', null, null, null, m('bench.replay')),
+    ev(6160, 'bench', null, '操作台批准回放，回放 drive-01', null, null, null, m('bench.replayed', { run_dir: 'bench/run-1' })),
+    ev(6800, 'tests', null, '台架之后的检查 2/2：logdiff、runtime-limits PASS', null, null, { passed: 2, total: 2, phase: 'after_bench' }, m('tests.after', { passed: 2, total: 2 })),
+    ev(7300, 'tests', null, '独立重跑 7/7：release.sh PASS，可以签字', null, null, { passed: 7, total: 7, phase: 'rerun' }, m('tests.rerun', { verdict: 'PASS' })),
   ]
   const rows = [...triage, ...(stage === 'triage' ? [] : build), ...(stage === 'release' ? release : [])].sort((a, b) => a[0] - b[0])
-  return rows.map(([dt, kind, role, text, from, to, data], i) => ({ seq: i + 1, at: t + dt, kind, role, text, from, to, data }))
+  return rows.map(([dt, kind, role, text, from, to, data, msg], i) => ({ seq: i + 1, at: t + dt, kind, role, text, code: msg?.code ?? null, params: msg?.params ?? null, from, to, data }))
 }
 
 const CHECK = (name: string, verdict: 'PASS' | 'FAIL' | 'BLOCKED', tier: string, owner: string | null, message: string | null, ms: number): TestCase => ({
   id: name, ac: name, name: `${name}.sh`, file: '', status: verdict === 'PASS' ? 'pass' : verdict === 'FAIL' ? 'fail' : 'blocked', verdict, tier, owner, ms, message,
 })
+
+/** title_en, stage_en, gate_label_en of the vstatd team's roles (team-vstatd.json). */
+const VSTATD_EN: Record<string, [string, string, string]> = {
+  triage: ['Triage', 'Triage · fix, explain or defer', 'Triage'], architect: ['Architect', 'Refactor plan · division of work', 'Start'],
+  tester: ['Tester', 'Tests first', ''], 'dev-fix': ['Developer · fix', 'Fix', ''], 'dev-refactor': ['Developer · refactor', 'Refactor', ''], reviewer: ['Reviewer', 'Review', ''],
+}
 
 /** The vstatd team (team-vstatd.json): at its triage gate, held at the bench, or ended with the release check. */
 export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Board {
@@ -651,7 +659,8 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
   const tpl = run.roles.find((r) => r.key === 'backend')!
   const at = (stage === 'triage' ? 0 : stage === 'bench' ? 1 : 2)
   const mk = (key: string, title: string, icon: string, phase: string, stage_: string, deps: string[], status: Lane['status'], member: string, extra: Partial<Lane> = {}): Lane => ({
-    ...clone(tpl), key, title, icon, phase, stage: stage_, depends_on: deps, status, gate: null, gate_label: '', kinds: ['work'], attempt: 1,
+    ...clone(tpl), key, title, title_en: VSTATD_EN[key]?.[0] ?? '', icon, phase, stage: stage_, stage_en: VSTATD_EN[key]?.[1] ?? '', depends_on: deps, status, gate: null, gate_label: '',
+    gate_label_en: VSTATD_EN[key]?.[2] ?? '', kinds: ['work'], attempt: 1,
     aidlc_agent: member, member, writable: [`src/${key}.*`], violations: [], mission: '', summary: null, agent: null, owns_tests: [], questions: [], answers: [], ...extra,
   })
   const after = (s: Lane['status']): Lane['status'] => (at ? s : 'waiting')
@@ -868,8 +877,19 @@ export function teamOf(missing: string[] = []): TeamPreview {
 /** GET /runs/<id>/flow: the vstatd run (vstatdBoard('release')) from its requirement to the sign-off it waits for. */
 export function flowOf(b: Board = vstatdBoard('release')): RunFlow {
   const r = b.run!
+  const RESULT: Record<string, FlowResult> = { 批准: 'approved', 不过: 'fail', 通过: 'pass', 不同: 'differs' }
+  const said = (label: string, role: string | null): Pick<FlowSegment, 'code' | 'params'> => {
+    if (label.startsWith('等人批准')) return { code: 'flow.gate', params: { g_gate: role } }
+    if (label.startsWith('操作台')) return { code: 'flow.console', params: { action: label.split(' · ')[1] } }
+    if (label.startsWith('检查 第')) return { code: 'flow.checks', params: { n: Number(/\d+/.exec(label)![0]) } }
+    if (label === '台架之后的检查') return { code: 'flow.after_bench', params: null }
+    if (label === '独立重跑全部检查') return { code: 'flow.rerun', params: null }
+    const round = /^.+ · 第 (\d+) 轮$/.exec(label)
+    if (round) return { code: 'flow.agent.round', params: { r_role: role, n: Number(round[1]) } }
+    return { code: 'flow.agent', params: { r_role: role, label: label.split(' · ').pop() } }
+  }
   const seg = (kind: FlowSegment['kind'], from: number, to: number, label: string, role: string | null = null, result: string | null = null, open = false): FlowSegment =>
-    ({ kind, from, to, role, label, result, open })
+    ({ kind, from, to, role, label, ...said(label, role), result, result_code: result ? RESULT[result] : null, open })
   const segments = [
     seg('agent', 20, 1500, '分诊 · 第 1 轮', 'triage'), seg('gate', 1510, 1800, '等人批准 · 分诊', 'triage', '批准'),
     seg('agent', 1810, 2600, '架构师 · 第 1 轮', 'architect'), seg('gate', 2610, 2700, '等人批准 · 开工', 'architect', '批准'),
@@ -883,9 +903,11 @@ export function flowOf(b: Board = vstatdBoard('release')): RunFlow {
   return {
     run: r.id, title: r.title, status: r.status, started_at: r.started_at, end: 7300, live: false, signed: !!r.signoff,
     segments,
-    marks: [{ at: 1800, kind: 'approved', role: 'triage', label: '人批准了分诊' }, { at: 2700, kind: 'approved', role: 'architect', label: '人批准了开工' },
-      { at: 4900, kind: 'check_fail', role: null, label: '检查不过：build' }, { at: 4901, kind: 'bounce', role: 'dev-fix', label: 'build 失败，打回开发 · 修复' }],
-    roles: r.roles.map((l) => ({ key: l.key, title: l.title, icon: l.icon })),
+    marks: [{ at: 1800, kind: 'approved', role: 'triage', label: '人批准了分诊', code: 'approved', params: { g_gate: 'triage' } },
+      { at: 2700, kind: 'approved', role: 'architect', label: '人批准了开工', code: 'approved', params: { g_gate: 'architect' } },
+      { at: 4900, kind: 'check_fail', role: null, label: '检查不过：build', code: 'flow.check_fail', params: { checks: ['build'] } },
+      { at: 4901, kind: 'bounce', role: 'dev-fix', label: 'build 失败，打回开发 · 修复', code: 'bounce.tests', params: { cases: ['build'], r_role: 'dev-fix' } }],
+    roles: r.roles.map((l) => ({ key: l.key, title: l.title, title_en: l.title_en, gate_label: l.gate_label, gate_label_en: l.gate_label_en, icon: l.icon })),
     totals: { elapsed_s: 7300, agent_s: 4705, person_s: 510, gate_s: 390, console_s: 120, check_s: 1260, credits: 18.4, check_rounds: 3, send_backs: 1 },
   }
 }

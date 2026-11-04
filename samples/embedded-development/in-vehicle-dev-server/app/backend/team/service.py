@@ -247,7 +247,7 @@ class Service:
             if kb_id:  # the roles search this company's source only (two companies' 《品牌规范》 would both answer)
                 state["knowledge_source_id"] = kb_id
             run = TeamRun(state, self._deps)
-            run.emit("run", f"运行开始：{state['title']}")
+            run.say("run", "run.start", {"title": state["title"]})
             if team.get("workspace") and any(r.get("optional") for r in team["roles"]):
                 await self.refresh_crew()  # 在职 is who is on 「代理」 now: a member added a moment ago counts
                 run.leave_out_unhired(self.member_names(team["workspace"]))
@@ -340,8 +340,8 @@ class Service:
         run.s["signoff"] = {"by": by, "note": note, "at": self._deps.now(), "tests": f"{t['passed']}/{t['total']}"}
         pr = run.pr() or {}
         run.s["signoff"]["merged"] = await run.merge_pr()
-        merged = f"PR #{pr.get('number')} 合入 main（{run.s['signoff']['merged']}）" if run.s["signoff"]["merged"] else ""
-        run.emit("signoff", f"{by} 签字放行" + (f"：{note}" if note else "") + (f"；{merged}" if merged else ""), role=None)
+        merged = run.s["signoff"]["merged"]
+        run.say("signoff", "signoff", {"by": by, "note": note, "pr": pr.get("number") if merged else None, "merged": merged or None})
         await run.save()
         if not run.s.get("imported"):  # results/audit.{md,json} beside the rerun's evidence, named on the sign-off record
             with contextlib.suppress(OSError):
@@ -349,10 +349,10 @@ class Service:
                 await run.save()
         return {"ok": True, "run": run.rid, "signoff": run.s["signoff"]}
 
-    def _trail(self, run: TeamRun) -> dict[str, Any]:
-        """Blocking: the run's audit trail, its text scrubbed as /events sends it."""
+    def _trail(self, run: TeamRun, lang: str = "zh") -> dict[str, Any]:
+        """Blocking: the run's audit trail in *lang*, its text scrubbed as /events sends it."""
         evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
-        out = audit.build(run.s, evs, scorecard.records())
+        out = audit.build(run.s, evs, scorecard.records(), lang)
         out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
         return out
 
@@ -367,14 +367,15 @@ class Service:
             out[name] = hashlib.sha256(data).hexdigest()
         return out
 
-    async def audit(self, rid: str) -> dict[str, Any]:
-        """审计记录: every decision and action of the run, from its events and the bench's action record."""
+    async def audit(self, rid: str, lang: str = "zh") -> dict[str, Any]:
+        """审计记录: every decision and action of the run, from its events and the bench's action record (zh or en;
+        the audit.md written at sign-off is always zh, its sha256 is on the sign-off record)."""
         run = self._run(rid)
-        return await asyncio.to_thread(self._trail, run)
+        return await asyncio.to_thread(self._trail, run, lang)
 
-    async def audit_bench(self) -> dict[str, Any]:
+    async def audit_bench(self, lang: str = "zh") -> dict[str, Any]:
         """The bench's requests no run made (the baseline set up at the console or on the board), and their outcome."""
-        out = await asyncio.to_thread(lambda: audit.bench_only(scorecard.records()))
+        out = await asyncio.to_thread(lambda: audit.bench_only(scorecard.records(), lang))
         out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
         return out
 

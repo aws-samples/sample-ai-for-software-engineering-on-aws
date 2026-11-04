@@ -8,12 +8,14 @@
  * The first snapshot of a run, and the first one after the page was hidden, are history: the differ
  * says so (`first`), and nothing animates.
  */
+import { localizeBoard } from '../i18n/events'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppApi } from '@kirocrew/app-sdk'
 import type { Board, RunDetail } from '../types'
 import { diffRuns, type BoardDiff } from './diff'
 import { POLL_MS, paths } from './format'
 import { useLatest } from './hooks'
+import { t as tr } from '../i18n'
 
 export interface BoardState {
   board: Board | null
@@ -38,14 +40,14 @@ export function errorText(e: unknown): string {
   const [, status, body] = m
   try {
     const data = JSON.parse(body) as { error?: unknown }
-    if (data && typeof data.error === 'string' && data.error) return `${data.error}（${status}）`
+    if (data && typeof data.error === 'string' && data.error) return tr('board.useBoard.1', { p0: data.error, p1: status })
   } catch {
     /* not JSON */
   }
-  if (status === '401') return '需要登录 KiroCrew dashboard（401）'
-  if (status === '403') return '没有权限：只接受 dashboard 主人本人的请求（403）'
-  if (status === '404') return '后端还没有这个接口（404）'
-  return `请求失败（${status}）${body.trim() ? `：${body.trim().slice(0, 200)}` : ''}`
+  if (status === '401') return tr('board.useBoard.2')
+  if (status === '403') return tr('board.useBoard.3')
+  if (status === '404') return tr('board.useBoard.4')
+  return tr('board.useBoard.5', { p0: status, p1: body.trim() ? tr('common.detail', { p0: body.trim().slice(0, 200) }) : '' })
 }
 
 export function errorStatus(e: unknown): number {
@@ -70,7 +72,7 @@ export function useBoard(api: AppApi, opts: { run: string | null; pollMs?: numbe
     inFlight.current = true
     const gen = generation.current
     try {
-      const got = await apiRef.current.get<Board>(paths.board(runRef.current))
+      const got = localizeBoard(await apiRef.current.get<Board>(paths.board(runRef.current)))
       if (gen !== generation.current) return // the selection changed while this was on its way
       const next = got?.run ?? null
       const visible = typeof document === 'undefined' || !document.hidden

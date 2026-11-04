@@ -69,6 +69,7 @@ export type RunDetail = {
   plan_skip: Record<string, string> // the optional members the planner's 分工提案 leaves out this run, with why (applied once a person approves)
   overruled: { role: string; note: string; review: string } | null // a person approved a gate over a review that still said 要改, and why
   sign_block: string // why this run cannot be signed off ('' when it can: it finished and what it deploys went out)
+  sign_block_msg: Msg | null // …by code, for the board's language (null when it can be signed)
   review_redo?: ReviewRedo | null // the run ended on a 要改 review a person can send back once more (按评审意见再改一轮)
   delivery: Delivery // 交付标签: what the CTO view counts this run as, once a person signs it off
   issue: Issue // the requirement as the organisation tracks it
@@ -95,7 +96,7 @@ export type ReleaseView = {
 export type BenchView = {
   step: 'doctor' | 'deploy' | 'replay' | 'after' | 'rerun' | 'done' | null
   running: string | null // the step running in the background
-  held: { step: string; why: string; commands: string[]; at: number } | null
+  held: { step: string; why: string; code?: string; params?: MsgParams | null; commands: string[]; at: number } | null
   doctor: { ok: boolean; rc: number | null; at: number; fails: string[]; warns: string[]; summary: string } | null
   artifact: string | null // the build deployed: build.sh's stripped vstatd
   run_dir: string | null // where the replay writes the run directory
@@ -266,12 +267,17 @@ export type FlowSegment = {
   to: number
   role: string | null // agent, gate: the role
   label: string
+  code: string // the label's message code (backend/team/messages.py)
+  params: MsgParams | null
   result: string | null // gate: 批准 | 退回; console: 批准 | 拒绝 | 超时; checks: 通过 | 不过; rerun: 一致 | 不同
+  result_code: FlowResult | null // the same, by code
   open: boolean
 }
 
+export type FlowResult = 'error' | 'approved' | 'sent_back' | 'refused' | 'timeout' | 'differs' | 'same' | 'fail' | 'pass'
+
 /** A moment of a run: a send-back, a round with a failing check, an approval, the sign-off. */
-export type FlowMark = { at: number; kind: 'bounce' | 'check_fail' | 'approved' | 'signoff'; role: string | null; label: string }
+export type FlowMark = { at: number; kind: 'bounce' | 'check_fail' | 'approved' | 'signoff'; role: string | null; label: string; code: string | null; params: MsgParams | null }
 
 /** 交付详情's figures; null: nothing recorded for it. person_s: gates and the console, overlaps counted once. */
 export type FlowTotals = {
@@ -297,7 +303,7 @@ export type RunFlow = {
   signed: boolean
   segments: FlowSegment[]
   marks: FlowMark[]
-  roles: { key: string; title: string; icon: string }[]
+  roles: { key: string; title: string; title_en: string; gate_label: string; gate_label_en: string; icon: string }[]
   totals: FlowTotals
 }
 
@@ -342,6 +348,7 @@ export type Ownership = { roles?: Record<string, string[]>; test_areas?: Record<
 export type Lane = {
   key: string // 'pm' | 'architect' | ...
   title: string // 产品经理 ...
+  title_en: string // its English name from the team file ('' when it has none: the board shows title)
   emoji: string
   model: string
   status: LaneStatus
@@ -363,10 +370,12 @@ export type Lane = {
   summary: string | null // the agent's `DONE: ...` line
   phase: string // AI-DLC phase: 'ideation' | 'inception' | 'construction' | 'review' | 'operation' | ''
   stage: string // e.g. '2.1 逆向工程'
+  stage_en: string
   mission: string // one line: what it is for
   aidlc_agent: string // the official AI-DLC agent definition it uses, e.g. 'aidlc-architect-agent'
   gate: 'pending' | 'discussing' | 'approved' | null // a person's gate after this role (null: none, or not reached; discussing: it is answering the person's 讨论)
   gate_label: string // what the person approves, e.g. '范围'
+  gate_label_en: string
   gate_preset: string // the team file's preset note for approving that gate (填入预设意见), '' when none
   gate_revise_preset: string // …and for sending it back (a review gate: says whom, 打回：前端开发 #2)
   gate_revise_risk: { what: string; amount: number | null } | null // …and the risk that send-back keeps from going live
@@ -486,10 +495,16 @@ export type TeamEvent = {
   kind: TeamEventKind
   role: string | null
   text: string // one line, Chinese, ready to show
+  code: string | null // what it says, by code (backend/team/messages.py): the board says it in its language; null on an older run's events, shown as text
+  params: MsgParams | null
   from: string | null // for particles: a role key, 'tests' or 'run'
   to: string | null
   data: EventData | null // structured facts behind the text; prefer these over parsing `text`
 }
+
+/** A message by code: ev.<code> in ui/src/i18n with these params (r_…: role keys, g_…: a role's gate). */
+export type Msg = { code: string; params: MsgParams | null }
+export type MsgParams = Record<string, unknown>
 
 export type EventData = {
   carry?: string // handoff: what is handed over (验收标准、接口契约 …)

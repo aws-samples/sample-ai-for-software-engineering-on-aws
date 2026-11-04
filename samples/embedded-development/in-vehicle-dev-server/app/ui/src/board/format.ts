@@ -5,6 +5,7 @@
  * kiro-light), so the same word always has the same colour and every colour has a word next to it.
  */
 import type { Lane, LaneStatus, RunDetail, RunStatus, TeamEventKind, TestCase } from '../types'
+import { t as tr } from '../i18n'
 
 export const BASE = '/api/apps/vstatd-team'
 export const POLL_MS = 2000
@@ -40,66 +41,66 @@ export interface StatusMeta {
 }
 
 export const LANE_META: Record<LaneStatus, StatusMeta> = {
-  waiting: { label: '等待', tone: 'idle', icon: '⏳', hint: '上游还没合并，它还不能开工' },
-  queued: { label: '排队', tone: 'queue', icon: '⏸', hint: '已派出，KiroCrew 还没让它开始' },
-  running: { label: '在跑', tone: 'run', icon: '●', hint: 'agent 正在干活' },
-  stalled: { label: '卡住', tone: 'warn', icon: '⚠', hint: 'KiroCrew 标记它卡住了' },
-  awaiting_approval: { label: '等你批准', tone: 'approve', icon: '✋', hint: '一个工具调用在等你批准' },
-  done: { label: '完成·待合并', tone: 'done', icon: '✓', hint: 'agent 做完了，分支还没合进运行分支' },
-  merged: { label: '已合并', tone: 'ok', icon: '✔', hint: '它的分支已经合进运行分支' },
-  fixing: { label: '修复中', tone: 'fix', icon: '↻', hint: '测试没过被打回，正在修' },
-  failed: { label: '失败', tone: 'bad', icon: '✕', hint: '这个角色失败了' },
-  skipped: { label: '跳过', tone: 'idle', icon: '–', hint: '这次不参与：批准的分工里不要它（原因写在它的卡片上）' },
+  waiting: { label: tr('board.format.1'), tone: 'idle', icon: '⏳', hint: tr('board.format.2') },
+  queued: { label: tr('board.format.3'), tone: 'queue', icon: '⏸', hint: tr('board.format.4') },
+  running: { label: tr('board.format.5'), tone: 'run', icon: '●', hint: tr('board.format.6') },
+  stalled: { label: tr('board.format.7'), tone: 'warn', icon: '⚠', hint: tr('board.format.8') },
+  awaiting_approval: { label: tr('board.format.9'), tone: 'approve', icon: '✋', hint: tr('board.format.10') },
+  done: { label: tr('board.format.11'), tone: 'done', icon: '✓', hint: tr('board.format.12') },
+  merged: { label: tr('board.format.13'), tone: 'ok', icon: '✔', hint: tr('board.format.14') },
+  fixing: { label: tr('board.format.15'), tone: 'fix', icon: '↻', hint: tr('board.format.16') },
+  failed: { label: tr('board.format.17'), tone: 'bad', icon: '✕', hint: tr('board.format.18') },
+  skipped: { label: tr('board.format.19'), tone: 'idle', icon: '–', hint: tr('board.format.20') },
 }
 
 export const RUN_META: Record<RunStatus, { label: string; tone: Tone; active: boolean }> = {
-  starting: { label: '启动中', tone: 'run', active: true },
-  running: { label: '进行中', tone: 'run', active: true },
-  fixing: { label: '修复中', tone: 'fix', active: true },
-  reviewing: { label: '评审中', tone: 'run', active: true },
-  gating: { label: '等你批准', tone: 'approve', active: true },
-  done: { label: '已完成', tone: 'ok', active: false },
-  failed: { label: '失败', tone: 'bad', active: false },
-  stopped: { label: '已停止', tone: 'idle', active: false },
+  starting: { label: tr('board.format.21'), tone: 'run', active: true },
+  running: { label: tr('board.format.22'), tone: 'run', active: true },
+  fixing: { label: tr('board.format.15'), tone: 'fix', active: true },
+  reviewing: { label: tr('board.format.23'), tone: 'run', active: true },
+  gating: { label: tr('board.format.9'), tone: 'approve', active: true },
+  done: { label: tr('board.format.24'), tone: 'ok', active: false },
+  failed: { label: tr('board.format.17'), tone: 'bad', active: false },
+  stopped: { label: tr('board.format.25'), tone: 'idle', active: false },
 }
 
 export const EVENT_META: Record<TeamEventKind, { icon: string; label: string; tone: Tone }> = {
-  run: { icon: '🏁', label: '运行', tone: 'info' },
-  handoff: { icon: '📨', label: '交接', tone: 'handoff' },
-  spawned: { icon: '▶️', label: '开工', tone: 'run' },
-  tool: { icon: '🔧', label: '工具', tone: 'idle' },
-  committed: { icon: '📝', label: '提交', tone: 'info' },
-  merged: { icon: '⤵️', label: '合入', tone: 'ok' },
-  conflict: { icon: '⚡', label: '冲突', tone: 'bad' },
-  tests: { icon: '🧪', label: '测试', tone: 'info' },
-  bounce: { icon: '↩️', label: '打回', tone: 'bad' },
-  violation: { icon: '🚫', label: '越界', tone: 'bad' },
-  done: { icon: '✅', label: '完成', tone: 'ok' },
-  failed: { icon: '❌', label: '失败', tone: 'bad' },
-  review: { icon: '🔍', label: '审查', tone: 'info' },
-  ownership: { icon: '🧭', label: '派活', tone: 'info' },
-  skipped: { icon: '–', label: '跳过', tone: 'idle' },
-  gate: { icon: '✋', label: '等人批准', tone: 'approve' },
-  approved: { icon: '👍', label: '人批准', tone: 'ok' },
-  finding: { icon: '📌', label: '补登发现', tone: 'approve' },
-  signoff: { icon: '✍️', label: '签字放行', tone: 'approve' },
-  plan: { icon: '🗂️', label: '分工提案', tone: 'handoff' },
-  member: { icon: '⏸', label: '缺成员', tone: 'warn' },
-  talk: { icon: '💬', label: '讨论', tone: 'approve' },
-  bench: { icon: '🔌', label: '台架', tone: 'info' },
+  run: { icon: '🏁', label: tr('board.format.26'), tone: 'info' },
+  handoff: { icon: '📨', label: tr('board.format.27'), tone: 'handoff' },
+  spawned: { icon: '▶️', label: tr('board.format.28'), tone: 'run' },
+  tool: { icon: '🔧', label: tr('board.format.29'), tone: 'idle' },
+  committed: { icon: '📝', label: tr('board.format.30'), tone: 'info' },
+  merged: { icon: '⤵️', label: tr('board.format.31'), tone: 'ok' },
+  conflict: { icon: '⚡', label: tr('board.format.32'), tone: 'bad' },
+  tests: { icon: '🧪', label: tr('board.format.33'), tone: 'info' },
+  bounce: { icon: '↩️', label: tr('board.format.34'), tone: 'bad' },
+  violation: { icon: '🚫', label: tr('board.format.35'), tone: 'bad' },
+  done: { icon: '✅', label: tr('board.format.36'), tone: 'ok' },
+  failed: { icon: '❌', label: tr('board.format.17'), tone: 'bad' },
+  review: { icon: '🔍', label: tr('board.format.37'), tone: 'info' },
+  ownership: { icon: '🧭', label: tr('board.format.38'), tone: 'info' },
+  skipped: { icon: '–', label: tr('board.format.19'), tone: 'idle' },
+  gate: { icon: '✋', label: tr('board.format.39'), tone: 'approve' },
+  approved: { icon: '👍', label: tr('board.format.40'), tone: 'ok' },
+  finding: { icon: '📌', label: tr('board.format.41'), tone: 'approve' },
+  signoff: { icon: '✍️', label: tr('board.format.42'), tone: 'approve' },
+  plan: { icon: '🗂️', label: tr('board.format.43'), tone: 'handoff' },
+  member: { icon: '⏸', label: tr('board.format.44'), tone: 'warn' },
+  talk: { icon: '💬', label: tr('board.format.45'), tone: 'approve' },
+  bench: { icon: '🔌', label: tr('board.format.46'), tone: 'info' },
 }
 
 export const CASE_META: Record<TestCase['status'], { label: string; glyph: string }> = {
-  pass: { label: '通过', glyph: '✓' },
-  fail: { label: '失败', glyph: '✕' },
-  skip: { label: '跳过', glyph: '–' },
-  blocked: { label: '没法判定，交给人', glyph: '!' },
+  pass: { label: tr('board.format.47'), glyph: '✓' },
+  fail: { label: tr('board.format.17'), glyph: '✕' },
+  skip: { label: tr('board.format.19'), glyph: '–' },
+  blocked: { label: tr('board.format.48'), glyph: '!' },
 }
 
 /** The meaning of a lane's status: a role that writes nothing (the reviewer) has nothing to merge, so
  * for it `done` is the end (完成), not 完成·待合并. */
 export function laneMeta(lane: Pick<Lane, 'status' | 'writable'>): StatusMeta {
-  if (lane.status === 'done' && lane.writable.length === 0) return { label: '完成', tone: 'ok', icon: '✔', hint: '它只读不写，做完就结束了' }
+  if (lane.status === 'done' && lane.writable.length === 0) return { label: tr('board.format.36'), tone: 'ok', icon: '✔', hint: tr('board.format.49') }
   // a status this page does not know yet (a newer backend) is shown as is, never a crash
   return LANE_META[lane.status] ?? { label: String(lane.status), tone: 'idle', icon: '•', hint: '' }
 }
@@ -117,11 +118,11 @@ export const isFinal = (lane: Pick<Lane, 'status' | 'writable'>) => lane.status 
 
 /** The AI-DLC phases, in order: the team graph's column groups. */
 export const PHASES: ReadonlyArray<{ key: string; n: string; title: string; en: string }> = [
-  { key: 'ideation', n: '1', title: '构思', en: 'Ideation' },
-  { key: 'inception', n: '2', title: '启动', en: 'Inception' },
-  { key: 'construction', n: '3', title: '构建', en: 'Construction' },
-  { key: 'review', n: '✓', title: '评审关卡', en: 'Review gate' },
-  { key: 'operation', n: '4', title: '运维', en: 'Operation' },
+  { key: 'ideation', n: '1', title: tr('board.format.50'), en: 'Ideation' },
+  { key: 'inception', n: '2', title: tr('board.format.51'), en: 'Inception' },
+  { key: 'construction', n: '3', title: tr('board.format.52'), en: 'Construction' },
+  { key: 'review', n: '✓', title: tr('board.format.53'), en: 'Review gate' },
+  { key: 'operation', n: '4', title: tr('board.format.54'), en: 'Operation' },
 ]
 
 /** An agent of this role is alive in KiroCrew right now. */
@@ -145,23 +146,23 @@ export function fmtClock(sec: number): string {
 /** 45 秒, 23 分钟, 1 小时 5 分 */
 export function fmtSpan(sec: number): string {
   const s = Math.max(0, Math.round(sec))
-  if (s < 60) return `${s} 秒`
+  if (s < 60) return tr('board.format.55', { p0: s })
   const m = Math.round(s / 60)
-  if (m < 60) return `${m} 分钟`
+  if (m < 60) return tr('board.format.56', { p0: m })
   const h = Math.floor(m / 60)
   const mm = m % 60
-  return mm ? `${h} 小时 ${mm} 分` : `${h} 小时`
+  return mm ? tr('board.format.57', { p0: h, p1: mm }) : tr('board.format.58', { p0: h })
 }
 
 export function fmtAgo(delta: number): string {
   const s = Math.max(0, Math.round(delta))
-  if (s < 5) return '刚刚'
-  if (s < 60) return `${s} 秒前`
+  if (s < 5) return tr('board.format.59')
+  if (s < 60) return tr('board.format.60', { p0: s })
   const m = Math.floor(s / 60)
-  if (m < 60) return `${m} 分钟前`
+  if (m < 60) return tr('board.format.61', { p0: m })
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h} 小时前`
-  return `${Math.floor(h / 24)} 天前`
+  if (h < 24) return tr('board.format.62', { p0: h })
+  return tr('board.format.63', { p0: Math.floor(h / 24) })
 }
 
 export function fmtCredits(c: number | null | undefined): string {
@@ -184,27 +185,27 @@ export function waitingFor(lane: Pick<Lane, 'depends_on'>, lanes: Lane[]): Lane[
 
 export function waitingText(lane: Pick<Lane, 'depends_on'>, lanes: Lane[]): string {
   const w = waitingFor(lane, lanes)
-  if (w.length) return `等 ${w.map((l) => l.title).join('、')}`
-  return lane.depends_on.length ? '上游都合并了，马上开工' : '马上开工'
+  if (w.length) return tr('board.format.64', { p0: w.map((l) => l.title).join(tr('common.sep')) })
+  return lane.depends_on.length ? tr('board.format.65') : tr('board.format.66')
 }
 
 /** 'AC-12' → 12 (sorting); no number → a big one, last. */
 /** Case-id groups, in wall order: 功能验收 AC，然后是规范包里的安全 SEC、体验 UX、合规 COMP、上架 STORE. */
 export const CASE_GROUPS: { prefix: string; label: string }[] = [
-  { prefix: 'AC', label: '功能' },
-  { prefix: 'RULE', label: '业务规则' },
-  { prefix: 'ACC', label: '账号安全' },
-  { prefix: 'PII', label: '个人信息' },
-  { prefix: 'SEC', label: '安全' },
-  { prefix: 'FE', label: '前端工程' },
-  { prefix: 'UX', label: '体验' },
-  { prefix: 'BR', label: '品牌' },
-  { prefix: 'COMP', label: '合规' },
-  { prefix: 'STORE', label: '上架' },
-  { prefix: 'PRC', label: '价格合规' },
-  { prefix: 'MGN', label: '毛利' },
-  { prefix: 'PP', label: '价保' },
-  { prefix: 'DATA', label: '数据' },
+  { prefix: 'AC', label: tr('board.format.67') },
+  { prefix: 'RULE', label: tr('board.format.68') },
+  { prefix: 'ACC', label: tr('board.format.69') },
+  { prefix: 'PII', label: tr('board.format.70') },
+  { prefix: 'SEC', label: tr('board.format.71') },
+  { prefix: 'FE', label: tr('board.format.72') },
+  { prefix: 'UX', label: tr('board.format.73') },
+  { prefix: 'BR', label: tr('board.format.74') },
+  { prefix: 'COMP', label: tr('board.format.75') },
+  { prefix: 'STORE', label: tr('board.format.76') },
+  { prefix: 'PRC', label: tr('board.format.77') },
+  { prefix: 'MGN', label: tr('board.format.78') },
+  { prefix: 'PP', label: tr('board.format.79') },
+  { prefix: 'DATA', label: tr('board.format.80') },
 ]
 
 export function caseGroup(ac: string | null): number {
@@ -278,24 +279,24 @@ export function eventTouches(e: { role: string | null; from: string | null; to: 
 
 /** The 14 agents AWS AI-DLC ships (core/agents): 11 domain experts, 2 reviewers, 1 composer. */
 export const AIDLC_AGENTS: ReadonlyArray<{ key: string; name: string }> = [
-  { key: 'aidlc-product-agent', name: '产品' },
-  { key: 'aidlc-architect-agent', name: '架构' },
-  { key: 'aidlc-design-agent', name: '设计' },
-  { key: 'aidlc-developer-agent', name: '开发' },
-  { key: 'aidlc-quality-agent', name: '质量' },
-  { key: 'aidlc-devsecops-agent', name: '安全' },
-  { key: 'aidlc-compliance-agent', name: '合规' },
-  { key: 'aidlc-pipeline-deploy-agent', name: '流水线部署' },
-  { key: 'aidlc-aws-platform-agent', name: 'AWS 平台' },
-  { key: 'aidlc-operations-agent', name: '运维' },
-  { key: 'aidlc-delivery-agent', name: '交付' },
-  { key: 'aidlc-architecture-reviewer-agent', name: '架构评审' },
-  { key: 'aidlc-product-lead-agent', name: '产品负责人' },
-  { key: 'aidlc-composer-agent', name: '组队 Composer' },
+  { key: 'aidlc-product-agent', name: tr('board.format.81') },
+  { key: 'aidlc-architect-agent', name: tr('board.format.82') },
+  { key: 'aidlc-design-agent', name: tr('board.format.83') },
+  { key: 'aidlc-developer-agent', name: tr('board.format.84') },
+  { key: 'aidlc-quality-agent', name: tr('board.format.85') },
+  { key: 'aidlc-devsecops-agent', name: tr('board.format.71') },
+  { key: 'aidlc-compliance-agent', name: tr('board.format.75') },
+  { key: 'aidlc-pipeline-deploy-agent', name: tr('board.format.86') },
+  { key: 'aidlc-aws-platform-agent', name: tr('board.format.87') },
+  { key: 'aidlc-operations-agent', name: tr('board.format.54') },
+  { key: 'aidlc-delivery-agent', name: tr('board.format.88') },
+  { key: 'aidlc-architecture-reviewer-agent', name: tr('board.format.89') },
+  { key: 'aidlc-product-lead-agent', name: tr('board.format.90') },
+  { key: 'aidlc-composer-agent', name: tr('board.format.91') },
 ]
 
 /** Experts a company adds to the official 14 (a Crew member of its own), by their member name. */
-export const CUSTOM_EXPERTS: Readonly<Record<string, string>> = { 'taoyuan-motion-agent': '品牌动效' }
+export const CUSTOM_EXPERTS: Readonly<Record<string, string>> = { 'taoyuan-motion-agent': tr('board.format.92') }
 
 export const expertName = (key: string) => AIDLC_AGENTS.find((a) => a.key === key)?.name ?? CUSTOM_EXPERTS[key] ?? key
 
