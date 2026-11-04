@@ -23,7 +23,7 @@ KNOWLEDGE = "vstatd"
 # member's name.
 TEAM = {
     "embedded-developer": ("aidlc-developer-agent", "Embedded 开发", "AI-DLC 开发专家：分诊、修复和重构 vstatd"),
-    "embedded-architect": ("aidlc-architect-agent", "Embedded 架构", "AI-DLC 架构专家：重构方案和按源文件分工"),
+    "embedded-architect": ("aidlc-architect-agent", "Embedded 架构", "AI-DLC 架构专家：重构方案和按源文件、构建文件分工"),
     "embedded-quality": ("aidlc-quality-agent", "Embedded 质量", "AI-DLC 质量专家：测试先行，先失败的单元测试"),
     "embedded-architecture-reviewer": ("aidlc-architecture-reviewer-agent", "Embedded 架构评审",
                                      "AI-DLC 架构评审：独立、只读，复核说明和保住的行为"),

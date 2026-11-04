@@ -36,6 +36,7 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     assert roles["reviewer"]["writable"] == [] and set(roles["reviewer"]["depends_on"]) == {"dev-fix", "dev-refactor"}
     assert roles["tester"]["depends_on"] == ["architect"] and roles["dev-fix"]["depends_on"] == ["tester"]  # tests first
     assert t["ownership"] == {"file": "docs/aidlc/work-split.json", "from": "architect"}
+    assert "也可以是 `cmake/**` 和 `CMakeLists.txt`，这两个可以分给 dev-fix" in roles["architect"]["brief"]
     assert all(roles[k]["writable"] == [team_mod.PENDING_GLOB] for k in ("dev-fix", "dev-refactor"))  # from the split
     assert "docs/aidlc/triage.json" in roles["triage"]["writable"]
     assert roles["triage"]["triage"] == {"file": "docs/aidlc/triage.json", "knowledge": "${sample}/knowledge"}
