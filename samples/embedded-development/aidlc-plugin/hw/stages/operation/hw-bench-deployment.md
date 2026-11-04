@@ -78,8 +78,10 @@ any interruption before anything else runs.
 ### Step 3: Request Each Action
 
 Request each deploy, flash, software update, restart or target write for the digest of the build that passed the
-checks before hardware. Each request waits for a person's approval at the operator console. Never retry a refused or failed action
-by yourself; report it and ask.
+checks before hardware. Each request waits for a person's approval at the operator console. A team may give the
+person a second place to decide, such as an approval board in its agent-team app, if it lies outside the agent
+session and hands the decision to the bench, which applies its own rules and records it. Never answer an approval
+yourself, never retry a refused or failed action by yourself; report it and ask.
 
 ### Step 4: Run the Checks on the Target
 

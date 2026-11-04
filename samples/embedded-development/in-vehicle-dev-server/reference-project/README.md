@@ -27,6 +27,11 @@ docker build -t vstatd-build tools/
 docker run --rm -it -v "$PWD":/work -v /opt/cc1-sysroot:/opt/cc1-sysroot:ro vstatd-build
 ```
 
+The Kiro Crew app and `bench/` use a tag per architecture, built natively: `docker build --platform linux/arm64 -t
+vstatd-build:arm64 tools/` on Apple Silicon, `--platform linux/amd64 -t vstatd-build:amd64` on x86_64. Use the one of
+your machine (ThreadSanitizer does not run in the amd64 image under Rosetta); plain `vstatd-build` above is the same
+image under another name.
+
 The CC-1 sysroot (glibc and the libsystemd headers, CC1-PN §7.2) comes from the Buildroot build of the bench's target
 image and is expected in `/opt/cc1-sysroot`. Until that build exists, a stand-in made from Ubuntu 24.04 arm64 packages
 can be unpacked there. The script runs inside the build container, with the sysroot directory mounted read-write; it
