@@ -12,6 +12,7 @@ import { fmtClock, laneMeta, paths, runMeta, toolIcon } from './format'
 import { FolderActions } from './Folder'
 import { errorText } from './useBoard'
 import { RoleIcon } from './RoleIcon'
+import { t as tr } from '../i18n'
 
 export const PRODUCT = 'run'
 export type OutputsTab = 'files' | 'reply' | 'task' | 'calls'
@@ -21,7 +22,7 @@ export interface OutputsTarget {
   tab?: OutputsTab | null
 }
 
-const TAB_LABEL: Record<OutputsTab, string> = { files: '产出文件', reply: '它的回复', task: '接到的任务', calls: '做了什么' }
+const TAB_LABEL: Record<OutputsTab, string> = { files: tr('board.Outputs.1'), reply: tr('board.Outputs.2'), task: tr('board.Outputs.3'), calls: tr('board.Outputs.4') }
 
 export function tabsFor(role: string, writable: boolean): OutputsTab[] {
   if (role === PRODUCT) return ['files']
@@ -38,25 +39,25 @@ export function OutputsDrawer({ api, run, target, onTarget, onClose }: { api: Ap
     const next = order[at + d]
     if (next) onTarget({ role: next })
   }
-  const title = target.role === PRODUCT ? '整个产品' : (run.roles[index]?.title ?? target.role)
+  const title = target.role === PRODUCT ? tr('board.Outputs.5') : (run.roles[index]?.title ?? target.role)
   return (
     <div className="kt-drawer-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="kt-drawer" role="dialog" aria-modal="true" aria-label={`${title}的产出`} data-testid="kt-outputs">
+      <aside className="kt-drawer" role="dialog" aria-modal="true" aria-label={tr('board.Outputs.6', { p0: title })} data-testid="kt-outputs">
         <div className="kt-drawer-top">
-          <h2>每一步的产出</h2>
+          <h2>{tr('board.Outputs.7')}</h2>
           <span className="kt-dim">{run.title}</span>
           <span className="kt-grow" />
-          <button type="button" className="kt-btn" onClick={() => step(-1)} disabled={at <= 0} aria-label="上一步">
-            ‹ 上一步
+          <button type="button" className="kt-btn" onClick={() => step(-1)} disabled={at <= 0} aria-label={tr('board.Outputs.8')}>
+            {tr('board.Outputs.9')}
           </button>
-          <button type="button" className="kt-btn" onClick={() => step(1)} disabled={at < 0 || at >= order.length - 1} aria-label="下一步">
-            下一步 ›
+          <button type="button" className="kt-btn" onClick={() => step(1)} disabled={at < 0 || at >= order.length - 1} aria-label={tr('board.Outputs.10')}>
+            {tr('board.Outputs.11')}
           </button>
-          <button ref={closeRef} type="button" className="kt-btn" onClick={onClose} aria-label="关闭产出">
+          <button ref={closeRef} type="button" className="kt-btn" onClick={onClose} aria-label={tr('board.Outputs.12')}>
             ✕
           </button>
         </div>
-        <nav className="kt-steps" aria-label="团队的每一步">
+        <nav className="kt-steps" aria-label={tr('board.Outputs.13')}>
           {run.roles.map((l, i) => (
             <button key={l.key} type="button" className={`kt-step tone-${laneMeta(l).tone}${l.key === target.role ? ' is-on' : ''}`} aria-current={l.key === target.role ? 'step' : undefined} onClick={() => onTarget({ role: l.key })} title={laneMeta(l).label}>
               <span className="kt-step-n">{i + 1}</span>
@@ -66,12 +67,12 @@ export function OutputsDrawer({ api, run, target, onTarget, onClose }: { api: Ap
           ))}
           <button type="button" className={`kt-step is-product${target.role === PRODUCT ? ' is-on' : ''}`} aria-current={target.role === PRODUCT ? 'step' : undefined} onClick={() => onTarget({ role: PRODUCT })}>
             <span aria-hidden="true">📦</span>
-            <span>整个产品</span>
+            <span>{tr('board.Outputs.5')}</span>
           </button>
         </nav>
         {run.imported && (
           <p className="kt-banner" role="note">
-            这次运行是从「{run.imported.from}」导入的，只带运行记录：每位成员的任务、回复和做了什么都在，改了哪些文件、文件内容要在原来那台 Mac 上看。
+            {tr('board.Outputs.14')}{run.imported.from}{tr('board.Outputs.15')}
           </p>
         )}
         <RolePane key={target.role} api={api} run={run} target={target} />
@@ -85,8 +86,8 @@ export function OutputsDrawer({ api, run, target, onTarget, onClose }: { api: Ap
 export function OpenSession({ slot, title }: { slot: string; title: string }) {
   const { openChat } = useChatLauncher()
   return (
-    <button type="button" className="kt-btn is-primary" onClick={() => openChat({ slotKey: slot, autoSend: false })} title={`「${title} agent」是 Kiro Crew 里的一个会话：每一步都能看，也能直接打字插话`}>
-      在 Crew 里打开会话
+    <button type="button" className="kt-btn is-primary" onClick={() => openChat({ slotKey: slot, autoSend: false })} title={tr('board.Outputs.16', { p0: title })}>
+      {tr('board.Outputs.17')}
     </button>
   )
 }
@@ -128,26 +129,26 @@ function RolePane({ api, run, target }: { api: AppApi; run: RunDetail; target: O
           <span className="kt-pane-emoji" aria-hidden="true">
             <RoleIcon role={product ? 'product' : lane?.icon || lane?.key} size={26} />
           </span>
-          <h3>{product ? '整个产品' : `${lane?.title ?? role}的产出`}</h3>
+          <h3>{product ? tr('board.Outputs.5') : tr('board.Outputs.6', { p0: lane?.title ?? role })}</h3>
           <span className={`kt-pill tone-${meta.tone}`}>{meta.label}</span>
           {data?.branch && (
-            <code className="kt-dim" title={data.base ? `和 ${data.base} 比` : undefined}>
+            <code className="kt-dim" title={data.base ? tr('board.Outputs.18', { p0: data.base }) : undefined}>
               {data.branch}
               {data.head ? ` @ ${data.head}` : ''}
             </code>
           )}
         </div>
-        {lane && <p className="kt-dim kt-pane-scope">{lane.writable.length ? `能写：${lane.writable.join('、')}` : '只读：不改任何文件'}</p>}
+        {lane && <p className="kt-dim kt-pane-scope">{lane.writable.length ? tr('board.Outputs.19', { p0: lane.writable.join(tr('common.sep')) }) : tr('board.Outputs.20')}</p>}
         {(data?.folder || lane?.session) && (
           <div className="kt-pane-folder">
             {lane?.session && <OpenSession slot={lane.session} title={lane.title} />}
             {data?.folder && <FolderActions api={api} run={run.id} role={product ? null : role} path={data.folder} />}
           </div>
         )}
-        <div className="kt-tabs" role="tablist" aria-label="看什么">
+        <div className="kt-tabs" role="tablist" aria-label={tr('board.Outputs.21')}>
           {tabs.map((t) => (
             <button key={t} type="button" role="tab" className="kt-tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {t === 'reply' && !lane?.writable.length ? '评审报告' : TAB_LABEL[t]}
+              {t === 'reply' && !lane?.writable.length ? tr('board.Outputs.22') : TAB_LABEL[t]}
               {t === 'files' && data ? <sub>{data.files.length}</sub> : null}
             </button>
           ))}
@@ -156,10 +157,10 @@ function RolePane({ api, run, target }: { api: AppApi; run: RunDetail; target: O
       <div className="kt-pane-body" role="tabpanel">
         {err && (
           <p className="kt-error" role="alert">
-            读不了：{err}
+            {tr('board.Outputs.23')}{err}
           </p>
         )}
-        {!data && !err && <p className="kt-dim">读取中…</p>}
+        {!data && !err && <p className="kt-dim">{tr('board.Outputs.24')}</p>}
         {data && tab === 'files' && <FilesTab api={api} run={run} data={data} initial={target.path ?? null} />}
         {data && (tab === 'reply' || tab === 'task' || tab === 'calls') && <AttemptTab data={data} tab={tab} />}
       </div>
@@ -183,7 +184,7 @@ function FilesTab({ api, run, data, initial }: { api: AppApi; run: RunDetail; da
     if (!sel && files[0]) setSel(files[0].path)
   }, [files, sel])
   const owners = useMemo(() => new Map(run.roles.map((l) => [l.key, l])), [run.roles])
-  if (!files.length) return <p className="kt-dim">{data.role === PRODUCT ? '还没有合进运行分支的改动。' : '它还没有提交任何文件。'}</p>
+  if (!files.length) return <p className="kt-dim">{data.role === PRODUCT ? tr('board.Outputs.25') : tr('board.Outputs.26')}</p>
   const outputs = files.filter((f) => f.output)
   const others = files.filter((f) => !f.output)
   const row = (f: OutputFile) => {
@@ -210,13 +211,13 @@ function FilesTab({ api, run, data, initial }: { api: AppApi; run: RunDetail; da
       <div className="kt-flist">
         {outputs.length > 0 && (
           <>
-            <p className="kt-flist-h">{data.role === PRODUCT ? '约定的产出' : '约定它交的'}</p>
+            <p className="kt-flist-h">{data.role === PRODUCT ? tr('board.Outputs.27') : tr('board.Outputs.28')}</p>
             <ul>{outputs.map(row)}</ul>
           </>
         )}
         {others.length > 0 && (
           <>
-            <p className="kt-flist-h">{outputs.length ? '其他改动' : '改动的文件'}</p>
+            <p className="kt-flist-h">{outputs.length ? tr('board.Outputs.29') : tr('board.Outputs.30')}</p>
             <ul>{others.map(row)}</ul>
           </>
         )}
@@ -256,15 +257,15 @@ function FileViewer({ api, run, role, path, head, file }: { api: AppApi; run: Ru
         <span className="kt-grow" />
         {markdown && (
           <button type="button" className="kt-btn is-small" aria-pressed={md === 'source'} onClick={() => setMd((m) => (m === 'rendered' ? 'source' : 'rendered'))}>
-            源码
+            {tr('board.Outputs.31')}
           </button>
         )}
-        <div className="kt-seg" role="group" aria-label="看内容还是看改动">
+        <div className="kt-seg" role="group" aria-label={tr('board.Outputs.32')}>
           <button type="button" className="kt-btn is-small" aria-pressed={view === 'content'} onClick={() => setView('content')} disabled={file?.status === 'D'}>
-            内容
+            {tr('board.Outputs.33')}
           </button>
           <button type="button" className="kt-btn is-small" aria-pressed={view === 'diff'} onClick={() => setView('diff')}>
-            改动
+            {tr('board.Outputs.34')}
           </button>
         </div>
       </div>
@@ -274,9 +275,9 @@ function FileViewer({ api, run, role, path, head, file }: { api: AppApi; run: Ru
             {err}
           </p>
         )}
-        {!got && !err && <p className="kt-dim kt-pad">读取中…</p>}
-        {got && got.binary && <p className="kt-dim kt-pad">二进制文件，不显示内容</p>}
-        {got && !got.binary && !got.text && <p className="kt-dim kt-pad">{view === 'diff' ? '没有改动' : '空文件'}</p>}
+        {!got && !err && <p className="kt-dim kt-pad">{tr('board.Outputs.24')}</p>}
+        {got && got.binary && <p className="kt-dim kt-pad">{tr('board.Outputs.35')}</p>}
+        {got && !got.binary && !got.text && <p className="kt-dim kt-pad">{view === 'diff' ? tr('board.Outputs.36') : tr('board.Outputs.37')}</p>}
         {got && !got.binary && got.text && (markdown && md === 'rendered' ? (
           <div className="kt-md msg-content">
             <MarkdownRenderer content={got.text} />
@@ -284,7 +285,7 @@ function FileViewer({ api, run, role, path, head, file }: { api: AppApi; run: Ru
         ) : (
           <CodeLines text={got.text} diff={view === 'diff'} />
         ))}
-        {got?.truncated && <p className="kt-dim kt-pad">只显示了前 300 KB</p>}
+        {got?.truncated && <p className="kt-dim kt-pad">{tr('board.Outputs.38')}</p>}
       </div>
     </div>
   )
@@ -318,15 +319,15 @@ function CodeLines({ text, diff }: { text: string; diff: boolean }) {
 function AttemptTab({ data, tab }: { data: RoleOutput; tab: 'reply' | 'task' | 'calls' }) {
   const [n, setN] = useState<number | null>(null)
   const atts = data.attempts
-  if (!atts.length) return <p className="kt-dim">它还没开工。</p>
+  if (!atts.length) return <p className="kt-dim">{tr('board.Outputs.39')}</p>
   const att = atts.find((a) => a.n === n) ?? atts[atts.length - 1]
   return (
     <div className="kt-attempt">
       {atts.length > 1 && (
-        <div className="kt-rounds" role="group" aria-label="哪一轮">
+        <div className="kt-rounds" role="group" aria-label={tr('board.Outputs.40')}>
           {atts.map((a) => (
             <button key={a.n} type="button" className="kt-btn is-small" aria-pressed={a.n === att.n} onClick={() => setN(a.n)}>
-              第 {a.n} 轮{a.label ? ` · ${a.label}` : a.kind === 'work' ? ' · 开工' : ''}
+              {tr('board.Outputs.41')} {a.n} {tr('board.Outputs.42')}{a.label ? ` · ${a.label}` : a.kind === 'work' ? tr('board.Outputs.43') : ''}
             </button>
           ))}
         </div>
@@ -343,20 +344,20 @@ function AttemptMeta({ att }: { att: OutputAttempt }) {
   const took = att.started && att.ended ? fmtClock(att.ended - att.started) : null
   return (
     <p className="kt-dim kt-attempt-meta">
-      {att.live ? '还在做' : took ? `用时 ${took}` : '没跑起来'}
-      {att.calls.length > 0 && ` · ${att.calls.length} 次工具调用`}
+      {att.live ? tr('board.Outputs.44') : took ? tr('board.Outputs.45', { p0: took }) : tr('board.Outputs.46')}
+      {att.calls.length > 0 && tr('board.Outputs.47', { p0: att.calls.length })}
       {att.credits !== null && ` · ${att.credits.toFixed(1)} credits`}
-      {att.agent && <span className="kt-mono"> · KiroCrew 子 agent {att.agent}</span>}
+      {att.agent && <span className="kt-mono"> {tr('board.Outputs.48')} {att.agent}</span>}
     </p>
   )
 }
 
 function Reply({ att }: { att: OutputAttempt }) {
-  if (att.error && !att.reply) return <p className="kt-error">没做成：{att.error}</p>
-  if (!att.reply) return <p className="kt-dim">{att.live ? '它还在做，回复还没出来。' : '没有留下回复。'}</p>
+  if (att.error && !att.reply) return <p className="kt-error">{tr('board.Outputs.49')}{att.error}</p>
+  if (!att.reply) return <p className="kt-dim">{att.live ? tr('board.Outputs.50') : tr('board.Outputs.51')}</p>
   return (
     <>
-      {att.error && <p className="kt-error">没做成：{att.error}</p>}
+      {att.error && <p className="kt-error">{tr('board.Outputs.49')}{att.error}</p>}
       <div className="kt-md kt-reply msg-content" data-testid="kt-reply">
         <MarkdownRenderer content={att.reply} />
       </div>
@@ -365,10 +366,10 @@ function Reply({ att }: { att: OutputAttempt }) {
 }
 
 function Calls({ att }: { att: OutputAttempt }) {
-  if (!att.calls.length) return <p className="kt-dim">{att.live ? '还没有工具调用。' : '没有记下工具调用。'}</p>
+  if (!att.calls.length) return <p className="kt-dim">{att.live ? tr('board.Outputs.52') : tr('board.Outputs.53')}</p>
   const t0 = att.started ?? att.calls[0].at
   return (
-    <ol className="kt-calls" aria-label="它做了什么">
+    <ol className="kt-calls" aria-label={tr('board.Outputs.54')}>
       {att.calls.map((c, i) => (
         <li key={`${c.at}-${i}`}>
           <time className="kt-mono kt-dim">{fmtClock(Math.max(0, c.at - t0))}</time>

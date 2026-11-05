@@ -8,6 +8,7 @@
  *   ?fixture=running|finished|started|trouble|failed|multi           the snapshot the stub serves (the web team of the tests)
  *   ?view=score        the 评分卡, from the run of vstatd-release
  *   ?view=item&run=<id>  交付详情 (GET /runs/<id>/flow) of the run of vstatd-release
+ *   ?lang=zh|en        the board's language (what 中文 / English in the app bar keeps)
  *   (every run's 审计记录 is GET /runs/<id>/audit of that run; the home page's bench actions GET /audit/bench)
  *   ?simulate=1        play scenario() forward, one snapshot every 3.2 s (?stepMs=…); ?step=n freezes it
  *   ?mode=light        the kiro-light theme (default kiro-dark)
@@ -23,6 +24,8 @@ import { FIXTURES, asRun, auditOf, benchAuditOf, backlogOf, clone, knowledgeOf, 
 import type { Board, RunDetail, TeamEvent } from '../src/types'
 import realRun from '../src/test/fixtures/replay-im.json'
 import { replayAt, replaySpan } from '../src/board/timeline'
+import { t as tr } from '../src/i18n'
+import { LangSwitch } from '../src/AppBar'
 
 const q = new URLSearchParams(location.search)
 const gate = q.get('fixture') === 'gate'
@@ -81,7 +84,7 @@ setApiRoutes({
   'GET /api/apps/vstatd-team/knowledge/file*': (_body, path) => knowledgeTextOf(new URL(path, location.origin).searchParams.get('path') ?? ''),
   'POST /api/apps/vstatd-team/runs': (body) => {
     const requirement = (body as { requirement?: string } | null)?.requirement?.trim()
-    const title = requirement ? requirement.split('\n')[0].slice(0, 24) : '活动报名小站'
+    const title = requirement ? requirement.split('\n')[0].slice(0, 24) : tr('preview.main.1')
     override = shiftTimes(asRun(startedBoard(), 'r1007b', title, 0), Date.now() / 1000 - startedBoard().at)
     return { id: 'r1007b' }
   },
@@ -95,7 +98,7 @@ setApiRoutes({
         for (const l of r.roles) {
           if (['running', 'fixing', 'stalled', 'awaiting_approval', 'queued'].includes(l.status)) {
             l.status = 'failed'
-            if (l.agent) l.agent.error = '运行被停止'
+            if (l.agent) l.agent.error = tr('preview.main.2')
           }
         }
         b.runs = b.runs.map((c) => (c.id === r.id ? { ...c, status: 'stopped', ended_at: b.at } : c))
@@ -106,7 +109,7 @@ setApiRoutes({
   },
   'GET /api/apps/vstatd-team/probe': () => ({
     kirocrew_version: 'preview',
-    subagent_manager: 'SubagentManager（预览：假数据）',
+    subagent_manager: tr('preview.main.3'),
     manager_methods: ['all_agents', 'spawn'],
     agents: [],
     elapsed_ms: 0.4,
@@ -131,7 +134,7 @@ function Bar() {
   }, [])
   return (
     <div className="pv-bar">
-      <b>看板预览</b>
+      <b>{tr('preview.main.4')}</b>
       {(Object.keys(FIXTURES) as FixtureName[]).map((f) => (
         <a key={f} href={href({ fixture: f, simulate: null, step: null })} aria-current={!simulate && f === fixture}>
           {f}
@@ -142,12 +145,13 @@ function Bar() {
       </a>
       {simulate && (
         <span className="pv-step">
-          第 {step + 1}/{steps.length} 拍{frozen === null && step < steps.length - 1 ? ` · 每 ${(STEP_MS / 1000).toFixed(1)} 秒一拍` : ''}
+          {tr('preview.main.5')} {step + 1}/{steps.length} {tr('preview.main.6')}{frozen === null && step < steps.length - 1 ? tr('preview.main.7', { p0: (STEP_MS / 1000).toFixed(1) }) : ''}
         </span>
       )}
-      {simulate && <a href={href({ simulate: '1', step: null })}>重新播放</a>}
-      <a href={href({ mode: mode === 'dark' ? 'light' : 'dark' })}>{mode === 'dark' ? '换亮色' : '换暗色'}</a>
-      <span>数据是 fixture，接口是 src/test/stubs 里的假实现</span>
+      {simulate && <a href={href({ simulate: '1', step: null })}>{tr('preview.main.8')}</a>}
+      <a href={href({ mode: mode === 'dark' ? 'light' : 'dark' })}>{mode === 'dark' ? tr('preview.main.9') : tr('preview.main.10')}</a>
+      <span>{tr('preview.main.11')}</span>
+      <LangSwitch />
     </div>
   )
 }

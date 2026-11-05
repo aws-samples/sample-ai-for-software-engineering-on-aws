@@ -14,6 +14,7 @@
  */
 import type { Lane } from '../types'
 import { PHASES } from './format'
+import { t as tr } from '../i18n'
 
 export const GW = 1320
 export const NODE_W = 184
@@ -373,7 +374,7 @@ export function layoutGraph(roles: RoleLike[], edgeList: EdgeList): GraphLayout 
       phases.push({ ...op, x1: round(last + 16), x2: round(W - 20), used: false })
     }
     // AI-DLC's phase 0: choosing the flow, staffing the team, setting up the repository — the orchestrator's part
-    if (phases.length) phases.unshift({ key: 'init', n: '0', title: '初始化', en: 'Initialization', x1: 8, x2: round(phases[0].x1 - 8), used: true })
+    if (phases.length) phases.unshift({ key: 'init', n: '0', title: tr('board.layout.1'), en: 'Initialization', x1: 8, x2: round(phases[0].x1 - 8), used: true })
   }
   const orch = phased ? { x: round(PAD_X + ORCH_W / 2 - 10), y: TOP + ORCH_BOX.h / 2 - 6 } : null
   return { width: W, height: railY + 44, nodes, stages, edges, rail: { x1: PAD_X, x2: station.x - STATION_R, y: railY }, station, mergeX, phases, orch }

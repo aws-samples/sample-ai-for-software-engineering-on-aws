@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import audit, board, checks, flow, library, outputs, paths, readiness, roster, scorecard
+from . import audit, board, checks, flow, library, messages, outputs, paths, readiness, roster, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -247,7 +247,7 @@ class Service:
             if kb_id:  # the roles search this company's source only (two companies' 《品牌规范》 would both answer)
                 state["knowledge_source_id"] = kb_id
             run = TeamRun(state, self._deps)
-            run.emit("run", f"运行开始：{state['title']}")
+            run.say("run", "run.start", {"title": state["title"]})
             if team.get("workspace") and any(r.get("optional") for r in team["roles"]):
                 await self.refresh_crew()  # 在职 is who is on 「代理」 now: a member added a moment ago counts
                 run.leave_out_unhired(self.member_names(team["workspace"]))
@@ -321,7 +321,7 @@ class Service:
         if (decision == "revise" and pending and not spec.get("writable")
                 and not team_mod.review_targets(note, run.team["roles"])
                 and not team_mod.review_targets(run.overrule_review(role), run.team["roles"])):
-            raise AppError("退回要写明打回给谁，比如「打回：前端开发 #2」", "no_target")
+            raise AppError("退回要写明打回给谁，比如「打回：前端开发 #2」（也可以写 Send back: 和角色的英文名）", "no_target")
         if not await run.gate(role, decision, note, delivery, answers, risk if decision == "revise" else None, by=by):
             raise AppError("这个角色现在没有在等人批准", "not_gated", 409)
         return {"ok": True, "run": run.rid, "role": role, "decision": decision, "status": run.s["status"]}
@@ -340,8 +340,8 @@ class Service:
         run.s["signoff"] = {"by": by, "note": note, "at": self._deps.now(), "tests": f"{t['passed']}/{t['total']}"}
         pr = run.pr() or {}
         run.s["signoff"]["merged"] = await run.merge_pr()
-        merged = f"PR #{pr.get('number')} 合入 main（{run.s['signoff']['merged']}）" if run.s["signoff"]["merged"] else ""
-        run.emit("signoff", f"{by} 签字放行" + (f"：{note}" if note else "") + (f"；{merged}" if merged else ""), role=None)
+        merged = run.s["signoff"]["merged"]
+        run.say("signoff", "signoff", {"by": by, "note": note, "pr": pr.get("number") if merged else None, "merged": merged or None})
         await run.save()
         if not run.s.get("imported"):  # results/audit.{md,json} beside the rerun's evidence, named on the sign-off record
             with contextlib.suppress(OSError):
@@ -349,10 +349,10 @@ class Service:
                 await run.save()
         return {"ok": True, "run": run.rid, "signoff": run.s["signoff"]}
 
-    def _trail(self, run: TeamRun) -> dict[str, Any]:
-        """Blocking: the run's audit trail, its text scrubbed as /events sends it."""
+    def _trail(self, run: TeamRun, lang: str = "zh") -> dict[str, Any]:
+        """Blocking: the run's audit trail in *lang*, its text scrubbed as /events sends it."""
         evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
-        out = audit.build(run.s, evs, scorecard.records())
+        out = audit.build(run.s, evs, scorecard.records(), lang)
         out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
         return out
 
@@ -367,14 +367,15 @@ class Service:
             out[name] = hashlib.sha256(data).hexdigest()
         return out
 
-    async def audit(self, rid: str) -> dict[str, Any]:
-        """审计记录: every decision and action of the run, from its events and the bench's action record."""
+    async def audit(self, rid: str, lang: str = "zh") -> dict[str, Any]:
+        """审计记录: every decision and action of the run, from its events and the bench's action record (zh or en;
+        the audit.md written at sign-off is always zh, its sha256 is on the sign-off record)."""
         run = self._run(rid)
-        return await asyncio.to_thread(self._trail, run)
+        return await asyncio.to_thread(self._trail, run, lang)
 
-    async def audit_bench(self) -> dict[str, Any]:
+    async def audit_bench(self, lang: str = "zh") -> dict[str, Any]:
         """The bench's requests no run made (the baseline set up at the console or on the board), and their outcome."""
-        out = await asyncio.to_thread(lambda: audit.bench_only(scorecard.records()))
+        out = await asyncio.to_thread(lambda: audit.bench_only(scorecard.records(), lang))
         out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
         return out
 
@@ -452,7 +453,8 @@ class Service:
         """Every event of a run, for the replay (the board carries only the latest ones)."""
         run = self._run(rid)
         evs = await asyncio.to_thread(store_mod.all_events, self.data_dir / "runs" / run.rid / "events.jsonl")
-        return {"run": run.rid, "events": [{**e, "text": self.scrub(str(e.get("text", "")))} for e in evs]}
+        return {"run": run.rid, "events": [{**e, "text": self.scrub(str(e.get("text", ""))),
+                                            "params": messages.scrubbed(e.get("params"), self.scrub)} for e in evs]}
 
     async def flow(self, rid: str) -> dict[str, Any]:
         """交付详情: where the run's time went, from its state, its events and the bench's action record."""
@@ -461,7 +463,11 @@ class Service:
         def read() -> dict[str, Any]:
             evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
             out = flow.build(run.s, evs, scorecard.records(), time.time())
-            out["marks"] = [{**m, "label": self.scrub(m["label"])} for m in out["marks"]]  # event text, as /events sends it
+            # event text and params, as /events sends them
+            out["marks"] = [{**m, "label": self.scrub(m["label"]), "params": messages.scrubbed(m.get("params"), self.scrub)}
+                            for m in out["marks"]]
+            out["segments"] = [{**x, "label": self.scrub(x["label"]), "params": messages.scrubbed(x.get("params"), self.scrub)}
+                               for x in out["segments"]]
             return out
         return await asyncio.to_thread(read)
 

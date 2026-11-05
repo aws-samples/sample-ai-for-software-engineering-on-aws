@@ -449,8 +449,8 @@ to the repository. They are used as tools and not redistributed. The bench's own
 
 The [Kiro Crew app](#the-kiro-crew-app) needs, besides the bench: a Mac (`setup.sh` installs into the Kiro Crew desktop
 app), Kiro Crew running and signed in, Docker, git, Python 3 and Node.js 22 or newer to build the board. Its manifest
-asks for Kiro Crew 0.8.0 or newer; it has not run a delivery end to end yet, so no Kiro Crew version is listed as
-tested.
+asks for Kiro Crew 0.8.0 or newer. The app ran one delivery end to end, run `r11032637` on 2026-11-03; its records do
+not name the Kiro Crew version, so none is listed as tested.
 
 The reference project builds in the container of `reference-project/tools/Dockerfile`, based on the `ubuntu:24.04`
 image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own licence, recorded in

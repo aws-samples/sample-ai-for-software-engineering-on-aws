@@ -13,10 +13,12 @@
  * was hidden (a quiet catch-up), one whose events went backwards (the record restarted), and any event
  * more than LATE_S older than the snapshot (it still shows in the feed, it just does not fly).
  */
+import { evText } from '../i18n/events'
 import type { LaneStatus, Merge, RunDetail, TeamEvent, TestCase } from '../types'
 import type { Item, Prio, PTone, Shape } from './engine'
 import { clip, parseScore, runMeta } from './format'
 import { ORCH, RUN, TESTS } from './layout'
+import { t as tr } from '../i18n'
 
 export const LATE_S = 30
 export const MAX_ITEMS = 24
@@ -77,9 +79,9 @@ interface Ctx {
 /** What a handoff hands over, from its text when the event carries no data:
  * 「验收标准交给架构师」 → 验收标准; 「产品经理把 验收标准 交给架构师」 → 验收标准. */
 export function handoffLabel(text: string): string | null {
-  const i = text.indexOf('交给')
+  const i = text.indexOf('交给') // i18n-keep: parses an older event's Chinese text
   let what = i > 0 ? text.slice(0, i) : ''
-  const ba = what.indexOf('把')
+  const ba = what.indexOf('把') // i18n-keep
   if (ba >= 0) what = what.slice(ba + 1)
   what = what.trim()
   return what ? clip(what, 9) : null
@@ -89,7 +91,7 @@ export function handoffLabel(text: string): string | null {
 export function bounceLabel(text: string): string | null {
   const acs = text.match(/AC-\d+/g)
   if (!acs?.length) return null
-  return acs.length > 2 ? `${acs.slice(0, 2).join('、')}…` : acs.join('、')
+  return acs.length > 2 ? `${acs.slice(0, 2).join(tr('board.diff.1'))}…` : acs.join(tr('board.diff.1'))
 }
 
 /** An event as an engine item; null when nothing on the graph stands for it. */
@@ -118,7 +120,7 @@ export function eventItem(e: TeamEvent, runId: string, ctx: Ctx): Item | null {
     case 'bounce': {
       const b = role(e.to) ?? role(e.role)
       const cases = Array.isArray(e.data?.cases) ? e.data.cases.filter((c): c is string => typeof c === 'string') : []
-      const label = cases.length ? (cases.length > 2 ? `${cases.slice(0, 2).join('、')}…` : cases.join('、')) : bounceLabel(e.text)
+      const label = cases.length ? (cases.length > 2 ? `${cases.slice(0, 2).join(tr('board.diff.1'))}…` : cases.join(tr('board.diff.1'))) : bounceLabel(e.text)
       if (e.from === 'person') return blip(b, 'bounce', 'cross', 3) // a person sent it back at a gate
       const src = role(e.from) ?? (e.from === RUN ? RUN : TESTS) // a review bounce leaves the reviewer
       return b ? { ...base, from: src, to: b, tone: 'bounce', shape: 'comet', prio: 3, label } : blip(TESTS, 'fail', 'cross', 3)
@@ -225,13 +227,13 @@ export function diffRuns(prev: RunDetail | null, next: RunDetail, opts: DiffOpti
 /** One sentence for the polite live region: the most important change of this poll (or null). */
 function announce(prev: RunDetail, next: RunDetail, fresh: TeamEvent[]): string | null {
   const parts: string[] = []
-  if (prev.status !== next.status) parts.push(`运行${runMeta(next.status).label}`)
-  if (prev.tests.passed !== next.tests.passed || prev.tests.total !== next.tests.total) parts.push(`测试 ${prev.tests.passed}/${prev.tests.total} → ${next.tests.passed}/${next.tests.total}`)
+  if (prev.status !== next.status) parts.push(tr('board.diff.2', { p0: runMeta(next.status).label }))
+  if (prev.tests.passed !== next.tests.passed || prev.tests.total !== next.tests.total) parts.push(tr('board.diff.3', { p0: prev.tests.passed, p1: prev.tests.total, p2: next.tests.passed, p3: next.tests.total }))
   const loud = [...fresh].reverse().find((e) => e.kind === 'bounce' || e.kind === 'conflict' || e.kind === 'violation' || e.kind === 'failed')
-  if (loud) parts.push(loud.text)
+  if (loud) parts.push(evText(loud, next.roles))
   if (parts.length < 2) {
     const calm = [...fresh].reverse().find((e) => e.kind === 'merged' || e.kind === 'handoff' || e.kind === 'done')
-    if (calm) parts.push(calm.text)
+    if (calm) parts.push(evText(calm, next.roles))
   }
-  return parts.length ? parts.slice(0, 2).join('；') : null
+  return parts.length ? parts.slice(0, 2).join(tr('board.diff.4')) : null
 }

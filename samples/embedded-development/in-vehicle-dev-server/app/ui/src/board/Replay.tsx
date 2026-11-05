@@ -12,6 +12,7 @@ import { fmtClock, paths } from './format'
 import type { SnapshotClock } from './hooks'
 import { replayAt, replaySpan, type ReplaySpan } from './timeline'
 import { errorText } from './useBoard'
+import { t as tr } from '../i18n'
 
 export const SPEEDS = [10, 30, 60, 120] as const
 export const TICK_MS = 250
@@ -78,7 +79,7 @@ export function useReplay(api: AppApi, run: RunDetail | null, onDiff: (d: BoardD
         prev.current = null
         setSt({ ...OFF, id, events, t: sp.start, speed: pickSpeed(sp.end - sp.start), playing: true })
       })
-      .catch((e) => setSt({ ...OFF, error: `回放没打开：${errorText(e)}` }))
+      .catch((e) => setSt({ ...OFF, error: tr('board.Replay.1', { p0: errorText(e) }) }))
   }, [api, run])
   const exit = useCallback(() => {
     prev.current = null
@@ -130,21 +131,21 @@ export function useReplay(api: AppApi, run: RunDetail | null, onDiff: (d: BoardD
 
 /** The replay's controls, under the top bar: what is playing, how far, how fast. */
 export function ReplayBar({ rp, projection }: { rp: ReplayHandle; projection: boolean }) {
-  if (rp.loading) return <div className="kt-replay" role="status">正在读这次运行的记录…</div>
+  if (rp.loading) return <div className="kt-replay" role="status">{tr('board.Replay.2')}</div>
   if (rp.error) return <div className="kt-banner is-error" role="alert">{rp.error}</div>
   if (!rp.run || !rp.span) return null
   const { start, end } = rp.span
   const ended = rp.t >= end
   return (
-    <div className="kt-replay" role="group" aria-label="回放">
-      <span className="kt-pill tone-info">回放</span>
-      <button type="button" className="kt-btn kt-btn-icon" onClick={rp.toggle} aria-label={rp.playing ? '暂停' : ended ? '从头再放' : '播放'} title={rp.playing ? '暂停' : ended ? '从头再放' : '播放'}>
+    <div className="kt-replay" role="group" aria-label={tr('board.Replay.3')}>
+      <span className="kt-pill tone-info">{tr('board.Replay.3')}</span>
+      <button type="button" className="kt-btn kt-btn-icon" onClick={rp.toggle} aria-label={rp.playing ? tr('board.Replay.4') : ended ? tr('board.Replay.5') : tr('board.Replay.6')} title={rp.playing ? tr('board.Replay.4') : ended ? tr('board.Replay.5') : tr('board.Replay.6')}>
         {rp.playing ? '⏸' : ended ? '↺' : '▶'}
       </button>
       <input
         type="range"
         className="kt-replay-scrub"
-        aria-label="回放进度"
+        aria-label={tr('board.Replay.7')}
         min={start}
         max={end}
         step={1}
@@ -155,7 +156,7 @@ export function ReplayBar({ rp, projection }: { rp: ReplayHandle; projection: bo
         {fmtClock(Math.round(rp.t - start))} / {fmtClock(Math.round(end - start))}
       </span>
       {!projection && (
-        <span className="kt-replay-speeds" role="radiogroup" aria-label="倍速">
+        <span className="kt-replay-speeds" role="radiogroup" aria-label={tr('board.Replay.8')}>
           {SPEEDS.map((s) => (
             <button key={s} type="button" role="radio" aria-checked={rp.speed === s} className={`kt-btn${rp.speed === s ? ' is-on' : ''}`} onClick={() => rp.setSpeed(s)}>
               {s}×
@@ -163,9 +164,9 @@ export function ReplayBar({ rp, projection }: { rp: ReplayHandle; projection: bo
           ))}
         </span>
       )}
-      <span className="kt-dim kt-replay-note">{ended ? '放完了：下面是这次运行最后的样子' : '按这次运行的记录重放，不调用 agent'}</span>
+      <span className="kt-dim kt-replay-note">{ended ? tr('board.Replay.9') : tr('board.Replay.10')}</span>
       <button type="button" className="kt-btn" onClick={rp.exit}>
-        退出回放
+        {tr('board.Replay.11')}
       </button>
     </div>
   )

@@ -159,13 +159,13 @@ results, the work tree, the server user's home and a host path, to reach the net
 result; it also sets a `core.fsmonitor` hook. It asserts that none of this gets through and that no background
 process still writes after the calls return, then deletes its folder.
 
-Last run on 2026-11-03 on an Ubuntu 24.04 build host with Docker 29.8.2, git 2.43.0 and MCP Python SDK 2.3.0:
-48 guardrail tests OK. The smoke test's calls returned as expected over stdio, each in its container; `checks/build.sh`
-judged the current release FAIL on the missing `<systemd/sd-daemon.h>`, which is the toolchain difficulty the agents
-are meant to repair, and `checks/release.sh` then found every input the published build result recorded. The probe's
-16 checks held: it reached neither the network nor any path outside the build folder of its call, its background
-writers stopped with their containers, and no forged result was published. The checks' own runs are in
-[`rehearsal/check-examples/`](../../rehearsal/check-examples/).
+Last run on 2026-11-03 on an Ubuntu 24.04 build host with Docker 29.8.2, git 2.43.0 and MCP Python SDK 2.3.0: 48
+guardrail tests OK (49 on main as of 2026-11-05, OK on the same host). The smoke test's calls returned as expected
+over stdio, each in its container; `checks/build.sh` judged the current release FAIL on the missing
+`<systemd/sd-daemon.h>`, which is the toolchain difficulty the agents are meant to repair, and `checks/release.sh`
+then found every input the published build result recorded. The probe's 16 checks held: it reached neither the network
+nor any path outside the build folder of its call, its background writers stopped with their containers, and no forged
+result was published. The checks' own runs are in [`rehearsal/check-examples/`](../../rehearsal/check-examples/).
 
 ## Prerequisites, cost and cleanup
 

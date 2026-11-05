@@ -9,21 +9,21 @@ import { FLOW } from './flow'
 import type { AuditEntry } from '../types'
 
 const API = '/api/apps/vstatd-team'
-const e = (at: number, actor: AuditEntry['actor'], step: string, what: string, evidence = '', who = ''): AuditEntry =>
-  ({ at, iso: '', seq: null, actor, who, step, what, evidence })
+const e = (at: number, actor: AuditEntry['actor'], step: string, what: string, evidence = '', who = '', flags: AuditEntry['flags'] = {}): AuditEntry =>
+  ({ at, iso: '', seq: null, actor, who, step, what, evidence, flags })
 
 describe('人机分工', () => {
   test('each cell counts what that actor did at that step, with its times and figures from the evidence', () => {
     const d = divisionOf([
-      e(100, 'person', 'gate-start', '人批准了开工', 'Q1=B（与建议不同）；Q2=A；Q3=A'),
+      e(100, 'person', 'gate-start', '人批准了开工', 'Q1=B（与建议不同）；Q2=A；Q3=A', '', { differs: 1 }),
       e(50, 'agent', 'triage', '分诊完成', 'F-001 F-002 VSTATD-IF-3.2'),
       e(60, 'agent', 'triage', '分诊提议分工', 'F-003'),
       e(70, 'agent', 'triage', '第三条'),
       e(200, 'app', 'before', '测试 4/5', 'build=FAIL static=PASS'),
       e(300, 'app', 'before', '测试 5/5', 'build=PASS static=PASS'),
-      e(400, 'person', 'bench', '看板批准部署', '', 'Kiro Crew 看板（you，vstatd-team）'),
-      e(410, 'person', 'bench', '操作台批准回放', '', 'you@mac (/dev/ttys003)'),
-      e(420, 'bench', 'bench', '部署结果 ok：installed'),
+      e(400, 'person', 'bench', '看板批准部署', '', 'Kiro Crew 看板（you，vstatd-team）', { where: 'board' }),
+      e(410, 'person', 'bench', '操作台批准回放', '', 'you@mac (/dev/ttys003)', { where: 'console' }),
+      e(420, 'bench', 'bench', '部署结果 ok：installed', '', '', { result: 'ok' }),
       e(10, 'person', '', '运行开始'),
     ])
     expect(d['gate-start'].person).toMatchObject({ count: 1, first: 100, last: 100, notes: ['逐题回答 3 题，1 题改了建议'] })
@@ -33,6 +33,17 @@ describe('人机分工', () => {
     expect(d.bench.bench.notes).toEqual(['动作完成 1 次'])
     expect(d.triage.person).toMatchObject({ count: 0, first: null, lines: [], notes: [] })
     expect(Object.keys(d)).toEqual(FLOW.map((s) => s.key)) // the step-less run start is in no column
+  })
+
+  test('the figures come from the entries\' flags, not their words: an English trail counts the same', () => {
+    const d = divisionOf([
+      e(100, 'person', 'gate-start', 'The person approved Start', 'Q1=B (differs from the proposal); Q2=A', '', { differs: 1 }),
+      e(400, 'person', 'bench', 'approved deploy on the board', '', 'Kiro Crew 看板（you，vstatd-team）', { where: 'board' }),
+      e(420, 'bench', 'bench', 'deploy result ok: installed', '', '', { result: 'ok' }),
+    ])
+    expect(d['gate-start'].person.notes).toEqual(['逐题回答 2 题，1 题改了建议'])
+    expect(d.bench.person.notes).toEqual(['看板上决定 1 次'])
+    expect(d.bench.bench.notes).toEqual(['动作完成 1 次'])
   })
 
   test('the planned grid splits a shared step between its actors', () => {

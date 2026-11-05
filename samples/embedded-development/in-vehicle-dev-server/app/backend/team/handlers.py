@@ -166,23 +166,31 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     async def run_flow(request: Any) -> Any:
         return kit.json(await svc.flow(str(request.match_info.get("rid", ""))))
 
+    def lang_of(request: Any) -> str:
+        lang = request.query.get("lang") or "zh"
+        if lang not in ("zh", "en"):
+            raise AppError("lang 只能是 zh 或 en", "invalid_lang")
+        return lang
+
     async def run_audit(request: Any) -> Any:
-        trail = await svc.audit(str(request.match_info.get("rid", "")))
-        return download(request, trail, f"audit-{trail['run']}")
+        lang = lang_of(request)
+        trail = await svc.audit(str(request.match_info.get("rid", "")), lang)
+        return download(request, trail, f"audit-{trail['run']}", lang)
 
     async def bench_audit(request: Any) -> Any:
-        return download(request, {"run": "", "title": "台架动作（不属于任何运行）", "requirement": "", "team": "", "base": "",
-                                  "status": "", **await svc.audit_bench()}, "audit-bench")
+        lang = lang_of(request)
+        return download(request, {"run": "", "title": audit_mod.WORDS[lang]["bench_title"], "requirement": "", "team": "", "base": "",
+                                  "status": "", **await svc.audit_bench(lang)}, "audit-bench", lang)
 
-    def download(request: Any, trail: dict[str, Any], name: str) -> Any:
+    def download(request: Any, trail: dict[str, Any], name: str, lang: str = "zh") -> Any:
         fmt = request.query.get("format") or ""
         if fmt not in ("", "md", "json"):
             raise AppError("format 只能是 md 或 json", "invalid_format")
         if not fmt:
             return kit.json(trail)
-        text = audit_mod.markdown(trail) if fmt == "md" else audit_mod.as_json(trail)
+        text = audit_mod.markdown(trail, lang) if fmt == "md" else audit_mod.as_json(trail)
         return web.Response(text=text, content_type="text/markdown" if fmt == "md" else "application/json", charset="utf-8",
-                            headers={"Content-Disposition": f'attachment; filename="{name}.{fmt}"'})
+                            headers={"Content-Disposition": f'attachment; filename="{name}{".en" if lang == "en" else ""}.{fmt}"'})
 
     async def gate(request: Any) -> Any:
         body = await kit.body(request)

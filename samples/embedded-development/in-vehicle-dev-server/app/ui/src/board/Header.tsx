@@ -20,6 +20,7 @@ import { ReadinessPanel, ReadinessSummary, useReadiness } from './FlowStrip'
 import { BenchAudit } from './Audit'
 import { KnowledgeHome } from './Knowledge'
 import { BacklogHome } from './Backlog'
+import { t as tr } from '../i18n'
 
 // ---------------------------------------------------------------------------------------------
 // the top bar
@@ -57,7 +58,7 @@ export interface TopBarProps {
 }
 
 /** What the PR says on the board: 待合并 until a person signs the run off, then merged into main here (or signed only, imported). */
-export const PR_STATE: Record<string, string> = { open: '待合并', merged: '已合并', signed: '已签字放行' }
+export const PR_STATE: Record<string, string> = { open: tr('board.Header.1'), merged: tr('board.Header.2'), signed: tr('board.Header.3') }
 
 export function TopBar({ board, run, projection, follow, startOpen, onSelect, onProjection, onFollow, onStart, onStop, onOutputs, onRetry, onFolder, onCleanup, onHide, onReplay, onDetail, inApp = false, replaying = false, folderOpen = false }: TopBarProps) {
   const failed = run ? run.roles.filter((l) => l.status === 'failed') : []
@@ -66,12 +67,12 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
   return (
     <header className="kt-top">
       <div className="kt-title">
-        {!inApp && <h1>AIDLC-Embedded团队</h1>}
+        {!inApp && <h1>{tr('board.Header.4')}</h1>}
         {run && meta && (
           <>
             <span className="kt-run-title" title={run.requirement || run.title}>{run.delivery?.name || run.title}</span>
             {run.issue && (
-              <span className="kt-pill tone-info kt-mono" data-testid="kt-issue" title={`Issue ${run.issue.id} · ${run.issue.kind} · ${run.issue.reporter}提出`}>
+              <span className="kt-pill tone-info kt-mono" data-testid="kt-issue" title={tr('board.Header.5', { p0: run.issue.id, p1: run.issue.kind, p2: run.issue.reporter })}>
                 {run.issue.id}
               </span>
             )}
@@ -80,12 +81,12 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
               {meta.label}
             </span>
             {run.imported && (
-              <span className="kt-pill tone-info" title={`这次运行是在「${run.imported.from}」上跑的，导入到这里来看和回放；代码和会话留在那台 Mac 上`}>
-                导入 · {run.imported.from}
+              <span className="kt-pill tone-info" title={tr('board.Header.6', { p0: run.imported.from })}>
+                {tr('board.Header.7')} {run.imported.from}
               </span>
             )}
             {!projection && run.pr ? (
-              <span className="kt-run-meta kt-mono" data-testid="kt-pr" title={`${run.pr.files} 个文件 · +${run.pr.added} −${run.pr.removed} · 检查 ${run.pr.checks}${run.pr.review ? ` · ${run.pr.review}` : ''}`}>
+              <span className="kt-run-meta kt-mono" data-testid="kt-pr" title={tr('board.Header.8', { p0: run.pr.files, p1: run.pr.added, p2: run.pr.removed, p3: run.pr.checks, p4: run.pr.review ? ` · ${run.pr.review}` : '' })}>
                 PR #{run.pr.number} · {run.pr.head} → {run.pr.base} · {PR_STATE[run.pr.state]}
               </span>
             ) : (
@@ -100,67 +101,67 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
       </div>
       <div className="kt-actions">
         {!projection && runs.length > 1 && run && (
-          <select className="kt-select" aria-label="选择运行" value={run.id} onChange={(e) => onSelect(e.target.value)}>
+          <select className="kt-select" aria-label={tr('board.Header.9')} value={run.id} onChange={(e) => onSelect(e.target.value)}>
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name || r.title}{r.issue ? `（${r.issue}）` : ''} · {r.imported ? '导入 · ' : ''}{runMeta(r.status).label} · 测试 {r.tests.passed}/{r.tests.total}
+                {r.name || r.title}{r.issue ? tr('board.Header.10', { p0: r.issue }) : ''} · {r.imported ? tr('board.Header.11') : ''}{runMeta(r.status).label} {tr('board.Header.12')} {r.tests.passed}/{r.tests.total}
               </option>
             ))}
           </select>
         )}
         {!projection && !replaying && run && onHide && !isRunActive(run.status) && (
-          <button type="button" className="kt-btn kt-btn-icon" onClick={() => onHide(run.id)} title="把这次运行从列表里删掉（记录和代码留在这台 Mac 上）" aria-label="从列表里删除这次运行">
+          <button type="button" className="kt-btn kt-btn-icon" onClick={() => onHide(run.id)} title={tr('board.Header.13')} aria-label={tr('board.Header.14')}>
             🗑
           </button>
         )}
         {!projection && !replaying && run && onDetail && (
-          <button type="button" className="kt-btn" onClick={() => onDetail(run.id)} title="这次运行的时间花在哪：agent 在做、等人批准、等操作台、跑检查，每一段都是记录里量出来的">
-            交付详情
+          <button type="button" className="kt-btn" onClick={() => onDetail(run.id)} title={tr('board.Header.15')}>
+            {tr('board.Header.16')}
           </button>
         )}
         {run && onReplay && !replaying && !isRunActive(run.status) && run.events.length > 0 && (
-          <button type="button" className="kt-btn" onClick={onReplay} title="按这次运行的记录从头重放：谁在什么时候干了什么、哪里被打回、测试怎么由红变绿。不调用 agent，不花 credits">
-            ▶ 回放
+          <button type="button" className="kt-btn" onClick={onReplay} title={tr('board.Header.17')}>
+            {tr('board.Header.18')}
           </button>
         )}
         {!projection && !replaying && board && (board.runs.length > 0 || run) && (
           <button type="button" className="kt-btn is-primary" aria-expanded={startOpen} onClick={onStart}>
-            新需求
+            {tr('board.Header.19')}
           </button>
         )}
         {!projection && !replaying && run && isRunActive(run.status) && (
           <button type="button" className="kt-btn is-danger" onClick={onStop}>
-            停止
+            {tr('board.Header.20')}
           </button>
         )}
         {!projection && !replaying && onCleanup && board && board.runs.length > 0 && !board.runs.some((r) => isRunActive(r.status)) && (
-          <button type="button" className="kt-btn" onClick={onCleanup} title="删掉已结束的运行在 Kiro Crew 侧栏里开的会话（签过字的运行保留，回放时还能打开）；运行记录和代码都保留">
-            清理已结束的会话
+          <button type="button" className="kt-btn" onClick={onCleanup} title={tr('board.Header.21')}>
+            {tr('board.Header.22')}
           </button>
         )}
         {!projection && !replaying && !run?.imported && onRetry && failed.length > 0 && (
-          <button type="button" className="kt-btn is-danger is-solid" onClick={onRetry} title={`再给失败的角色一轮：${failed.map((l) => l.title).join('、')}`}>
-            ↻ 重试失败的 {failed.length} 个角色
+          <button type="button" className="kt-btn is-danger is-solid" onClick={onRetry} title={tr('board.Header.23', { p0: failed.map((l) => l.title).join(tr('common.sep')) })}>
+            {tr('board.Header.24')} {failed.length} {tr('board.Header.25')}
           </button>
         )}
         {!projection && run && !run.imported && onFolder && (
-          <button type="button" className="kt-btn" aria-expanded={folderOpen} onClick={onFolder} title="项目在这台 Mac 上的哪个文件夹：在 Finder 或 Kiro 里打开">
-            📁 文件夹
+          <button type="button" className="kt-btn" aria-expanded={folderOpen} onClick={onFolder} title={tr('board.Header.26')}>
+            {tr('board.Header.27')}
           </button>
         )}
         {run && onOutputs && run.roles.length > 0 && (
-          <button type="button" className="kt-btn" onClick={() => onOutputs({ role: run.roles[0].key })} title="一步一步看每个角色交了什么：文档、代码、回复、做了什么">
-            产出
+          <button type="button" className="kt-btn" onClick={() => onOutputs({ role: run.roles[0].key })} title={tr('board.Header.28')}>
+            {tr('board.Header.29')}
           </button>
         )}
         {run && (
-          <button type="button" className="kt-btn" aria-pressed={follow} onClick={onFollow} title="自动滚到并放大最活跃的泳道">
-            跟随
+          <button type="button" className="kt-btn" aria-pressed={follow} onClick={onFollow} title={tr('board.Header.30')}>
+            {tr('board.Header.31')}
           </button>
         )}
         {run && onProjection && (
-          <button type="button" className={`kt-btn${projection ? ' is-on' : ''}`} onClick={onProjection} title={projection ? '退出投影（Esc）' : '全屏、大字、隐藏操作'}>
-            {projection ? '退出投影' : '投影'}
+          <button type="button" className={`kt-btn${projection ? ' is-on' : ''}`} onClick={onProjection} title={projection ? tr('board.Header.32') : tr('board.Header.33')}>
+            {projection ? tr('board.Header.34') : tr('board.Header.35')}
           </button>
         )}
       </div>
@@ -176,7 +177,7 @@ const hue = (i: number) => (i * 47 + 200) % 360
 
 export function Kpis({ run, reducedMotion, onRole }: { run: RunDetail; reducedMotion: boolean; onRole?: (key: string) => void }) {
   return (
-    <div className="kt-kpis" role="group" aria-label="指标">
+    <div className="kt-kpis" role="group" aria-label={tr('board.Header.36')}>
       <TestsKpi tests={run.tests} reducedMotion={reducedMotion} />
       {phased(run) ? <GatesKpi run={run} /> : <ParallelKpi run={run} reducedMotion={reducedMotion} />}
       <RolesKpi run={run} onRole={onRole} />
@@ -194,8 +195,8 @@ function TestsKpi({ tests, reducedMotion }: { tests: TestWall; reducedMotion: bo
   const cells = groupByAc(tests.cases).flatMap((g) => g.cases)
   return (
     <div className={`kt-kpi kt-kpi-tests${green ? ' is-green' : ''}`}>
-      <div className="kt-kpi-label">测试通过</div>
-      <div className="kt-kpi-value" data-testid="kt-tests-counter" aria-label={`测试通过 ${tests.passed}/${tests.total}`}>
+      <div className="kt-kpi-label">{tr('board.Header.37')}</div>
+      <div className="kt-kpi-value" data-testid="kt-tests-counter" aria-label={tr('board.Header.38', { p0: tests.passed, p1: tests.total })}>
         <span className={`kt-kpi-big${pop ? ' is-pop' : ''}`} key={pop}>
           {shown}
         </span>
@@ -207,8 +208,8 @@ function TestsKpi({ tests, reducedMotion }: { tests: TestWall; reducedMotion: bo
         ))}
       </div>
       <div className="kt-kpi-note">
-        {tests.total ? (green ? <b className="tone-ok">全绿</b> : <b className="tone-bad">{tests.failed} 个红</b>) : '还没有测试'}
-        {tests.at ? ` · ${fmtAgo(now - tests.at)}测过` : ''}
+        {tests.total ? (green ? <b className="tone-ok">{tr('board.Header.39')}</b> : <b className="tone-bad">{tests.failed} {tr('board.Header.40')}</b>) : tr('board.Header.41')}
+        {tests.at ? tr('board.Header.42', { p0: fmtAgo(now - tests.at) }) : ''}
       </div>
     </div>
   )
@@ -228,7 +229,7 @@ function GatesKpi({ run }: { run: RunDetail }) {
   const people = run.roles.filter((l) => l.gate === 'approved').length + run.events.filter((e) => e.kind === 'bounce' && e.from === 'person').length
   return (
     <div className="kt-kpi kt-kpi-gates">
-      <div className="kt-kpi-label">关卡记录 · 在约束下改了几轮</div>
+      <div className="kt-kpi-label">{tr('board.Header.43')}</div>
       <div className="kt-kpi-value" data-testid="kt-gates">
         {first ? (
           <span className="kt-gates-score">
@@ -238,13 +239,13 @@ function GatesKpi({ run }: { run: RunDetail }) {
             <span className="kt-kpi-of">/{run.tests.total}</span>
           </span>
         ) : (
-          <span className="kt-kpi-mid">检查还没跑</span>
+          <span className="kt-kpi-mid">{tr('board.Header.44')}</span>
         )}
       </div>
       <div className="kt-gates-rows">
-        <span className={testBacks ? 'is-hit' : ''}>检查打回 <b>{testBacks}</b> 次</span>
-        <span className={reviewBacks ? 'is-hit' : ''}>审查打回 <b>{reviewBacks}</b> 轮</span>
-        <span className={people ? 'is-hit' : ''}>人拍板 <b>{people}</b> 次</span>
+        <span className={testBacks ? 'is-hit' : ''}>{tr('board.Header.45')} <b>{testBacks}</b> {tr('board.Header.46')}</span>
+        <span className={reviewBacks ? 'is-hit' : ''}>{tr('board.Header.47')} <b>{reviewBacks}</b> {tr('board.Header.48')}</span>
+        <span className={people ? 'is-hit' : ''}>{tr('board.Header.49')} <b>{people}</b> {tr('board.Header.46')}</span>
       </div>
     </div>
   )
@@ -261,21 +262,21 @@ function UsedKpi({ run }: { run: RunDetail }) {
   const agents = run.roles.filter((l) => l.attempt > 0 && l.status !== 'waiting' && l.status !== 'skipped').length
   return (
     <div className="kt-kpi kt-kpi-used">
-      <div className="kt-kpi-label">这次用到了什么</div>
+      <div className="kt-kpi-label">{tr('board.Header.50')}</div>
       <div className="kt-used-row">
-        <b>Kiro Crew</b> 底座 · 会话 ×{agents} · 审批 · 审计
+        <b>Kiro Crew</b> {tr('board.Header.51')}{agents} {tr('board.Header.52')}
       </div>
       <div className="kt-used-row">
-        <b>AI-DLC</b> 专家 {AIDLC_AGENTS.filter((a) => used.has(a.key)).length}/14
-        {used.size > AIDLC_AGENTS.filter((a) => used.has(a.key)).length ? ` + 自定义 ${used.size - AIDLC_AGENTS.filter((a) => used.has(a.key)).length}` : ''}
+        <b>AI-DLC</b> {tr('board.Header.53')} {AIDLC_AGENTS.filter((a) => used.has(a.key)).length}/14
+        {used.size > AIDLC_AGENTS.filter((a) => used.has(a.key)).length ? tr('board.Header.54', { p0: used.size - AIDLC_AGENTS.filter((a) => used.has(a.key)).length }) : ''}
         <span className="kt-used-dots" aria-hidden="true">
           {AIDLC_AGENTS.map((a) => (
-            <i key={a.key} className={used.has(a.key) ? 'is-on' : ''} title={`${a.name}${used.has(a.key) ? '：本次用到' : '：本次没用'}`} />
+            <i key={a.key} className={used.has(a.key) ? 'is-on' : ''} title={`${a.name}${used.has(a.key) ? tr('board.Header.55') : tr('board.Header.56')}`} />
           ))}
         </span>
       </div>
       <div className="kt-used-row">
-        <b>检查</b> {checks ? `场景的检查 ${checks} 项，app 自己跑` : `公司检查 ${company} 项 · 团队写的 ${written} 项`}
+        <b>{tr('board.Header.57')}</b> {checks ? tr('board.Header.58', { p0: checks }) : tr('board.Header.59', { p0: company, p1: written })}
       </div>
     </div>
   )
@@ -291,28 +292,28 @@ function ParallelKpi({ run, reducedMotion }: { run: RunDetail; reducedMotion: bo
   const segTotal = segs.reduce((a, l) => a + l.active_s, 0) || 1
   return (
     <div className="kt-kpi kt-kpi-par">
-      <div className="kt-kpi-label">并行省时 · 墙钟对比一个 agent 从头做到尾</div>
+      <div className="kt-kpi-label">{tr('board.Header.60')}</div>
       <div className="kt-kpi-value" data-testid="kt-saving">
         {saved_s >= 60 ? (
           <span className="kt-saving">
-            并行省了 <span className="kt-kpi-big">{minutes}</span> 分钟
+            {tr('board.Header.61')} <span className="kt-kpi-big">{minutes}</span> {tr('board.Header.62')}
           </span>
         ) : (
-          <span className="kt-kpi-mid">还没省下时间</span>
+          <span className="kt-kpi-mid">{tr('board.Header.63')}</span>
         )}
-        {speedup !== null && speedup > 1.05 && <span className="kt-speedup" title="串行估算 ÷ 墙钟">×{speedup.toFixed(1)}</span>}
+        {speedup !== null && speedup > 1.05 && <span className="kt-speedup" title={tr('board.Header.64')}>×{speedup.toFixed(1)}</span>}
       </div>
       <div className="kt-bars">
         <div className="kt-bar-row">
-          <span className="kt-bar-name">墙钟</span>
-          <span className="kt-bar" title={`实际用时 ${fmtClock(wall)}`}>
+          <span className="kt-bar-name">{tr('board.Header.65')}</span>
+          <span className="kt-bar" title={tr('board.Header.66', { p0: fmtClock(wall) })}>
             <i className="kt-bar-wall" style={{ width: `${(wall / max) * 100}%` }} />
           </span>
           <span className="kt-bar-val kt-mono">{fmtClock(wall)}</span>
         </div>
         <div className="kt-bar-row">
-          <span className="kt-bar-name">串行估算</span>
-          <span className="kt-bar is-segs" title={`每个角色自己干活的时间加起来 ${fmtClock(run.serial_s)}（${fmtSpan(run.serial_s)}）`}>
+          <span className="kt-bar-name">{tr('board.Header.67')}</span>
+          <span className="kt-bar is-segs" title={tr('board.Header.68', { p0: fmtClock(run.serial_s), p1: fmtSpan(run.serial_s) })}>
             {segs.map((l, i) => (
               <i key={l.key} className="kt-bar-seg" style={{ width: `${(l.active_s / segTotal) * (run.serial_s / max) * 100}%`, '--h': hue(i) } as CSSProperties} title={`${l.title} ${fmtClock(l.active_s)}`} />
             ))}
@@ -331,7 +332,7 @@ function RolesKpi({ run, onRole }: { run: RunDetail; onRole?: (key: string) => v
   const unmerged = run.roles.filter((l) => l.status === 'done' && l.writable.length > 0).length
   return (
     <div className="kt-kpi kt-kpi-roles">
-      <div className="kt-kpi-label">角色完成</div>
+      <div className="kt-kpi-label">{tr('board.Header.69')}</div>
       <div className="kt-kpi-value" data-testid="kt-roles-counter">
         <span className="kt-kpi-big">{done}</span>
         <span className="kt-kpi-of">/{run.roles.length}</span>
@@ -342,8 +343,8 @@ function RolesKpi({ run, onRole }: { run: RunDetail; onRole?: (key: string) => v
             key={l.key}
             type="button"
             className={`kt-role-dot tone-${laneMeta(l).tone}${WORKING.has(l.status) ? ' is-working' : ''}`}
-            title={`${l.title}：${laneMeta(l).label}（点一下只看它）`}
-            aria-label={`${l.title}：${laneMeta(l).label}`}
+            title={tr('board.Header.70', { p0: l.title, p1: laneMeta(l).label })}
+            aria-label={tr('board.Header.71', { p0: l.title, p1: laneMeta(l).label })}
             onClick={() => onRole?.(l.key)}
           >
             <RoleIcon role={l.icon || l.key} size={16} />
@@ -351,9 +352,9 @@ function RolesKpi({ run, onRole }: { run: RunDetail; onRole?: (key: string) => v
         ))}
       </div>
       <div className="kt-kpi-note">
-        {working ? <b className="tone-run">同时在跑 {working}</b> : '没有在跑的'}
-        {stuck ? <b className="tone-warn"> · {stuck} 个卡住或等你</b> : null}
-        {unmerged ? ` · ${unmerged} 个待合并` : ''}
+        {working ? <b className="tone-run">{tr('board.Header.72')} {working}</b> : tr('board.Header.73')}
+        {stuck ? <b className="tone-warn"> · {stuck} {tr('board.Header.74')}</b> : null}
+        {unmerged ? tr('board.Header.75', { p0: unmerged }) : ''}
       </div>
     </div>
   )
@@ -368,7 +369,7 @@ function CreditsKpi({ credits, reducedMotion }: { credits: number | null; reduce
       <div className="kt-kpi-value">
         <span className="kt-kpi-big">{credits === null ? '—' : fmtCredits(shown)}</span>
       </div>
-      <div className="kt-kpi-note">{credits === null ? 'KiroCrew 还没报' : '整个运行合计'}</div>
+      <div className="kt-kpi-note">{credits === null ? tr('board.Header.76') : tr('board.Header.77')}</div>
     </div>
   )
 }
@@ -383,9 +384,9 @@ export interface StartOptions {
 export type StartFn = (requirement: string, opts?: StartOptions) => Promise<void>
 
 /** The scenario's work item (README.md, "The scenario"): it fills the requirement box. */
-export const WORK_ITEM = '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。'
+export const WORK_ITEM = '修复 vstatd 静态分析待办里标为 fix 的发现，并把信号表的处理从 750 行的 Service::run() 里拆出去。行为不变：在录制的行驶数据上，信号、值、超时和错误都和原来一样；目标上的内存不超过限额。'  // i18n-keep: the request the agents work on, in their working language (team.json work_item)
 
-const CHECK_WHEN: ReadonlyArray<[string, string]> = [['before_bench', '上台架前'], ['after_bench', '台架后'], ['release', '签字前']]
+const CHECK_WHEN: ReadonlyArray<[string, string]> = [['before_bench', tr('board.Header.79')], ['after_bench', tr('board.Header.80')], ['release', tr('board.Header.81')]]
 
 /** 组队预览 (GET /team): the one team's roles by AI-DLC phase, the templates they run, its checks and the knowledge source. */
 export function TeamPreviewPanel() {
@@ -402,28 +403,28 @@ export function TeamPreviewPanel() {
       live = false
     }
   }, [api])
-  if (err) return <p className="kt-pick is-empty" data-testid="kt-pick">组队预览读不到：{err}</p>
-  if (!t) return <p className="kt-pick is-empty" data-testid="kt-pick">正在读团队配置…</p>
+  if (err) return <p className="kt-pick is-empty" data-testid="kt-pick">{tr('board.Header.82')}{err}</p>
+  if (!t) return <p className="kt-pick is-empty" data-testid="kt-pick">{tr('board.Header.83')}</p>
   if (t.error) return <p className="kt-pick is-empty kt-warn" data-testid="kt-pick">{t.error}</p>
   const missing = new Set(t.templates.filter((x) => !x.present).map((x) => x.name))
   const phases = PHASES.map((ph) => ({ ...ph, roles: t.roles.filter((r) => r.phase === ph.key) })).filter((ph) => ph.roles.length)
   const byKey = new Map(t.roles.map((r) => [r.key, r.title]))
   const kb = t.knowledge
   return (
-    <section className="kt-pick" aria-label="组队预览" data-testid="kt-pick">
-      <p className="kt-pick-team"><b>{t.name}</b> · {t.roles.length} 位成员</p>
-      <ol className="kt-pick-phases" aria-label="按 AI-DLC 阶段">
+    <section className="kt-pick" aria-label={tr('board.Header.84')} data-testid="kt-pick">
+      <p className="kt-pick-team"><b>{t.name}</b> · {t.roles.length} {tr('board.Header.85')}</p>
+      <ol className="kt-pick-phases" aria-label={tr('board.Header.86')}>
         {phases.map((ph) => (
           <li key={ph.key}>
             <span className="kt-pick-phase">{ph.n} {ph.title}</span>
             {ph.roles.map((r) => (
               <span key={r.key} className={`kt-pick-role${missing.has(r.template) ? ' is-absent' : ''}`} data-testid="kt-pick-role" data-key={r.key}
-                title={`AI-DLC 专家 ${r.aidlc_agent || '—'} · 可写：${r.writable}`}>
+                title={tr('board.Header.87', { p0: r.aidlc_agent || '—', p1: r.writable })}>
                 <RoleIcon role={r.icon || r.key} size={16} />
                 <span>
                   {r.title}
-                  {r.gate ? <em> · 人批准（{r.gate}）</em> : null}
-                  <small className="kt-mono">{r.template}{missing.has(r.template) && <span className="kt-pick-miss"> 模板没装</span>}</small>
+                  {r.gate ? <em> {tr('board.Header.88')}{r.gate}{tr('board.Header.89')}</em> : null}
+                  <small className="kt-mono">{r.template}{missing.has(r.template) && <span className="kt-pick-miss"> {tr('board.Header.90')}</span>}</small>
                 </span>
               </span>
             ))}
@@ -432,10 +433,10 @@ export function TeamPreviewPanel() {
       </ol>
       {missing.size > 0 && (
         <p className="kt-warn" data-testid="kt-pick-missing">
-          模板 {[...missing].join('、')} 不在 ~/.kiro/agents：在场景文件夹里跑 <code className="kt-mono">bash setup.sh</code>
+          {tr('board.Header.91')} {[...missing].join(tr('board.Header.92'))} {tr('board.Header.93')} <code className="kt-mono">bash setup.sh</code>
         </p>
       )}
-      <div className="kt-pick-checks" aria-label="检查">
+      <div className="kt-pick-checks" aria-label={tr('board.Header.57')}>
         {CHECK_WHEN.map(([when, label]) => {
           const cs = t.checks.filter((c) => c.when === when)
           if (!cs.length) return null
@@ -443,7 +444,7 @@ export function TeamPreviewPanel() {
             <p key={when} data-testid="kt-pick-checks" data-when={when}>
               <span className="kt-pick-phase">{label}</span>
               {cs.map((c) => (
-                <span key={c.name} className="kt-pick-agent is-used kt-mono" title={c.owner ? `失败没写文件时交给${byKey.get(c.owner) ?? c.owner} · 最多 ${c.max_rounds} 轮` : '签字前在最终提交上跑'}>
+                <span key={c.name} className="kt-pick-agent is-used kt-mono" title={c.owner ? tr('board.Header.94', { p0: byKey.get(c.owner) ?? c.owner, p1: c.max_rounds }) : tr('board.Header.95')}>
                   {c.name}
                 </span>
               ))}
@@ -453,7 +454,7 @@ export function TeamPreviewPanel() {
       </div>
       {kb && (
         <p className={kb.present === false ? 'kt-warn' : 'kt-dim'} data-testid="kt-pick-kb">
-          知识库「{kb.name}」：{kb.present === false ? `还没挂上，在 Crew 侧栏「知识库 → 来源」里加 ${kb.path || '~/workplace/vstatd/knowledge'}` : kb.present === null ? '读取中' : `${kb.items ?? 0} 份文档${kb.status === 'synced' ? ' · 已同步' : ' · 正在索引'}`}
+          {tr('board.Header.96')}{kb.name}{tr('board.Header.97')}{kb.present === false ? tr('board.Header.98', { p0: kb.path || '~/workplace/vstatd/knowledge' }) : kb.present === null ? tr('board.Header.99') : tr('board.Header.100', { p0: kb.items ?? 0, p1: kb.status === 'synced' ? tr('board.Header.kbSynced') : tr('board.Header.kbIndexing') })}
         </p>
       )}
     </section>
@@ -480,33 +481,33 @@ export function StartForm({ onStart, onCancel, note }: { onStart: StartFn; onCan
     }
   }
   return (
-    <form className="kt-start" onSubmit={submit} aria-label="给 agent 团队派需求">
-      <label htmlFor="kt-req">交给 agent 团队的需求</label>
-      <p className="kt-dim kt-req-hint">团队先分诊待办里的发现（修、说明或延后）、定重构方案和分工，你在分诊和开工两个关卡批准后才往下做。</p>
+    <form className="kt-start" onSubmit={submit} aria-label={tr('board.Header.101')}>
+      <label htmlFor="kt-req">{tr('board.Header.102')}</label>
+      <p className="kt-dim kt-req-hint">{tr('board.Header.103')}</p>
       <textarea id="kt-req" value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder={WORK_ITEM} />
       <details className="kt-start-more">
-        <summary>看团队配置</summary>
+        <summary>{tr('board.Header.104')}</summary>
         <TeamPreviewPanel />
       </details>
       <details className="kt-start-more" open={!!source}>
-      <summary>高级选项</summary>
+      <summary>{tr('board.Header.105')}</summary>
       <div className="kt-start-row">
         <label className="kt-start-field">
-          <span>已有项目的代码目录（修 bug、接手已有产品时填；新项目不用填）</span>
-          <input type="text" value={source} onChange={(e) => setSource(e.target.value)} placeholder="目录的绝对路径，例如 /Users/you/workplace/vstatd-team/runs/r1009abcd/wt/_run" />
+          <span>{tr('board.Header.106')}</span>
+          <input type="text" value={source} onChange={(e) => setSource(e.target.value)} placeholder={tr('board.Header.107')} />
         </label>
       </div>
       </details>
       <div className="kt-start-actions">
         <button type="submit" className="kt-btn is-primary" disabled={busy}>
-          {busy ? '正在派给团队…' : '交给团队'}
+          {busy ? tr('board.Header.108') : tr('board.Header.109')}
         </button>
         {onCancel && (
           <button type="button" className="kt-btn" onClick={onCancel}>
-            取消
+            {tr('board.Header.110')}
           </button>
         )}
-        <span className="kt-dim">检查由 app 自己跑，台架上的每个动作要你批准（看板或操作台），最后你按证据页签字</span>
+        <span className="kt-dim">{tr('board.Header.111')}</span>
         {note}
       </div>
       {err && (
@@ -534,14 +535,14 @@ export function StopConfirm({ run, onConfirm, onCancel }: { run: RunDetail; onCo
   }
   return (
     <div className="kt-confirm" role="alertdialog" aria-labelledby="kt-stop-title" aria-describedby="kt-stop-desc">
-      <strong id="kt-stop-title">停止「{run.title}」？</strong>
-      <span id="kt-stop-desc">{live ? `在跑和排队的 ${live} 个 agent 会被停掉，还没开工的角色不再派出去。` : '还没开工的角色不再派出去。'}</span>
+      <strong id="kt-stop-title">{tr('board.Header.112')}{run.title}{tr('board.Header.113')}</strong>
+      <span id="kt-stop-desc">{live ? tr('board.Header.114', { p0: live }) : tr('board.Header.115')}</span>
       <span className="kt-confirm-actions">
         <button type="button" className="kt-btn is-danger is-solid" onClick={confirm} disabled={busy}>
-          {busy ? '正在停止…' : '确认停止'}
+          {busy ? tr('board.Header.116') : tr('board.Header.117')}
         </button>
         <button type="button" className="kt-btn" onClick={onCancel} autoFocus>
-          取消
+          {tr('board.Header.110')}
         </button>
       </span>
       {err && (
@@ -555,9 +556,11 @@ export function StopConfirm({ run, onConfirm, onCancel }: { run: RunDetail; onCo
 
 /** 交付标签 as the person confirms them at the gate of a role that proposes them (the vstatd team has none). */
 export type DeliveryPick = Pick<Delivery, 'name' | 'kind' | 'size' | 'line'>
-const DELIVERY_KINDS: Delivery['kind'][] = ['新应用', '新功能', '修复']
-const DELIVERY_SIZES: Delivery['size'][] = ['小', '中', '大']
-const DELIVERY_LINES: Delivery['line'][] = ['电商', '移动应用', '客户关系管理', '供应链', '内部系统']
+const DELIVERY_KINDS: Delivery['kind'][] = ['新应用', '新功能', '修复']  // i18n-keep: values the backend stores
+const DELIVERY_SIZES: Delivery['size'][] = ['小', '中', '大']  // i18n-keep: values the backend stores
+const DELIVERY_LINES: Delivery['line'][] = ['电商', '移动应用', '客户关系管理', '供应链', '内部系统']  // i18n-keep: values the backend stores
+/** A stored delivery value shown in the board's language (the value sent back stays the stored one). */
+const deliveryLabel = (group: 'kind' | 'size' | 'line', values: readonly string[], v: string) => tr(`board.Header.delivery.${group}.${values.indexOf(v)}`)
 
 /** A person at a gate, inside the page (the desktop app has no window.prompt): approve with an optional note for
  * everyone after it, or send it back with what to change. *skips*: the optional members the proposal leaves out (they
@@ -593,20 +596,20 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
   const answer = (id: string, a: Partial<{ choice: string; text: string }>) => setAnswers((x) => ({ ...x, [id]: { ...x[id], ...a } }))
   const confirm = async () => {
     if (overrule && approve && !note.trim()) {
-      setErr('审查还说要改：推翻它放行要写理由')
+      setErr(tr('board.Header.129'))
       return
     }
     if (discuss && !note.trim()) {
-      setErr('写下你想问的或想商量的')
+      setErr(tr('board.Header.130'))
       return
     }
     if (!approve && !discuss && !overrule && !note.trim()) {
-      setErr('退回要写明改什么')
+      setErr(tr('board.Header.131'))
       return
     }
     const blank = asking ? questions.find((q) => answers[q.id]?.choice === 'other' && !answers[q.id].text.trim()) : undefined
     if (blank) {
-      setErr(`决定 ${blank.id} 选了「其他」：写下你的决定`)
+      setErr(tr('board.Header.132', { p0: blank.id }))
       return
     }
     setBusy(true)
@@ -619,20 +622,20 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
       setBusy(false)
     }
   }
-  const title = discuss ? `讨论${label}` : overrule ? (approve ? `仍然批准${label}` : `退回${label}，再改一轮`) : approve ? `批准${label}` : `退回${label}`
+  const title = discuss ? tr('board.Header.133', { p0: label }) : overrule ? (approve ? tr('board.Header.134', { p0: label }) : tr('board.Header.135', { p0: label })) : approve ? tr('board.Header.136', { p0: label }) : tr('board.Header.137', { p0: label })
   const lead = discuss
-    ? `写下你想问的或想商量的。${who || '它'}会回答，需要的话改自己的文档；关卡一直开着，讨论完再批准或退回。`
-    : overrule ? (approve ? '审查还说要改，打回的轮数用完了。批准就是你推翻审查结论放行：写明理由，记在签字单上，然后部署。' : '按审查意见再改一轮：没写打回给谁时，打回审查点名的成员；你写的意见一起交给它们，和审查冲突时以你为准。改完审查再看一遍，然后回到这里。')
-      : report !== undefined ? (approve ? '批准后部署。你的意见会记在签字单上。' : '写明打回给谁、改什么（「打回：开发 · 修复」），改完审查会再看一遍，然后回到这里。')
-        : approve ? (asking ? '批准后，编排器按这份分工派下一阶段开工。下面每件事选一个答案（默认是它的建议），你的决定和意见会交给后面的每个 agent。' : '批准后，编排器按这份分工派下一阶段开工。有意见可以写在这里，会交给后面的每个 agent（可以不写）。')
-          : '写下要改什么，它会按你的意见重写，再交给你批准。'
+    ? tr('board.Header.138', { p0: who || tr('common.it') })
+    : overrule ? (approve ? tr('board.Header.139') : tr('board.Header.140'))
+      : report !== undefined ? (approve ? tr('board.Header.141') : tr('board.Header.reviseHint'))
+        : approve ? (asking ? tr('board.Header.143') : tr('board.Header.144'))
+          : tr('board.Header.145')
   return (
     <div className={`kt-confirm kt-gate-dialog${approve ? ' is-approve' : ''}${discuss ? ' is-discuss' : ''}`} role="dialog" aria-labelledby="kt-gate-title" data-testid="kt-gate-dialog">
       <strong id="kt-gate-title">{title}</strong>
       <span>{lead}</span>
       {outputs.length > 0 && (
         <p className="kt-gate-docs" data-testid="kt-gate-docs">
-          <span className="kt-dim">这一阶段的产出：</span>
+          <span className="kt-dim">{tr('board.Header.146')}</span>
           {outputs.map((o) => (
             <button key={o.key} type="button" className="kt-chip-link" onClick={o.onOpen}>
               <RoleIcon role={o.icon || o.key} size={13} /> {o.title} ↗
@@ -646,13 +649,13 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
             const a = answers[q.id] ?? { choice: '', text: '' }
             const differs = !!q.recommend && a.choice !== q.recommend
             return (
-              <fieldset key={q.id} className="kt-gate-q" aria-label={`决定 ${q.id}`}>
+              <fieldset key={q.id} className="kt-gate-q" aria-label={tr('board.Header.147', { p0: q.id })}>
                 <legend>
-                  <b>决定 {q.id}</b> {q.q}
+                  <b>{tr('board.Header.148')} {q.id}</b> {q.q}
                 </legend>
                 {q.cites && q.cites.length > 0 && (
                   <span className="kt-gate-cites" data-testid="kt-gate-cites">
-                    引用的规范：{q.cites.map((c) => <code key={c}>{c}</code>)}
+                    {tr('board.Header.149')}{q.cites.map((c) => <code key={c}>{c}</code>)}
                   </span>
                 )}
                 {q.options.map((o) => (
@@ -660,19 +663,19 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
                     <input type="radio" name={`q-${q.id}`} checked={a.choice === o.key} onChange={() => answer(q.id, { choice: o.key })} />
                     <span>
                       {o.key}. {o.text}
-                      {o.key === q.recommend && <em className="kt-gate-rec">建议</em>}
+                      {o.key === q.recommend && <em className="kt-gate-rec">{tr('board.Header.150')}</em>}
                     </span>
                   </label>
                 ))}
                 <label className={a.choice === 'other' ? 'is-picked' : undefined}>
                   <input type="radio" name={`q-${q.id}`} checked={a.choice === 'other'} onChange={() => answer(q.id, { choice: 'other' })} />
-                  <span>其他</span>
-                  {a.choice === 'other' && <input className="kt-gate-other" aria-label={`决定 ${q.id} 的其他答案`} value={a.text} maxLength={300} onChange={(e) => answer(q.id, { text: e.target.value })} placeholder="写下你的决定" />}
+                  <span>{tr('board.Header.151')}</span>
+                  {a.choice === 'other' && <input className="kt-gate-other" aria-label={tr('board.Header.152', { p0: q.id })} value={a.text} maxLength={300} onChange={(e) => answer(q.id, { text: e.target.value })} placeholder={tr('board.Header.153')} />}
                 </label>
                 {(q.why || differs) && (
                   <span className="kt-dim">
-                    {q.why && `建议理由：${q.why}`}
-                    {differs && <b className="kt-gate-differs">{q.why ? '；' : ''}与建议（{q.recommend}）不同</b>}
+                    {q.why && tr('board.Header.154', { p0: q.why })}
+                    {differs && <b className="kt-gate-differs">{q.why ? tr('board.Header.155') : ''}{tr('board.Header.156')}{q.recommend}{tr('board.Header.157')}</b>}
                   </span>
                 )}
               </fieldset>
@@ -681,28 +684,28 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
         </div>
       )}
       {talk.length > 0 && (
-        <ol className="kt-gate-talk" aria-label="讨论记录" data-testid="kt-gate-talk">
+        <ol className="kt-gate-talk" aria-label={tr('board.Header.158')} data-testid="kt-gate-talk">
           {talk.map((t, i) => (
             <li key={i} className={t.who === 'person' ? 'is-person' : 'is-agent'}>
-              <b>{t.who === 'person' ? '你' : who || '它'}</b>
-              <div className="kt-gate-talk-text">{t.who === 'agent' ? <MarkdownRenderer content={t.text} /> : t.text}{t.changed ? <em className="kt-dim">（改了文档）</em> : null}</div>
+              <b>{t.who === 'person' ? tr('board.Header.159') : who || tr('board.Header.160')}</b>
+              <div className="kt-gate-talk-text">{t.who === 'agent' ? <MarkdownRenderer content={t.text} /> : t.text}{t.changed ? <em className="kt-dim">{tr('board.Header.161')}</em> : null}</div>
             </li>
           ))}
         </ol>
       )}
       {report !== undefined && !discuss && (
         <div className="kt-gate-report">
-          <b>{overrule ? '审查还说要改：' : '审查结论：'}</b>
-          {report || '（没有结论）'}
+          <b>{overrule ? tr('board.Header.162') : tr('board.Header.163')}</b>
+          {report || tr('board.Header.164')}
           {onReport && (
             <button type="button" className="kt-btn" onClick={onReport}>
-              看完整审查报告
+              {tr('board.Header.165')}
             </button>
           )}
         </div>
       )}
       {split && split.length > 0 && !discuss && (
-        <ul className="kt-gate-split" aria-label="分工提案">
+        <ul className="kt-gate-split" aria-label={tr('board.Header.166')}>
           {split.map((m) => (
             <li key={m.key}>
               <RoleIcon role={m.icon || m.key} size={14} /> <b>{m.title}</b> {m.assignment}
@@ -711,51 +714,51 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
         </ul>
       )}
       {skips && skips.length > 0 && !discuss && (
-        <ul className="kt-gate-split is-out" aria-label="这次不要的成员" data-testid="kt-gate-skips">
+        <ul className="kt-gate-split is-out" aria-label={tr('board.Header.167')} data-testid="kt-gate-skips">
           {skips.map((m) => (
             <li key={m.key}>
-              <RoleIcon role={m.key} size={14} /> <b>{m.title}</b> 这次不要：{m.why}
+              <RoleIcon role={m.key} size={14} /> <b>{m.title}</b> {tr('board.Header.168')}{m.why}
             </li>
           ))}
-          <li className="kt-dim">批准后它们这次不参与，归它们的检查这次不跑；要它们就退回，写明要谁。</li>
+          <li className="kt-dim">{tr('board.Header.169')}</li>
         </ul>
       )}
       {approve && pick && delivery && (
         <fieldset className="kt-gate-delivery" data-testid="kt-gate-delivery">
-          <legend title="签字放行后记在这次运行上">交付标签{delivery.why ? `（提议：${delivery.why}）` : ''}</legend>
-          <input aria-label="交付名称" value={pick.name} maxLength={20} onChange={(e) => setPick({ ...pick, name: e.target.value })} />
-          <select aria-label="类型" value={pick.kind} onChange={(e) => setPick({ ...pick, kind: e.target.value as Delivery['kind'] })}>
-            {DELIVERY_KINDS.map((k) => <option key={k}>{k}</option>)}
+          <legend title={tr('board.Header.170')}>{tr('board.Header.171')}{delivery.why ? tr('board.Header.172', { p0: delivery.why }) : ''}</legend>
+          <input aria-label={tr('board.Header.173')} value={pick.name} maxLength={20} onChange={(e) => setPick({ ...pick, name: e.target.value })} />
+          <select aria-label={tr('board.Header.174')} value={pick.kind} onChange={(e) => setPick({ ...pick, kind: e.target.value as Delivery['kind'] })}>
+            {DELIVERY_KINDS.map((k) => <option key={k} value={k}>{deliveryLabel('kind', DELIVERY_KINDS, k)}</option>)}
           </select>
-          <select aria-label="规模" value={pick.size} onChange={(e) => setPick({ ...pick, size: e.target.value as Delivery['size'] })}>
-            {DELIVERY_SIZES.map((k) => <option key={k}>{k}</option>)}
+          <select aria-label={tr('board.Header.175')} value={pick.size} onChange={(e) => setPick({ ...pick, size: e.target.value as Delivery['size'] })}>
+            {DELIVERY_SIZES.map((k) => <option key={k} value={k}>{deliveryLabel('size', DELIVERY_SIZES, k)}</option>)}
           </select>
-          <select aria-label="业务线" value={pick.line} onChange={(e) => setPick({ ...pick, line: e.target.value as Delivery['line'] })}>
-            {DELIVERY_LINES.map((k) => <option key={k}>{k}</option>)}
+          <select aria-label={tr('board.Header.176')} value={pick.line} onChange={(e) => setPick({ ...pick, line: e.target.value as Delivery['line'] })}>
+            {DELIVERY_LINES.map((k) => <option key={k} value={k}>{deliveryLabel('line', DELIVERY_LINES, k)}</option>)}
           </select>
         </fieldset>
       )}
       {back && askRisk && (
         <fieldset className="kt-gate-delivery kt-gate-risk" data-testid="kt-gate-risk">
-          <legend title="记在签字单上">拦下的风险（可选）</legend>
-          <input aria-label="拦下的风险" className="kt-gate-what" value={risk.what} maxLength={60} onChange={(e) => setRisk({ ...risk, what: e.target.value })} placeholder="例如：一个会改变运行日志的修复" />
+          <legend title={tr('board.Header.177')}>{tr('board.Header.178')}</legend>
+          <input aria-label={tr('board.Header.179')} className="kt-gate-what" value={risk.what} maxLength={60} onChange={(e) => setRisk({ ...risk, what: e.target.value })} placeholder={tr('board.Header.180')} />
           <label>
-            金额 <input aria-label="金额（万元）" className="kt-gate-amount" type="number" min={0} step={0.1} value={risk.wan} onChange={(e) => setRisk({ ...risk, wan: e.target.value })} placeholder="可不填" /> 万元
+            {tr('board.Header.181')} <input aria-label={tr('board.Header.182')} className="kt-gate-amount" type="number" min={0} step={0.1} value={risk.wan} onChange={(e) => setRisk({ ...risk, wan: e.target.value })} placeholder={tr('board.Header.183')} /> {tr('board.Header.184')}
           </label>
         </fieldset>
       )}
-      <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={discuss ? '例如：F-008 为什么建议说明而不修？引的那一页怎么说？' : overrule && approve ? '例如：评审的意见我认，这一条下一批再处理' : approve ? '例如：重构分两步提交，每步都能单独构建' : '例如：F-013 要单元测试，不能只靠静态分析'} autoFocus aria-label={discuss ? '讨论' : '意见'} />
+      <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={discuss ? tr('board.Header.185') : overrule && approve ? tr('board.Header.186') : approve ? tr('board.Header.187') : tr('board.Header.188')} autoFocus aria-label={discuss ? tr('board.Header.189') : tr('board.Header.190')} />
       <span className="kt-confirm-actions">
         {preset && note !== preset && !discuss && (
           <button type="button" className="kt-btn" onClick={() => { setNote(preset); if (back && presetRisk) setRisk({ what: presetRisk.what, wan: presetRisk.amount != null ? String(presetRisk.amount / 1e4) : '' }) }} title={preset}>
-            填入预设意见
+            {tr('board.Header.191')}
           </button>
         )}
         <button type="button" className={`kt-btn is-solid${approve || discuss ? ' is-primary' : ' is-danger'}`} onClick={confirm} disabled={busy}>
-          {busy ? '正在提交…' : discuss ? '发出' : overrule && approve ? '确认推翻并批准' : approve ? '确认批准' : '确认退回'}
+          {busy ? tr('board.Header.192') : discuss ? tr('board.Header.193') : overrule && approve ? tr('board.Header.194') : approve ? tr('board.Header.195') : tr('board.Header.196')}
         </button>
         <button type="button" className="kt-btn" onClick={onCancel}>
-          取消
+          {tr('board.Header.110')}
         </button>
       </span>
       {err && (
@@ -774,11 +777,11 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
 export function EmptyStart({ onStart }: { onStart: StartFn }) {
   const ready = useReadiness()
   return (
-    <section className="kt-empty" data-testid="kt-empty" aria-label="还没有运行">
+    <section className="kt-empty" data-testid="kt-empty" aria-label={tr('board.Header.197')}>
       <div className="kt-empty-hero">
-        <h2>vstatd 本批：修待办里的发现，拆分 Service::run()，行为不变</h2>
+        <h2>{tr('board.Header.198')}</h2>
         <p>
-          六个 AI-DLC 角色在 Kiro Crew 里分诊、定方案、写测试、修复和评审；检查由 app 自己跑，台架动作和最后的签字都由人批准。
+          {tr('board.Header.199')}
         </p>
       </div>
       <StartForm onStart={onStart} note={<ReadinessSummary r={ready.r} />} />
@@ -796,10 +799,10 @@ export function EmptyStart({ onStart }: { onStart: StartFn }) {
 // ---------------------------------------------------------------------------------------------
 
 const EXPERT_STATE = {
-  busy: { label: '干活中', hint: '它的 agent 正在干活' },
-  used: { label: '已调用', hint: '编排器已经派它干过活' },
-  team: { label: '待命', hint: '这支团队有它的任务，还没轮到' },
-  none: { label: '不参与', hint: '这支团队没有它的任务，这次不会被激活' },
+  busy: { label: tr('board.Header.200'), hint: tr('board.Header.201') },
+  used: { label: tr('board.Header.202'), hint: tr('board.Header.203') },
+  team: { label: tr('board.Header.204'), hint: tr('board.Header.205') },
+  none: { label: tr('board.Header.206'), hint: tr('board.Header.207') },
 } as const
 
 /** All 14 experts AWS AI-DLC defines, in four states: at work, called, on the team but not its turn yet, or not on
@@ -810,23 +813,23 @@ export function ExpertStrip({ run }: { run: RunDetail }) {
   const custom = experts.filter((a) => a.custom).length
   const of = (key: string) => run.roles.filter((l) => l.status !== 'skipped' && l.aidlc_agent.split(',').map((x) => x.trim()).includes(key))
   return (
-    <section className="kt-experts" aria-label="AI-DLC 官方 14 位专家" data-testid="kt-experts">
+    <section className="kt-experts" aria-label={tr('board.Header.208')} data-testid="kt-experts">
       <span className="kt-experts-title">
-        AI-DLC 官方 14 位专家{custom ? ` + 自定义 ${custom} 位` : ''} · 这次用 {team.size} 位
+        {tr('board.Header.208')}{custom ? tr('board.Header.209', { p0: custom }) : ''} {tr('board.Header.210')} {team.size} {tr('board.Header.211')}
       </span>
       <ul className="kt-experts-list">
         {experts.map((a) => {
           const lanes = of(a.key)
           const state = busy.has(a.key) ? 'busy' : used.has(a.key) ? 'used' : team.has(a.key) ? 'team' : 'none'
           const n = lanes.length
-          const who = lanes.map((l) => l.title).join('、')
+          const who = lanes.map((l) => l.title).join(tr('board.Header.92'))
           return (
-            <li key={a.key} className={`kt-expert is-${state}${a.custom ? ' is-custom' : ''}`} data-state={state} title={`${a.name}（${a.key}）：${EXPERT_STATE[state].hint}${who ? `；这次是 ${who}` : ''}`}>
+            <li key={a.key} className={`kt-expert is-${state}${a.custom ? ' is-custom' : ''}`} data-state={state} title={tr('board.Header.212', { p0: a.name, p1: a.key, p2: EXPERT_STATE[state].hint, p3: who ? tr('board.Header.thisTime', { p0: who }) : '' })}>
               <b>
                 {a.name}
                 {n > 1 ? ` ×${n}` : ''}
               </b>
-              <small>{a.custom && state === 'none' ? '自定义' : EXPERT_STATE[state].label}</small>
+              <small>{a.custom && state === 'none' ? tr('board.Header.213') : EXPERT_STATE[state].label}</small>
             </li>
           )
         })}

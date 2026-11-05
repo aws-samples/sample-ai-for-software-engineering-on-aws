@@ -7,14 +7,15 @@ import type { AuditActor, AuditTrail } from '../types'
 import { ACTOR_LABEL, ActorChip, type AuditPick } from './Audit'
 import { divisionOf, plannedOf, ROWS } from './division'
 import { FLOW, type FlowKey } from './flow'
+import { locale, t as tr } from '../i18n'
 
-const hm = (t: number) => new Date(t * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+const hm = (t: number) => new Date(t * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', hour12: false })
 
 function Head() {
   return (
     <thead>
       <tr>
-        <th scope="col"><span className="kt-sr">谁</span></th>
+        <th scope="col"><span className="kt-sr">{tr('board.DivisionGrid.1')}</span></th>
         {FLOW.map((s) => (
           <th key={s.key} scope="col" className={s.n ? '' : 'is-gate'} data-step={s.key}>
             <span className="kt-flow-n">{s.n || '◆'}</span> <b>{s.title}</b>
@@ -29,7 +30,7 @@ function Head() {
 export function FlowSteps() {
   return (
     <div className="kt-div-wrap">
-      <table className="kt-div" aria-label="流程：人机分工" data-testid="kt-flow-steps">
+      <table className="kt-div" aria-label={tr('board.DivisionGrid.2')} data-testid="kt-flow-steps">
         <Head />
         <tbody>
           {ROWS.map((a) => (
@@ -53,8 +54,8 @@ export function DivisionView({ trail, current, onPick }: { trail: AuditTrail | n
   return (
     <details className="kt-card kt-div-card" data-testid="kt-division" open>
       <summary className="kt-card-head">
-        <h2>人机分工</h2>
-        <span className="kt-dim">每一步人、AI、app、台架各做了什么（来自审计记录）；点格子在审计记录里看这些条目</span>
+        <h2>{tr('board.DivisionGrid.3')}</h2>
+        <span className="kt-dim">{tr('board.DivisionGrid.4')}</span>
       </summary>
       <div className="kt-div-wrap">
         <table className="kt-div">
@@ -70,8 +71,8 @@ export function DivisionView({ trail, current, onPick }: { trail: AuditTrail | n
                     <td key={s.key} className={cls} data-step={s.key} data-count={c.count}>
                       {c.count > 0 && (
                         <button type="button" className="kt-div-cell" onClick={() => onPick({ step: s.key, actor: a, n: Date.now() })}
-                          title={`在审计记录里看 ${s.title} · ${ACTOR_LABEL[a]}`}>
-                          <b>{c.count} 条</b>
+                          title={tr('board.DivisionGrid.5', { p0: s.title, p1: ACTOR_LABEL[a] })}>
+                          <b>{c.count} {tr('board.DivisionGrid.6')}</b>
                           <small className="kt-dim">{c.first === c.last ? hm(c.first!) : `${hm(c.first!)}–${hm(c.last!)}`}</small>
                           {c.notes.map((n) => <span key={n} className="kt-div-note">{n}</span>)}
                           {c.lines.map((l, i) => <span key={i} className="kt-div-line">{l}</span>)}
