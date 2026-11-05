@@ -29,8 +29,11 @@ _SECRETS = re.compile(r"(?i)((?:password|passwd|secret|token|api[_-]?key|authori
                       r"|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}")
 
 
+REDACTED = "[REDACTED]"  # the same in both languages of the board
+
+
 def basic_scrub(text: str) -> str:
-    return _SECRETS.sub(lambda m: (m.group(1) or "") + "[已隐去]", text)
+    return _SECRETS.sub(lambda m: (m.group(1) or "") + REDACTED, text)
 
 
 class Service:

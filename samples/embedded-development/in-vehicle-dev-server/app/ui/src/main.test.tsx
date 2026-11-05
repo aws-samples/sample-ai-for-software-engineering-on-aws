@@ -6,6 +6,7 @@ import { apiCalls, apiError, setApiRoutes } from './test/stubs/app-sdk'
 import { clone, emptyBoard, multiRunBoard, readinessOf, runningBoard, setCase, withEvent } from './test/fixtures'
 import { TeamPage, mostActive } from './main'
 import { WORK_ITEM } from './board/Header'
+import { Engine } from './board/engine'
 
 const BOARD = 'GET /api/apps/vstatd-team/board*'
 const RUNS = '/api/apps/vstatd-team/runs'
@@ -21,6 +22,10 @@ function twoPhase(first: Board, second: Board) {
 const lanes = () => screen.getAllByTestId('kt-lane')
 const laneOf = (key: string) => lanes().find((l) => l.dataset.role === key)!
 const particles = (c: HTMLElement) => c.querySelectorAll('.kt-p[data-src]')
+/** The frame budget (engine.ts) follows how long this machine's frames take: under a parallel test run it drops
+ * particles by design. Tests that watch a particle fly report every frame as in budget (engine.test.ts tests the
+ * budget itself). */
+const steadyFrames = () => vi.spyOn(Engine.prototype, 'report').mockImplementation(() => {})
 const sleep = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
 
 function reduceMotion() {
@@ -62,6 +67,7 @@ describe('the board', () => {
   })
 
   test('the first snapshot does not animate; a new handoff after it flies along its edge', async () => {
+    steadyFrames()
     const first = runningBoard()
     const second = withEvent(runningBoard(), { kind: 'handoff', role: 'reviewer', from: 'ops', to: 'reviewer', text: '运维的脚本交给评审' })
     const p = twoPhase(first, second)
@@ -71,12 +77,14 @@ describe('the board', () => {
     expect(particles(container)).toHaveLength(0)
     expect(container.querySelectorAll('.kt-cell-face.is-flip, .kt-belt-chip.is-new, .kt-ev.is-new')).toHaveLength(0)
     p.next()
+    // the feed's row flashes when the poll brings it; the particle may start later (engine.ts, spread)
+    await waitFor(() => expect(container.querySelector('.kt-ev.is-new[data-seq="32"]')).not.toBeNull())
     await waitFor(() => expect(container.querySelector('.kt-p[data-src="r1006a#32"]')).not.toBeNull())
     expect(container.querySelector('.kt-p[data-src="r1006a#32"]')).toHaveAttribute('data-kind', 'handoff')
-    expect(container.querySelector('.kt-ev.is-new[data-seq="32"]')).not.toBeNull()
   })
 
   test('a bounce flies red from the test station; a test case going red → green flips', async () => {
+    steadyFrames()
     const second = withEvent(setCase(runningBoard(), 'api-signup.test.js#AC-6', 'pass'), { kind: 'bounce', role: 'backend', from: 'tests', to: 'backend', text: 'AC-7 失败，打回后端' })
     const p = twoPhase(runningBoard(), second)
     const { container } = render(<TeamPage pollMs={POLL} />)

@@ -84,7 +84,10 @@ describe('the board in English', () => {
     const said = errorText(new Error('API 400: {"error": "退回要写明打回给谁", "code": "no_target"}'))
     expect(said).toContain('Send back: Developer · fix')
     expect(said).not.toContain('退回')
-    expect(errorText(new Error('API 409: {"error": "已经签过了", "code": "signed"}'))).toContain('已经签过了')
+    expect(errorText(new Error('API 409: {"error": "已经签过了", "code": "signed"}'))).toContain('It has been signed off already')
+    // what the app passes on stays as it said it, inside the English sentence
+    expect(errorText(new Error('API 409: {"error": "没批成：digest mismatch", "code": "bench_refused"}'))).toContain('Not approved (没批成：digest mismatch)')
+    expect(errorText(new Error('API 409: {"error": "x", "code": "no_such_code"}'))).toContain('x')
   })
 
   test('the English audit trail downloads as audit-<run>.en.*, not as the signed audit.md', async () => {

@@ -68,13 +68,14 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "gate_discuss": bool(run.team.get("defaults", {}).get("gate_discuss")),
         "plan_skip": dict(s.get("plan_skip") or {}),
         "overruled": dict(s["overruled"]) if s.get("overruled") else None,
-        "sign_block": run.sign_block(),
-        "sign_block_msg": run.sign_block_msg(),
+        "sign_block": scrub(run.sign_block()),  # its why comes from release.sh
+        "sign_block_msg": messages.scrubbed(run.sign_block_msg(), scrub),
         "review_redo": run.review_redo(),
         "tests": {"at": t["at"], "command": t.get("command", ""), "cases": [_case(c) for c in t["cases"]],
                   "passed": t["passed"], "failed": t["failed"], "total": t["total"],
                   "history": [{"at": h["at"], "passed": h["passed"], "failed": h["failed"]} for h in t["history"]],
-                  "held": {**t["held"], "suggest": run.path_suggestions()} if t.get("held") else None, "round": int(t.get("round") or 0),
+                  "held": ({**messages.scrubbed(t["held"], scrub), "suggest": run.path_suggestions()}
+                           if t.get("held") else None), "round": int(t.get("round") or 0),
                   "running": bool(s.get("needs_test"))},
         "merges": [{k: m.get(k) for k in ("role", "sha", "at", "status", "files", "note")} for m in s["merges"]],
         "events": [{**e, "text": scrub(str(e.get("text", ""))), "code": e.get("code"),
@@ -90,7 +91,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "delivery": {**run.delivery(), "confirmed": bool(s.get("delivery"))},
         "issue": run.issue(),
         "pr": run.pr(),
-        "bench": bench_view(run),
+        "bench": bench_view(run, scrub),
         "release": release_view(run),
         "backlog": backlog_view(run),
     }
@@ -176,7 +177,7 @@ def triage_view(run: TeamRun) -> dict[str, Any] | None:
             "findings": out}
 
 
-def bench_view(run: TeamRun) -> dict[str, Any] | None:
+def bench_view(run: TeamRun, scrub: Callable[[str], str] = str) -> dict[str, Any] | None:
     """BenchView: the run's bench step and the bench state, read now (read only); *console*: how a person opens the
     operator console, when the bench beside the deploy command has one (bench/console.py)."""
     spec = run.team.get("bench")
@@ -184,7 +185,8 @@ def bench_view(run: TeamRun) -> dict[str, Any] | None:
         return None
     b = run.s.get("bench") or {}
     console = Path(spec["deploy"][0]).with_name("console.py")
-    return {"step": b.get("step"), "running": b.get("running"), "held": b.get("held"), "doctor": b.get("doctor"),
+    held = messages.scrubbed(b.get("held"), scrub) if b.get("held") else None  # its why and params: the bench's output
+    return {"step": b.get("step"), "running": b.get("running"), "held": held, "doctor": b.get("doctor"),
             "artifact": b.get("artifact"), "run_dir": b.get("run_dir"), "baseline": str(spec["baseline"]),
             "actions": list(b.get("actions") or []), "state": bench_mod.read_state(),
             "console": shlex.join(["python3", str(console)]) if console.is_file() else None}

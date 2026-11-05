@@ -47,6 +47,16 @@ def test_a_review_names_who_fixes_what():
     en = [{**r, "title_en": {"backend": "Developer · fix", "frontend": "Developer · refactor"}.get(r["key"], "")} for r in roles]
     assert targets("Send back: Developer · fix, the check on line 3", en) == ["backend"]
     assert targets("- send back: developer · refactor\n- Send back: mobile", en) == ["frontend", "mobile"]
+    # a role the note goes on to mention is not sent back too; ·, - and spaces are the same
+    en_t = [{**r, "title_en": {"tester": "Tester"}.get(r["key"], r["title_en"])} for r in en]
+    assert targets("Send back: Developer · fix (the Tester's case on line 3)", en_t) == ["backend"]
+    assert targets("Send back: developer-fix, Tester", en_t) == ["tester", "backend"]
+
+
+def test_a_reviewers_verdict_in_either_language():
+    verdict = mod("team").review_verdict
+    assert [verdict(s) for s in ("可以交付", "要改：两处", "Ready to deliver", "changes needed: x", "Needs changes",
+                                 "看起来还行", "", None)] == ["ok", "changes", "ok", "changes", "changes", "", "", ""]
 
 
 def _review_flow(tmp_path, verdicts, limit):

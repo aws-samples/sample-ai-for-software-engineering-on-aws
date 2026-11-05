@@ -149,11 +149,50 @@ def test_params_go_out_redacted_as_the_text_does(tmp_path, monkeypatch):
     async def go():
         for path in (f"/runs/{s['id']}/events", f"/runs/{s['id']}/flow"):
             out = json.dumps((await call(routes, "GET", path)).body, ensure_ascii=False)
-            assert secret not in out and "[已隐去]" in out, path
+            assert secret not in out and "[REDACTED]" in out, path
     asyncio.run(go())
 
     run = make_run(tmp_path / "b", FakeManager())
     run.say("approved", "approved", {"g_gate": run.order[0], "note": f"token={secret}"}, role=run.order[0], frm="person")
     out = board.build({run.rid: run}, None, mgr=None, scrub=service.basic_scrub, now=1.0)["run"]
     assert secret not in json.dumps(out["events"], ensure_ascii=False)
-    assert out["events"][-1]["params"]["note"] == "token=[已隐去]"
+    assert out["events"][-1]["params"]["note"] == "token=[REDACTED]"
+
+
+def test_the_status_lines_go_out_redacted_too():
+    """Why a run cannot be signed (from release.sh), why the checks or the bench hold the run (from their output)."""
+    from teamkit import FakeManager, make_run
+
+    service, board = mod("service"), mod("board")
+    secret = "sk-ABCDEFGHIJKLMNOPQRSTUV"
+    run = make_run(__import__("pathlib").Path(__import__("tempfile").mkdtemp()), FakeManager())
+    run.s["tests"]["held"] = {"checks": ["release"], "why": f"release FAIL: token={secret}"}
+    run.s["status"], run.s["ended_at"] = "done", 1.0
+    run.s["rerun"] = {"at": 1.0, "head": "c0ffee", "results": "/r", "checks": [], "differs": [],
+                      "release": {"verdict": "FAIL", "reasons": [f"api_key={secret}"], "summary": ""}}
+    out = board.build({run.rid: run}, None, mgr=None, scrub=service.basic_scrub, now=1.0)["run"]
+    text = json.dumps({k: out[k] for k in ("sign_block", "sign_block_msg", "tests")}, ensure_ascii=False)
+    assert secret not in text and "[REDACTED]" in text
+    held = {"step": "deploy", "why": f"secret={secret}", "code": "hold.release", "params": {"why": f"secret={secret}"},
+            "commands": [], "at": 1.0}
+    run.s["bench"] = {"held": held}
+    run.team["bench"] = {"deploy": ["/nonexistent/cc1.sh", "deploy"], "baseline": "/b"}
+    view = json.dumps(board.bench_view(run, service.basic_scrub), ensure_ascii=False)
+    assert secret not in view and view.count("[REDACTED]") == 2
+
+
+def test_every_error_the_app_answers_with_has_both_languages():
+    """The English board says an error by its code (err.<code> in ui/src/i18n): every code an AppError or the
+    request guard answers with has an entry in both dictionaries."""
+    import ast
+    codes = set()
+    for f in (ROOT / "backend").rglob("*.py"):
+        for n in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(n, ast.Call) and (getattr(n.func, "id", None) or getattr(n.func, "attr", None)) in ("AppError", "err") \
+                    and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant):
+                codes.add(n.args[1].value)
+    assert len(codes) > 40
+    for lang in ("zh", "en"):
+        d = json.loads((I18N / f"{lang}.json").read_text(encoding="utf-8"))
+        assert codes - {k[4:] for k in d if k.startswith("err.")} == set(), lang
+

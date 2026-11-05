@@ -219,6 +219,22 @@ def money(amount: float | None) -> str:
     return f"¥{amount / 1e4:,.1f} 万" if amount >= 1e4 else f"¥{amount:,.0f}"
 
 
+_REVIEW_OK = re.compile(r"^\s*(?:可以交付|ready to deliver|can be delivered|ok to deliver)", re.I)
+_REVIEW_CHANGES = re.compile(r"^\s*(?:要改|changes? (?:needed|requested|required)|needs? changes)", re.I)
+
+
+def review_verdict(summary: Any) -> str:
+    """A reviewer's ``DONE:`` line: ``ok`` (可以交付, or "Ready to deliver" from an agent writing English), ``changes``
+    (要改, "Changes needed"), else ``""``."""
+    text = str(summary or "")
+    return "ok" if _REVIEW_OK.match(text) else "changes" if _REVIEW_CHANGES.match(text) else ""
+
+
+def _plain(text: str) -> str:
+    """For matching an English role name: lower case, ``·`` ``-`` ``_`` and runs of spaces as one space."""
+    return " ".join(re.sub(r"[·・\-_]", " ", text.lower()).split())
+
+
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     """The writing roles a 要改 review sends back, in team order: its ``打回：`` (or ``Send back:``) lines (one per role
     is fine), else every 归X it names."""
@@ -228,8 +244,11 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     chunks = lines or _OWNER_RE.findall(text or "")
     found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
+    # English names name a target only where an item of the line starts with one, so that a role the note goes on
+    # to mention ("Send back: Developer · fix (the Tester's case…)") is not sent back too
+    items = [_plain(i) for chunk in chunks for i in re.split(r"[,，;；、/]", re.sub(r"\([^)]*\)|（[^）]*）", "", chunk))]
     found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
-              and any(r["title_en"].lower() in chunk.lower() for chunk in chunks)}
+              and any(i == _plain(r["title_en"]) or i.startswith(_plain(r["title_en"]) + " ") for i in items)}
     return [k for k in writers if k in found]
 
 
@@ -826,7 +845,7 @@ class TeamRun:
         rev = next((k for k in self.order if not self.roles[k]["writable"] and self.lane(k)["status"] == "done"), None)
         last = self.lane(rev)["attempts"][-1] if rev and self.lane(rev)["attempts"] else {}
         targets = review_targets(last.get("reply") or "", self.team["roles"])
-        if not (str(last.get("summary") or "").startswith("要改") and targets):
+        if not (review_verdict(last.get("summary")) == "changes" and targets):
             return None
         return {"role": rev, "summary": str(last["summary"]), "targets": targets}
 
@@ -1529,7 +1548,7 @@ class TeamRun:
         lane.update(status="done", done_at=self.d.now())
         summary = att.get("summary") or ""
         self.say("review", "review", {"summary": summary}, role=key)
-        if summary.startswith("要改"):
+        if review_verdict(summary) == "changes":
             rounds = int(s.get("review_rounds") or 0)
             limit = int(self.team.get("defaults", {}).get("max_review_rounds", 0) or 0)
             if rounds < limit and not self.ended and await self._review_bounce(key, att.get("reply") or ""):
@@ -1556,7 +1575,7 @@ class TeamRun:
             if red:  # done, but not green: said as it is, the person decides
                 self._end("done", "run.done_red", {"summary": summary[:20], "red": red})
             else:
-                self._end("done", "run.done_ok" if summary.startswith("可以交付") else "run.done")
+                self._end("done", "run.done_ok" if review_verdict(summary) == "ok" else "run.done")
 
     async def _resolve_ownership(self) -> None:
         """Once the role that writes the ownership file is merged: every role whose directories come from it gets

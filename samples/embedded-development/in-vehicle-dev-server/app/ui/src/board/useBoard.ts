@@ -40,8 +40,10 @@ export function errorText(e: unknown): string {
   const [, status, body] = m
   try {
     const data = JSON.parse(body) as { error?: unknown; code?: unknown }
-    // in English, an error the dictionary knows by its code (err.<code>) is said from there; else the app's own words
-    const said = lang() === 'en' && typeof data?.code === 'string' && has(`err.${data.code}`) ? tr(`err.${data.code}`) : data?.error
+    // in English, an error is said by its code (err.<code>); {detail} there is the app's own message, which carries
+    // what the app passes on (a reason from the bench, a file name …)
+    const said = lang() === 'en' && typeof data?.code === 'string' && has(`err.${data.code}`)
+      ? tr(`err.${data.code}`, { detail: typeof data.error === 'string' ? data.error : '' }) : data?.error
     if (data && typeof said === 'string' && said) return tr('board.useBoard.1', { p0: said, p1: status })
   } catch {
     /* not JSON */
