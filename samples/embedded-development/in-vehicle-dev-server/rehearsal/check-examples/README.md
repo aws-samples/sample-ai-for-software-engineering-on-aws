@@ -23,12 +23,13 @@ builds that `unit.sh` makes on each call.
 
 2026-11-03, native arm64 build container `vstatd-build:arm64` on Apple Silicon (GCC 12.4.0, cppcheck 2.13.0,
 clang-tidy 18.1.3, git 2.43.0), stand-in sysroot in a Docker volume. 23 of 23 as expected, in 215 s;
-`checks/test/test_checks.py` 72 tests OK in the same container. The table is from 2026-10-28 (amd64 container, the
-same verdicts); on arm64 ThreadSanitizer names the race with the absolute path of the check's copy. The amd64
-container under Rosetta cannot run ThreadSanitizer, so there the `unit` rows fail for that reason. With the Buildroot
-sysroot (volume `cc1-sysroot`) instead of the stand-in, the seven `static` rows from step 2 on were BLOCKED, because
-that sysroot had no C++ standard headers for clang-tidy. Since `bench/build-target.sh` exports them (2026-11-04) it is
-23 of 23 with `cc1-sysroot` too, in 359 s, native arm64 image; the amd64 image was not tried.
+`checks/test/test_checks.py` 72 tests OK in the same container (76 on main as of 2026-11-05, OK in the amd64 image on
+an x86_64 Ubuntu 24.04 build host). The table is from 2026-10-28 (amd64 container, the same verdicts); on arm64
+ThreadSanitizer names the race with the absolute path of the check's copy. The amd64 container under Rosetta cannot
+run ThreadSanitizer, so there the `unit` rows fail for that reason. With the Buildroot sysroot (volume `cc1-sysroot`)
+instead of the stand-in, the seven `static` rows from step 2 on were BLOCKED, because that sysroot had no C++ standard
+headers for clang-tidy. Since `bench/build-target.sh` exports them (2026-11-04) it is 23 of 23 with `cc1-sysroot` too,
+in 359 s, native arm64 image; the amd64 image was not tried.
 
 | Step | Check | Expected | Verdict | First reason |
 | --- | --- | --- | --- | --- |
