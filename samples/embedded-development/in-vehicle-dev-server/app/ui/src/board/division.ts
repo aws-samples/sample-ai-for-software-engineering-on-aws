@@ -5,6 +5,7 @@
  */
 import type { AuditActor, AuditEntry } from '../types'
 import { FLOW, type FlowKey, type FlowStepDef } from './flow'
+import { t as tr } from '../i18n'
 
 export const ROWS: AuditActor[] = ['person', 'agent', 'app', 'bench']
 
@@ -12,7 +13,7 @@ export const ROWS: AuditActor[] = ['person', 'agent', 'app', 'bench']
 export function plannedOf(def: FlowStepDef, who: AuditActor): string {
   const at = def.who.indexOf(who)
   if (at < 0) return ''
-  const parts = def.does.split('；')
+  const parts = def.does.split(/；|; /) // i18n-keep: the two parts of a shared step, in either language
   return def.who.length > 1 && parts.length === def.who.length ? parts[at] : def.does
 }
 
@@ -31,24 +32,24 @@ function notesOf(actor: AuditActor, rows: AuditEntry[]): string[] {
   const ev = rows.map((r) => r.evidence).join(' ')
   if (actor === 'person') {
     const answers = ev.match(/\bQ\d+=/g)?.length ?? 0
-    const differ = ev.match(/与建议不同/g)?.length ?? 0
-    if (answers) out.push(`逐题回答 ${answers} 题${differ ? `，${differ} 题改了建议` : ''}`)
-    if (rows[0]?.step === 'bench') { // a bench decision says where it was made in its who
-      const board = rows.filter((r) => r.who.includes('Kiro Crew 看板')).length
-      if (board) out.push(`看板上决定 ${board} 次`)
-      if (rows.length > board) out.push(`操作台上决定 ${rows.length - board} 次`)
+    const differ = rows.reduce((n, r) => n + (r.flags?.differs ?? 0), 0)
+    if (answers) out.push(tr('board.division.1', { p0: answers, p1: differ ? tr('board.division.changed', { p0: differ }) : '' }))
+    if (rows[0]?.step === 'bench') { // a bench decision says where it was made
+      const board = rows.filter((r) => r.flags?.where === 'board').length
+      if (board) out.push(tr('board.division.2', { p0: board }))
+      if (rows.length > board) out.push(tr('board.division.3', { p0: rows.length - board }))
     }
   } else if (actor === 'agent') {
     const cites = ev.match(/\b(?:F-\d{3}|VSTATD-[A-Z]+[-\w.]*)/g)?.length ?? 0
-    if (cites) out.push(`引用发现或规范 ${cites} 次`)
+    if (cites) out.push(tr('board.division.4', { p0: cites }))
   } else if (actor === 'app') {
     const rounds = rows.filter((r) => /=(?:FAIL|fail|BLOCKED)\b/.test(r.evidence)).length
-    if (rounds) out.push(`${rounds} 轮检查有不过`)
+    if (rounds) out.push(tr('board.division.5', { p0: rounds }))
     const commits = ev.match(/\bcommit [0-9a-f]+/g)?.length ?? 0
-    if (commits) out.push(`合入 ${commits} 次`)
+    if (commits) out.push(tr('board.division.6', { p0: commits }))
   } else {
-    const ok = rows.filter((r) => /结果 ok/.test(r.what)).length
-    if (ok) out.push(`动作完成 ${ok} 次`)
+    const ok = rows.filter((r) => r.flags?.result === 'ok').length
+    if (ok) out.push(tr('board.division.7', { p0: ok }))
   }
   return out
 }

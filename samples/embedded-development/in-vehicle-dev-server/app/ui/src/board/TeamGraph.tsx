@@ -17,6 +17,7 @@ import { NODE_H, NODE_W, ORCH_BOX, ROSTER, anchorBox, commandPath, headX, partic
 import { Overlay } from './overlay'
 import { RoleGlyph } from './RoleIcon'
 import { NodeCard } from './NodeCard'
+import { t as tr } from '../i18n'
 
 export type FlashMap = Record<string, { n: number; tone: string }>
 
@@ -125,7 +126,7 @@ export function TeamGraph({ run, lay, focus, onRole, flashes, reducedMotion, fee
 
   const working = run.roles.filter((l) => WORKING.has(l.status)).length
   const merged = run.roles.filter((l) => l.status === 'merged').length
-  const label = `团队图：${run.roles.length} 个角色，${working} 个在跑，${merged} 个已合并；测试 ${run.tests.passed}/${run.tests.total}。点一个角色只看它。`
+  const label = tr('board.TeamGraph.1', { p0: run.roles.length, p1: working, p2: merged, p3: run.tests.passed, p4: run.tests.total })
 
   return (
     <div className={`kt-graph${lay.orch ? ' is-phased' : ''}`} data-testid="kt-graph">
@@ -173,7 +174,7 @@ export function TeamGraph({ run, lay, focus, onRole, flashes, reducedMotion, fee
             ...(right ? { right: `${((lay.width - (box.x - NODE_W / 2 - 10)) / lay.width) * 100}%` } : { left: `${((box.x + NODE_W / 2 + 10) / lay.width) * 100}%` }),
           }
           return (
-            <div key={card} ref={fitCard} className="kt-ncard" style={style} data-testid="kt-ncard" role="dialog" aria-label={`${byKey.get(card)!.title}做了什么`}
+            <div key={card} ref={fitCard} className="kt-ncard" style={style} data-testid="kt-ncard" role="dialog" aria-label={tr('board.TeamGraph.2', { p0: byKey.get(card)!.title })}
                  onMouseEnter={() => hover(card, 0)} onMouseLeave={() => hover(null, 200)}>
               <NodeCard run={run} lane={byKey.get(card)!} onOutputs={onOutputs} />
             </div>
@@ -232,7 +233,7 @@ function Stages({ run, lay, byKey, reducedMotion }: { run: RunDetail; lay: Graph
                 <rect x={-52} y={-12} width={104} height={24} rx={12} />
                 <ParallelDot reducedMotion={reducedMotion} />
                 <text x={6} y={4.5} textAnchor="middle">
-                  同时在跑 {working}
+                  {tr('board.TeamGraph.3')} {working}
                 </text>
               </g>
             )}
@@ -276,11 +277,11 @@ function Phases({ run, lay, byKey, reducedMotion, phase, onPhase }: { run: RunDe
               )}
             </text>
             <text className="kt-phase-stages" x={cx} y={48} textAnchor="middle">
-              {p.key === 'init' ? '选流程 · 组队 · 建仓库' : clip([...new Set(lanes.flatMap((l) => l.stage.split(/\s*·\s*/)).filter(Boolean))].join(' · '), Math.max(6, (p.x2 - p.x1) / 13))}
+              {p.key === 'init' ? tr('board.TeamGraph.4') : clip([...new Set(lanes.flatMap((l) => l.stage.split(/\s*·\s*/)).filter(Boolean))].join(' · '), Math.max(6, (p.x2 - p.x1) / 13))}
             </text>
             {!p.used && (
               <text className="kt-phase-note" x={cx} y={lay.rail.y / 2} textAnchor="middle">
-                {p.key === 'operation' ? '本次未执行' : '这次不需要'}
+                {p.key === 'operation' ? tr('board.TeamGraph.5') : tr('board.TeamGraph.6')}
               </text>
             )}
             {working >= 2 && (
@@ -288,7 +289,7 @@ function Phases({ run, lay, byKey, reducedMotion, phase, onPhase }: { run: RunDe
                 <rect x={-52} y={-12} width={104} height={24} rx={12} />
                 <ParallelDot reducedMotion={reducedMotion} />
                 <text x={6} y={4.5} textAnchor="middle">
-                  同时在跑 {working}
+                  {tr('board.TeamGraph.3')} {working}
                 </text>
               </g>
             )}
@@ -306,16 +307,16 @@ function Orchestrator({ run, lay, flash }: { run: RunDetail; lay: GraphLayout; f
   const active = run.status !== 'done' && run.status !== 'failed' && run.status !== 'stopped'
   return (
     <g className={`kt-orch${active ? ' is-active' : ''}`} transform={`translate(${o.x},${o.y})`} data-testid="kt-orch">
-      <title>{`编排器：做 AI-DLC 初始化阶段的事（选流程、组队、建仓库），之后按依赖派活、合入、跑检查、打回。它是确定性的程序，不是模型。实现：${run.team.orchestrator}`}</title>
+      <title>{tr('board.TeamGraph.7', { p0: run.team.orchestrator })}</title>
       <rect className="kt-orch-body" x={-w / 2} y={-h / 2} width={w} height={h} rx={18} />
       <text className="kt-orch-title" y={-14} textAnchor="middle">
         Orchestrator
       </text>
       <text className="kt-orch-cn" y={6} textAnchor="middle">
-        编排器
+        {tr('board.TeamGraph.8')}
       </text>
       <text className="kt-orch-sub" y={26} textAnchor="middle">
-        0 初始化 · 组队、建仓库
+        {tr('board.TeamGraph.9')}
       </text>
       {flash && <rect key={flash.n} className={`kt-node-flash is-${flash.tone}`} x={-w / 2 - 5} y={-h / 2 - 5} width={w + 10} height={h + 10} rx={22} />}
     </g>
@@ -349,7 +350,7 @@ function Roster({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
   return (
     <g className="kt-roster" transform={`translate(${o.x},${top})`} data-testid="kt-roster">
       <text className="kt-roster-title" y={0} textAnchor="middle">
-        {`团队 · ${picked} 人`}
+        {tr('board.TeamGraph.10', { p0: picked })}
       </text>
       {groups.map((g) => {
         const head = y
@@ -362,7 +363,7 @@ function Roster({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
             const title = l?.title ?? key
             return (
               <g key={key} className="kt-roster-item is-bench" transform={`translate(0,${at})`} data-state="bench">
-                <title>{`${title}：${l?.status === 'skipped' && l.summary ? `${l.summary}，` : '这次的需求用不到这个岗位，'}不进工作流`}</title>
+                <title>{tr('board.TeamGraph.11', { p0: title, p1: l?.status === 'skipped' && l.summary ? tr('board.TeamGraph.skipWhy', { p0: l.summary }) : tr('board.TeamGraph.unneeded') })}</title>
                 <rect x={-w / 2 + 8} y={-7.5} width={w - 8} height={15} rx={7.5} />
                 <circle cx={-w / 2 + 18} cy={0.5} r={3.5} />
                 <text x={-w / 2 + 28} y={4.5}>
@@ -374,7 +375,7 @@ function Roster({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
           const state = LIVE.has(l.status) || l.status === 'queued' ? 'busy' : l.status === 'waiting' ? 'team' : 'used'
           return (
             <g key={l.key} className={`kt-roster-item is-team${state !== 'team' ? ' is-used' : ''}${state === 'busy' ? ' is-busy' : ''}`} transform={`translate(0,${at})`} data-state={state}>
-              <title>{`${l.title}：${l.doing || l.mission}`}</title>
+              <title>{tr('board.TeamGraph.12', { p0: l.title, p1: l.doing || l.mission })}</title>
               <rect x={-w / 2 + 8} y={-7.5} width={w - 8} height={15} rx={7.5} />
               <circle cx={-w / 2 + 18} cy={0.5} r={3.5} />
               <text x={-w / 2 + 28} y={4.5}>
@@ -387,7 +388,7 @@ function Roster({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
         return (
           <g key={g.key}>
             <text className="kt-roster-group" x={-w / 2} y={head + 4}>
-              {expertName(g.key)}专家{g.keys.length > 1 ? ` ×${g.keys.length}` : ''}
+              {expertName(g.key)}{tr('board.TeamGraph.13')}{g.keys.length > 1 ? ` ×${g.keys.length}` : ''}
             </text>
             {rows}
           </g>
@@ -410,16 +411,16 @@ function Rail({ run, lay, head, byKey, focus, flash }: { run: RunDetail; lay: Gr
       <line className="kt-rail-base" x1={x1} y1={y} x2={x2} y2={y} />
       {anyMerged && <line className="kt-rail-fill" x1={x1} y1={y} x2={head} y2={y} />}
       <text className="kt-rail-label" x={x1} y={y - 18}>
-        运行分支 <tspan className="kt-mono">{run.branch}</tspan>
+        {tr('board.TeamGraph.14')} <tspan className="kt-mono">{run.branch}</tspan>
       </text>
       <text className="kt-rail-sub" x={x1} y={y + 24}>
-        基线 <tspan className="kt-mono">{run.base}</tspan>
+        {tr('board.TeamGraph.15')} <tspan className="kt-mono">{run.base}</tspan>
       </text>
       {[...latest.entries()].map(([role, m]) => {
         const mx = lay.mergeX.get(role)
         const lane = byKey.get(role)
         if (mx === undefined || !lane) return null
-        const tip = `${lane.title}：${m.status === 'conflict' ? `合入冲突${m.note ? `（${m.note}）` : ''}` : `已合入 ${m.sha}`}${m.count > 1 ? `，共合入 ${m.count} 次` : ''}`
+        const tip = tr('board.TeamGraph.16', { p0: lane.title, p1: m.status === 'conflict' ? tr('board.TeamGraph.conflict', { p0: m.note ? tr('board.TeamGraph.conflictNote', { p0: m.note }) : '' }) : tr('board.TeamGraph.merged', { p0: m.sha }), p2: m.count > 1 ? tr('board.TeamGraph.mergedN', { p0: m.count }) : '' })
         return (
           <g key={role} className={`kt-rail-dot is-${m.status}${focus && focus !== role ? ' is-dim' : ''}`} transform={`translate(${mx},${y})`}>
             <title>{tip}</title>
@@ -446,7 +447,7 @@ function Station({ run, lay, flash }: { run: RunDetail; lay: GraphLayout; flash?
   const fail = total ? (failed / total) * c : 0
   const tone = !total ? 'none' : failed ? 'fail' : 'pass'
   return (
-    <g className={`kt-station is-${tone}`} transform={`translate(${st.x},${st.y})`} data-testid="kt-station" role="img" aria-label={total ? `测试 ${passed}/${total}` : '还没跑过测试'}>
+    <g className={`kt-station is-${tone}`} transform={`translate(${st.x},${st.y})`} data-testid="kt-station" role="img" aria-label={total ? tr('board.TeamGraph.17', { p0: passed, p1: total }) : tr('board.TeamGraph.18')}>
       <circle className="kt-station-bg" r={st.r} />
       <circle className="kt-station-track" r={r} />
       {pass > 0 && <circle className="kt-station-pass" r={r} strokeDasharray={`${pass} ${c}`} transform="rotate(-90)" />}
@@ -455,7 +456,7 @@ function Station({ run, lay, flash }: { run: RunDetail; lay: GraphLayout; flash?
         {total ? `${passed}/${total}` : '—'}
       </text>
       <text className="kt-station-label" y={-st.r - 9} textAnchor="middle">
-        🧪 测试
+        {tr('board.TeamGraph.19')}
       </text>
       {flash && <circle key={flash.n} className={`kt-station-flash is-${flash.tone}`} r={st.r + 3} />}
     </g>
@@ -472,43 +473,43 @@ function Elapsed({ lane }: { lane: Lane }) {
 function Quiet({ lane }: { lane: Lane }) {
   const now = useServerNow()
   const last = lane.agent?.last_activity
-  if (!last) return <>卡住</>
+  if (!last) return <>{tr('board.TeamGraph.20')}</>
   const s = Math.max(0, now - last)
-  return <>静了 {s < 60 ? `${Math.round(s)} 秒` : `${Math.round(s / 60)} 分钟`}</>
+  return <>{tr('board.TeamGraph.21')} {s < 60 ? tr('board.TeamGraph.22', { p0: Math.round(s) }) : tr('board.TeamGraph.23', { p0: Math.round(s / 60) })}</>
 }
 
 function subLine(lane: Lane, lanes: Lane[]) {
-  if (lane.status === 'merged' && lane.gate === 'pending') return `等人批准${lane.gate_label || ''}`
+  if (lane.status === 'merged' && lane.gate === 'pending') return tr('board.TeamGraph.24', { p0: lane.gate_label || '' })
   switch (lane.status) {
     case 'skipped':
-      return clip(lane.summary || '跳过：本项目用不到', 8.2)
+      return clip(lane.summary || tr('board.TeamGraph.25'), 8.2)
     case 'waiting':
-      if (lane.awaiting_member) return '等人加成员'
+      if (lane.awaiting_member) return tr('board.TeamGraph.26')
       return clip(waitingText(lane, lanes), 8.2)
     case 'queued':
-      return '等 KiroCrew 放行'
+      return tr('board.TeamGraph.27')
     case 'running':
       return (
         <>
-          在跑 · <Elapsed lane={lane} />
+          {tr('board.TeamGraph.28')} <Elapsed lane={lane} />
         </>
       )
     case 'fixing':
       return (
         <>
-          修复中 · <Elapsed lane={lane} />
+          {tr('board.TeamGraph.29')} <Elapsed lane={lane} />
         </>
       )
     case 'stalled':
       return <Quiet lane={lane} />
     case 'awaiting_approval':
-      return '✋ 等你批准'
+      return tr('board.TeamGraph.30')
     case 'done':
-      return lane.writable.length ? '完成 · 待合并' : `完成 · ${fmtClock(lane.active_s)}`
+      return lane.writable.length ? tr('board.TeamGraph.31') : tr('board.TeamGraph.32', { p0: fmtClock(lane.active_s) })
     case 'merged':
-      return `已合并 · ${fmtClock(lane.active_s)}`
+      return tr('board.TeamGraph.33', { p0: fmtClock(lane.active_s) })
     case 'failed':
-      return '✕ 失败'
+      return tr('board.TeamGraph.34')
     default:
       return laneMeta(lane).label
   }
@@ -521,14 +522,14 @@ function GraphNode({ lane, lanes, box, focus, off = false, flash, onRole, reduce
   const working = WORKING.has(lane.status)
   const ticker = !quiet && LIVE.has(lane.status) && lane.agent?.last_tool ? lane.agent.last_tool : null
   const badges: Array<{ text: string; tone: string }> = []
-  if (lane.attempt > 1) badges.push({ text: `第 ${lane.attempt} 轮`, tone: 'fix' })
-  if (lane.violations.length) badges.push({ text: `越界 ${lane.violations.length}`, tone: 'bad' })
-  if (lane.status === 'queued') badges.push({ text: '排队', tone: 'queue' })
-  if (lane.status === 'stalled') badges.push({ text: '⚠ 卡住', tone: 'warn' })
-  if (lane.gate === 'pending') badges.push({ text: '等你批准', tone: 'gate' })
-  if (lane.awaiting_member && lane.status === 'waiting') badges.push({ text: '缺成员', tone: 'warn' })
+  if (lane.attempt > 1) badges.push({ text: tr('board.TeamGraph.35', { p0: lane.attempt }), tone: 'fix' })
+  if (lane.violations.length) badges.push({ text: tr('board.TeamGraph.36', { p0: lane.violations.length }), tone: 'bad' })
+  if (lane.status === 'queued') badges.push({ text: tr('board.TeamGraph.37'), tone: 'queue' })
+  if (lane.status === 'stalled') badges.push({ text: tr('board.TeamGraph.38'), tone: 'warn' })
+  if (lane.gate === 'pending') badges.push({ text: tr('board.TeamGraph.39'), tone: 'gate' })
+  if (lane.awaiting_member && lane.status === 'waiting') badges.push({ text: tr('board.TeamGraph.40'), tone: 'warn' })
   const isFocus = focus === lane.key
-  const name = `${lane.stage ? `${lane.stage} · ` : ''}${lane.title}${lane.doing ? `（${lane.doing}）` : ''}：${meta.label}${lane.attempt > 1 ? `，第 ${lane.attempt} 轮` : ''}${lane.violations.length ? `，越界改了 ${lane.violations.join('、')}` : ''}${lane.status === 'waiting' ? `，${waitingText(lane, lanes)}` : ''}${ticker ? `，正在：${ticker}` : ''}`
+  const name = tr('board.TeamGraph.41', { p0: lane.stage ? `${lane.stage} · ` : '', p1: lane.title, p2: lane.doing ? tr('board.TeamGraph.doing', { p0: lane.doing }) : '', p3: meta.label, p4: lane.attempt > 1 ? tr('board.TeamGraph.round', { p0: lane.attempt }) : '', p5: lane.violations.length ? tr('board.TeamGraph.violated', { p0: lane.violations.join(tr('common.sep')) }) : '', p6: lane.status === 'waiting' ? tr('board.TeamGraph.waiting', { p0: waitingText(lane, lanes) }) : '', p7: ticker ? tr('board.TeamGraph.now', { p0: ticker }) : '' })
   const onKey = (e: KeyboardEvent<SVGGElement>) => {
     if (e.key !== 'Enter' && e.key !== ' ') return
     e.preventDefault()
@@ -611,7 +612,7 @@ function RetryChip({ lane, box, onRetry }: { lane: Lane; box: NodeBox; onRetry: 
       transform={`translate(${box.x + NODE_W / 2 - 34},${box.y + NODE_H / 2 + 14})`}
       role="button"
       tabIndex={0}
-      aria-label={`重试${lane.title}`}
+      aria-label={tr('board.TeamGraph.42', { p0: lane.title })}
       onClick={go}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -620,10 +621,10 @@ function RetryChip({ lane, box, onRetry }: { lane: Lane; box: NodeBox; onRetry: 
         }
       }}
     >
-      <title>{`重试${lane.title}：再给它一轮`}</title>
+      <title>{tr('board.TeamGraph.43', { p0: lane.title })}</title>
       <rect x={-32} y={-12} width={64} height={24} rx={12} />
       <text y={4.5} textAnchor="middle">
-        ↻ 重试
+        {tr('board.TeamGraph.44')}
       </text>
     </g>
   )
@@ -635,9 +636,9 @@ function GateChips({ lane, box, onGate }: { lane: Lane; box: NodeBox; onGate?: (
   if (lane.gate === 'discussing') {
     return (
       <g className="kt-gate" transform={`translate(${box.x},${box.y + NODE_H / 2 + 22})`} data-testid="kt-gate">
-        <g className="kt-gate-chip is-talking is-static" aria-label={`${lane.title}在回答你的讨论`}>
+        <g className="kt-gate-chip is-talking is-static" aria-label={tr('board.TeamGraph.45', { p0: lane.title })}>
           <rect x={-56} y={-13} width={112} height={26} rx={13} />
-          <text y={5} textAnchor="middle">讨论中 · 在回答</text>
+          <text y={5} textAnchor="middle">{tr('board.TeamGraph.46')}</text>
         </g>
       </g>
     )
@@ -670,14 +671,14 @@ function GateChips({ lane, box, onGate }: { lane: Lane; box: NodeBox; onGate?: (
     <g className="kt-gate" transform={`translate(${box.x},${box.y + NODE_H / 2 + 22})`} data-testid="kt-gate">
       {lane.can_discuss ? (
         <>
-          {lane.overrule ? chip('approve', '仍然批准', -52, 104) : chip('approve', `✓ 批准${label}`, -52, 104)}
-          {chip('discuss', '讨论', 26, 44)}
-          {chip('revise', lane.overrule ? '再改一轮' : '退回', lane.overrule ? 92 : 80, lane.overrule ? 60 : 44)}
+          {lane.overrule ? chip('approve', tr('board.TeamGraph.47'), -52, 104) : chip('approve', tr('board.TeamGraph.48', { p0: label }), -52, 104)}
+          {chip('discuss', tr('board.TeamGraph.49'), 26, 44)}
+          {chip('revise', lane.overrule ? tr('board.TeamGraph.50') : tr('board.TeamGraph.51'), lane.overrule ? 92 : 80, lane.overrule ? 60 : 44)}
         </>
       ) : (
         <>
-          {lane.overrule ? chip('approve', '仍然批准', -28, 104) : chip('approve', `✓ 批准${label}`, -28, 104)}
-          {chip('revise', lane.overrule ? '再改一轮' : '退回', lane.overrule ? 60 : 52, lane.overrule ? 68 : 52)}
+          {lane.overrule ? chip('approve', tr('board.TeamGraph.47'), -28, 104) : chip('approve', tr('board.TeamGraph.48', { p0: label }), -28, 104)}
+          {chip('revise', lane.overrule ? tr('board.TeamGraph.50') : tr('board.TeamGraph.51'), lane.overrule ? 60 : 52, lane.overrule ? 68 : 52)}
         </>
       )}
     </g>
@@ -685,21 +686,21 @@ function GateChips({ lane, box, onGate }: { lane: Lane; box: NodeBox; onGate?: (
 }
 
 const LEGEND: Array<{ status: Lane['status']; text: string }> = [
-  { status: 'running', text: '在跑' },
-  { status: 'fixing', text: '修复中' },
-  { status: 'queued', text: '排队' },
-  { status: 'stalled', text: '卡住' },
-  { status: 'awaiting_approval', text: '等你批准' },
-  { status: 'done', text: '完成·待合并' },
-  { status: 'merged', text: '已合并' },
-  { status: 'failed', text: '失败' },
-  { status: 'waiting', text: '等上游' },
-  { status: 'skipped', text: '跳过' },
+  { status: 'running', text: tr('board.TeamGraph.52') },
+  { status: 'fixing', text: tr('board.TeamGraph.53') },
+  { status: 'queued', text: tr('board.TeamGraph.37') },
+  { status: 'stalled', text: tr('board.TeamGraph.20') },
+  { status: 'awaiting_approval', text: tr('board.TeamGraph.39') },
+  { status: 'done', text: tr('board.TeamGraph.54') },
+  { status: 'merged', text: tr('board.TeamGraph.55') },
+  { status: 'failed', text: tr('board.TeamGraph.56') },
+  { status: 'waiting', text: tr('board.TeamGraph.57') },
+  { status: 'skipped', text: tr('board.TeamGraph.58') },
 ]
 
 function Legend() {
   return (
-    <div className="kt-legend" role="note" aria-label="图例">
+    <div className="kt-legend" role="note" aria-label={tr('board.TeamGraph.59')}>
       {LEGEND.map((l) => (
         <span key={l.status} className={`kt-legend-item is-${l.status}`}>
           <i aria-hidden="true" />
@@ -709,19 +710,19 @@ function Legend() {
       <span className="kt-legend-sep" aria-hidden="true" />
       <span className="kt-legend-item is-p-handoff">
         <b aria-hidden="true" />
-        交接
+        {tr('board.TeamGraph.60')}
       </span>
       <span className="kt-legend-item is-p-merge">
         <b aria-hidden="true" />
-        合入运行分支
+        {tr('board.TeamGraph.61')}
       </span>
       <span className="kt-legend-item is-p-pass">
         <b aria-hidden="true" />
-        测试全绿
+        {tr('board.TeamGraph.62')}
       </span>
       <span className="kt-legend-item is-p-fail">
         <b aria-hidden="true" />
-        测试有红 / 打回
+        {tr('board.TeamGraph.63')}
       </span>
     </div>
   )

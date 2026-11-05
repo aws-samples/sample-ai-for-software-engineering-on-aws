@@ -43,6 +43,10 @@ def test_a_review_names_who_fixes_what():
               "- 打回：后端（删掉 `sendCheck` 的转义）\n")
     assert targets(review, roles) == ["tester", "backend"]
     assert targets("1. 打回：网页\n2. **打回**：后端", roles) == ["backend", "frontend"]
+    # from the English board: Send back:, with the English titles of the team file (title_en) or role keys
+    en = [{**r, "title_en": {"backend": "Developer · fix", "frontend": "Developer · refactor"}.get(r["key"], "")} for r in roles]
+    assert targets("Send back: Developer · fix, the check on line 3", en) == ["backend"]
+    assert targets("- send back: developer · refactor\n- Send back: mobile", en) == ["frontend", "mobile"]
 
 
 def _review_flow(tmp_path, verdicts, limit):

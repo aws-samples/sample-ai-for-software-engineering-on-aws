@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import scorecard
+from . import messages, scorecard
 from .constants import APP_NAME
 
 
@@ -63,9 +63,23 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
     evs = sorted((e for e in events if e.get("at") is not None), key=lambda e: (float(e["at"]), int(e.get("seq") or 0)))
     segs: list[dict[str, Any]] = []
 
-    def seg(kind: str, a: float, b: float | None, label: str, role: str | None = None, result: str | None = None) -> None:
-        segs.append({"kind": kind, "from": rel(a), "to": rel(b if b is not None else stop), "role": role, "label": label,
-                     "result": result, "open": b is None and live})
+    gates = {str(r["key"]): str(r.get("gate_label") or "") or titles[str(r["key"])] for r in roles}
+
+    def say(code: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = messages.clean(params)
+        return {"label": messages.render(code, params, lambda k: titles.get(k, k), lambda k: gates.get(k, k)).strip(),
+                "code": code, "params": params}
+
+    def seg(kind: str, a: float, b: float | None, label: dict[str, Any], role: str | None = None, result: str | None = None) -> None:
+        """*label*: say(); *result*: a result code (result.*), shown as its text."""
+        segs.append({"kind": kind, "from": rel(a), "to": rel(b if b is not None else stop), "role": role, **label,
+                     "result": messages.ZH[f"result.{result}"] if result else None, "result_code": result,
+                     "open": b is None and live})
+
+    def mark(at: float, kind: str, role: str | None, e: dict[str, Any] | None = None, label: dict[str, Any] | None = None) -> None:
+        """A moment: an event's own text (and code), or *label*."""
+        said = label or {"label": str((e or {}).get("text") or ""), "code": (e or {}).get("code"), "params": (e or {}).get("params")}
+        marks.append({"at": rel(at), "kind": kind, "role": role, **said})
 
     credits: list[float] = []
     for key in titles:
@@ -74,9 +88,11 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
                 credits.append(float(att["credits"]))
             if att.get("started") is None:
                 continue
-            what = att.get("label") or ("讨论" if att.get("kind") == "discuss" else f"第 {att.get('n') or 1} 轮")
+            what = (say("flow.agent", {"r_role": key, "label": att["label"]}) if att.get("label") else
+                    say("flow.agent.talk", {"r_role": key}) if att.get("kind") == "discuss" else
+                    say("flow.agent.round", {"r_role": key, "n": att.get("n") or 1}))
             seg("agent", float(att["started"]), float(att["ended"]) if att.get("ended") is not None else None,
-                f"{titles[key]} · {what}", key, "出错" if att.get("error") else None)
+                what, key, "error" if att.get("error") else None)
 
     marks: list[dict[str, Any]] = []
     open_gate: dict[str, float] = {}
@@ -87,33 +103,30 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
         if kind == "gate" and key in titles:
             open_gate.setdefault(key, at)
         elif kind in ("approved", "bounce") and src == "person" and key in open_gate:
-            label = next((str(r.get("gate_label") or "") for r in roles if r["key"] == key), "") or titles[key]
-            seg("gate", open_gate.pop(key), at, f"等人批准 · {label}", key, "批准" if kind == "approved" else "退回")
+            seg("gate", open_gate.pop(key), at, say("flow.gate", {"g_gate": key}), key, "approved" if kind == "approved" else "sent_back")
         if kind == "approved":
-            marks.append({"at": rel(at), "kind": "approved", "role": key, "label": str(e.get("text") or "")})
+            mark(at, "approved", key, e)
         elif kind == "bounce":
-            marks.append({"at": rel(at), "kind": "bounce", "role": key, "label": str(e.get("text") or "")})
+            mark(at, "bounce", key, e)
         elif kind == "bench" and data.get("step") == "rerun":
             rerun_at = at
         elif kind == "tests" and data.get("phase") in ("before_bench", "after_bench", "rerun"):
             phase, bad = data["phase"], _failing(data)
             if phase == "rerun":
                 if rerun_at is not None:
-                    seg("rerun", rerun_at, at, "独立重跑全部检查", None, "不同" if data.get("differs") else "一致")
+                    seg("rerun", rerun_at, at, say("flow.rerun"), None, "differs" if data.get("differs") else "same")
                     rerun_at = None
             else:
                 before += phase == "before_bench"
-                label = f"检查 第 {before} 轮" if phase == "before_bench" else "台架之后的检查"
+                label = say("flow.checks", {"n": before}) if phase == "before_bench" else say("flow.after_bench")
                 if isinstance(data.get("ms"), (int, float)):
-                    seg("checks", at - data["ms"] / 1000, at, label, None, "不过" if bad else "通过")
+                    seg("checks", at - data["ms"] / 1000, at, label, None, "fail" if bad else "pass")
             if bad:
-                marks.append({"at": rel(at), "kind": "check_fail", "role": None,
-                              "label": f"检查不过：{'、'.join(bad[:6])}" + ("等" if len(bad) > 6 else "")})
+                mark(at, "check_fail", None, label=say("flow.check_fail", {"checks": bad[:6], "more": len(bad) > 6}))
     for key, at in open_gate.items():
-        label = next((str(r.get("gate_label") or "") for r in roles if r["key"] == key), "") or titles[key]
-        seg("gate", at, None, f"等人批准 · {label}", key)
+        seg("gate", at, None, say("flow.gate", {"g_gate": key}), key)
     if rerun_at is not None:
-        seg("rerun", rerun_at, None, "独立重跑全部检查")
+        seg("rerun", rerun_at, None, say("flow.rerun"))
 
     me, mine = f"{APP_NAME} {s.get('id')}", {}
     for r in recs:
@@ -121,15 +134,16 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
             mine[str(r.get("id"))] = r
         elif r.get("event") == "decision" and str(r.get("id")) in mine:
             q = mine.pop(str(r.get("id")))
-            seg("console", _iso(q["at"]), _iso(r.get("at")), f"操作台 · {q.get('action') or '台架动作'}", None,
-                {"approved": "批准", "refused": "拒绝"}.get(str(r.get("verdict")), str(r.get("verdict") or "")))
+            verdict = str(r.get("verdict") or "")
+            seg("console", _iso(q["at"]), _iso(r.get("at")), say("flow.console", {"action": q.get("action")}), None,
+                verdict if verdict in ("approved", "refused") else None)
     for q in mine.values():  # no decision: the console's own timeout ends the wait
         a = _iso(q["at"])
         b = a + float(q["timeout_s"]) if isinstance(q.get("timeout_s"), (int, float)) and a + float(q["timeout_s"]) < stop else None
-        seg("console", a, b, f"操作台 · {q.get('action') or '台架动作'}", None, "超时" if b is not None else None)
+        seg("console", a, b, say("flow.console", {"action": q.get("action")}), None, "timeout" if b is not None else None)
 
     if sig and sig.get("at"):
-        marks.append({"at": rel(sig["at"]), "kind": "signoff", "role": None, "label": f"{sig.get('by') or ''} 签字放行".strip()})
+        mark(sig["at"], "signoff", None, label=say("flow.signoff", {"by": sig.get("by") or ""}))
     segs.sort(key=lambda x: (x["from"], x["to"]))
     marks.sort(key=lambda m: m["at"])
 
@@ -141,7 +155,10 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
         "run": str(s.get("id") or ""), "title": str(s.get("title") or ""), "status": str(s.get("status") or ""),
         "started_at": t0, "end": rel(end), "live": live, "signed": bool(sig),
         "segments": segs, "marks": marks,
-        "roles": [{"key": k, "title": t, "icon": str(next((r.get("icon") for r in roles if r["key"] == k), "") or k)}
+        "roles": [{"key": k, "title": t, "title_en": str(next((r.get("title_en") for r in roles if r["key"] == k), "") or ""),
+                   "gate_label": str(next((r.get("gate_label") for r in roles if r["key"] == k), "") or ""),
+                   "gate_label_en": str(next((r.get("gate_label_en") for r in roles if r["key"] == k), "") or ""),
+                   "icon": str(next((r.get("icon") for r in roles if r["key"] == k), "") or k)}
                   for k, t in titles.items()],
         "totals": {"elapsed_s": rel(end), "agent_s": round(_union(span("agent")), 1) if span("agent") else None,
                    "person_s": round(_union(span("gate", "console")), 1) if span("gate", "console") else None,

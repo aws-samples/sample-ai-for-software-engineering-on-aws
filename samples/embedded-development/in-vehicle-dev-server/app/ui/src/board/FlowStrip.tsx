@@ -13,19 +13,20 @@ import { WHO_LABEL, flowOf, type StepState } from './flow'
 import { errorText } from './useBoard'
 import { SuggestAgree, type Confirm } from './Finding'
 import { ReviewRedoBox } from './ReviewRedo'
+import { t as tr } from '../i18n'
 
 const STATE_ICON: Record<StepState, string> = { todo: '', current: '●', done: '✔', failed: '✕', held: '✋' }
-const STATE_LABEL: Record<StepState, string> = { todo: '还没到', current: '现在在这一步', done: '做完了', failed: '没过', held: '交给人决定' }
+const STATE_LABEL: Record<StepState, string> = { todo: tr('board.FlowStrip.1'), current: tr('board.FlowStrip.2'), done: tr('board.FlowStrip.3'), failed: tr('board.FlowStrip.4'), held: tr('board.FlowStrip.5') }
 
 /** During a run: the steps in one row, and 现在：… */
 export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail; onFinding?: () => void; onAgree?: Confirm; onRedo?: (b: { note: string; by: string }) => Promise<void> }) {
   const f = flowOf(run)
   return (
-    <section className="kt-flow" aria-label="流程" data-testid="kt-flow">
+    <section className="kt-flow" aria-label={tr('board.FlowStrip.6')} data-testid="kt-flow">
       <ol className="kt-flow-row">
         {f.steps.map(({ def, state }) => (
           <li key={def.key} className={`kt-flow-cell is-${state}${def.n ? '' : ' is-gate'}`} data-step={def.key} data-state={state}
-            title={`${def.title}（${def.who.map((w) => WHO_LABEL[w]).join(' + ')}）：${def.does} · ${STATE_LABEL[state]}`}>
+            title={tr('board.FlowStrip.7', { p0: def.title, p1: def.who.map((w) => WHO_LABEL[w]).join(' + '), p2: def.does, p3: STATE_LABEL[state] })}>
             <span className="kt-flow-mark" aria-hidden="true">{STATE_ICON[state] || (def.n ? '○' : '◆')}</span>
             <span className="kt-flow-name">{def.n ? `${def.n} ` : ''}{def.title}</span>
           </li>
@@ -33,34 +34,34 @@ export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail;
       </ol>
       {onFinding && run.tests.held && f.steps.some((s) => s.state === 'held') ? (
         <div className="kt-ready-pending" role="status" data-testid="kt-flow-held">
-          <b>✋ 检查停下来交给你决定</b>
+          <b>{tr('board.FlowStrip.8')}</b>
           <ul>
-            {run.tests.held.why.split('；').filter(Boolean).map((w) => <li key={w}>{w}</li>)}
+            {run.tests.held.why.split('；').filter(Boolean).map((w) => <li key={w}>{w}</li>) /* i18n-keep: the app joins the reasons with ； */}
           </ul>
           {onAgree && <SuggestAgree run={run} onConfirm={onAgree} />}
-          <span className="kt-dim">没有角色的范围或待办能修它：按 TR §4.4 补登成下一个编号，交给一个开发并给它要改的文件（是根因所在的文件，不一定是报错那一行）；或者停止这次运行。登记几条时，前面的先取消「接着运行」，最后一条再勾上。</span>
+          <span className="kt-dim">{tr('board.FlowStrip.9')}</span>
           <span className="kt-start-actions">
-            <button type="button" className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`} onClick={onFinding}>{run.tests.held.suggest?.length ? '自己填' : '补登发现并交给角色'}</button>
+            <button type="button" className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`} onClick={onFinding}>{run.tests.held.suggest?.length ? tr('board.FlowStrip.10') : tr('board.FlowStrip.11')}</button>
           </span>
         </div>
       ) : onRedo && run.review_redo ? (
         <ReviewRedoBox key={run.id} run={run} onConfirm={onRedo} />
       ) : (
-        <p className="kt-flow-now" data-testid="kt-flow-now"><b>现在：</b>{f.now}</p>
+        <p className="kt-flow-now" data-testid="kt-flow-now"><b>{tr('board.FlowStrip.12')}</b>{f.now}</p>
       )}
     </section>
   )
 }
 
-const NEEDED: Record<ReadinessItem['needed'], string> = { start: '开始就要', checks: '测试先行起要', bench: '上台架才要' }
+const NEEDED: Record<ReadinessItem['needed'], string> = { start: tr('board.FlowStrip.13'), checks: tr('board.FlowStrip.14'), bench: tr('board.FlowStrip.15') }
 const POLL_READY_MS = 5000
-const ACTION: Record<string, string> = { deploy: '部署', restart: '重启', replay: '回放' }
+const ACTION: Record<string, string> = { deploy: tr('board.FlowStrip.16'), restart: tr('board.FlowStrip.17'), replay: tr('board.FlowStrip.18') }
 
 function itemState(i: ReadinessItem): { icon: string; tone: string; text: string } {
-  if (i.running && i.ok === null) return { icon: '…', tone: 'run', text: '正在查' }
-  if (i.ok === true) return { icon: '✔', tone: 'ok', text: '好了' }
-  if (i.ok === false) return { icon: '✕', tone: i.needed === 'bench' ? 'warn' : 'bad', text: '没好' }
-  return { icon: '?', tone: 'idle', text: '看不出' }
+  if (i.running && i.ok === null) return { icon: '…', tone: 'run', text: tr('board.FlowStrip.19') }
+  if (i.ok === true) return { icon: '✔', tone: 'ok', text: tr('board.FlowStrip.20') }
+  if (i.ok === false) return { icon: '✕', tone: i.needed === 'bench' ? 'warn' : 'bad', text: tr('board.FlowStrip.21') }
+  return { icon: '?', tone: 'idle', text: tr('board.FlowStrip.22') }
 }
 
 export type ReadinessState = { r: Readiness | null; err: string; load: (doctor?: boolean) => Promise<void> }
@@ -93,7 +94,7 @@ export function ReadinessSummary({ r }: { r: Readiness | null }) {
   const waiting = r.pending?.length ?? 0
   return (
     <a className="kt-ready-sum" href="#kt-ready" data-testid="kt-ready-sum">
-      准备情况：{ok}/{r.items.length} 就绪{waiting > 0 ? ` · ${waiting} 个台架请求等你批准` : ''}
+      {tr('board.FlowStrip.23')}{ok}/{r.items.length} {tr('board.FlowStrip.24')}{waiting > 0 ? tr('board.FlowStrip.25', { p0: waiting }) : ''}
     </a>
   )
 }
@@ -109,23 +110,23 @@ export function ReadinessPanel({ state }: { state: ReadinessState }) {
     setAsking(false)
   }
   return (
-    <section className="kt-ready" id="kt-ready" aria-label="准备情况" data-testid="kt-ready">
+    <section className="kt-ready" id="kt-ready" aria-label={tr('board.FlowStrip.26')} data-testid="kt-ready">
       <header className="kt-ready-head">
-        <h3>准备情况</h3>
-        <span className="kt-dim">台架没准备好也能先开始：运行做到台架前会停下，看板上写着缺什么和要跑的命令。</span>
+        <h3>{tr('board.FlowStrip.26')}</h3>
+        <span className="kt-dim">{tr('board.FlowStrip.27')}</span>
         {doctor && (
-          <button type="button" className="kt-btn" onClick={() => void redo()} disabled={asking || doctor.running} title="在后台重跑 bench/doctor.sh，看板不用等它">
-            {doctor.running ? 'doctor.sh 在跑…' : '重跑 doctor.sh'}
+          <button type="button" className="kt-btn" onClick={() => void redo()} disabled={asking || doctor.running} title={tr('board.FlowStrip.28')}>
+            {doctor.running ? tr('board.FlowStrip.29') : tr('board.FlowStrip.30')}
           </button>
         )}
       </header>
-      {err && <p className="kt-error" role="alert">准备情况读不到：{err}</p>}
+      {err && <p className="kt-error" role="alert">{tr('board.FlowStrip.31')}{err}</p>}
       {r?.error && <p className="kt-warn" role="status">{r.error}</p>}
-      {!r && !err && <p className="kt-dim">正在读…</p>}
+      {!r && !err && <p className="kt-dim">{tr('board.FlowStrip.32')}</p>}
       {r?.pending && r.pending.length > 0 && (
         <div className="kt-ready-pending" role="status" data-testid="kt-ready-pending">
-          <b>✋ 台架上有 {r.pending.length} 个请求等你批准</b>
-          <span className="kt-dim">核对摘要后在这里输入前 6 位批准，或在操作台上批（a 序号 摘要前 6 位）。两边都走台架自己的审批逻辑。</span>
+          <b>{tr('board.FlowStrip.33')} {r.pending.length} {tr('board.FlowStrip.34')}</b>
+          <span className="kt-dim">{tr('board.FlowStrip.35')}</span>
           <ul>
             {r.pending.map((p) => (
               <li key={p.id} data-testid="kt-ready-request" data-id={p.id}>
@@ -133,12 +134,12 @@ export function ReadinessPanel({ state }: { state: ReadinessState }) {
                   <b>{ACTION[p.action] ?? p.action}</b> <Digest digest={p.digest} />
                   <small className="kt-dim">
                     {' '}{p.id} · {p.requested_by}
-                    {p.left_s !== null && ` · 还剩 ${Math.max(0, p.left_s)} 秒，超时自动拒绝`}
+                    {p.left_s !== null && tr('board.FlowStrip.36', { p0: Math.max(0, p.left_s) })}
                   </small>
                 </span>
                 <DecideRequest id={p.id} digest={p.digest} onDone={() => void load()} />
                 <details className="kt-ready-cli">
-                  <summary>用命令批准或拒绝</summary>
+                  <summary>{tr('board.FlowStrip.37')}</summary>
                   <Cmd cmd={p.approve} />
                   <Cmd cmd={p.refuse} />
                 </details>
@@ -158,7 +159,7 @@ export function ReadinessPanel({ state }: { state: ReadinessState }) {
                 <span className={`kt-ready-needed${i.needed === 'bench' ? ' is-later' : ''}`}>{NEEDED[i.needed]}</span>
                 <span className="kt-ready-detail">
                   {i.detail}
-                  {i.age_s !== null && <small className="kt-dim">（{fmtAgo(i.age_s)}查的{i.running ? '，正在重查' : ''}）</small>}
+                  {i.age_s !== null && <small className="kt-dim">{tr('board.FlowStrip.38')}{fmtAgo(i.age_s)}{tr('board.FlowStrip.39')}{i.running ? tr('board.FlowStrip.40') : ''}{tr('board.FlowStrip.41')}</small>}
                 </span>
                 {i.command && <Cmd cmd={i.command} />}
               </li>

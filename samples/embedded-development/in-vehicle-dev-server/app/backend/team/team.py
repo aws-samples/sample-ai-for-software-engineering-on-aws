@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from . import bench as bench_mod
-from . import checks, gitwork
+from . import checks, gitwork, messages
 from . import delivery as delivery_mod
 from . import triage as triage_mod
 from .constants import APP_NAME, APP_ROOT, EVENTS_KEPT, TAG_PREFIX
@@ -66,8 +66,10 @@ def _ids_in(text: str) -> set[str]:
     for a, b in re.findall(r"F-(\d{3})\s*[~～–-]\s*F-(\d{3})", text):
         ids.update(f"F-{n:03d}" for n in range(int(a), min(int(b), int(a) + 50) + 1))
     return ids
-# A review names who fixes what: its own `打回：` line (role keys or titles), else every 归X it writes.
-_BOUNCE_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*打回[*_`]*\s*[:：]\s*(.+)$", re.M)  # a list item too
+# A review names who fixes what: its own `打回：` line (`Send back:` from the English board; role keys, titles or
+# English titles), else every 归X it writes.
+_BOUNCE_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)、]\s*)?[*_`]*(?:打回|send back)[*_`]*\s*[:：]\s*(.+)$",
+                             re.M | re.I)  # a list item too
 _OWNER_RE = re.compile(r"归([^）)，,；;。\n]{1,40})")
 _ROLE_ALIASES = {"后端": "backend", "服务端": "backend", "前端": "frontend", "网页": "frontend", "网页前端": "frontend",
                  "移动端": "mobile", "安卓": "mobile", "Android": "mobile", "运维": "ops", "合规": "compliance",
@@ -218,14 +220,16 @@ def money(amount: float | None) -> str:
 
 
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
-    """The writing roles a 要改 review sends back, in team order: its ``打回：`` lines (one per role is fine), else every
-    归X it names."""
+    """The writing roles a 要改 review sends back, in team order: its ``打回：`` (or ``Send back:``) lines (one per role
+    is fine), else every 归X it names."""
     writers = [r["key"] for r in roles if r.get("writable")]
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
     chunks = lines or _OWNER_RE.findall(text or "")
     found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
+    found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
+              and any(r["title_en"].lower() in chunk.lower() for chunk in chunks)}
     return [k for k in writers if k in found]
 
 
@@ -393,13 +397,30 @@ class TeamRun:
             extra += sum(a.get("kind") == "discuss" for a in self.lane(key)["attempts"])
         return 1 + int(self.team.get("defaults", {}).get("max_fix_rounds", 2)) + extra
 
-    def emit(self, kind: str, text: str, role: str | None = None, frm: str | None = None, to: str | None = None,
-             data: dict[str, Any] | None = None) -> None:
+    def gate_label(self, key: str) -> str:
+        return self.roles[key].get("gate_label") or self.title(key) if key in self.roles else key
+
+    def msg(self, code: str, params: dict[str, Any] | None = None) -> str:
+        """The Chinese text of a message (messages.py), with its roles named."""
+        return messages.render(code, params, lambda k: self.title(k) if k in self.roles else k, self.gate_label)
+
+    def emit(self, kind: str, text: str | None, role: str | None = None, frm: str | None = None, to: str | None = None,
+             data: dict[str, Any] | None = None, *, code: str | None = None, params: dict[str, Any] | None = None) -> None:
+        """An event on the board. With a *code*, its Chinese *text* comes from the code and its *params*, and the board
+        says it in the person's language; without one (an older run's events, too), the board shows *text* as it is."""
         self.s["seq"] = int(self.s.get("seq") or 0) + 1
-        ev = {"seq": self.s["seq"], "at": self.d.now(), "kind": kind, "role": role, "text": " ".join(text.split())[:200],
+        if code:
+            params = messages.clean(params)
+            text = self.msg(code, params)
+        ev = {"seq": self.s["seq"], "at": self.d.now(), "kind": kind, "role": role, "text": " ".join((text or "").split())[:200],
               "from": frm, "to": to, "data": data or None}
+        if code:
+            ev.update(code=code, params=params)
         self.events.append(ev)
         self._unsaved.append(ev)
+
+    def say(self, kind: str, code: str, params: dict[str, Any] | None = None, **kw: Any) -> None:
+        self.emit(kind, None, code=code, params=params, **kw)
 
     async def save(self) -> None:
         async with self._save_lock:
@@ -423,7 +444,7 @@ class TeamRun:
             except Exception as exc:
                 self.errors += 1
                 if self.errors >= ERRORS_TO_FAIL:
-                    await self.stop(status="failed", text=f"运行出错，停下了：{exc}")
+                    await self.stop(status="failed", code="run.error", params={"error": str(exc)})
                 raise
             finally:
                 await self.save()
@@ -461,7 +482,7 @@ class TeamRun:
                                              existing=bool(source))
             await gitwork.add_worktree(Path(s["repo"]), Path(s["run_wt"]), s["branch"], base)
         except Exception as exc:  # noqa: BLE001
-            self._end("failed", f"运行失败：建仓库出错：{exc}")
+            self._end("failed", "run.repo_failed", {"error": str(exc)})
             return
         s["base"], s["status"] = base, "running"
 
@@ -473,10 +494,10 @@ class TeamRun:
                 if missing:  # held until a person adds the member: once, not every tick
                     if lane.get("awaiting_member") != missing:
                         lane["awaiting_member"] = missing
-                        self.emit("member", f"{self.title(key)}没开工：Crew「代理」里还没有成员 {missing}，加上就自动开工", role=key)
+                        self.say("member", "member.missing", {"r_role": key, "member": missing}, role=key)
                     return
                 if lane.get("awaiting_member"):
-                    self.emit("member", f"成员 {lane['awaiting_member']} 加上了，{self.title(key)}开工", role=key)
+                    self.say("member", "member.added", {"member": lane["awaiting_member"], "r_role": key}, role=key)
                     lane["awaiting_member"] = None
                 await self._start(key, "work", mgr)
             return
@@ -575,9 +596,9 @@ class TeamRun:
                 lane.update(worktree=str(wt), branch=branch, fork=run_head, base_fork=run_head)
             lane["started_at"] = now
             for dep in role["depends_on"]:
-                outs = "、".join(_name(p) for p in self.roles[dep]["outputs"]) or "产出"
-                self.emit("handoff", f"{self.title(dep)}把 {outs} 交给{self.title(key)}", role=key, frm=dep, to=key,
-                          data={"carry": outs})
+                names = [_name(p) for p in self.roles[dep]["outputs"]]
+                self.say("handoff", "handoff", {"r_from": dep, "outs": names, "r_role": key}, role=key, frm=dep, to=key,
+                         data={"carry": "、".join(names) or "产出"})
         n = len(lane["attempts"]) + 1
         if kind == "fix" and found:
             caught_up = await self._catch_up(key)
@@ -637,11 +658,12 @@ class TeamRun:
         att.update(agent=f["id"], conv=conv, error=None, queued_reason=f["queued_reason"])
         self.lane(key).update(conv=conv, status=live_status(att["kind"], f))
         task = self.assignment(key) if self.roles[key].get("assignment") or self.s.get("plan") else ""
-        label = ((f"编排器派活：{self.title(key)} · {task}" if task else f"{self.title(key)}开工") if att["kind"] == "work" and att["n"] == 1
-                 else f"{self.title(key)}第 {att['n']} 轮：{att['label']}")
-        if att.get("again"):
-            label += f"（{att.pop('again')}）"
-        self.emit("spawned", label, role=key)
+        again = att.pop("again", None) or None
+        if att["kind"] == "work" and att["n"] == 1:
+            code, params = ("spawned.dispatch", {"r_role": key, "task": task}) if task else ("spawned.start", {"r_role": key})
+        else:
+            code, params = "spawned.round", {"r_role": key, "n": att["n"], "label": att["label"]}
+        self.say("spawned", code, {**params, "again": again}, role=key)
         await self.save()
 
     async def _launch(self, key: str, att: dict[str, Any], mgr: Any) -> Any | None:
@@ -680,7 +702,7 @@ class TeamRun:
         tool = short(self.d.scrub(f["last_tool"]))
         if tool and tool != lane.get("tool_seen") and now - float(lane.get("tool_at") or 0) >= TOOL_EVENT_GAP_S:
             lane["tool_seen"], lane["tool_at"] = tool, now
-            self.emit("tool", f"{self.title(key)}：{tool}", role=key)
+            self.say("tool", "tool", {"r_role": key, "tool": tool}, role=key)
         # The worktree only changes through the agent's tool calls: look again after new ones (or now and then).
         since = now - float(lane.get("stats_at") or 0)
         if since >= STATS_EVERY_S or (since >= STATS_GAP_S and f["tool_count"] != lane.get("stats_tools")):
@@ -728,7 +750,7 @@ class TeamRun:
         for c in commits:
             if c["sha"] not in seen:
                 seen.append(c["sha"])
-                self.emit("committed", f"{self.title(key)}提交：{c['subject']}", role=key)
+                self.say("committed", "committed", {"r_role": key, "subject": c["subject"]}, role=key)
         del seen[:-50]
         self._violations(key, st["paths"])
 
@@ -739,7 +761,7 @@ class TeamRun:
                 continue
             lane["violations"].append(p)
             if len(lane["violations"]) <= 12:
-                self.emit("violation", f"{self.title(key)}改了不属于它的 {p}", role=key)
+                self.say("violation", "violation", {"r_role": key, "path": p}, role=key)
 
     async def _finish(self, key: str, att: dict[str, Any], f: dict[str, Any]) -> None:
         lane, now = self.lane(key), self.d.now()
@@ -772,7 +794,7 @@ class TeamRun:
             return
         if att["summary"]:
             lane["summary"] = att["summary"]
-        self.emit("done", f"{self.title(key)}完成" + (f"：{att['summary']}" if att["summary"] else ""), role=key)
+        self.say("done", "done", {"r_role": key, "summary": att["summary"]}, role=key)
         if self.roles[key]["writable"]:
             await self._integrate(key)
         elif att["kind"] == "discuss":  # a reviewer answered the person: its verdict stands, the gate is open again
@@ -818,8 +840,8 @@ class TeamRun:
             if not keys and not failed and self.ended and bench.get("held"):  # a person dealt with the bench: carry on
                 self._resume()
                 bench["held"] = None
-                self.emit("run", f"重试：{by}让台架从「{bench['step']}」接着做" + (f"（{note}）" if note else ""),
-                          data={"by": by, "note": note} if by else None)
+                self.say("run", "retry.bench", {"by": by, "step": bench["step"], "note": note},
+                         data={"by": by, "note": note} if by else None)
                 self._settle()
                 await self.save()
                 return ["bench"]
@@ -830,8 +852,8 @@ class TeamRun:
                 self._resume()
                 if note:  # the person's decisions on what the review left to them
                     self.s["review_note"] = note
-                self.emit("run", f"重试：{by}按评审意见改" + (f"，附人的决定：{note}" if note else ""),
-                          data={"by": by, "note": note} if by else None)
+                self.say("run", "retry.review", {"by": by, "note": note},
+                         data={"by": by, "note": note} if by else None)
                 picked = await self._review_bounce(rev, review)
                 self._settle()
                 await self.save()
@@ -841,7 +863,7 @@ class TeamRun:
                 return []
             if self.ended:
                 self._resume()
-            self.emit("run", f"重试：{'、'.join(self.title(k) for k in picked)}")
+            self.say("run", "retry.roles", {"r_roles": picked})
             mgr = self.d.manager()
             for key in picked:
                 lane = self.lane(key)
@@ -939,10 +961,11 @@ class TeamRun:
                    "extend": bool(ext)}
             held["registered"] = [*(held.get("registered") or []), reg]
             go_on = bool(body["continue"])
-            head = (f"{body['by']}给已补登的 {fid}（{check} 发现：{location}）加可写路径，交给{self.title(role)}，" if ext else
-                    f"{body['by']}补登 {fid}（{check} 发现：{location}，{entry['decision']}），交给{self.title(role)}，")
-            self.emit("finding", head + f"可写 {'、'.join(body['paths']) or '不变'}" + ("，接着运行" if go_on else "") + (f"：{body['note']}" if body["note"] else ""),
-                      role=role, frm="person", to=role,
+            self.say("finding", "finding.extend" if ext else "finding.add",
+                     {"by": body["by"], "id": fid, "check": check, "location": location,
+                      "decision": None if ext else entry["decision"], "r_role": role, "paths": list(body["paths"]),
+                      "go_on": go_on, "note": body["note"]},
+                     role=role, frm="person", to=role,
                       data={"by": body["by"], "id": fid, "check": check, "role": role, "paths": list(body["paths"]),
                             "note": body["note"], "continue": go_on, "extend": bool(ext)})
             if go_on:
@@ -1011,8 +1034,8 @@ class TeamRun:
                 lane["status"] = "merged"
             names = {r["check"] for r in mine}
             failing = [c for c in t["cases"] if c["id"] in names] or [{"id": n, "ac": n, "name": n, "file": ""} for n in names]
-            self.emit("bounce", f"按负责人补登的 {'、'.join(r['id'] for r in mine)}，{'、'.join(sorted(names))} 交给{self.title(key)}再修一轮",
-                      role=key, frm="tests", to=key, data={"cases": sorted(names)})
+            self.say("bounce", "bounce.finding", {"ids": [r["id"] for r in mine], "cases": sorted(names), "r_role": key},
+                     role=key, frm="tests", to=key, data={"cases": sorted(names)})
             await self._start(key, "fix", mgr, failing=failing, found=mine)
         self._settle()
 
@@ -1058,7 +1081,7 @@ class TeamRun:
         paths, sha = await gitwork.commit_leftovers(wt, role["writable"], key) if not self._traced() else ([], None)
         if paths:
             lane.setdefault("seen_commits", []).append(sha)
-            self.emit("committed", f"app 替{self.title(key)}提交了 {len(paths)} 个文件", role=key)
+            self.say("committed", "committed.app", {"r_role": key, "n": len(paths)}, role=key)
         _, committed = await asyncio.gather(self._stats(key), gitwork.committed_paths(wt, lane["fork"]))
         self._violations(key, committed)
         # what it changed outside its area and then put back (a stub to try its tests, a checkout that only touched line
@@ -1074,14 +1097,14 @@ class TeamRun:
         if att["kind"] != "work" and head == lane.get("merged_sha"):
             # Nothing new since its last merge: sending the same failures back again would only spend credits.
             lane.update(status="merged", done_at=self.d.now(), stuck=True)
-            self.emit("failed", f"{self.title(key)}第 {lane['attempt']} 轮没有改动：{att.get('summary') or '没说原因'}", role=key)
+            self.say("failed", "failed.nochange", {"r_role": key, "n": lane["attempt"], "summary": att.get("summary")}, role=key)
             self.s["needs_test"] = True  # same head, so no new test run: only who to send the failures to is looked at again
             return
         own = self.team.get("ownership")
         if own and own.get("from") == key and lane["attempt"] < self.max_attempts(key):
             err = ownership_problem(wt / own["file"], [k for k in self.order if self.roles[k].get("writable_from")])
             if err:  # the team cannot be dispatched from a wrong ownership file: it goes back before it is merged
-                self.emit("bounce", f"分工文件不对，退回{self.title(key)}：{err}", role=key, frm="run", to=key)
+                self.say("bounce", "bounce.split", {"r_role": key, "error": err}, role=key, frm="run", to=key)
                 await self._start(key, "revise", self.d.manager(), review=f"你写的分工文件 `{own['file']}` 用不了：{err}。"
                                   "按任务说明里的格式改好它（只改这个文件也行），再提交。")
                 return
@@ -1092,7 +1115,7 @@ class TeamRun:
                 if lane["attempt"] >= self.max_attempts(key):
                     self._fail_lane(key, f"分诊文件 {tri['file']} 不合格式，修改的轮数用完了：{err[0]}")
                     return
-                self.emit("bounce", f"分诊文件不合格式，退回{self.title(key)}：{err[0]}", role=key, frm="run", to=key)
+                self.say("bounce", "bounce.triage_format", {"r_role": key, "error": err[0]}, role=key, frm="run", to=key)
                 await self._start(key, "revise", self.d.manager(), review=f"你写的 `{tri['file']}` 不合 checks/README.md 的格式，"
                                   "检查会拒绝它：\n" + "\n".join(f"- {e}" for e in err[:20]) + "\n\n改好再提交。")
                 return
@@ -1120,7 +1143,7 @@ class TeamRun:
             if (key in self.test_writers and self._approved_triage() is not None
                     and all(self.lane(k)["status"] in ("waiting", "skipped") for k in self.impl if k != key)):
                 lane["first"] = {"status": "pending"}  # tests first: the developers wait until they fail on the base
-            self.emit("merged", f"{self.title(key)}的分支合入运行分支", role=key, frm=key, to="run")
+            self.say("merged", "merged", {"r_role": key}, role=key, frm=key, to="run")
             if own and own.get("from") == key:
                 await self._resolve_ownership()  # before any role it dispatches is looked at in this same tick
             if role.get("gate") == "human" and lane.get("gate") != "approved":
@@ -1136,16 +1159,16 @@ class TeamRun:
                     self._discussed(key, att, changed=True)
                 else:
                     lane["gate"] = "pending"
-                    self.emit("gate", f"等人批准：{role.get('gate_label') or self.title(key)}", role=key, frm=key, to="person")
+                    self.say("gate", "gate.wait", {"g_gate": key}, role=key, frm=key, to="person")
             if key in self.impl or key in self.test_writers or any(self.lane(k)["status"] == "merged" for k in self.impl):
                 s["needs_test"] = True
             return
-        self.emit("conflict", f"{self.title(key)}合入冲突：{res['note']}", role=key, frm=key, to="run",
+        self.say("conflict", "conflict", {"r_role": key, "note": res["note"]}, role=key, frm=key, to="run",
                   data={"paths": [p for p in str(res.get("note") or "").replace("、", ",").split(",") if p.strip()][:12]})
         if lane["attempt"] >= self.max_attempts(key):
             self._fail_lane(key, f"合入冲突，修改的轮数用完了：{res['note']}")
             return
-        self.emit("bounce", f"合入冲突，打回{self.title(key)}", role=key, frm="run", to=key)
+        self.say("bounce", "bounce.conflict", {"r_role": key}, role=key, frm="run", to=key)
         await self._start(key, "conflict", self.d.manager(), conflicts=res["conflicts"] or [res["note"]])
 
     async def _test_and_bounce(self, mgr: Any) -> None:
@@ -1171,7 +1194,7 @@ class TeamRun:
             try:
                 wall = task.result()
             except checks.TestsUnavailable as exc:  # without tests nothing can be checked: stop spending credits
-                await self.stop(status="failed", text=f"运行失败：app 跑不了测试：{exc}")
+                await self.stop(status="failed", code="run.tests_failed", params={"error": str(exc)})
                 return
             finally:
                 if not checked:
@@ -1181,13 +1204,11 @@ class TeamRun:
             if checked:
                 t.update(checks=wall["checks"], results=wall["results"])
             t["history"] = (t.get("history", []) + [{"at": wall["at"], "passed": wall["passed"], "failed": wall["failed"]}])[-60:]
-            note = ""
-            if t["total"] and not t["failed"]:
-                note = "：全绿"
-            elif t["total"] and not t["passed"] and not any(self.lane(k)["status"] == "merged" for k in self.impl):
-                note = "：实现还没写，全红"
+            green = bool(t["total"] and not t["failed"])
+            red = bool(not green and t["total"] and not t["passed"] and not any(self.lane(k)["status"] == "merged" for k in self.impl))
             # every case's status rides along: a replay of the run turns the test wall cell by cell
-            self.emit("tests", f"测试 {t['passed']}/{t['total']}{note}", data={"passed": t["passed"], "total": t["total"],
+            self.say("tests", "tests.score", {"passed": t["passed"], "total": t["total"], "green": green, "red": red},
+                     data={"passed": t["passed"], "total": t["total"],
                       "cases": [[c["id"], c["status"]] for c in t["cases"]][:400],
                       **({"phase": "before_bench", "ms": _ms(wall["checks"])} if checked else {})})
         s["needs_test"] = False
@@ -1203,8 +1224,8 @@ class TeamRun:
             if (lane["status"] != "merged" or lane.get("stuck") or not failing or lane["attempt"] >= self.max_attempts(key)
                     or self.ended):
                 continue
-            names = "、".join(c["ac"] or c["name"] for c in failing[:6]) + ("等" if len(failing) > 6 else "")
-            self.emit("bounce", f"{names} 失败，打回{self.title(key)}", role=key, frm="tests", to=key,
+            self.say("bounce", "bounce.tests", {"cases": [c["ac"] or c["name"] for c in failing[:6]], "more": len(failing) > 6,
+                                                "r_role": key}, role=key, frm="tests", to=key,
                       data={"cases": [c["ac"] or c["name"] for c in failing][:24]})
             await self._start(key, "fix", mgr, failing=failing)
         await self._test_writer_bounce(mgr)
@@ -1263,12 +1284,12 @@ class TeamRun:
         try:
             res = task.result()
         except (checks.TestsUnavailable, gitwork.GitError) as exc:
-            await self.stop(status="failed", text=f"运行失败：app 没法在需求提交上跑测试：{exc}")
+            await self.stop(status="failed", code="run.tests_first_failed", params={"error": str(exc)})
             return
         lane["first"] = {"status": "passed" if res["ok"] else "failed", "head": head, "base": res["base"],
                          "tests": res["tests"], "reasons": res["reasons"][:20], "results": res["results"], "at": self.d.now()}
         if res["ok"]:
-            self.emit("tests", f"{self.title(key)}的新测试在需求提交上都失败了，开发开工", role=key,
+            self.say("tests", "tests.first_ok", {"r_role": key}, role=key,
                       data={"first": sorted({n for ns in res["tests"].values() for n in ns})[:40]})
             return
         why = "；".join(res["reasons"][:6])
@@ -1276,7 +1297,7 @@ class TeamRun:
             self._fail_lane(key, f"测试先行没过，修改的轮数用完了：{why}")
             return
         lane["first"]["status"] = "sent_back"
-        self.emit("bounce", f"测试先行没过，打回{self.title(key)}：{why}", role=key, frm="tests", to=key)
+        self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
 
     def _finale_due(self) -> bool:
@@ -1302,16 +1323,16 @@ class TeamRun:
                                    "doctor": (b or {}).get("doctor"), "actions": list((b or {}).get("actions") or []),
                                    "artifact": str(Path(t["results"]) / bench_mod.ARTIFACT),
                                    "run_dir": str(root / "bench" / f"run-{n}"), "after": None}
-            self.emit("bench", f"检查都过了，评审放行：上台架（第 {n} 次），先跑 doctor.sh")
+            self.say("bench", "bench.go", {"n": n})
         if b["held"] or b["step"] == "done":
             return
         if self._bench is None:
             if b["running"]:  # it was going when the app stopped: what it did on the bench is a person's to check
                 b["running"] = None
-                self._bench_hold(f"app 重启时台架上的「{b['step']}」还没做完：到操作台看动作记录、核对目标状态，再重试")
+                self._bench_hold("hold.restart", {"step": b["step"]})
                 return
             if b["step"] == "deploy" and not Path(b["artifact"]).is_file():
-                self._bench_hold(f"没有要部署的构建 {b['artifact']}（build.sh 的产物）")
+                self._bench_hold("hold.no_artifact", {"artifact": b["artifact"]})
                 return
             b["running"] = b["step"]
             self._bench = asyncio.create_task(self._bench_task(b))
@@ -1324,7 +1345,7 @@ class TeamRun:
         try:
             res = task.result()
         except checks.TestsUnavailable as exc:
-            await self.stop(status="failed", text=f"运行失败：app 跑不了台架之后的检查：{exc}")
+            await self.stop(status="failed", code="run.after_bench_failed", params={"error": str(exc)})
             return
         await self._bench_done(b, res, mgr)
 
@@ -1349,10 +1370,10 @@ class TeamRun:
             b["doctor"] = res
             gaps = bench_mod.missing(self.team["bench"], res, bench_mod.read_state())
             if gaps:
-                self._bench_hold("台架没准备好：" + "；".join(g["why"] for g in gaps), [g["command"] for g in gaps if g["command"]])
+                self._bench_hold("hold.not_ready", {"why": "；".join(g["why"] for g in gaps)}, [g["command"] for g in gaps if g["command"]])
                 return
             b["step"] = "deploy"
-            self.emit("bench", f"台架就绪，部署 {Path(b['artifact']).name}：等人在操作台上批准这个构建")
+            self.say("bench", "bench.deploy", {"artifact": Path(b["artifact"]).name})
         elif step in ("deploy", "replay"):
             rc, tail = res
             kind, why = bench_mod.outcome(rc, tail, bench_mod.read_state()["target"])
@@ -1360,19 +1381,18 @@ class TeamRun:
                 kind, why = "failed", f"回放结束了，但运行目录 {b['run_dir']} 里没有 run-result.json"
             b["actions"].append({"action": step, "at": self.d.now(), "outcome": kind, "why": why, "rc": rc})
             if kind != "ok":
-                self._bench_hold(f"{'部署' if step == 'deploy' else '回放'}没做成（{kind}）：{why}")
+                self._bench_hold("hold.deploy" if step == "deploy" else "hold.replay", {"kind": kind, "why": why})
                 return
             b["step"] = "replay" if step == "deploy" else "after"
-            self.emit("bench", "部署好了，回放录制的行驶数据：等人在操作台上批准" if step == "deploy"
-                      else f"回放完了，跑台架之后的检查（{b['run_dir']}）")
+            self.say("bench", "bench.replay" if step == "deploy" else "bench.replayed", {"run_dir": b["run_dir"]} if step != "deploy" else None)
         elif step == "after":
             b["after"] = {k: res[k] for k in ("at", "passed", "failed", "total", "checks", "results")}
-            self.emit("tests", f"台架之后的检查 {res['passed']}/{res['total']}", data={"checks": [[r["name"], r["verdict"]] for r in res["checks"]],
+            self.say("tests", "tests.after", {"passed": res["passed"], "total": res["total"]}, data={"checks": [[r["name"], r["verdict"]] for r in res["checks"]],
                                                                                "phase": "after_bench", "ms": _ms(res["checks"])})
             if not res["failed"]:
                 if any(c["when"] == "release" for c in self.team["checks"]):
                     b["step"] = "rerun"
-                    self.emit("bench", "台架之后的检查都过了：在新的结果目录里从头重跑全部检查，再跑 release.sh", data={"step": "rerun"})
+                    self.say("bench", "bench.rerun", data={"step": "rerun"})
                 else:
                     b["step"] = "done"
                 return
@@ -1380,7 +1400,7 @@ class TeamRun:
             await self._check_bounce(mgr, res)
             if res.get("held"):
                 b["after"]["held"] = res["held"]
-                self._bench_hold(f"台架之后的检查要人决定：{res['held']['why']}")
+                self._bench_hold("hold.after_bench", {"why": res["held"]["why"]})
                 return
             for k in self.order:  # the fix changes what the reviewer let through: it looks again before the bench
                 if not self.roles[k]["writable"] and self.lane(k)["status"] == "done":
@@ -1388,11 +1408,10 @@ class TeamRun:
 
         elif step == "rerun":
             rerun = self.s["rerun"] = res
-            self.emit("tests", f"独立重跑：release.sh {rerun['release']['verdict']}" + (
-                f"，和上一轮结果不同的检查：{'、'.join(d['name'] for d in rerun['differs'])}" if rerun["differs"] else ""),
-                data={"checks": [[r["name"], r["verdict"]] for r in rerun["checks"]], "differs": rerun["differs"], "phase": "rerun"})
+            self.say("tests", "tests.rerun", {"verdict": rerun["release"]["verdict"], "differs": [d["name"] for d in rerun["differs"]]},
+                     data={"checks": [[r["name"], r["verdict"]] for r in rerun["checks"]], "differs": rerun["differs"], "phase": "rerun"})
             if rerun["release"]["verdict"] != "PASS":
-                self._bench_hold("独立重跑后 release.sh 没通过：" + "；".join(rerun["release"]["reasons"][:3] or [rerun["release"]["summary"]]))
+                self._bench_hold("hold.release", {"why": "；".join(rerun["release"]["reasons"][:3] or [rerun["release"]["summary"]])})
                 return
             b["step"] = "done"
 
@@ -1427,11 +1446,13 @@ class TeamRun:
                             if last.get(n) != now.get(n)],
                 "release": {k: rel[k] for k in ("verdict", "summary", "reasons")}, "evidence": str(page) if page else None}
 
-    def _bench_hold(self, why: str, commands: list[str] | None = None) -> None:
+    def _bench_hold(self, code: str, params: dict[str, Any], commands: list[str] | None = None) -> None:
         """The bench waits for a person: the reason, and the commands they run for it (D10). No automatic retry."""
         b = self.s["bench"]
-        b["held"] = {"step": b["step"], "why": " ".join(why.split())[:400], "commands": commands or [], "at": self.d.now()}
-        self.emit("failed", f"台架要人处理：{b['held']['why']}", data={"commands": b["held"]["commands"]})
+        params = messages.clean(params) or {}
+        b["held"] = {"step": b["step"], "why": " ".join(self.msg(code, params).split())[:400], "code": code, "params": params,
+                     "commands": commands or [], "at": self.d.now()}
+        self.say("failed", "failed.bench", {"why": {"code": code, "params": params}}, data={"commands": b["held"]["commands"]})
 
     def _first_review(self, res: dict[str, Any]) -> str:
         return "\n".join([f"app 在需求提交 `{res['base'][:12]}` 的代码上跑了你的新测试（构建容器里、和 unit.sh 一样构建，"
@@ -1463,15 +1484,14 @@ class TeamRun:
         if held:
             why = "；".join(f"{r['name']} {what}：{(r['reasons'] or [r['summary']])[0]}" for r, what in held)[:300]
             t["held"] = {"checks": [r["name"] for r, _ in held], "why": why}
-            self.emit("failed", f"检查要人决定：{why}", data={"checks": t["held"]["checks"]})
+            self.say("failed", "failed.checks", {"why": why}, data={"checks": t["held"]["checks"]})
             return
         t["held"] = None
         for r in failing:
             rounds[r["name"]] = rounds.get(r["name"], 0) + 1
         for key in [k for k in self.order if k in owners]:
             cases = [c for c in t["cases"] if c.get("owner") == key and c["status"] == "fail"]
-            names = "、".join(c["ac"] for c in cases)
-            self.emit("bounce", f"检查 {names} 没过，打回{self.title(key)}", role=key, frm="tests", to=key,
+            self.say("bounce", "bounce.checks", {"cases": [c["ac"] for c in cases], "r_role": key}, role=key, frm="tests", to=key,
                       data={"cases": [c["ac"] for c in cases]})
             await self._start(key, "fix", mgr, failing=cases)
 
@@ -1496,8 +1516,8 @@ class TeamRun:
             owners = sorted({c["owner"] for c in failing}, key=self.order.index)
             said = "\n".join(f"- {self.title(o)}：{self.lane(o).get('summary') or self.lane(o)['attempts'][-1].get('summary') or '没说原因'}"
                               for o in owners)
-            names = "、".join(c["ac"] or c["name"] for c in failing[:6]) + ("等" if len(failing) > 6 else "")
-            self.emit("bounce", f"{names} 失败，{'、'.join(self.title(o) for o in owners)}说测试本身有问题，打回{self.title(writer)}",
+            self.say("bounce", "bounce.test_writer", {"cases": [c["ac"] or c["name"] for c in failing[:6]], "more": len(failing) > 6,
+                                                      "r_owners": owners, "r_role": writer},
                       role=writer, frm="tests", to=writer, data={"cases": [c["ac"] or c["name"] for c in failing][:24]})
             await self._start(writer, "fix", mgr, failing=failing, review=said)
 
@@ -1508,7 +1528,7 @@ class TeamRun:
         self._violations(key, committed)
         lane.update(status="done", done_at=self.d.now())
         summary = att.get("summary") or ""
-        self.emit("review", f"审查：{summary or '没有给结论'}", role=key)
+        self.say("review", "review", {"summary": summary}, role=key)
         if summary.startswith("要改"):
             rounds = int(s.get("review_rounds") or 0)
             limit = int(self.team.get("defaults", {}).get("max_review_rounds", 0) or 0)
@@ -1517,18 +1537,15 @@ class TeamRun:
             if self.roles[key].get("gate") == "human" and not self.ended:
                 # its rounds are used up (or it names nobody): the person at its gate decides, the run does not end here
                 lane.update(gate="pending", overrule=True, passed=False)
-                label = self.roles[key].get("gate_label") or self.title(key)
                 s["verdict"] = f"审查打回 {rounds} 轮后仍要改" if rounds else "审查要改"
-                self.emit("gate", f"等人决定{label}：{s['verdict']}，人可以再退回一轮，或写明理由推翻审查放行", role=key,
-                          frm=key, to="person")
+                self.say("gate", "gate.overrule", {"g_gate": key, "rounds": rounds}, role=key, frm=key, to="person")
                 return
-            self._end("failed", f"运行结束：评审打回 {rounds} 轮后仍要改，交给人决定" if rounds else "运行结束：评审要改")
+            self._end("failed", "run.review_rounds", {"rounds": rounds})
         else:
             lane["passed"] = True
             if self.roles[key].get("gate") == "human" and lane.get("gate") != "approved":
                 lane["gate"] = "pending"  # a person signs this review off before anything after it starts
-                label = self.roles[key].get("gate_label") or self.title(key)
-                self.emit("gate", f"等人批准：{label}", role=key, frm=key, to="person")
+                self.say("gate", "gate.wait", {"g_gate": key}, role=key, frm=key, to="person")
             first = re.split(r"[。；;\n]", summary, maxsplit=1)[0].strip() if summary else ""
             s["verdict"] = f"审查说{first[:30]}" if first else "审查没有给结论"
             if lane.get("gate") == "pending" or any(self.lane(k)["status"] not in ("merged", "done", "skipped") for k in self._after(key)):
@@ -1537,9 +1554,9 @@ class TeamRun:
                 return  # the bench actions and the checks after them come next (_bench_step); _settle ends the run
             red = int(s["tests"].get("failed") or 0)
             if red:  # done, but not green: said as it is, the person decides
-                self._end("done", f"运行结束：审查说{summary[:20] or '没有结论'}，但测试还有 {red} 项没过，交给人决定")
+                self._end("done", "run.done_red", {"summary": summary[:20], "red": red})
             else:
-                self._end("done", "运行完成：审查说可以交付" if summary.startswith("可以交付") else "运行完成")
+                self._end("done", "run.done_ok" if summary.startswith("可以交付") else "run.done")
 
     async def _resolve_ownership(self) -> None:
         """Once the role that writes the ownership file is merged: every role whose directories come from it gets
@@ -1552,7 +1569,7 @@ class TeamRun:
         err = ownership_problem(path, dynamic)
         if err:
             s["ownership"] = {"error": err}
-            await self.stop(status="failed", text=f"运行失败：分工文件 {own['file']} 用不了：{err}")
+            await self.stop(status="failed", code="run.ownership_failed", params={"file": own["file"], "error": err})
             return
         data = json.loads(path.read_text(encoding="utf-8"))
         now, assigned = self.d.now(), {}
@@ -1562,13 +1579,13 @@ class TeamRun:
                 self.roles[k]["writable"] = assigned[k] = globs
             else:
                 self.lane(k).update(status="skipped", done_at=now)
-                self.emit("skipped", f"{self.title(k)}：这个项目用不到，跳过", role=k)
+                self.say("skipped", "skipped.unneeded", {"r_role": k}, role=k)
         areas = {str(a): r for a, r in (data.get("test_areas") or {}).items() if r in assigned}
         if areas:
             self.team["test_owners"] = [{"glob": f"tests/**/*-{a}-*", "role": r} for a, r in areas.items()]
         s["ownership"] = {"roles": assigned, "test_areas": areas}
-        self.emit("ownership", f"编排器按{self.title(own['from'])}的分工派活：" + "；".join(
-            f"{self.title(k)} {'、'.join(g)}" for k, g in assigned.items()), data={"roles": assigned})
+        self.say("ownership", "ownership", {"r_from": own["from"], "assigned": [{"r_role": k, "files": list(g)} for k, g in assigned.items()]},
+                 data={"roles": assigned})
 
     async def gate(self, key: str, decision: str, note: str = "", delivery: Any = None, answers: Any = None,
                    risk: Any = None, by: str = "") -> bool:
@@ -1589,7 +1606,7 @@ class TeamRun:
                     return False
                 lane["gate"] = "discussing"
                 self.s.setdefault("talks", {}).setdefault(key, []).append({"who": "person", "text": note.strip(), "at": self.d.now()})
-                self.emit("talk", f"人在{label}关卡和{self.title(key)}讨论：{note}", role=key, frm="person", to=key)
+                self.say("talk", "talk.gate", {"g_gate": key, "r_role": key, "note": note}, role=key, frm="person", to=key)
                 await self._start(key, "discuss", self.d.manager(), review=note.strip())
                 self._settle()
                 await self.save()
@@ -1605,8 +1622,8 @@ class TeamRun:
                                          f"{a['choice']}. {a['option']}" + (f"（补充：{a['text']}）" if a["text"] else ""))
                                          for a in changed)
                         asked = {q["id"]: q for q in (self.s.get("questions") or {}).get(key) or []}
-                        self.emit("bounce", f"人在{label}关卡改了 {len(changed)} 条决定，退回{self.title(key)}照着改", role=key,
-                                  frm="person", to=key, data={"answers": [a["id"] for a in changed], "justified": [
+                        self.say("bounce", "bounce.triage_changed", {"g_gate": key, "n": len(changed), "r_role": key}, role=key,
+                                 frm="person", to=key, data={"answers": [a["id"] for a in changed], "justified": [
                                       a["id"] for a in changed if asked.get(a["id"], {}).get("decision") == "justify"]})
                         await self._start(key, "revise", self.d.manager(), review=(
                             f"人在{label}关卡上不同意这些建议，按人的决定改 `{role['triage']['file']}` 和分诊文档（改成修复的补 evidence、"
@@ -1631,13 +1648,13 @@ class TeamRun:
                     last = lane["attempts"][-1] if lane["attempts"] else {}
                     self.s["overruled"] = {"role": key, "note": note, "review": str(last.get("summary") or "")}
                     self.s["verdict"] = "人推翻了审查结论放行"
-                    self.emit("approved", f"人推翻审查结论，批准了{label}：{note}", role=key, frm="person", to=key)
+                    self.say("approved", "approved.overrule", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
                 else:
-                    self.emit("approved", f"人批准了{label}" + (f"：{note}" if note else ""), role=key, frm="person", to=key)
+                    self.say("approved", "approved", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
                 if role.get("delivery"):  # the person confirms the 交付标签 the role proposed (or changes them)
                     self.s["delivery"] = delivery_mod.clean(delivery, self.delivery())
-                    self.emit("plan", f"人确认交付标签：{delivery_mod.label(self.s['delivery'])}", role=key,
-                              data={"delivery": self.s["delivery"]})
+                    self.say("plan", "plan.delivery_confirmed", {"delivery": delivery_mod.label(self.s["delivery"])}, role=key,
+                             data={"delivery": self.s["delivery"]})
                 if role.get("plan"):  # the roles the approved proposal leaves out sit this run out
                     for k, why in (self.s.get("plan_skip") or {}).items():
                         if k in self.roles and self.lane(k)["status"] == "waiting":
@@ -1654,8 +1671,7 @@ class TeamRun:
                 if note:
                     self.s["review_note"] = note
                 caught = self._keep_risk(key, label, clean_risk(risk), note)
-                self.emit("bounce", f"人在{label}关卡退回：按审查意见再改一轮" + (f"：{note}" if note else ""), role=key,
-                          frm="person", to=key, data=caught)
+                self.say("bounce", "bounce.gate_review", {"g_gate": key, "note": note}, role=key, frm="person", to=key, data=caught)
                 await self._review_bounce(key, review, only=review_targets(note, self.team["roles"]) or None)
             elif not role["writable"]:  # a review gate: the person sends work back to the members the note names
                 targets = review_targets(note, self.team["roles"])
@@ -1664,16 +1680,16 @@ class TeamRun:
                 lane.update(gate=None, passed=False)
                 self.s["human_review"] = note
                 caught = self._keep_risk(key, label, clean_risk(risk), note)
-                self.emit("bounce", f"人在{label}关卡退回：{note}", role=key, frm="person", to=key, data=caught)
+                self.say("bounce", "bounce.gate", {"g_gate": key, "note": note}, role=key, frm="person", to=key, data=caught)
                 lane["status"] = "waiting"
                 mgr = self.d.manager()
                 for t in targets:
-                    self.emit("bounce", f"按人的意见打回{self.title(t)}", role=t, frm=key, to=t)
+                    self.say("bounce", "bounce.by_person", {"r_role": t}, role=t, frm=key, to=t)
                     await self._start(t, "review", mgr, review=HUMAN_MARK + note)
             else:
                 lane["gate"] = None
                 caught = self._keep_risk(key, label, clean_risk(risk), note)
-                self.emit("bounce", f"人退回了{label}：{note or '没写原因'}", role=key, frm="person", to=key, data=caught)
+                self.say("bounce", "bounce.rejected", {"g_gate": key, "note": note}, role=key, frm="person", to=key, data=caught)
                 await self._start(key, "revise", self.d.manager(), review=f"人在关卡上没有批准，意见：{note or '没写原因'}")
             self._settle()
             await self.save()
@@ -1696,7 +1712,7 @@ class TeamRun:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            self.emit("plan", f"{self.title(key)}没有提出分工（{rel}），按团队配置派活", role=key)
+            self.say("plan", "plan.no_split", {"r_role": key, "file": rel}, role=key)
             return
         skip = data.get("skip") if isinstance(data, dict) else None
         drop = {k: " ".join(str(v).split())[:60] or "没写理由" for k, v in (skip.items() if isinstance(skip, dict) else [])
@@ -1705,9 +1721,9 @@ class TeamRun:
                 if k in self.roles and k != key and k not in drop and isinstance(v, str) and v.strip()}
         self.s["plan"], self.s["plan_skip"] = plan, drop
         if plan or drop:
-            self.emit("plan", f"{self.title(key)}提议分工：" + "；".join(f"{self.title(k)} · {v}" for k, v in plan.items())
-                      + ("；这次不要：" + "、".join(f"{self.title(k)}（{v}）" for k, v in drop.items()) if drop else ""),
-                      role=key, data={"plan": plan, "skip": drop})
+            self.say("plan", "plan.split", {"r_role": key, "plan": [{"r_role": k, "what": v} for k, v in plan.items()],
+                                            "skip": [{"r_role": k, "why": v} for k, v in drop.items()]},
+                     role=key, data={"plan": plan, "skip": drop})
 
     def _read_delivery(self, key: str, rel: str) -> None:
         """交付标签: the gated role's proposal (``{name, kind, size, line, why}``, a JSON file in the run branch), shown at
@@ -1717,11 +1733,11 @@ class TeamRun:
         except (OSError, ValueError):
             data = None
         if not isinstance(data, dict):
-            self.emit("plan", f"{self.title(key)}没有提出交付标签（{rel}），按团队配置：{delivery_mod.label(self.delivery())}", role=key)
+            self.say("plan", "plan.no_delivery", {"r_role": key, "file": rel, "delivery": delivery_mod.label(self.delivery())}, role=key)
             return
         self.s["delivery_proposed"] = delivery_mod.clean(data, self._delivery_defaults())
-        self.emit("plan", f"{self.title(key)}提议交付标签：{delivery_mod.label(self.s['delivery_proposed'])}", role=key,
-                  data={"delivery": self.s["delivery_proposed"]})
+        self.say("plan", "plan.delivery", {"r_role": key, "delivery": delivery_mod.label(self.s["delivery_proposed"])}, role=key,
+                 data={"delivery": self.s["delivery_proposed"]})
 
     def _read_questions(self, key: str, rel: str) -> None:
         """要人决定的: the gated role's questions for the person (``{"questions": [{id, q, options: [{key, text}], recommend,
@@ -1749,7 +1765,7 @@ class TeamRun:
                 break
         self.s.setdefault("questions", {})[key] = out
         if out:
-            self.emit("plan", f"{self.title(key)}列出 {len(out)} 件要人决定的事", role=key, data={"questions": len(out)})
+            self.say("plan", "plan.questions", {"r_role": key, "n": len(out)}, role=key, data={"questions": len(out)})
 
     def _read_triage(self, key: str, where: Path) -> tuple[dict[str, Any] | None, list[str]]:
         tri = self.roles[key]["triage"]
@@ -1771,8 +1787,8 @@ class TeamRun:
         out = triage_mod.questions(data, rows)
         self.s.setdefault("questions", {})[key] = out
         self.s["triage_listed"] = triage_mod.listed(data, rows)
-        self.emit("plan", f"{self.title(key)}的分诊：{len(out)} 件要人决定，{len(self.s['triage_listed'])} 条照分诊做（见分诊文档）",
-                  role=key, data={"questions": len(out)})
+        self.say("plan", "plan.triage", {"r_role": key, "n": len(out), "listed": len(self.s["triage_listed"])},
+                 role=key, data={"questions": len(out)})
 
     async def _approve_triage(self, key: str, picked: list[dict[str, Any]], by: str) -> list[dict[str, Any]]:
         """The person's answers at the triage gate: those that take a proposal as it is (A) leave it; the others
@@ -1789,7 +1805,7 @@ class TeamRun:
         digest = await asyncio.to_thread(triage_mod.write, path, data)
         self.s["triage"] = {"path": str(path), "sha256": digest, "base": data["base"], "base_set": False,
                             "approved": data["approved"]}
-        self.emit("plan", f"分诊批准（{by}），记在 {TRIAGE_FILE}（sha256 {digest[:12]}）", role=key)
+        self.say("plan", "plan.triage_approved", {"by": by, "file": TRIAGE_FILE, "sha": digest[:12]}, role=key)
         return []
 
     async def _set_base(self) -> None:
@@ -1801,7 +1817,7 @@ class TeamRun:
         self._head = None
         data["base"] = await self.run_head()
         tri.update(base=data["base"], sha256=await asyncio.to_thread(triage_mod.write, path, data), base_set=True)
-        self.emit("plan", f"分诊的 base 定为开工时的运行分支 {data['base'][:12]}：之后每个提交都要写发现编号")
+        self.say("plan", "plan.triage_base", {"base": data["base"][:12]})
 
     def _traced(self) -> bool:
         return bool((self.s.get("triage") or {}).get("base_set"))
@@ -1818,7 +1834,7 @@ class TeamRun:
         if lane["attempt"] >= self.max_attempts(key):
             self._fail_lane(key, f"提交没写清对应的发现，修改的轮数用完了：{why}", keep_merged=bool(lane.get("merged_sha")))
             return
-        self.emit("bounce", f"{self.title(key)}的提交没写清对应的发现，退回", role=key, frm="run", to=key)
+        self.say("bounce", "bounce.trace", {"r_role": key}, role=key, frm="run", to=key)
         await self._start(key, "trace", self.d.manager(), review=why + "\n\n" + TRACE_RULE.format(
             branch=self.s["branch"]))
 
@@ -1849,17 +1865,17 @@ class TeamRun:
 
     def _discussed(self, key: str, att: dict[str, Any], failed: str = "", changed: bool = False) -> None:
         """The role answered the person (or could not): the answer is kept for the gate card, the gate is open again."""
-        lane, role = self.lane(key), self.roles[key]
-        label = role.get("gate_label") or self.title(key)
+        lane = self.lane(key)
         said = (att.get("reply") or "").strip()  # its answer, without the DONE: line (that is the summary)
         reply = "\n".join(ln for ln in said.splitlines() if not ln.strip().startswith("DONE:")).strip() or att.get("summary") or ""
         text = f"（这一轮没有回答：{failed}）" if failed else (reply[:TALK_KEEP] or "（没有写回答）")
         self.s.setdefault("talks", {}).setdefault(key, []).append(
             {"who": "agent", "text": text, "summary": att.get("summary") or "", "at": self.d.now(), "changed": changed})
         lane["gate"] = "pending"
-        self.emit("talk", f"{self.title(key)}" + (f"没有回答：{failed}" if failed else f"回答：{att.get('summary') or text[:80]}"),
-                  role=key, frm=key, to="person")
-        self.emit("gate", f"等人批准：{label}（讨论之后）", role=key, frm=key, to="person")
+        self.say("talk", "talk.failed" if failed else "talk.answer",
+                 {"r_role": key, "error": failed} if failed else {"r_role": key, "answer": att.get("summary") or text[:80]},
+                 role=key, frm=key, to="person")
+        self.say("gate", "gate.after_talk", {"g_gate": key}, role=key, frm=key, to="person")
 
     async def _record_decisions(self) -> None:
         """What people said and decided at the gates so far, as a document in the run branch: the roles after them read
@@ -1972,7 +1988,7 @@ class TeamRun:
         """*key* takes no part in this run: skipped (a dependency that is done), and the checks only it owns are not run."""
         self.lane(key).update(status="skipped", done_at=self.d.now(), summary=summary)
         globs = [str(o["glob"]) for o in self.team.get("test_owners", []) if o.get("role") == key]
-        self.emit("skipped", f"{self.title(key)}：{why}" + (f"；归它的检查（{'、'.join(globs)}）这次不跑" if globs else ""), role=key)
+        self.say("skipped", "skipped", {"r_role": key, "why": why, "globs": globs}, role=key)
 
     def _tested_team(self) -> dict[str, Any]:
         """The team as the test run sees it: the test files owned by a role that sits this run out are left out."""
@@ -1980,22 +1996,27 @@ class TeamRun:
         return {**self.team, "skip_owners": out} if out else self.team
 
     def sign_block(self) -> str:
-        """Why this run cannot be signed off ("" when it can): 签字放行 is a person taking responsibility for what the
-        team delivered, so a run that failed or was stopped has nothing to sign; with a release check, only a
-        release.sh that passed on the independent rerun can be signed (D9)."""
+        """Why this run cannot be signed off ("" when it can), in Chinese; sign_block_msg() has it by code."""
+        m = self.sign_block_msg()
+        return self.msg(m["code"], m["params"]) if m else ""
+
+    def sign_block_msg(self) -> dict[str, Any] | None:
+        """Why this run cannot be signed off (None when it can), as a message: 签字放行 is a person taking
+        responsibility for what the team delivered, so a run that failed or was stopped has nothing to sign; with a
+        release check, only a release.sh that passed on the independent rerun can be signed (D9)."""
         s = self.s
         if not self.ended:
-            return "运行结束以后才能签字"
+            return {"code": "sign.not_ended", "params": None}
         release = (s.get("rerun") or {}).get("release")
         if release and release["verdict"] != "PASS":  # D9: sign-off only on a release.sh that passed on the rerun
-            return "独立重跑后 release.sh 没通过，不能签字放行：" + ((release["reasons"] or [release["summary"]])[0])[:120]
+            return {"code": "sign.release", "params": {"why": ((release["reasons"] or [release["summary"]])[0])[:120]}}
         if s["status"] == "failed":
-            return "运行失败了，没有交付，不能签字放行（可以重试失败的角色）"
+            return {"code": "sign.failed", "params": None}
         if s["status"] == "stopped":
-            return "运行停下了，没有交付，不能签字放行"
+            return {"code": "sign.stopped", "params": None}
         if any(c["when"] == "release" for c in self.team.get("checks") or []) and not release:
-            return "还没有独立重跑和 release.sh 的结果，不能签字放行"
-        return ""
+            return {"code": "sign.no_rerun", "params": None}
+        return None
 
     def _planner(self) -> str:
         return next((self.title(k) for k in self.order if self.roles[k].get("plan")), "上游")
@@ -2023,7 +2044,7 @@ class TeamRun:
         self.lane(key)["status"] = "waiting"
         mgr = self.d.manager()
         for t in targets:
-            self.emit("bounce", f"评审要改，打回{self.title(t)}（第 {rnd} 轮评审）", role=t, frm=key, to=t,
+            self.say("bounce", "bounce.review", {"r_role": t, "round": rnd}, role=t, frm=key, to=t,
                       data={"review_round": rnd})
             await self._start(t, "review", mgr, review=review)
         return targets
@@ -2080,14 +2101,14 @@ class TeamRun:
         if not busy and not gating and not any(self.lane(k)["status"] == "waiting" and self._ready(k) for k in self.order):
             held = self.s["tests"].get("held") or bench.get("held")
             if held:
-                self._end("failed", f"运行停下，交给人决定：{held['why']}")
+                self._end("failed", "run.held", {"why": {"code": held["code"], "params": held.get("params")} if held.get("code") else held["why"]})
                 return
-            failed = [self.title(k) for k in self.order if self.lane(k)["status"] == "failed"]
+            failed = [k for k in self.order if self.lane(k)["status"] == "failed"]
             if failed:
-                self._end("failed", f"运行失败：{'、'.join(failed)}没做完，后面的角色没法开工")
+                self._end("failed", "run.failed_roles", {"r_roles": failed})
                 return
             if all(lane["status"] in ("merged", "done", "skipped") for lane in lanes):
-                self._end("done", "运行完成" + (f"：{self.s['verdict']}" if self.s.get("verdict") else ""))
+                self._end("done", "run.done", {"verdict": self.s.get("verdict")})
                 return
         if gating and not busy:
             self.s["status"] = "gating"
@@ -2099,10 +2120,10 @@ class TeamRun:
         else:
             self.s["status"] = "running"
 
-    def _end(self, status: str, text: str) -> None:
+    def _end(self, status: str, code: str, params: dict[str, Any] | None = None) -> None:
         if not self.ended:
             self.s.update(status=status, ended_at=self.d.now())
-            self.emit("run", text)
+            self.say("run", code, params)
 
     def _fail_lane(self, key: str, why: str, *, keep_merged: bool = False) -> None:
         lane, now = self.lane(key), self.d.now()
@@ -2111,10 +2132,9 @@ class TeamRun:
             att = lane["attempts"][-1]
             att["error"], att["ended"] = why, att.get("ended") or now
         lane.update(status="merged" if keep_merged else "failed", done_at=now)
-        text = f"{self.title(key)}第 {lane['attempt']} 轮没修成：{why}" if keep_merged else f"{self.title(key)}失败：{why}"
-        self.emit("failed", text, role=key)
+        self.say("failed", "failed.round" if keep_merged else "failed.role", {"r_role": key, "n": lane["attempt"], "why": why}, role=key)
 
-    async def stop(self, *, status: str = "stopped", text: str = "运行已停止") -> bool:
+    async def stop(self, *, status: str = "stopped", code: str = "run.stopped", params: dict[str, Any] | None = None) -> bool:
         """Cancel every live agent of the run, and its test run; it ends as *status*."""
         if self.ended:
             return False
@@ -2130,7 +2150,7 @@ class TeamRun:
                     ids.append(att["agent"])
                 att["error"], att["ended"] = att.get("error") or "运行被停止", att.get("ended") or now
             lane.update(status="failed", done_at=now)
-        self._end(status, text)
+        self._end(status, code, params)
         await self.save()  # the end is on disk before anything is cancelled
         if mgr is not None:
             await asyncio.gather(*(cancel(mgr, aid) for aid in ids))

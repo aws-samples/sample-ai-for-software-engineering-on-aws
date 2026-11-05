@@ -34,6 +34,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // ?lang=zh|en: the board's language for this preview, kept where the app bar's 中文 / English keeps it (read when the board loads)
+      try { const l = new URLSearchParams(location.search).get('lang'); if (l === 'zh' || l === 'en') localStorage.setItem('vstatd-team:lang', l) } catch { /* no storage */ }
+    </script>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>

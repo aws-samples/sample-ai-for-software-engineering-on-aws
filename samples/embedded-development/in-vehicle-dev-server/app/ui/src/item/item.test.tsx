@@ -47,7 +47,7 @@ describe('交付详情', () => {
 
   test('what has no record is —, a live run has open segments', async () => {
     const f: RunFlow = { ...flowOf(), live: true, status: 'running', signed: false, marks: [],
-      segments: [{ kind: 'agent', from: 20, to: 300, role: 'triage', label: '分诊 · 第 1 轮', result: null, open: true }],
+      segments: [{ kind: 'agent', from: 20, to: 300, role: 'triage', label: '分诊 · 第 1 轮', code: 'flow.agent.round', params: { r_role: 'triage', n: 1 }, result: null, result_code: null, open: true }],
       totals: { elapsed_s: 300, agent_s: 280, person_s: null, gate_s: null, console_s: null, check_s: null, credits: null, check_rounds: null, send_backs: 0 } }
     setApiRoutes({ [`GET ${API}/runs/${f.run}/flow`]: () => clone(f) })
     render(<ItemView run={f.run} onBoard={() => {}} pollMs={60_000} />)

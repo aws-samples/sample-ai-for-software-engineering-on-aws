@@ -595,7 +595,7 @@ ${legendSwatches}
 .kt-lane.is-dim { opacity: .42; }
 .kt-lane.is-focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
 .kt-lane.is-followed { font-size: 1.07em; border-color: var(--kt-tone); box-shadow: 0 0 0 2px var(--kt-tone), 0 16px 44px -16px var(--kt-tone); }
-.kt-lane.is-followed::after { content: '跟随中'; position: absolute; top: 8px; right: 10px; padding: 1px 8px; border-radius: 999px; font-size: .72em; font-weight: 800; background: var(--kt-tone); color: var(--kt-on); }
+.kt-lane.is-followed::after { content: attr(data-follow); position: absolute; top: 8px; right: 10px; padding: 1px 8px; border-radius: 999px; font-size: .72em; font-weight: 800; background: var(--kt-tone); color: var(--kt-on); }
 .kt-lane-bump { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: kt-bump 1.8s ease-out 1 forwards; }
 .kt-lane-axis { padding: 0 14px 0 18px; border: 0; background: none; box-shadow: none; }
 .kt-lane-axis::before { display: none; }

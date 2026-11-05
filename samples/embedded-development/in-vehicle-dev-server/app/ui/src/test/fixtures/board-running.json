@@ -36,6 +36,7 @@
       {
         "key": "pm",
         "title": "产品经理",
+        "title_en": "",
         "emoji": "🧭",
         "model": "claude-opus-5.5",
         "status": "merged",
@@ -88,10 +89,12 @@
         "credits": 6.1,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work"
         ],
@@ -117,6 +120,7 @@
       {
         "key": "architect",
         "title": "架构师",
+        "title_en": "",
         "emoji": "🏛️",
         "model": "claude-opus-5.5",
         "status": "merged",
@@ -178,10 +182,12 @@
         "credits": 11.8,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work"
         ],
@@ -207,6 +213,7 @@
       {
         "key": "designer",
         "title": "UI 设计",
+        "title_en": "",
         "emoji": "🎨",
         "model": "claude-opus-5.5",
         "status": "merged",
@@ -268,10 +275,12 @@
         "credits": 13.4,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work"
         ],
@@ -297,6 +306,7 @@
       {
         "key": "tester",
         "title": "测试",
+        "title_en": "",
         "emoji": "🧪",
         "model": "claude-opus-5.5",
         "status": "merged",
@@ -363,10 +373,12 @@
         "credits": 17.2,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work"
         ],
@@ -392,6 +404,7 @@
       {
         "key": "backend",
         "title": "后端",
+        "title_en": "",
         "emoji": "⚙️",
         "model": "claude-opus-5.5",
         "status": "fixing",
@@ -492,10 +505,12 @@
         "credits": 9.3,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work",
           "work"
@@ -522,6 +537,7 @@
       {
         "key": "frontend",
         "title": "前端",
+        "title_en": "",
         "emoji": "🖥️",
         "model": "claude-opus-5.5",
         "status": "running",
@@ -625,10 +641,12 @@
         "credits": null,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work"
         ],
@@ -654,6 +672,7 @@
       {
         "key": "ops",
         "title": "运维",
+        "title_en": "",
         "emoji": "🚀",
         "model": "claude-opus-5.5",
         "status": "done",
@@ -722,10 +741,12 @@
         "credits": 8.7,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work"
         ],
@@ -751,6 +772,7 @@
       {
         "key": "reviewer",
         "title": "评审",
+        "title_en": "",
         "emoji": "🔍",
         "model": "claude-opus-5.5",
         "status": "waiting",
@@ -779,10 +801,12 @@
         "credits": null,
         "phase": "",
         "stage": "",
+        "stage_en": "",
         "mission": "",
         "aidlc_agent": "",
         "gate": null,
         "gate_label": "",
+        "gate_label_en": "",
         "kinds": [
           "work"
         ],
@@ -1091,6 +1115,8 @@
         "kind": "run",
         "role": null,
         "text": "运行开始：活动报名小站",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1101,6 +1127,8 @@
         "kind": "spawned",
         "role": "pm",
         "text": "产品经理开工",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1111,6 +1139,8 @@
         "kind": "done",
         "role": "pm",
         "text": "产品经理完成：12 条验收标准",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1121,6 +1151,8 @@
         "kind": "merged",
         "role": "pm",
         "text": "产品经理的分支合入运行分支",
+        "code": null,
+        "params": null,
         "from": "pm",
         "to": "run",
         "data": null
@@ -1131,6 +1163,8 @@
         "kind": "handoff",
         "role": "architect",
         "text": "验收标准交给架构师",
+        "code": null,
+        "params": null,
         "from": "pm",
         "to": "architect",
         "data": {
@@ -1143,6 +1177,8 @@
         "kind": "handoff",
         "role": "designer",
         "text": "验收标准交给 UI 设计",
+        "code": null,
+        "params": null,
         "from": "pm",
         "to": "designer",
         "data": {
@@ -1155,6 +1191,8 @@
         "kind": "spawned",
         "role": "architect",
         "text": "架构师开工",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1165,6 +1203,8 @@
         "kind": "spawned",
         "role": "designer",
         "text": "UI 设计开工",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1175,6 +1215,8 @@
         "kind": "done",
         "role": "architect",
         "text": "架构师完成：6 个接口",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1185,6 +1227,8 @@
         "kind": "merged",
         "role": "architect",
         "text": "架构师的分支合入运行分支",
+        "code": null,
+        "params": null,
         "from": "architect",
         "to": "run",
         "data": null
@@ -1195,6 +1239,8 @@
         "kind": "handoff",
         "role": "tester",
         "text": "接口契约交给测试",
+        "code": null,
+        "params": null,
         "from": "architect",
         "to": "tester",
         "data": {
@@ -1207,6 +1253,8 @@
         "kind": "handoff",
         "role": "ops",
         "text": "接口契约交给运维",
+        "code": null,
+        "params": null,
         "from": "architect",
         "to": "ops",
         "data": {
@@ -1219,6 +1267,8 @@
         "kind": "done",
         "role": "designer",
         "text": "UI 设计完成",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1229,6 +1279,8 @@
         "kind": "merged",
         "role": "designer",
         "text": "UI 设计的分支合入运行分支",
+        "code": null,
+        "params": null,
         "from": "designer",
         "to": "run",
         "data": null
@@ -1239,6 +1291,8 @@
         "kind": "tests",
         "role": null,
         "text": "测试 0/12：实现还没写，全红",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": {
@@ -1252,6 +1306,8 @@
         "kind": "merged",
         "role": "tester",
         "text": "测试的分支合入运行分支",
+        "code": null,
+        "params": null,
         "from": "tester",
         "to": "run",
         "data": null
@@ -1262,6 +1318,8 @@
         "kind": "handoff",
         "role": "backend",
         "text": "测试和契约交给后端",
+        "code": null,
+        "params": null,
         "from": "tester",
         "to": "backend",
         "data": {
@@ -1274,6 +1332,8 @@
         "kind": "handoff",
         "role": "frontend",
         "text": "测试、契约、设计交给前端",
+        "code": null,
+        "params": null,
         "from": "tester",
         "to": "frontend",
         "data": {
@@ -1286,6 +1346,8 @@
         "kind": "spawned",
         "role": "backend",
         "text": "后端开工",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1296,6 +1358,8 @@
         "kind": "spawned",
         "role": "frontend",
         "text": "前端开工",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1306,6 +1370,8 @@
         "kind": "done",
         "role": "ops",
         "text": "运维完成：start.sh 和 Dockerfile",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1316,6 +1382,8 @@
         "kind": "merged",
         "role": "backend",
         "text": "后端的分支合入运行分支",
+        "code": null,
+        "params": null,
         "from": "backend",
         "to": "run",
         "data": null
@@ -1326,6 +1394,8 @@
         "kind": "tests",
         "role": null,
         "text": "测试 4/12",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": {
@@ -1339,6 +1409,8 @@
         "kind": "conflict",
         "role": "frontend",
         "text": "前端合入冲突：backend/server.js",
+        "code": null,
+        "params": null,
         "from": "frontend",
         "to": "run",
         "data": {
@@ -1353,6 +1425,8 @@
         "kind": "violation",
         "role": "frontend",
         "text": "前端改了不属于它的 backend/server.js",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": {
@@ -1367,6 +1441,8 @@
         "kind": "tests",
         "role": null,
         "text": "测试 5/12",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": {
@@ -1380,6 +1456,8 @@
         "kind": "bounce",
         "role": "backend",
         "text": "AC-6、AC-7 失败，打回后端",
+        "code": null,
+        "params": null,
         "from": "tests",
         "to": "backend",
         "data": {
@@ -1395,6 +1473,8 @@
         "kind": "spawned",
         "role": "backend",
         "text": "后端第 2 轮：修 AC-6、AC-7",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1405,6 +1485,8 @@
         "kind": "tests",
         "role": null,
         "text": "测试 6/12",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": {
@@ -1418,6 +1500,8 @@
         "kind": "tool",
         "role": "backend",
         "text": "后端：Editing backend/validate.js",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1428,6 +1512,8 @@
         "kind": "tool",
         "role": "frontend",
         "text": "前端：Editing frontend/app.js",
+        "code": null,
+        "params": null,
         "from": null,
         "to": null,
         "data": null
@@ -1495,6 +1581,7 @@
     "plan_skip": {},
     "overruled": null,
     "sign_block": "运行结束以后才能签字",
+    "sign_block_msg": null,
     "review_redo": null,
     "delivery": {
       "name": "活动报名小站",

@@ -6,6 +6,7 @@ import { useState } from 'react'
 import type { AppApi } from '@kirocrew/app-sdk'
 import { paths } from './format'
 import { errorText } from './useBoard'
+import { t as tr } from '../i18n'
 
 export function FolderActions({ api, run, role, path }: { api: AppApi; run: string; role: string | null; path: string | null }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -13,13 +14,13 @@ export function FolderActions({ api, run, role, path }: { api: AppApi; run: stri
     setMsg(null)
     api
       .post<{ ok: boolean; path: string; app: string }>(paths.open(run), { role, app })
-      .then((r) => setMsg({ ok: true, text: app === 'kiro' ? '已经用 Kiro 打开' : '已经在 Finder 里打开' }))
+      .then((r) => setMsg({ ok: true, text: app === 'kiro' ? tr('board.Folder.1') : tr('board.Folder.2') }))
       .catch((e) => setMsg({ ok: false, text: errorText(e) }))
   }
   const copy = () => {
     if (!path) return
-    const done = () => setMsg({ ok: true, text: '路径已复制' })
-    const fail = () => setMsg({ ok: false, text: '复制不了，手动选中上面的路径' })
+    const done = () => setMsg({ ok: true, text: tr('board.Folder.3') })
+    const fail = () => setMsg({ ok: false, text: tr('board.Folder.4') })
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(path).then(done, fail)
     else fail()
   }
@@ -32,14 +33,14 @@ export function FolderActions({ api, run, role, path }: { api: AppApi; run: stri
       )}
       <span className="kt-folder-acts">
         <button type="button" className="kt-btn is-small" onClick={() => open('finder')}>
-          📁 在 Finder 打开
+          {tr('board.Folder.5')}
         </button>
         <button type="button" className="kt-btn is-small" onClick={() => open('kiro')}>
-          用 Kiro 打开
+          {tr('board.Folder.6')}
         </button>
         {path && (
           <button type="button" className="kt-btn is-small" onClick={copy}>
-            复制路径
+            {tr('board.Folder.7')}
           </button>
         )}
         {msg && (
@@ -55,12 +56,12 @@ export function FolderActions({ api, run, role, path }: { api: AppApi; run: stri
 /** Under the top bar: the run's own folder. */
 export function FolderPanel({ api, run, folder, onClose }: { api: AppApi; run: string; folder: string; onClose: () => void }) {
   return (
-    <section className="kt-folder-panel" aria-label="项目文件夹">
+    <section className="kt-folder-panel" aria-label={tr('board.Folder.8')}>
       <div className="kt-folder-panel-head">
-        <strong>项目文件夹</strong>
-        <span className="kt-dim">运行分支检出在这里：团队合并进来的全部代码。每个角色自己的工作目录在「产出」里打开。</span>
+        <strong>{tr('board.Folder.8')}</strong>
+        <span className="kt-dim">{tr('board.Folder.9')}</span>
         <span className="kt-grow" />
-        <button type="button" className="kt-btn is-small" onClick={onClose} aria-label="收起项目文件夹">
+        <button type="button" className="kt-btn is-small" onClick={onClose} aria-label={tr('board.Folder.10')}>
           ✕
         </button>
       </div>

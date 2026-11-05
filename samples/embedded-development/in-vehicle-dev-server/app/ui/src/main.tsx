@@ -52,6 +52,7 @@ import { KIT_CSS } from './kit'
 import { parseView, searchOf, type BoardEntry, type View } from './nav'
 import { ScorecardView } from './scorecard/ScorecardView'
 import { ItemView } from './item/ItemView'
+import { t as tr } from './i18n'
 
 interface Effects {
   run: string | null
@@ -367,10 +368,10 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
   const eventFeed = run && <EventFeed run={run} focus={focus} onRole={onRole} fresh={fx.fresh} milestones={projection} actors={actors} />
   const [cleanupMsg, setCleanupMsg] = useState('')
   const cleanup = useCallback(async () => {
-    setCleanupMsg('正在清理…')
+    setCleanupMsg(tr('main.1'))
     try {
       const r = await api.post<{ sessions: number; folders: number }>(paths.cleanup(), {})
-      setCleanupMsg(`清理了 ${r.sessions} 个已结束的会话，收起了 ${r.folders} 个空文件夹`)
+      setCleanupMsg(tr('main.2', { p0: r.sessions, p1: r.folders }))
     } catch (e) {
       setCleanupMsg(errorText(e))
     }
@@ -418,16 +419,16 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
         {!projection && folderOpen && run && <FolderPanel api={api} run={run.id} folder={run.folder} onClose={() => setFolderOpen(false)} />}
         {retryErr && (
           <div className="kt-banner is-error" role="alert">
-            重试没成：{retryErr}
+            {tr('main.3')}{retryErr}
           </div>
         )}
         {error && (
           <div className="kt-banner" role="status">
-            {missing ? '后端还没有看板接口（GET /board 回 404）' : `看板刷新失败：${error}`}
-            {board ? '，显示的是上一次拿到的数据' : ''}
+            {missing ? tr('main.4') : tr('main.5', { p0: error })}
+            {board ? tr('main.6') : ''}
           </div>
         )}
-        {!board && loading && <p className="kt-loading">正在连接看板…</p>}
+        {!board && loading && <p className="kt-loading">{tr('main.7')}</p>}
         {!projection && !inReplay && startOpen && run && <StartForm onStart={start} onCancel={() => setStartOpen(false)} />}
         {!projection && !inReplay && stopAsk && run && <StopConfirm run={run} onConfirm={stop} onCancel={() => setStopAsk(false)} />}
         {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} askRisk={!!gateLane?.gate_revise_risk} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
@@ -451,7 +452,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
                 {!projection && run.merges.length > 0 && <Conveyor run={run} fresh={fx.merges} focus={focus} onRole={onRole} />}
                 {projection && laneList}
               </div>
-              <aside className="kt-side" aria-label={projection ? '测试和事件' : '检查和台架'}>
+              <aside className="kt-side" aria-label={projection ? tr('main.8') : tr('main.9')}>
                 <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} onFinding={onFinding} />
                 {run.bench && <BenchPanel bench={run.bench} onRetry={!projection && !inReplay && !run.imported && run.bench.held ? benchRetry : undefined} />}
                 {projection && eventFeed}
@@ -484,8 +485,8 @@ function PhaseBar({ run, phase, onClear }: { run: RunDetail; phase: string; onCl
   const n = run.roles.filter((l) => l.status !== 'skipped' && phaseOfLane(l.phase) === phase).length
   return (
     <div className="kt-focuschip" role="status" data-testid="kt-phasebar">
-      {p ? `${p.n} ${p.title}` : phase} · {n} 个角色
-      <button type="button" onClick={onClear} aria-label="看全部" title="看全部（Esc）">
+      {p ? `${p.n} ${p.title}` : phase} · {n} {tr('main.10')}
+      <button type="button" onClick={onClear} aria-label={tr('main.11')} title={tr('main.12')}>
         ✕
       </button>
     </div>
@@ -498,7 +499,7 @@ function FocusBar({ run, focus, onClear }: { run: RunDetail; focus: string; onCl
   return (
     <div className="kt-focuschip" role="status" data-testid="kt-focusbar">
       <RoleIcon role={lane.icon || lane.key} size={14} /> {lane.title}
-      <button type="button" onClick={onClear} aria-label="看全部" title="看全部（Esc）">
+      <button type="button" onClick={onClear} aria-label={tr('main.11')} title={tr('main.12')}>
         ✕
       </button>
     </div>

@@ -141,6 +141,9 @@ def test_full_run_parallel_stages_merges_bounce_conflict_and_review(tmp_path):
             "frontend:conflict", "frontend:merged", "backend:merged"]
         assert set(status(run).values()) == {"merged", "done"}
         assert [e["seq"] for e in run.events] == list(range(1, len(run.events) + 1))
+        # every event says what it says by code too: its Chinese text is the code's, with the roles named
+        assert all(e.get("code") for e in run.events)
+        assert all(e["text"] == " ".join(run.msg(e["code"], e["params"]).split())[:200] for e in run.events)
         end = check_board(run, mgr)["run"]
         assert [h["passed"] for h in end["tests"]["history"]] == [0, 0, 1, 2]  # no test run when a merge conflicted
         assert end["merges"][6]["status"] == "conflict" and end["roles"][-1]["agent"]["id"] == reviewer.id

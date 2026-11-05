@@ -31,10 +31,14 @@ interface RoleState {
   lastAt: number | null
 }
 
+// an older run's events have no code: what follows the colon of their Chinese text
 const afterColon = (text: string) => {
-  const i = text.indexOf('：')
+  const i = text.indexOf('：') // i18n-keep: parses the backend's Chinese text
   return i >= 0 ? text.slice(i + 1).trim() : ''
 }
+/** A param of the event's code, else what follows the colon of its text. */
+const said = (e: TeamEvent, code: string, name: string): string =>
+  e.code ? (e.code === code && e.params?.[name] != null ? String(e.params[name]) : '') : afterColon(e.text)
 
 /** The board of *run* as it stood at *t* (seconds since the epoch, between its start and end). */
 export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDetail {
@@ -63,13 +67,13 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
           s.attempts += 1
           s.status = s.attempts > 1 && byKey.get(e.role!)?.writable.length ? 'fixing' : 'running' // a reviewer's second look is not a fix
           s.spans.push({ a: e.at, b: null })
-          const label = /第 \d+ 轮：/.test(e.text) ? afterColon(e.text) : ''
+          const label = e.code ? said(e, 'spawned.round', 'label') : /第 \d+ 轮：/.test(e.text) ? afterColon(e.text) : '' // i18n-keep: an older run's text
           s.doing = label || byKey.get(e.role!)?.assignment || ''
         }
         break
       case 'tool':
         if (s) {
-          s.lastTool = afterColon(e.text) || e.text
+          s.lastTool = said(e, 'tool', 'tool') || e.text
           s.lastAt = e.at
         }
         break
@@ -77,14 +81,14 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
         if (s) {
           close(s, e.at)
           s.status = 'done'
-          s.summary = afterColon(e.text) || s.summary
+          s.summary = said(e, 'done', 'summary') || s.summary
         }
         break
       case 'review':
         if (s) {
           close(s, e.at)
           s.status = 'done'
-          s.summary = afterColon(e.text) || s.summary
+          s.summary = said(e, 'review', 'summary') || s.summary
         }
         break
       case 'merged':

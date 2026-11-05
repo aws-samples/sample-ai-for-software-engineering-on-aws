@@ -339,6 +339,40 @@ the run goes on.
 Alternatives considered: the person editing `triage.json` and its record by hand (the app would not know the scope or
 send the round); widening the work split at the start gate (the defect is found later).
 
+### D16. The board in Chinese or English; the agents keep working in Chinese
+
+The board's fixed text is in two dictionaries, `ui/src/i18n/zh.json` and `en.json`, one key per string, read with
+`t(key, params)`. 「中文 / English」 in the app bar picks the language; the choice is kept in this browser's
+storage (Chinese until someone picks English) and switching reloads the page. Dates, times and numbers follow it.
+
+What the app says carries a `code` and its `params` beside its Chinese `text`: every event, why a run cannot be
+signed off yet, why the bench is held, and the segments of 交付详情 (`backend/team/messages.py` holds the templates
+in both languages; the board has the same ones as `ev.<code>`, and a test keeps them equal). In Chinese the board
+shows `text` as the app wrote it; in English it renders the code. An event with no code (a run recorded before this)
+shows its `text`; `events.jsonl` is not rewritten. `GET /runs/{rid}/audit?lang=en` gives the audit trail in English;
+the `audit.md` written at sign-off stays Chinese, because its sha256 is on the sign-off record. The team file gives
+its roles' names, stages and gate labels in English (`title_en`, `stage_en`, `gate_label_en`) and its working
+language (`"language": "zh"`).
+
+The params go out through the same redaction as the text (`/events`, `/flow` and the board), since the English board
+says an event from them. Sending work back at a review gate takes `打回：` or `Send back:`, with a role's key, its
+name or its English name. The board's counts in the work-split grid come from `flags` on the audit entries, not from
+their words, so the English trail counts the same. The English audit downloads as `audit-<run>.en.md`, so it is not
+taken for the signed `audit.md`.
+
+Not translated: finding IDs, check names, file paths, commits and commands; what people and agents write (notes,
+summaries, replies, the agents' documents); the reasons the app passes on from the checks and the bench; the roles'
+briefs, the task template and the default request, which are what the agents read.
+
+The agents' working language is a separate switch, not made here: their briefs, the task template, the triage
+questions and the documents they write are Chinese whichever language the board shows. `"language"` in the team file
+records it; making it switchable means a second set of briefs and templates, and checking that what the agents write
+in the other language still passes the checks that read it (the triage, the commit messages).
+
+Alternatives considered: translating `text` in the backend for each request (it would have to parse every wording
+an older run's events have); one language per installation (the person at the board and the one reviewing the audit
+may not read the same one).
+
 ## Implementation plan
 
 Each step ends with its verification; a step is done when that verification passes. Steps 1 to 11 run without the

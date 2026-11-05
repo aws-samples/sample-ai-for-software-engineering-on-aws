@@ -9,9 +9,10 @@ import { useAppApi } from '@kirocrew/app-sdk'
 import type { BacklogIndex, BacklogRow, RunDetail, TriageRow } from '../types'
 import { BASE } from './format'
 import { errorText } from './useBoard'
+import { t as tr } from '../i18n'
 
 type Filter = 'all' | 'fix' | 'later'
-const FILTERS: ReadonlyArray<[Filter, string]> = [['all', '全部'], ['fix', 'fix'], ['later', 'later']]
+const FILTERS: ReadonlyArray<[Filter, string]> = [['all', tr('board.Backlog.1')], ['fix', 'fix'], ['later', 'later']]
 const NONE = '—'
 
 export function BacklogTable({ rows }: { rows: BacklogRow[] }) {
@@ -20,7 +21,7 @@ export function BacklogTable({ rows }: { rows: BacklogRow[] }) {
   const shown = filter === 'all' ? rows : rows.filter((r) => r.label === filter)
   return (
     <div className="kt-reqs-backlog">
-      <div className="kt-reqs-filter" role="group" aria-label="按标注筛选">
+      <div className="kt-reqs-filter" role="group" aria-label={tr('board.Backlog.2')}>
         {FILTERS.map(([f, label]) => (
           <button key={f} type="button" className="kt-btn" aria-pressed={filter === f} onClick={() => setFilter(f)}>
             {label} {count(f)}
@@ -30,7 +31,7 @@ export function BacklogTable({ rows }: { rows: BacklogRow[] }) {
       <div className="kt-reqs-scroll">
         <table className="kt-reqs-table" data-testid="kt-backlog-table">
           <thead>
-            <tr><th>编号</th><th>工具</th><th>检查</th><th>位置</th><th>说明</th><th>标注</th></tr>
+            <tr><th>{tr('board.Backlog.3')}</th><th>{tr('board.Backlog.4')}</th><th>{tr('board.Backlog.5')}</th><th>{tr('board.Backlog.6')}</th><th>{tr('board.Backlog.7')}</th><th>{tr('board.Backlog.8')}</th></tr>
           </thead>
           <tbody>
             {shown.map((r) => (
@@ -53,11 +54,11 @@ export function BacklogTable({ rows }: { rows: BacklogRow[] }) {
 /** 30 条（fix 22 / later 8） */
 export function countText(rows: BacklogRow[]): string {
   const by = (l: string) => rows.filter((r) => r.label === l).length
-  return `${rows.length} 条（fix ${by('fix')} / later ${by('later')}）`
+  return tr('board.Backlog.9', { p0: rows.length, p1: by('fix'), p2: by('later') })
 }
 
 function refactorNote(nextId: string): string {
-  return `分诊还会按 TR §4.4 把本批的重构（拆分 Service::run()）加成下一个空号${nextId ? ` ${nextId}` : ''}，决定 fix。`
+  return tr('board.Backlog.10', { p0: nextId ? ` ${nextId}` : '' })
 }
 
 /** 需求清单 on the home page. */
@@ -77,19 +78,19 @@ export function BacklogHome() {
     void load()
   }, [load])
   return (
-    <details className="kt-ready kt-reqs kt-fold" aria-label="需求清单" data-testid="kt-reqs-home">
+    <details className="kt-ready kt-reqs kt-fold" aria-label={tr('board.Backlog.11')} data-testid="kt-reqs-home">
       <summary data-testid="kt-reqs-sum">
-        <h3>需求清单</h3>
+        <h3>{tr('board.Backlog.11')}</h3>
         {b && !b.error && <span className="kt-dim">{countText(b.rows)}</span>}
       </summary>
       <div className="kt-fold-body">
-      <p className="kt-dim">工作项和静态分析待办（findings-backlog.md）：标 fix 的进本批，每条在分诊里定修、说明或延后。</p>
-      {err && <p className="kt-error" role="alert">需求清单读不到：{err}</p>}
+      <p className="kt-dim">{tr('board.Backlog.12')}</p>
+      {err && <p className="kt-error" role="alert">{tr('board.Backlog.13')}{err}</p>}
       {b?.error && <p className="kt-warn" role="status">{b.error}</p>}
-      {!b && !err && <p className="kt-dim">正在读…</p>}
+      {!b && !err && <p className="kt-dim">{tr('board.Backlog.14')}</p>}
       {b && !b.error && (
         <>
-          <p className="kt-reqs-work" data-testid="kt-work-item"><b>工作项：</b>{b.work_item || NONE}</p>
+          <p className="kt-reqs-work" data-testid="kt-work-item"><b>{tr('board.Backlog.15')}</b>{b.work_item || NONE}</p>
           <BacklogTable rows={b.rows} />
           <p className="kt-dim" data-testid="kt-reqs-note">{refactorNote(b.next_id)}</p>
         </>
@@ -99,8 +100,8 @@ export function BacklogHome() {
   )
 }
 
-const STATIC: Record<string, string> = { reported: '还在报', gone: '已消失', new: '新发现' }
-const DECISION: Record<string, string> = { fix: '修复', justify: '说明', defer: '延后' }
+const STATIC: Record<string, string> = { reported: tr('board.Backlog.16'), gone: tr('board.Backlog.17'), new: tr('board.Backlog.18') }
+const DECISION: Record<string, string> = { fix: tr('board.Backlog.19'), justify: tr('board.Backlog.7'), defer: tr('board.Backlog.20') }
 
 function staticText(s: string | null): string {
   if (s === null || s === '') return NONE
@@ -109,7 +110,7 @@ function staticText(s: string | null): string {
 
 function traceText(t: string[] | null): string {
   if (t === null) return NONE
-  return t.length ? t.join(' ') : '没有提交引用'
+  return t.length ? t.join(' ') : tr('board.Backlog.21')
 }
 
 function TriageTable({ rows, backlog }: { rows: TriageRow[]; backlog: Map<string, BacklogRow> }) {
@@ -117,7 +118,7 @@ function TriageTable({ rows, backlog }: { rows: TriageRow[]; backlog: Map<string
     <div className="kt-reqs-scroll">
       <table className="kt-reqs-table" data-testid="kt-triage-table">
         <thead>
-          <tr><th>发现</th><th>决定</th><th>引用</th><th>证据</th><th>行为</th><th>关卡上的回答</th><th>静态分析</th><th>追溯（提交）</th></tr>
+          <tr><th>{tr('board.Backlog.22')}</th><th>{tr('board.Backlog.23')}</th><th>{tr('board.Backlog.24')}</th><th>{tr('board.Backlog.25')}</th><th>{tr('board.Backlog.26')}</th><th>{tr('board.Backlog.27')}</th><th>{tr('board.Backlog.28')}</th><th>{tr('board.Backlog.29')}</th></tr>
         </thead>
         <tbody>
           {rows.map((f) => {
@@ -126,12 +127,12 @@ function TriageTable({ rows, backlog }: { rows: TriageRow[]; backlog: Map<string
               <tr key={f.id} data-testid="kt-triage-row" data-id={f.id} className={`is-${f.decision}`}>
                 <td>
                   <b className="kt-mono">{f.id}</b>
-                  <small className="kt-dim">{f.added ? ' TR §4.4 新加' : row ? ` ${row.location}` : ''}</small>
+                  <small className="kt-dim">{f.added ? tr('board.Backlog.30') : row ? ` ${row.location}` : ''}</small>
                 </td>
                 <td><span className={`kt-reqs-label is-${f.decision}`}>{DECISION[f.decision] ?? f.decision}</span></td>
                 <td className="kt-mono">{[...f.cites, ...f.facts].join(' ') || NONE}</td>
                 <td>{f.evidence ?? NONE}</td>
-                <td>{f.behaviour === null ? NONE : f.behaviour ? '涉及' : '不涉及'}</td>
+                <td>{f.behaviour === null ? NONE : f.behaviour ? tr('board.Backlog.31') : tr('board.Backlog.32')}</td>
                 <td>{f.answer ?? NONE}</td>
                 <td>{staticText(f.static)}</td>
                 <td className="kt-mono">{traceText(f.trace)}</td>
@@ -151,15 +152,15 @@ export function BacklogPanel({ run }: { run: RunDetail }) {
   const t = b.triage
   const fix = b.rows.filter((r) => r.label === 'fix').length
   return (
-    <details className="kt-card kt-reqs kt-fold" aria-label="需求清单" data-testid="kt-reqs" open={t?.state === 'proposed'}>
+    <details className="kt-card kt-reqs kt-fold" aria-label={tr('board.Backlog.11')} data-testid="kt-reqs" open={t?.state === 'proposed'}>
       <summary className="kt-card-head">
-        <h2>需求清单</h2>
+        <h2>{tr('board.Backlog.11')}</h2>
         <span className="kt-dim" data-testid="kt-reqs-state">
           {!t
-            ? `还没有分诊：待办 ${b.rows.length} 条，${fix} 条标了 fix`
+            ? tr('board.Backlog.33', { p0: b.rows.length, p1: fix })
             : t.state === 'approved'
-              ? `分诊已批准${t.approved ? `（${t.approved.by}，${t.approved.at}）` : ''} · ${t.findings.length} 条`
-              : `分诊的建议，等分诊关卡 · ${t.findings.length} 条`}
+              ? tr('board.Backlog.34', { p0: t.approved ? tr('board.Backlog.approvedBy', { p0: t.approved.by, p1: t.approved.at }) : '', p1: t.findings.length })
+              : tr('board.Backlog.35', { p0: t.findings.length })}
         </span>
       </summary>
       {t ? (
