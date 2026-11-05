@@ -122,4 +122,15 @@ is spliced into a core stage, and that every core stage reads as before outside 
 Last run on 2026-10-28 with AI-DLC Workflows 2.11.2: clean on `kiro`, `kiro-ide`, `claude` and `codex`, with the
 placement checks on `kiro` and `kiro-ide`. The new stages compile to `hw-verification-planning` 2.10 (after
 `delivery-planning`), `hw-simulation-verification` 3.8 (after `ci-pipeline`), `hw-bench-deployment` 4.8 and
-`hw-evidence-signoff` 4.9. No agent has run a workflow with the plugin yet; the first rehearsal of a scenario will.
+`hw-evidence-signoff` 4.9.
+
+First workflow with the plugin: 2026-11-05, Kiro CLI 2.34.0 with the `kiro` projection (with `kiro-ide`, Kiro CLI
+2.34 did not find the `aidlc` agent and used its default agent), on a copy of the in-vehicle
+[reference project](../../in-vehicle-dev-server/reference-project/) with its hardware sources. AI-DLC set up a
+refactor workflow of 11 stages; it ran `reverse-engineering`, `requirements-analysis` and `hw-verification-planning`
+and stopped at that stage's approval gate. The `requirements-analysis` contribution added the
+`Hardware environment (hw)` and `Hardware facts (hw)` sections to `requirements.md`; `hw-verification-planning` wrote
+a plan that gives every requirement a tier and a check, with the recorded-drive comparison, the memory and thread
+limits and the size check at the emulation tier, reported as blocked until the bench has run them. The session used
+88.73 Kiro credits and reached the gate after 77 minutes. The Construction and Operation stages have not run with
+the plugin yet.
