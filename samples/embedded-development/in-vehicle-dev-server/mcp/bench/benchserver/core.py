@@ -365,6 +365,7 @@ class BenchService:
             check_trusted(path, name, extra)
         # the files themselves too, where they are already there
         for name, path, extra in (("triage", self.triage, readers),
+                                  ("triage", self.triage.with_name(self.triage.name + ".sha256"), readers),
                                   ("baseline", self.baseline / "baseline-result.json", ()),
                                   ("baseline", self.baseline / "baseline.jsonl", ())):
             if os.path.lexists(path):
@@ -388,8 +389,13 @@ class BenchService:
         label = hashlib.sha256(str(self.state).encode()).hexdigest()[:16]
         self.sandbox = Sandbox(cfg.get("sandbox", {}), env_path, label)
         self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"  # this session's lease identity
-        self.current = None  # the call in progress, for the audit if the session ends during it
+        self.current = {}  # the calls in progress (reads run beside a write), for the audit if the session ends
+        self.call_ids = itertools.count()
+        # who the bench's requests name: unique to this session, so that this call's request is told from another's
+        # (the app's own, another session's) in the action record
+        self.requester = f"bench MCP server (role {role}, session {self.holder})"
         self.lock = threading.Lock()
+        self.publish_lock = threading.Lock()
         self.lock_path = self.state / "lock"
 
     @contextlib.contextmanager
@@ -420,9 +426,10 @@ class BenchService:
         cls, params = TOOLS.get(tool, (None, ())) if isinstance(tool, str) else (None, ())
         if cls is None:
             return "unknown tool"
-        extra = sorted(set(args) - set(params))
+        names = lambda ks: [str(k)[:AUDIT_ARG_MAX] for k in ks][:20]  # noqa: E731 - as capped() keeps them
+        extra = names(sorted(set(args) - set(params), key=str))
         missing = [p for p in params if p not in args]
-        wrong = sorted(k for k, v in args.items() if not isinstance(v, str))
+        wrong = names(sorted((k for k, v in args.items() if not isinstance(v, str)), key=str))
         return (f"unexpected arguments {extra}" if extra else f"missing arguments {missing}" if missing else
                 f"arguments that are not strings {wrong}" if wrong else None)
 
@@ -442,8 +449,8 @@ class BenchService:
         with contextlib.nullcontext() if cls == READ_ONLY else self.exclusive():
             started = time.monotonic()
             self.audit({**entry, "outcome": "started"})
-            if cls != READ_ONLY:
-                self.current = entry
+            cid = next(self.call_ids)
+            self.current[cid] = entry
             try:
                 if tool in NEEDS_LEASE:
                     self.need_lease()
@@ -457,8 +464,7 @@ class BenchService:
                 self.audit({**entry, "outcome": "error", "detail": f"{type(e).__name__}: {e}"})
                 raise RuntimeError(f"{tool} failed on the server; see the audit log") from e
             finally:
-                if cls != READ_ONLY:
-                    self.current = None
+                self.current.pop(cid, None)
             self.audit({**entry, "outcome": result.get("outcome", "ok"), "exit_status": result.get("exit_status"),
                         "duration_ms": int((time.monotonic() - started) * 1000),
                         **{k: result[k] for k in ("verdict", "digest", "request") if result.get(k)}})
@@ -478,7 +484,7 @@ class BenchService:
                     "HOME": os.environ.get("HOME", str(self.state)), "LANG": "C.UTF-8",
                     "CC1_BENCH_STATE": str(self.bench_state),
                     "CC1_APPROVAL_TIMEOUT_S": str(int(self.timeouts["approval"])),
-                    "CC1_REQUESTER": f"bench MCP server (role {self.role})"})
+                    "CC1_REQUESTER": self.requester})
         if self.sandbox.docker_host:
             env["DOCKER_HOST"] = str(self.sandbox.docker_host)
         return env
@@ -489,8 +495,10 @@ class BenchService:
         return {**r, "log": log}
 
     def cc1_read(self, what):
-        r = self.cc1([what], self.timeouts["read"], f"read-{what}")
+        """A read through cc1.sh, into a log of its own (reads run side by side), removed once read."""
+        r = self.cc1([what], self.timeouts["read"], f"read-{what}-{os.getpid()}-{secrets.token_hex(6)}")
         out = (read_nofollow(r["log"]) or b"").decode(errors="replace").splitlines()[1:]
+        r["log"].unlink(missing_ok=True)
         for line in reversed(out):
             with contextlib.suppress(ValueError):
                 data = json.loads(line)
@@ -567,10 +575,10 @@ class BenchService:
         audits the call in progress, and gives the lease back. Takes neither lock, since the call in progress may
         hold them; the lease file is this session's, so removing it races with nobody."""
         with contextlib.suppress(Exception):
-            current, stopped = self.current, stop_running()
-            if current:
-                self.audit({**current, "outcome": "error",
-                            "detail": f"{why} during the call; stopped {stopped} process(es) it had started"})
+            current, stopped = list(self.current.values()), stop_running()
+            for entry in current:
+                self.audit({**entry, "outcome": "error",
+                            "detail": f"{why} during the call; stopped {stopped} process(es) the session had started"})
             held = read_json(self.lease_file)
             if held and held.get("holder") == self.holder:
                 os.unlink(self.lease_file)
@@ -593,10 +601,22 @@ class BenchService:
     def _read_actions(self):
         return {"actions": self.bench_records()}
 
+    @contextlib.contextmanager
+    def publishing(self):
+        """Held while a check's published files are replaced or read together (briefly, never during an action)."""
+        with self.publish_lock:
+            fd = os.open(self.state / "results.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o640)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                yield
+            finally:
+                os.close(fd)
+
     def _read_result(self, check):
         self.pick("check", check, CHECKS)
-        return {"check": check, "result": read_json(self.state / "results" / f"{check}.json"),
-                "log_tail": tail(self.state / "results" / f"{check}.log")}
+        with self.publishing():
+            return {"check": check, "result": read_json(self.state / "results" / f"{check}.json"),
+                    "log_tail": tail(self.state / "results" / f"{check}.log")}
 
     # ------------------------------------------------------------------------------------------ physical actions
 
@@ -609,32 +629,37 @@ class BenchService:
                 out.append(json.loads(line))
         return out
 
-    def physical(self, action, args, timeout):
+    def physical(self, action, args, timeout, digest=None):
         """One action through cc1.sh. This call's request and whether the console refused it are read from the
-        action record written during the call (from its size before the call), not from the log, which also holds
-        what the target printed."""
+        action record written during the call (from its size before the call): the request this session named
+        itself in (and, for a deploy, with this build's digest), and the decision and gate entries with that
+        request's ID. The log is read only when the action never began, so nothing the target printed is in it."""
         record = self.bench_state / "actions.jsonl"
         offset = os.path.getsize(record) if os.path.isfile(record) else 0
         r = self.cc1(args, timeout + self.timeouts["approval"], action)
         new = self.records_from(offset)
-        rid = next((e.get("id") for e in new if e.get("event") == "request" and e.get("action") == action), None)
+        rid = next((e.get("id") for e in new if e.get("event") == "request" and e.get("action") == action
+                    and e.get("requested_by") == self.requester and (digest is None or e.get("digest") == digest)),
+                   None)
         out = {**{k: v for k, v in r.items() if k != "log"}, "action": action, "request": rid,
                "log_tail": tail(r["log"], 2048)}
         if r["outcome"] == "ok":
             return out
-        decision = next((e for e in new if e.get("event") == "decision" and e.get("id") == rid), None)
+        mine = [e for e in new if rid is not None and rid in (e.get("id"), e.get("request"))]
+        decision = next((e for e in mine if e.get("event") == "decision"), None)
         if decision and decision.get("verdict") != "approved":
             by, reason = decision.get("by") or "the console", decision.get("reason") or "no reason given"
             raise Refused(f"refused ({by}): {reason} (not retried)")
-        gate = next((e for e in new if e.get("event") == "gate" and e.get("action") == action and not e.get("passed")),
-                    None)
+        gate = next((e for e in mine if e.get("event") == "gate" and not e.get("passed")), None)
         if gate:
             raise Refused(f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)")
-        if rid is None:  # refused before any request (the target is unknown, the supply is off): nothing ran on it
+        began = any(e.get("event") in ("action", "target") for e in mine)
+        if not began:  # refused before the request, or approved but not begun (the target busy): nothing ran
             text = (read_nofollow(r["log"]) or b"").decode(errors="replace")
             lines = [ln for ln in text.splitlines() if ln.strip()]
             if lines and lines[-1].startswith("refused"):
-                raise Refused(f"{lines[-1]} (not retried)")
+                ran = " after the approval; nothing ran on the target" if decision else ""
+                raise Refused(f"{lines[-1]}{ran} (not retried)")
         if r["outcome"] == "timeout":
             raise Refused(f"{action} did not finish within its timeout; the bench marks the target unknown until a "
                           "person reconciles it at the operator console (not retried)")
@@ -662,7 +687,7 @@ class BenchService:
 
     def _request_deploy(self):
         copy, digest, commit = self.judged_build()
-        out = self.physical("deploy", ["deploy", copy], self.timeouts["deploy"])
+        out = self.physical("deploy", ["deploy", copy], self.timeouts["deploy"], digest)
         return {**out, "digest": digest, "commit": commit}
 
     def _request_restart(self):
@@ -710,10 +735,21 @@ class BenchService:
         if r["outcome"] == "timeout" and not problem:
             problem = "the check timed out"
         dest = self.state / "results"
+        with self.publishing():
+            self.publish(dest, check, results, log, problem, call_start)
+        clear(work)
+        if problem:
+            verdict = "ERROR"
+        out = {**r, "check": check, "run": run.name, "verdict": verdict, "summary": tail(log, 2048)}
+        out.update({"problem": problem} if problem else {"result": data})
+        return out
+
+    @staticmethod
+    def publish(dest, check, results, log, problem, call_start):
+        """Replaces the check's published json, log and diff (under publishing())."""
         for suffix in ("json", "log", "diff"):
             (dest / f"{check}.{suffix}").unlink(missing_ok=True)
         if problem:
-            verdict = "ERROR"
             write_atomic(dest / f"{check}.json", json.dumps({
                 "check": check, "verdict": "ERROR", "commit": None, "local": False, "started": call_start,
                 "ended": now(), "summary": problem, "reasons": [f"bench server: {problem}"], "inputs": {},
@@ -724,10 +760,6 @@ class BenchService:
                 blob = read_nofollow(results / f"{check}.{suffix}")
                 if blob is not None:
                     write_atomic(dest / f"{check}.{suffix}", blob)
-        clear(work)
-        out = {**r, "check": check, "run": run.name, "verdict": verdict, "summary": tail(log, 2048)}
-        out.update({"problem": problem} if problem else {"result": data})
-        return out
 
     @staticmethod
     def judge(results, check, verdict, call_start, inputs, hashes):

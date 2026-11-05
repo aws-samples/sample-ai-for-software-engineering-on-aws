@@ -39,16 +39,30 @@ case $1 in
   probe)  echo '{"qemu_running": true, "reachable": true}' ;;
   deploy|restart|replay)
     echo $$ > "$F/pid"
-    rid="req-$1-$RANDOM"
-    printf '{"at": "2026-11-04T00:00:00Z", "event": "request", "id": "%s", "action": "%s", "requested_by": "%s"}\n' \
-      "$rid" "$1" "$CC1_REQUESTER" >> "$S/actions.jsonl"
+    rid="req-$1-$RANDOM"; d=$(cat "$F/digest" 2>/dev/null)
+    [[ $1 == deploy ]] && d=$(shasum -a 256 "$2" | cut -d' ' -f1)
+    if [[ $mode == other-first ]]; then  # another requester's refused request lands first (the app's own)
+      printf '{"event": "request", "id": "app-1", "action": "%s", "digest": "%s", "requested_by": "vstatd-team r1"}\n' \
+        "$1" "$d" >> "$S/actions.jsonl"
+      printf '{"event": "decision", "id": "app-1", "verdict": "refused", "by": "bob", "reason": "app request"}\n' \
+        >> "$S/actions.jsonl"
+      printf '{"event": "gate", "id": "app-1", "action": "%s", "passed": false, "why": "theirs"}\n' "$1" \
+        >> "$S/actions.jsonl"
+    fi
+    printf '{"event": "request", "id": "%s", "action": "%s", "digest": "%s", "requested_by": "%s"}\n' \
+      "$rid" "$1" "$d" "$CC1_REQUESTER" >> "$S/actions.jsonl"
     case $mode in
       refuse) echo "deploy of x: approve or refuse it at the operator console" >&2
               printf '{"event": "decision", "id": "%s", "verdict": "refused", "by": "%s", "reason": "%s"}\n' \
                 "$rid" "alice@bench (ttys001)" "not this build" >> "$S/actions.jsonl"
               echo "refused: refused (alice@bench (ttys001)): not this build" >&2; exit 1 ;;
-      target-says-refused) echo "refused: printed by the agents' vstatd on the target" >&2; exit 1 ;;
-      fail)   echo "$1 failed" >&2; exit 1 ;;
+      target-says-refused)  # approved and begun, as the bench records it; then the target prints "refused: ..."
+              printf '{"event": "target", "state": "busy", "request": "%s"}\n' "$rid" >> "$S/actions.jsonl"
+              echo "refused: printed by the agents' vstatd on the target" >&2; exit 1 ;;
+      fail|other-first) echo "$1 failed" >&2; exit 1 ;;
+      busy)   printf '{"event": "decision", "id": "%s", "verdict": "approved", "by": "alice"}\n' "$rid" \
+                >> "$S/actions.jsonl"
+              echo "refused: the target is busy: replay in progress (one action at a time)" >&2; exit 1 ;;
       hang)   sleep 30 ;;
     esac
     if [[ $1 == deploy ]]; then cp "$2" "$F/deployed-file"; echo "$2" > "$F/deployed-from"; fi
@@ -233,6 +247,38 @@ class Calls(Env):
                 s.call("bench_status", **args)
         self.assertEqual(self.outcomes(), [("bench_status", "refused")] * 2)
 
+    def test_an_unexpected_argument_with_a_long_name_is_capped_in_the_reason_too(self):
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", **{"n" * 100_000: "x"})
+        self.assertLess(len((self.st / "audit.jsonl").read_text()), 2000)
+
+    def test_concurrent_reads_each_read_their_own_output(self):
+        import threading
+        sessions = [self.service("reviewer") for _ in range(4)]
+        seen, errors = [], []
+
+        def read(svc):
+            for _ in range(5):
+                try:
+                    seen.append((svc.call("bench_status")["target"], svc.call("read_actions")))
+                except Exception as e:  # noqa: BLE001
+                    errors.append(e)
+        threads = [threading.Thread(target=read, args=(svc,)) for svc in sessions]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
+        self.assertEqual({json.dumps(t, sort_keys=True) for t, _ in seen},
+                         {json.dumps({"state": "known", "why": "booted"})})
+        self.assertEqual(list((self.st / "logs").glob("read-*")), [])  # each read's log is removed once read
+
+    def test_a_session_ending_during_a_read_audits_it(self):
+        s = self.service("reviewer")
+        s.current[0] = {"tool": "bench_status", "class": "read-only", "args": {}}
+        s.end_session()
+        self.assertEqual(self.audit()[-1]["outcome"], "error")
+
     def test_the_raw_arguments_of_a_malformed_call_are_capped_in_the_audit(self):
         with self.assertRaises(Refused):
             self.service().call("x" * 5000, **{"y" * 5000: "z" * 5000, **{f"a{i}": i for i in range(50)}})
@@ -282,7 +328,9 @@ class Paths(Env):
             self.service()
 
     def test_the_triage_and_the_baseline_files_themselves_are_checked(self):
-        for f in (self.triage, self.baseline / "baseline.jsonl"):
+        sha = self.triage.with_name("triage.json.sha256")
+        sha.write_text("0" * 64 + "\n")
+        for f in (self.triage, sha, self.baseline / "baseline.jsonl"):
             os.chmod(f, 0o666)
             with self.assertRaisesRegex(ConfigError, "writable by other users", msg=f):
                 self.service()
@@ -418,7 +466,7 @@ class Deploy(Env):
         src = (self.fake / "deployed-from").read_text().strip()
         self.assertEqual(pathlib.Path(src), self.st / "builds" / digest)  # not the build server's file
         env = (self.fake / "env-cc1").read_text()
-        self.assertIn("CC1_REQUESTER=bench MCP server (role developer)", env)
+        self.assertIn(f"CC1_REQUESTER=bench MCP server (role developer, session {s.holder})", env)
         self.assertIn(f"CC1_BENCH_STATE={self.bstate}", env)
         self.assertIn("CC1_APPROVAL_TIMEOUT_S=2", env)
         self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
@@ -449,6 +497,22 @@ class Deploy(Env):
         (self.bstate / "actions.jsonl").write_text(old * 2000)  # about 450 KiB, more than the 256 KiB read for status
         out = s.call("request_deploy")
         self.assertTrue(out["request"].startswith("req-deploy-"))
+
+    def test_another_requesters_refused_request_is_not_this_calls(self):
+        s = self.with_lease()
+        self.publish_build()
+        (self.fake / "mode").write_text("other-first")
+        out = s.call("request_deploy")  # our deploy failed; the app's refusal just before it is not ours
+        self.assertEqual(out["outcome"], "failed")
+        self.assertTrue(out["request"].startswith("req-deploy-"))
+        self.assertEqual(self.audit()[-1]["request"], out["request"])
+
+    def test_an_approved_action_the_busy_target_did_not_begin_is_refused_not_failed(self):
+        s = self.with_lease()
+        self.publish_build()
+        (self.fake / "mode").write_text("busy")
+        with self.assertRaisesRegex(Refused, "busy.*nothing ran on the target"):
+            s.call("request_deploy")
 
     def test_a_refusal_at_the_console_is_final_and_not_retried(self):
         s = self.with_lease()
@@ -528,6 +592,22 @@ class Checks(Env):
             published = json.loads((self.st / "results" / "runtime-limits.json").read_text())
             self.assertEqual(published["verdict"], "ERROR", mode)
             self.assertTrue(published["reasons"][0].startswith("bench server:"), mode)
+
+    def test_a_result_is_read_whole_while_it_is_published(self):
+        s = self.with_lease()
+        self.publish_build()
+        s.call("request_replay")
+        s.call("run_check", check="logdiff")
+        with s.publishing():  # a check replacing its files holds this; a read waits for it
+            import threading
+            got = []
+            reader = self.service("reviewer")
+            t = threading.Thread(target=lambda: got.append(reader.call("read_result", check="logdiff")))
+            t.start()
+            t.join(1)
+            self.assertEqual(got, [])
+        t.join(5)
+        self.assertEqual(got[0]["result"]["verdict"], "PASS")
 
     def test_a_fail_is_published_as_it_is(self):
         s = self.replayed()
