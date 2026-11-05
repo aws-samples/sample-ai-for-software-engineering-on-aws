@@ -1,0 +1,17 @@
+# The bench MCP server, installed into its own virtual environment so that it is started with `python -I` and never
+# imported from the caller's working directory (README, Running).
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vstatd-benchserver"
+version = "0.1.0"
+description = "The bench MCP server of the in-vehicle embedded AI-DLC sample"
+requires-python = ">=3.11"
+license = "MIT-0"
+# The official MCP Python SDK (MIT), pinned like the build server's: its 2.x API is still moving.
+dependencies = ["mcp==2.3.0"]
+
+[tool.setuptools]
+packages = ["benchserver"]

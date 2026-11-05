@@ -3,3 +3,6 @@
 # What `pip install mcp/build` leaves next to the source.
 /build/build/
 /build/*.egg-info/
+# What `pip install mcp/bench` leaves next to the source.
+/bench/build/
+/bench/*.egg-info/

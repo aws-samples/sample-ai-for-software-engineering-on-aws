@@ -1,0 +1,42 @@
+# Configuration of the bench MCP server. This file, every path below and the folders above them belong to root or the
+# server's user and are not writable by others (the server refuses to start otherwise).
+
+[paths]
+bench = "/srv/sample/bench"                       # the sample's bench/: cc1.sh and its gate
+checks = "/srv/sample/checks"                     # the sample's checks/: runtime-limits.sh and logdiff.sh
+# the server's own: builds/, runs/, results/, logs/, lease.json, audit.jsonl
+state = "/srv/bench/state"
+bench_state = "/srv/bench/cc1-bench"              # CC1_BENCH_STATE: supply, target, requests, decisions, action record
+build_results = "/srv/build/state/results"        # the build server's published results, read-only for this server
+baseline = "/srv/bench/baseline"                  # recorded by the bench owner (cc1.sh replay --kind baseline)
+triage = "/srv/build/triage/triage.json"          # the approved triage, for logdiff's allowed differences
+
+[trust]
+readers = ["buildsrv"]                            # may also own build_results and the triage (the build server)
+
+[sandbox]                                         # for the after-bench checks only
+runner = "docker"
+image = "vstatd-build"                            # the image of reference-project/tools/Dockerfile
+memory = "2g"
+cpus = 2
+# docker_host = "unix:///run/user/<uid of benchsrv>/docker.sock"
+
+[lease]
+ttl_s = 1800                                      # a lease lapses this long after its last physical call or check
+
+[roles.developer]
+classes = ["read-only", "controlled-write", "physical"]
+
+[roles.reviewer]
+classes = ["read-only"]
+
+[timeouts]                                        # seconds; nothing is retried
+read = 120
+approval = 300                                    # the operator console's: no answer is a refusal
+deploy = 600                                      # after the approval
+restart = 300
+replay = 900
+check = 600
+
+[environment]
+path = "/usr/local/bin:/usr/bin:/bin"             # PATH inside the checks' sandbox
