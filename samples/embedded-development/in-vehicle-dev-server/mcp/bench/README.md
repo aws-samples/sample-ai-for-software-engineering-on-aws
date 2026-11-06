@@ -170,6 +170,16 @@ F-008 wrong fix of its step 6, which writes timeouts at start-up and after the r
 does not (at 334 ms and 20436 ms in this baseline). The first run's `audit.jsonl` has 19 lines (9 `started`, 7 `ok`,
 2 `refused`, 1 `failed`: the `logdiff` FAIL).
 
+Then with a build that has no seeded wrong fix, the same day and host: the reference project with only the right
+toolchain repair (F-031, the sysroot), built by the `build` server (PASS, digest `8608714a2e61…`), a new baseline
+recorded with it, and five more runs of the same sequence. All 55 rows were as expected: `logdiff` PASS in all five
+(328 of 328 baseline entries paired, no difference, no order change) and `runtime-limits` PASS (peak RSS 5836 to
+5872 of 6400 KiB, baseline 5932, 3 threads). Against that baseline, one run of the batch's build with the F-008
+wrong fix gave `logdiff` FAIL with 20 unexplained differences and no order change: the timeouts and recoveries of
+five messages after the start (from 93 ms) and again after the reconnection (from 20195 ms), only in the run. The
+log comparison catches the wrong fix on this host, as
+[rehearsal/check-examples/](../../rehearsal/check-examples/README.md) says it should.
+
 On that host the guardrail tests pass (44 OK) with `umask 022` and a temporary folder of the user's own with mode
 755. With Ubuntu's default `umask 002`, or with `TMPDIR=/tmp`,
 `test_trusted_readers_own_the_build_results_and_the_triage_only` fails or errors: when it pretends to be another
@@ -181,8 +191,6 @@ paths as it should; the test's expected message is narrower than the check.
 
 - The server as a user of its own (`benchsrv`), started by the agents' user through sudo; the runs above were as the
   bench owner's own user, so the path checks only met that user's folders.
-- `logdiff` on the Linux host with a build that has no seeded wrong fix, which writes no start-up timeouts (see
-  *Two steps in one millisecond* below).
 - `test_trusted_readers_own_the_build_results_and_the_triage_only` under `umask 002` or `TMPDIR=/tmp`: the test
   expects the owner message where the check first finds a writable folder.
 
@@ -202,10 +210,12 @@ paths as it should; the test's expected message is narrower than the check.
   and keeps their order (CC1-PN §6.3; `checks/lib/check_logdiff.py` groups by equal `t_ms`). A timeout and another
   message's decoding step can fall on the same millisecond, and VSTATD-IF §7.3 orders entries within one decoding
   step or one timeout, not between a timeout and another message's decoding step; on the Linux host their order
-  changed between the baseline and a run of the same build. The collisions seen involve timeouts that the F-008
-  wrong fix writes, so whether a correct build collides is not known yet. Proposed: change CC1-PN §6.3 and the check
-  so that the order rule applies to the entries of one message (a `SIGNAL_TIMEOUT` with that message's
-  `SIGNAL_VALUE` entries, which needs the path-to-message mapping of `knowledge/vss-mapping.yaml`, since
-  `SIGNAL_VALUE` names no message), and check it against the repeatability data.
+  changed between the baseline and a run of the same build. Those collisions involve timeouts that the F-008 wrong
+  fix writes, in both the baseline and the run; with a correct build, five runs on that host had no order change. A
+  correct build can still meet it when its one timeout, `BCM_Exterior`'s after the reconnection, lands on another
+  message's decoding step. Proposed: change CC1-PN §6.3 and the check so that the order rule applies to the entries
+  of one message (a `SIGNAL_TIMEOUT` with that message's `SIGNAL_VALUE` entries, which needs the path-to-message
+  mapping of `knowledge/vss-mapping.yaml`, since `SIGNAL_VALUE` names no message), and check it against the
+  repeatability data.
 - **Repeated replays** for the repeatability runs: each one is a separate approval; whether a person may approve a
   batch for one digest is not decided.
