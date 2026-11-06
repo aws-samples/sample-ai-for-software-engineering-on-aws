@@ -166,9 +166,9 @@ the wait for the answer, a deploy took 6.6 to 6.9 s, a restart 5.7 to 5.9 s and 
 5820, 3 threads). `logdiff` gave FAIL in all five, each time for one or two order changes: a `SIGNAL_TIMEOUT` and a
 `SIGNAL_VALUE` of another message that fell on the same millisecond (see [Open questions](#open-questions)); in the
 first and the last run all 348 baseline entries paired with no other difference. The batch's final build keeps the
-F-008 wrong fix of its step 6, which writes timeouts at start-up that a correct build does not (one at 334 ms in
-this baseline). The first run's `audit.jsonl` has 19 lines (9 `started`, 7 `ok`, 2 `refused`, 1 `failed`: the
-`logdiff` FAIL).
+F-008 wrong fix of its step 6, which writes timeouts at start-up and after the reconnection that a correct build
+does not (at 334 ms and 20436 ms in this baseline). The first run's `audit.jsonl` has 19 lines (9 `started`, 7 `ok`,
+2 `refused`, 1 `failed`: the `logdiff` FAIL).
 
 On that host the guardrail tests pass (44 OK) with `umask 022` and a temporary folder of the user's own with mode
 755. With Ubuntu's default `umask 002`, or with `TMPDIR=/tmp`,
@@ -201,11 +201,11 @@ paths as it should; the test's expected message is narrower than the check.
 - **Two steps in one millisecond.** `logdiff` takes the baseline entries with the same `t_ms` as one decoding step
   and keeps their order (CC1-PN §6.3; `checks/lib/check_logdiff.py` groups by equal `t_ms`). A timeout and another
   message's decoding step can fall on the same millisecond, and VSTATD-IF §7.3 orders entries within one decoding
-  step or one timeout, not across messages; on the Linux host their order changed between the baseline and a run of
-  the same build. The collisions seen involve timeouts that the F-008 wrong fix writes, so whether a correct build
-  collides is not known yet. Proposed: change CC1-PN §6.3 and the check so that the order rule applies to the
-  entries of one message (a `SIGNAL_TIMEOUT` with that message's `SIGNAL_VALUE` entries, which needs the
-  path-to-message mapping of `knowledge/vss-mapping.yaml`, since `SIGNAL_VALUE` names no message), and check it
-  against the repeatability data.
+  step or one timeout, not between a timeout and another message's decoding step; on the Linux host their order
+  changed between the baseline and a run of the same build. The collisions seen involve timeouts that the F-008
+  wrong fix writes, so whether a correct build collides is not known yet. Proposed: change CC1-PN §6.3 and the check
+  so that the order rule applies to the entries of one message (a `SIGNAL_TIMEOUT` with that message's
+  `SIGNAL_VALUE` entries, which needs the path-to-message mapping of `knowledge/vss-mapping.yaml`, since
+  `SIGNAL_VALUE` names no message), and check it against the repeatability data.
 - **Repeated replays** for the repeatability runs: each one is a separate approval; whether a person may approve a
   batch for one digest is not decided.
