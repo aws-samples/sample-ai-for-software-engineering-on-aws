@@ -444,7 +444,7 @@ class Service:
             raise AppError("导入的内容要有 run（运行记录）和 events（事件列表）", "invalid_import")
         rid = str(state.get("id") or "")
         if not RID_RE.match(rid):
-            raise AppError(f"运行编号不对：{rid!r}", "invalid_import")
+            raise AppError(f"运行编号不对：{rid!r}", "invalid_import", detail=repr(rid))
         if state.get("status") not in team_mod.ENDED:
             raise AppError("只能导入已经结束的运行", "invalid_import")
         if not isinstance(state.get("lanes"), dict) or not isinstance(state.get("team"), dict):

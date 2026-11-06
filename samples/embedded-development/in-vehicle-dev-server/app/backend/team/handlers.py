@@ -64,7 +64,7 @@ def finding_body(body: dict[str, Any]) -> dict[str, Any]:
             raise AppError("要写明给它加哪些可写路径（paths）", "invalid_finding")
         bad = [g for g in out["paths"] if not scope_glob(g)]
         if bad:
-            raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding")
+            raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding", detail=", ".join(bad))
         return out
     if body.get("decision") not in ("fix", "justify", "defer"):
         raise AppError("decision 只能是 fix、justify 或 defer", "invalid_finding")
@@ -80,7 +80,7 @@ def finding_body(body: dict[str, Any]) -> dict[str, Any]:
     out.update(facts=_texts(body, "facts", 40), cites=_texts(body, "cites", 60), paths=_texts(body, "paths"))
     bad = [g for g in out["paths"] if not scope_glob(g)]
     if bad:
-        raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding")
+        raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding", detail=", ".join(bad))
     return out
 
 

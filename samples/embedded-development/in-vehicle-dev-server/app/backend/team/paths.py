@@ -42,7 +42,7 @@ def sample_dir(data_dir: Path | str | None) -> Path:
     missing = [n for n in NEEDED if not (path / n).is_dir()]
     if missing:
         raise AppError(f"场景文件夹 {path}（来自 {where}）里没有 {'、'.join(m + '/' for m in missing)}：文件夹移动过？"
-                       "重新运行 setup.sh", "no_sample", 500)
+                       "重新运行 setup.sh", "no_sample", 500, detail=f"{path}: {', '.join(m + '/' for m in missing)}")
     return path
 
 
