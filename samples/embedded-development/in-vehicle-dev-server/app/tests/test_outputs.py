@@ -1,6 +1,7 @@
 """The 产出 view (each role's task, reply, tool calls and files)."""
 
 import asyncio
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -138,10 +139,11 @@ def test_open_folder_opens_only_the_runs_own_folders(tmp_path):
             rid = (await call(routes, "POST", f"/runs", json_body={})).body["run"]
             run_wt = svc.runs[rid].s["run_wt"]
             r = await call(routes, "POST", f"/runs/{rid}/open", json_body={})
-            assert r.status == 200 and r.body == {"ok": True, "path": run_wt, "app": "finder"}
+            assert r.status == 200 and r.body == {"ok": True, "path": mod("display").View().text(run_wt), "app": "finder"}
             r = await call(routes, "POST", f"/runs/{rid}/open", json_body={"role": "pm", "app": "kiro"})
             assert r.status == 200 and r.body["path"].endswith("/wt/pm")
-            assert opened == [["/usr/bin/open", run_wt], ["/usr/bin/open", "-a", "Kiro", r.body["path"]]]
+            # the reply shows the folder with ~ (display.py); the folder opened is the real one
+            assert opened == [["/usr/bin/open", run_wt], ["/usr/bin/open", "-a", "Kiro", os.path.expanduser(r.body["path"])]]
             r = await call(routes, "POST", f"/runs/{rid}/open", json_body={"role": "backend"})  # not started: no worktree
             assert (r.status, r.code) == (404, "no_folder")
             r = await call(routes, "POST", f"/runs/{rid}/open", json_body={"app": "terminal"})

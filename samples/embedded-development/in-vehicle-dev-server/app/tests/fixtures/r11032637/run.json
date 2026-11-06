@@ -1,0 +1,89 @@
+{
+ "id": "r11032637",
+ "team_name": "AIDLC-Embedded团队",
+ "roles": [
+  {
+   "key": "triage",
+   "title": "分诊",
+   "gate_label": "分诊",
+   "writable": [
+    "docs/aidlc/triage.json",
+    "docs/aidlc/triage.md"
+   ],
+   "depends_on": []
+  },
+  {
+   "key": "architect",
+   "title": "架构师",
+   "gate_label": "开工",
+   "writable": [
+    "docs/aidlc/refactor-plan.md",
+    "docs/aidlc/work-split.json",
+    "docs/aidlc/plan.json"
+   ],
+   "depends_on": [
+    "triage"
+   ]
+  },
+  {
+   "key": "tester",
+   "title": "测试",
+   "writable": [
+    "tests/**",
+    "docs/aidlc/tests.md"
+   ],
+   "depends_on": [
+    "architect"
+   ]
+  },
+  {
+   "key": "dev-fix",
+   "title": "开发 · 修复",
+   "writable": [
+    "src/gateway_client.*",
+    "src/frame_decoder.*",
+    "src/supervisor.*",
+    "src/signal_table.*",
+    "src/ipc_server.*",
+    "src/client_session.*",
+    "src/config.*",
+    "src/main.cpp",
+    "src/signal_table.cpp",
+    "cmake/cc1-aarch64.cmake",
+    "tests/test_signal_table.cpp"
+   ],
+   "depends_on": [
+    "tester"
+   ]
+  },
+  {
+   "key": "dev-refactor",
+   "title": "开发 · 重构",
+   "writable": [
+    "src/service.*"
+   ],
+   "depends_on": [
+    "tester"
+   ]
+  },
+  {
+   "key": "reviewer",
+   "title": "评审",
+   "writable": [],
+   "depends_on": [
+    "dev-fix",
+    "dev-refactor"
+   ]
+  }
+ ],
+ "signoff": {
+  "by": "{USER}",
+  "at": 1793701309.752701
+ },
+ "started_at": 1793686463.9704618,
+ "ended_at": 1793701128.058167,
+ "bench": {
+  "artifact": "\"{HOME}/workplace/vstatd-team/runs/r11032637/results/4/artifacts/vstatd\"",
+  "run_dir": "\"{HOME}/workplace/vstatd-team/runs/r11032637/bench/run-1\""
+ }
+}

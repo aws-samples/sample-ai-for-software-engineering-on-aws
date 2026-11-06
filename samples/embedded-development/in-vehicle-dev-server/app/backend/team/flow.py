@@ -88,7 +88,7 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
                 credits.append(float(att["credits"]))
             if att.get("started") is None:
                 continue
-            what = (say("flow.agent", {"r_role": key, "label": att["label"]}) if att.get("label") else
+            what = (say("flow.agent", {"r_role": key, "label": messages.label_of(att["label"]) or att["label"]}) if att.get("label") else
                     say("flow.agent.talk", {"r_role": key}) if att.get("kind") == "discuss" else
                     say("flow.agent.round", {"r_role": key, "n": att.get("n") or 1}))
             seg("agent", float(att["started"]), float(att["ended"]) if att.get("ended") is not None else None,

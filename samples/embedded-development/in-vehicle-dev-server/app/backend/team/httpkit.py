@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any, Awaitable, Callable
 
+from . import display
 from .constants import APP_NAME
 
 
@@ -47,13 +48,21 @@ async def read_body(request: Any) -> dict[str, Any]:
 
 
 class Kit:
-    def __init__(self, web: Any, *, is_owner: Callable[[Any], bool] | None = None, app_name: str = APP_NAME) -> None:
+    def __init__(self, web: Any, *, is_owner: Callable[[Any], bool] | None = None, app_name: str = APP_NAME,
+                 names: Callable[[], Any] = lambda: ()) -> None:
+        """*names*: the people's names in the records, for presentation mode (display.py)."""
         self.web = web
         self.is_owner = is_owner or host_is_owner
         self.app_name = app_name
         self.body = read_body
+        self.names = names
+
+    def view(self) -> display.View:
+        """How this reply shows the home folder and the people (display.py)."""
+        return display.current(self.names)
 
     def json(self, data: Any, status: int = 200) -> Any:
+        data = self.view()(data)  # ~ for the home folder, roles for names in presentation mode: nothing recorded changes
         return self.web.json_response(data, status=status, dumps=lambda o: json.dumps(o, ensure_ascii=False, default=str))
 
     def err(self, status: int, code: str, message: str) -> Any:
@@ -78,9 +87,13 @@ class Kit:
             denied = self.deny(request)
             if denied is not None:
                 return denied
+            present = str(request.query.get("present") or "")
+            token = display.PRESENT.set(present if present in display.OWNER else "")
             try:
                 return await fn(request)
             except AppError as exc:
                 return self.json({"error": str(exc), "code": exc.code, **exc.extra}, status=exc.status)
+            finally:
+                display.PRESENT.reset(token)
 
         return handler

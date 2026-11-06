@@ -5,7 +5,7 @@
  * figures of the scenario page are left out. The cards and blocks are the kit's (kit.ts), as the CTO view's were.
  */
 import { useEffect, useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import { BOARD_CSS } from '../board/styles'
 import { fmtSpan, paths, runMeta } from '../board/format'
 import { errorText } from '../board/useBoard'

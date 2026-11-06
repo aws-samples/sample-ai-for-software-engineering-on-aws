@@ -103,6 +103,7 @@ export type BenchView = {
   baseline: string
   actions: { action: string; at: number; outcome: 'ok' | 'refused' | 'timeout' | 'unknown' | 'failed'; why: string; rc: number | null }[]
   state: { dir: string; target: Record<string, unknown>; supply: Record<string, unknown> | null; pending: BenchRequest[]; actions: Record<string, unknown>[] }
+  history?: Record<string, unknown>[] // the action record as it concerns this run (its requests and what names them, the target and supply while it ran): the bench of its replay
   console: string | null // the command that opens the operator console (python3 …/bench/console.py), null when there is none
 }
 
@@ -334,6 +335,8 @@ export type TriageRow = {
   evidence: string | null // a fix's: unit-test | static-analysis | build
   behaviour: boolean | null
   answer: string | null // the person's answer at the triage gate
+  answer_key?: string | null // its option's key, when the option's words are the app's (answer_msg)
+  answer_msg?: Msg | null
   static: string | null // the latest static result's status: reported | gone | …
   trace: string[] | null // commits citing it in the latest trace result
 }
@@ -375,6 +378,7 @@ export type Lane = {
   stage: string // e.g. '2.1 逆向工程'
   stage_en: string
   mission: string // one line: what it is for
+  mission_en: string // …in English, from the team file ('' when it has none)
   aidlc_agent: string // the official AI-DLC agent definition it uses, e.g. 'aidlc-architect-agent'
   gate: 'pending' | 'discussing' | 'approved' | null // a person's gate after this role (null: none, or not reached; discussing: it is answering the person's 讨论)
   gate_label: string // what the person approves, e.g. '范围'
@@ -387,6 +391,7 @@ export type Lane = {
   icon: string // which drawing stands for it ('frontend', 'tester' ...): the team file's, else its key
   assignment: string // what the orchestrator assigned this member in this run (the team plan), e.g. '抽奖接口和开奖记录'
   doing: string // what it is on right now: the assignment, or what it was sent back for ('修 RULE-2'、'解决合入冲突')
+  doing_msg: Msg | null // the round's own words by code (label.*), for the board in English; null for the role's assignment
   member: string // the Kiro Crew member it is (「代理」), '' when the team does not name one
   member_kind: string | null // how its session was booted: 'member' | 'template' | 'default'; null before one opened
   optional: boolean // a post that may sit a run out: its member not on Crew's 「代理」 page (未入职), or the approved plan leaves it out
@@ -402,7 +407,7 @@ export type Lane = {
 
 /** A question a gated role puts to the person (its questions file): options A/B…, its recommendation and why. The
  * triage gate's (D4) also carry the finding's proposed decision and the specification pages it cites. */
-export type GateQuestion = { id: string; q: string; options: { key: string; text: string }[]; recommend: string; why: string; cites?: string[]; decision?: string }
+export type GateQuestion = { id: string; q: string; q_msg?: Msg | null; options: { key: string; text: string; msg?: Msg | null }[]; recommend: string; why: string; cites?: string[]; decision?: string }
 
 /** The person's answer: an option's key, or 'other' with their own words (text); differs: not what the role recommended. */
 export type GateAnswer = { id: string; choice: string; option: string; text: string; differs: boolean }

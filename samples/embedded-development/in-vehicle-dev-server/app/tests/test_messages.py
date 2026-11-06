@@ -109,7 +109,7 @@ def test_the_audit_trail_in_english_and_an_older_event_without_a_code():
     assert [x["what"] for x in zh["entries"]] == ["关卡打开，等人批准：分诊", "人批准了分诊：好", "分诊完成：旧的记录"]
     assert [x["what"] for x in en["entries"]] == ["Gate opened: Waiting for approval: Triage", "The person approved Triage: 好",
                                                    "分诊完成：旧的记录"]
-    assert [x["who"] for x in en["entries"]] == ["app", "owner", "Triage"]
+    assert [x["who"] for x in en["entries"]] == ["app", "Release owner", "Triage"]
     md = audit.markdown(en, "en")
     assert md.startswith("# Audit trail · r1") and "| Time (UTC) | Who | What | Evidence |" in md and "## Gate: triage" in md
     assert audit.markdown(zh).startswith("# 审计记录 · r1")  # the audit.md written at sign-off: Chinese, as before

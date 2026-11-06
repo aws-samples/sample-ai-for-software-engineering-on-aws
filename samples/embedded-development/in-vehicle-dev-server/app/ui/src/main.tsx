@@ -19,7 +19,8 @@
  * finished run again from its event log; while it plays the board's write actions are off and the polls do not animate.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAppApi, useNavigate, type AppApi } from '@kirocrew/app-sdk'
+import { useNavigate, type AppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from './api'
 import type { GateDecision, RunDetail } from './types'
 import { Conveyor } from './board/Conveyor'
 import type { BoardDiff } from './board/diff'
@@ -46,6 +47,7 @@ import { FindingDialog, type ExtendBody, type FindingBody } from './board/Findin
 import { AuditPanel, useAudit, type AuditPick } from './board/Audit'
 import { DivisionView } from './board/DivisionGrid'
 import { flowOf } from './board/flow'
+import { benchAt } from './board/timeline'
 import { ReplayBar, useReplay } from './board/Replay'
 import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
@@ -53,6 +55,7 @@ import { parseView, searchOf, type BoardEntry, type View } from './nav'
 import { ScorecardView } from './scorecard/ScorecardView'
 import { ItemView } from './item/ItemView'
 import { t as tr } from './i18n'
+import { assignmentText } from './i18n/events'
 
 interface Effects {
   run: string | null
@@ -306,12 +309,12 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
 
   const gate = useCallback(
     async (note: string, delivery?: DeliveryPick, answers?: GateAnswers, risk?: GateRisk) => {
-      if (!run || !gateAsk) return
+      if (!run || !gateAsk || inReplay) return // a replay shows the gate, it answers nothing
       await api.post(paths.gate(run.id), { role: gateAsk.role, decision: gateAsk.decision, note, ...(delivery ? { delivery } : {}), ...(answers ? { answers } : {}), ...(risk ? { risk } : {}) })
       setGateAsk(null)
       reload()
     },
-    [api, run, gateAsk, reload],
+    [api, run, gateAsk, inReplay, reload],
   )
   const finding = useCallback(
     async (body: FindingBody | ExtendBody) => {
@@ -431,7 +434,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
         {!board && loading && <p className="kt-loading">{tr('main.7')}</p>}
         {!projection && !inReplay && startOpen && run && <StartForm onStart={start} onCancel={() => setStartOpen(false)} />}
         {!projection && !inReplay && stopAsk && run && <StopConfirm run={run} onConfirm={stop} onCancel={() => setStopAsk(false)} />}
-        {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} askRisk={!!gateLane?.gate_revise_risk} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
+        {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} askRisk={!!gateLane?.gate_revise_risk} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: assignmentText(l) }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} replay={inReplay} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
         {findingAsk && run?.tests.held && <FindingDialog key={run.id} run={run} onConfirm={finding} onCancel={() => setFindingAsk(false)} />}
         {board && !run && board.runs.length === 0 && <EmptyStart onStart={start} />}
         {run && lay && (
@@ -445,7 +448,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
             {!isRunActive(run.status) && run.tests.total > 0 && <SignOff run={run} onSign={sign} />}
             <div className="kt-body">
               <div className="kt-col">
-                <TeamGraph key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} lay={lay} focus={focus} onRole={onRole} flashes={fx.flashes} reducedMotion={reducedMotion} feed={feed} onRetry={projection || inReplay || run.imported ? undefined : (k) => void retry(k)} onGate={inReplay ? undefined : (k, d) => setGateAsk({ role: k, decision: d })} quiet={projection} onOutputs={(k) => openOutputs(k)} phase={phase} onPhase={(p) => { setFocus(null); setPhase((x) => (x === p ? null : p)) }} />
+                <TeamGraph key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} lay={lay} focus={focus} onRole={onRole} flashes={fx.flashes} reducedMotion={reducedMotion} feed={feed} onRetry={projection || inReplay || run.imported ? undefined : (k) => void retry(k)} onGate={inReplay ? undefined : (k, d) => setGateAsk({ role: k, decision: d })} onGateView={inReplay ? (k) => setGateAsk({ role: k, decision: 'approve' }) : undefined} quiet={projection} onOutputs={(k) => openOutputs(k)} phase={phase} onPhase={(p) => { setFocus(null); setPhase((x) => (x === p ? null : p)) }} />
                 {focus && <FocusBar run={run} focus={focus} onClear={() => setFocus(null)} />}
                 {!focus && phase && <PhaseBar run={run} phase={phase} onClear={() => setPhase(null)} />}
                 {/* on a projector the rail of the graph carries the merges; the space goes to the lanes */}
@@ -454,7 +457,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
               </div>
               <aside className="kt-side" aria-label={projection ? tr('main.8') : tr('main.9')}>
                 <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} onFinding={onFinding} />
-                {run.bench && <BenchPanel bench={run.bench} onRetry={!projection && !inReplay && !run.imported && run.bench.held ? benchRetry : undefined} />}
+                {run.bench && <BenchPanel bench={run.ended_at && run.bench.history ? benchAt(run.bench, (run.signoff?.at ?? run.ended_at) + 60) : run.bench} onRetry={!projection && !inReplay && !run.imported && run.bench.held ? benchRetry : undefined} />}
                 {projection && eventFeed}
               </aside>
             </div>

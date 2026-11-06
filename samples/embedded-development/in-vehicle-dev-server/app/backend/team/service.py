@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import audit, board, checks, flow, library, messages, outputs, paths, readiness, roster, scorecard
+from . import audit, board, checks, display, flow, library, messages, outputs, paths, readiness, roster, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -76,6 +76,30 @@ class Service:
     def manager(self) -> Any:
         """The agent manager the runs, the board and 产出 use: the role sessions."""
         return self._agents
+
+    def person_names(self) -> set[str]:
+        """The people's names in the records, for presentation mode (display.py): who signed, registered, decided
+        or retried in each run, and who decided or set the supply at the bench."""
+        found: set[str] = set()
+
+        def by(v: Any) -> None:
+            if isinstance(v, str) and v:
+                found.update(display.names_in(v))
+        for run in list(self.runs.values()):
+            s = run.s
+            by((s.get("signoff") or {}).get("by"))
+            by((s.get("triage") or {}).get("approved_by"))
+            for e in run.events:
+                by((e.get("data") or {}).get("by"))
+                by((e.get("params") or {}).get("by"))
+        for r in scorecard.records():
+            for k in ("by", "requested_by", "set_by"):
+                by(r.get(k))
+        try:
+            by((bench_mod.read_state().get("supply") or {}).get("set_by"))
+        except Exception:  # noqa: BLE001 - no bench state on this Mac
+            pass
+        return found
 
     def scrub(self, text: str) -> str:
         """KiroCrew's own outbound redaction (``ctx.scrub``) when there is one, else a few obvious patterns."""
@@ -355,6 +379,8 @@ class Service:
     def _trail(self, run: TeamRun, lang: str = "zh") -> dict[str, Any]:
         """Blocking: the run's audit trail in *lang*, its text scrubbed as /events sends it."""
         evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
+        if lang != "zh":  # the Chinese trail is the events' own text (and the audit.md written at sign-off is that one)
+            evs = messages.with_codes(evs, (run.s.get("team") or {}).get("roles") or [])
         out = audit.build(run.s, evs, scorecard.records(), lang)
         out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
         return out
@@ -456,6 +482,7 @@ class Service:
         """Every event of a run, for the replay (the board carries only the latest ones)."""
         run = self._run(rid)
         evs = await asyncio.to_thread(store_mod.all_events, self.data_dir / "runs" / run.rid / "events.jsonl")
+        evs = messages.with_codes(evs, (run.s.get("team") or {}).get("roles") or [])  # an older run's: its code, from its text
         return {"run": run.rid, "events": [{**e, "text": self.scrub(str(e.get("text", ""))),
                                             "params": messages.scrubbed(e.get("params"), self.scrub)} for e in evs]}
 
@@ -465,6 +492,7 @@ class Service:
 
         def read() -> dict[str, Any]:
             evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
+            evs = messages.with_codes(evs, (run.s.get("team") or {}).get("roles") or [])
             out = flow.build(run.s, evs, scorecard.records(), time.time())
             # event text and params, as /events sends them
             out["marks"] = [{**m, "label": self.scrub(m["label"]), "params": messages.scrubbed(m.get("params"), self.scrub)}

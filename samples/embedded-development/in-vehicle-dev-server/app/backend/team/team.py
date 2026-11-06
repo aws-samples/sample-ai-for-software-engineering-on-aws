@@ -621,26 +621,30 @@ class TeamRun:
         n = len(lane["attempts"]) + 1
         if kind == "fix" and found:
             caught_up = await self._catch_up(key)
-            task, label = self._found_task(key, n, found, caught_up), f"修 {'、'.join(f['id'] for f in found)}"
-        elif kind == "fix":
-            names = "、".join(c["ac"] or c["name"] for c in failing[:6]) + ("等" if len(failing) > 6 else "")
+        # a round's label is said by a label.* message (its Chinese words are kept; the board says them by code)
+        if kind == "fix" and found:
             caught_up = await self._catch_up(key)
-            task, label = self._fix_task(key, n, failing, caught_up, said=review), f"修 {names}"
+            task, label = self._found_task(key, n, found, caught_up), self.msg("label.fix", {"items": [f["id"] for f in found]})
+        elif kind == "fix":
+            items = [c["ac"] or c["name"] for c in failing[:6]]
+            caught_up = await self._catch_up(key)
+            task = self._fix_task(key, n, failing, caught_up, said=review)
+            label = self.msg("label.fix", {"items": items, "more": len(failing) > 6})
         elif kind == "conflict":
-            task, label = self._conflict_task(key, n, conflicts or []), "解决合入冲突"
+            task, label = self._conflict_task(key, n, conflicts or []), self.msg("label.conflict")
         elif kind == "review":
             caught_up = await self._catch_up(key)
-            task, label = self._review_task(key, n, review, caught_up), "按评审意见改"
+            task, label = self._review_task(key, n, review, caught_up), self.msg("label.review")
         elif kind == "trace":  # its commits do not cite their findings: it commits again, its worktree as it is
-            task, label = self._revise_task(key, n, review, False), "补写提交说明"
+            task, label = self._revise_task(key, n, review, False), self.msg("label.trace")
         elif kind == "revise":  # never merged yet (a wrong ownership file): it redoes its own branch as it is
             caught_up = await self._catch_up(key) if lane.get("merged_sha") else False
-            task, label = self._revise_task(key, n, review, caught_up), "按意见重写"
+            task, label = self._revise_task(key, n, review, caught_up), self.msg("label.revise")
         elif kind == "discuss":  # a person at its gate talks with it: it answers, and changes its documents if it has to
             caught_up = await self._catch_up(key) if role["writable"] and lane.get("merged_sha") else False
-            task, label = self._discuss_task(key, n, review, caught_up), "讨论"
+            task, label = self._discuss_task(key, n, review, caught_up), self.msg("label.discuss")
         else:
-            task, label = self._work_task(key, n), ("重新开工" if n > 1 else "")
+            task, label = self._work_task(key, n), (self.msg("label.again") if n > 1 else "")
         lane["attempts"].append({"n": n, "kind": kind, "label": label, "agent": None, "conv": None, "task": task,
                                  "requested_at": now, "started": None, "ended": None, "error": None, "summary": None,
                                  "credits": None, "tries": 0})
@@ -681,8 +685,8 @@ class TeamRun:
         if att["kind"] == "work" and att["n"] == 1:
             code, params = ("spawned.dispatch", {"r_role": key, "task": task}) if task else ("spawned.start", {"r_role": key})
         else:
-            code, params = "spawned.round", {"r_role": key, "n": att["n"], "label": att["label"]}
-        self.say("spawned", code, {**params, "again": again}, role=key)
+            code, params = "spawned.round", {"r_role": key, "n": att["n"], "label": messages.label_of(att["label"]) or att["label"]}
+        self.say("spawned", code, {**params, "again": messages.as_msg(again, "again.")}, role=key)
         await self.save()
 
     async def _launch(self, key: str, att: dict[str, Any], mgr: Any) -> Any | None:
@@ -800,7 +804,7 @@ class TeamRun:
             # the model backend kept failing in that session (it was told to carry on already): once more in a new one,
             # with the worktree as it was left
             att["fresh_retry"] = True
-            await self._again(key, att, "模型后端出错，换一个新会话接着做")
+            await self._again(key, att, self.msg("again.transient"))
             return
         if f["outcome"] != "completed" and att["kind"] == "discuss" and not self.ended:
             # the answer did not come: the gate is open again as it was, the person can ask once more or decide
@@ -1491,19 +1495,22 @@ class TeamRun:
         failing = [r for r in rows if r["verdict"] == "FAIL"]
         rounds = self.s["tests"].setdefault("rounds", {})
         granted = self.s["tests"].get("granted") or {}  # rounds a person gave a check with a finding (TR §4.4)
-        held: list[tuple[dict[str, Any], str]] = [(r, "检查配置错误") for r in rows if r["verdict"] == "USAGE"]
+        held: list[tuple[dict[str, Any], dict[str, Any]]] = [(r, {"code": "held.usage"}) for r in rows if r["verdict"] == "USAGE"]
         if not failing:
-            held += [(r, "没法判定") for r in rows if r["verdict"] == "BLOCKED"]
+            held += [(r, {"code": "held.blocked"}) for r in rows if r["verdict"] == "BLOCKED"]
         for r in failing:
             if rounds.get(r["name"], 0) >= spec[r["name"]]["max_rounds"] + int(granted.get(r["name"]) or 0):
-                held.append((r, f"修了 {rounds.get(r['name'], 0)} 轮仍不过"))
+                held.append((r, {"code": "held.rounds", "params": {"n": rounds.get(r["name"], 0)}}))
             elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck") for o in r["owners"]):
-                held.append((r, "没过，负责的角色没法再改"))
+                held.append((r, {"code": "held.owner"}))
         owners = {o for r in failing for o in r["owners"]}
         if held:
-            why = "；".join(f"{r['name']} {what}：{(r['reasons'] or [r['summary']])[0]}" for r, what in held)[:300]
-            t["held"] = {"checks": [r["name"] for r, _ in held], "why": why}
-            self.say("failed", "failed.checks", {"why": why}, data={"checks": t["held"]["checks"]})
+            reason = messages.clean({"items": [{"check": r["name"], "what": what, "reason": (r["reasons"] or [r["summary"]])[0]}
+                                               for r, what in held]}) or {}
+            why = self.msg("checks.held", reason)[:300]
+            t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason}
+            self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
+                     data={"checks": t["held"]["checks"]})
             return
         t["held"] = None
         for r in failing:
@@ -1655,12 +1662,13 @@ class TeamRun:
                 if note:
                     self.s.setdefault("gate_notes", {})[key] = note
                 picked = self._answers_for(key, answers)
+                said = None  # the decisions at the gate, as a message (the board says them in either language)
                 if picked:
                     self.s.setdefault("answers", {})[key] = picked
                     note_text = note
-                    note = (note + "；" if note else "") + "决定：" + "、".join(
-                        f"{a['id']} 选 {a['choice'] if a['choice'] != 'other' else '其他'}" + ("（与建议不同）" if a["differs"] else "")
-                        for a in picked)
+                    said = [{"id": a["id"], "choice": a["choice"] if a["choice"] != "other" else {"code": "choice.other"},
+                             "differs": bool(a["differs"])} for a in picked]
+                    note = self.msg("approved.answers", {"g_gate": key, "note": note_text, "answers": said}).split("：", 1)[1]
                     lane["gate_note"] = note_text or None
                 if lane.pop("overrule", None):
                     lane["passed"] = True
@@ -1669,7 +1677,11 @@ class TeamRun:
                     self.s["verdict"] = "人推翻了审查结论放行"
                     self.say("approved", "approved.overrule", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
                 else:
-                    self.say("approved", "approved", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
+                    if said:
+                        self.say("approved", "approved.answers", {"g_gate": key, "note": note_text, "answers": said},
+                                 role=key, frm="person", to=key)
+                    else:
+                        self.say("approved", "approved", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
                 if role.get("delivery"):  # the person confirms the 交付标签 the role proposed (or changes them)
                     self.s["delivery"] = delivery_mod.clean(delivery, self.delivery())
                     self.say("plan", "plan.delivery_confirmed", {"delivery": delivery_mod.label(self.s["delivery"])}, role=key,

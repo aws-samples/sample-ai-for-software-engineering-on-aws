@@ -6,7 +6,8 @@
  * does not carry is not made up: a member's credits show once its last round is over (the record has only the total);
  * its last tool call is the last one logged.
  */
-import type { AgentLive, Lane, LaneStatus, RunDetail, RunStatus, TeamEvent, TestCase } from '../types'
+import type { AgentLive, Lane, LaneStatus, Msg, RunDetail, RunStatus, TeamEvent, TestCase } from '../types'
+import { msgText } from '../i18n/events'
 
 export interface ReplaySpan {
   start: number
@@ -24,6 +25,7 @@ interface RoleState {
   status: LaneStatus
   attempts: number
   doing: string
+  doingMsg: Msg | null // the round's label by code (label.*): the board says it in English
   summary: string | null
   spans: { a: number; b: number | null }[]
   gate: 'pending' | 'discussing' | 'approved' | null
@@ -50,7 +52,7 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
   // a role that sat the run out is skipped from its 「skipped」 event on (未入职 at the start, 这次用不到 at the gate)
   const outAt = new Set(events.filter((e) => e.kind === 'skipped' && e.role).map((e) => e.role as string))
   for (const l of run.roles) {
-    st.set(l.key, { status: l.status === 'skipped' && !outAt.has(l.key) ? 'skipped' : 'waiting', attempts: 0, doing: l.assignment, summary: null,
+    st.set(l.key, { status: l.status === 'skipped' && !outAt.has(l.key) ? 'skipped' : 'waiting', attempts: 0, doing: l.assignment, doingMsg: null, summary: null,
       spans: [], gate: null, lastTool: '', lastAt: null })
   }
   const close = (s: RoleState, at: number) => {
@@ -67,8 +69,12 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
           s.attempts += 1
           s.status = s.attempts > 1 && byKey.get(e.role!)?.writable.length ? 'fixing' : 'running' // a reviewer's second look is not a fix
           s.spans.push({ a: e.at, b: null })
-          const label = e.code ? said(e, 'spawned.round', 'label') : /第 \d+ 轮：/.test(e.text) ? afterColon(e.text) : '' // i18n-keep: an older run's text
+          const given = e.code === 'spawned.round' ? e.params?.label : undefined
+          const msg = given && typeof given === 'object' && typeof (given as Msg).code === 'string' ? given as Msg : null
+          const label = msg ? msgText(msg.code, msg.params) : e.code ? said(e, 'spawned.round', 'label')
+            : /第 \d+ 轮：/.test(e.text) ? afterColon(e.text) : '' // i18n-keep: an older run's text
           s.doing = label || byKey.get(e.role!)?.assignment || ''
+          s.doingMsg = label ? msg : null
         }
         break
       case 'tool':
@@ -154,6 +160,7 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
       attempt: Math.max(1, s.attempts),
       agent,
       doing: s.doing,
+      doing_msg: s.doingMsg,
       summary: finished || s.status === 'failed' || s.status === 'skipped' ? s.summary ?? l.summary : null,
       active_s: Math.round(active * 10) / 10,
       started_at: s.spans[0]?.a ?? null,
@@ -172,7 +179,9 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
   const last = lastTests as TeamEvent | null
   const d = (last?.data ?? null) as { passed?: number; total?: number; cases?: [string, TestCase['status']][] } | null
   for (const [id, status] of d?.cases ?? []) statusOf.set(id, status)
-  const cases = run.tests.cases.filter((c) => statusOf.has(c.id)).map((c) => ({ ...c, status: statusOf.get(c.id)!, message: statusOf.get(c.id) === 'fail' ? c.message : null }))
+  // a check's verdict as that run gave it (the record keeps the last verdict only): PASS, or the last one that was not
+  const verdictAt = (c: TestCase, st: TestCase['status']): TestCase['verdict'] => (!c.verdict ? c.verdict : st === 'pass' ? 'PASS' : c.verdict !== 'PASS' ? c.verdict : 'FAIL')
+  const cases = run.tests.cases.filter((c) => statusOf.has(c.id)).map((c) => ({ ...c, status: statusOf.get(c.id)!, verdict: verdictAt(c, statusOf.get(c.id)!), message: statusOf.get(c.id) === 'fail' ? c.message : null }))
   const passed = d?.passed ?? cases.filter((c) => c.status === 'pass').length
   const total = d?.total ?? cases.length
   const tests = { ...run.tests, at: last?.at ?? null, cases, passed, failed: total - passed, total, history }
@@ -191,9 +200,50 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
     roles,
     tests,
     merges: run.merges.filter((m) => m.at <= t),
+    bench: run.bench ? { ...benchAt(run.bench, t), step: benchStepAt(seen), running: null, held: null } : run.bench,
     events: seen.slice(-200),
     gate_notes: Object.fromEntries(Object.entries(run.gate_notes).filter(([k]) => roles.find((l) => l.key === k)?.gate === 'approved')),
     signoff: null,
     knowledge: { ...run.knowledge, hits: run.knowledge.hits.filter((h) => h.at <= t) },
   }
 }
+
+// the app's step on the bench that each of its bench events starts (team.py's bench steps)
+const BENCH_STEP: Record<string, NonNullable<NonNullable<RunDetail['bench']>['step']>> = {
+  'bench.go': 'doctor', 'bench.deploy': 'deploy', 'bench.replay': 'replay', 'bench.replayed': 'after', 'bench.rerun': 'rerun', 'run.done_ok': 'done',
+}
+
+/** The app's step on the bench after the events seen so far: none before it went to the bench. */
+export function benchStepAt(seen: TeamEvent[]): NonNullable<RunDetail['bench']>['step'] {
+  let step: NonNullable<RunDetail['bench']>['step'] = null
+  for (const e of seen) if (e.code && e.code in BENCH_STEP && (e.code !== 'run.done_ok' || step)) step = BENCH_STEP[e.code]
+  return step
+}
+
+const epoch = (x: unknown) => { const n = Date.parse(String(x ?? '')); return Number.isFinite(n) ? n / 1000 : null }
+
+/** The bench as it stood at *t*: from the run's own part of the action record (BenchView.history), not the bench
+ * as it is now. Without a history (an older reply) the bench is shown as it is. */
+export function benchAt(bench: NonNullable<RunDetail['bench']>, t: number): NonNullable<RunDetail['bench']> {
+  if (!bench.history) return bench
+  const seen = bench.history.filter((r) => (epoch(r.at) ?? Infinity) <= t)
+  const last = (event: string) => [...seen].reverse().find((r) => r.event === event)
+  const target = last('target')
+  const supply = last('supply')
+  const decided = new Set(seen.filter((r) => r.event === 'decision').map((r) => String(r.id)))
+  const pending = seen.filter((r) => r.event === 'request' && !decided.has(String(r.id))).map((r) => ({
+    id: String(r.id), action: String(r.action ?? ''), digest: String(r.digest ?? ''), detail: String(r.detail ?? ''),
+    requested_at: String(r.at ?? ''), requested_by: String(r.requested_by ?? ''), expired: false,
+  }))
+  return {
+    ...bench,
+    state: {
+      ...bench.state,
+      target: target ? { state: target.state, why: target.why } : { state: 'off', why: '' },
+      supply: supply ? { voltage_v: supply.voltage_v, kl15: supply.kl15, set_by: supply.by } : bench.state.supply,
+      pending,
+      actions: seen,
+    },
+  }
+}
+

@@ -20,6 +20,20 @@ const at = (dt: number) => {
 const lane = (r: RunDetail, key: string) => r.roles.find((l) => l.key === key)!
 
 describe('回放：一次跑完的运行按记录重放', () => {
+  test("a check's verdict and the bench's step are what the record said by then, not how the run ended", () => {
+    const { run } = im()
+    const s = replaySpan(run, im().events).start
+    const ev = (dt: number, kind: string, code: string, data: unknown = null) => ({ seq: dt, at: s + dt, kind, role: null, text: code, from: null, to: null, data, code, params: {} }) as unknown as TeamEvent
+    run.tests.cases = [{ ...run.tests.cases[0], id: 'build', status: 'pass', verdict: 'PASS' }]
+    run.bench = { step: 'done', running: null, held: null, history: [], state: { supply: null } } as unknown as RunDetail['bench']
+    const events = [ev(1, 'tests', 'tests.score', { passed: 0, total: 1, cases: [['build', 'fail']] }), ev(2, 'bench', 'bench.go'), ev(3, 'bench', 'bench.replay'), ev(4, 'run', 'run.done_ok')]
+    const r1 = replayAt(run, events, s + 1.5)
+    expect(r1.tests.cases[0]).toMatchObject({ status: 'fail', verdict: 'FAIL' })
+    expect(r1.bench?.step).toBeNull()
+    expect(replayAt(run, events, s + 3.5).bench?.step).toBe('replay')
+    expect(replayAt(run, events, s + 4.5).bench?.step).toBe('done')
+  })
+
   test('the run spans its record; the speed plays it in about a minute and a half', () => {
     const { run, events } = im()
     const sp = replaySpan(run, events)

@@ -6,11 +6,14 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import gitwork, library, messages
+from . import gitwork, library, messages, roster
+from .constants import APP_NAME
 from .sessions import agent_fields, find_agent
 from .team import ACTIVE, TeamRun, clean_risk, live_status
 from .toollog import short
@@ -79,7 +82,8 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
                   "running": bool(s.get("needs_test"))},
         "merges": [{k: m.get(k) for k in ("role", "sha", "at", "status", "files", "note")} for m in s["merges"]],
         "events": [{**e, "text": scrub(str(e.get("text", ""))), "code": e.get("code"),
-                    "params": messages.scrubbed(e.get("params"), scrub), "data": e.get("data")} for e in run.events if not (e.get("kind") == "violation" and any(p in str(e.get("text", "")) for p in gitwork.HOST_PREFIXES))],
+                    "params": messages.scrubbed(e.get("params"), scrub), "data": e.get("data")}
+                   for e in messages.with_codes(run.events, list(run.roles.values())) if not (e.get("kind") == "violation" and any(p in str(e.get("text", "")) for p in gitwork.HOST_PREFIXES))],
         "imported": dict(s["imported"]) if s.get("imported") else None,
         "signoff": dict(s["signoff"]) if s.get("signoff") else None,
         "risks": [{k: r.get(k) for k in ("what", "amount", "gate", "role", "at")} for r in s.get("risks") or [] if isinstance(r, dict)],
@@ -160,9 +164,12 @@ def triage_view(run: TeamRun) -> dict[str, Any] | None:
         if not isinstance(f, dict) or not isinstance(f.get("id"), str):
             continue
         fid, a = f["id"], answers.get(f["id"])
-        answer = None
+        answer, answer_msg = None, None
         if a is not None:
             answer = f"其他：{a.get('text') or ''}" if a.get("choice") == "other" else f"{a.get('choice')} {a.get('option') or ''}".strip()
+            if a.get("choice") != "other":  # the option's words are the app's (triage.opt.*): said by code in English
+                m = messages.as_msg(a.get("option"), "triage.opt.")
+                answer_msg = m if isinstance(m, dict) else None
         added = f.get("added") if isinstance(f.get("added"), dict) else {}
         out.append({"id": fid, "decision": str(f.get("decision") or ""), "added": "added" in f,
                     "found_by": str(added["found_by"]) if added.get("found_by") else None,
@@ -170,11 +177,52 @@ def triage_view(run: TeamRun) -> dict[str, Any] | None:
                     "cites": [str(c) for c in f.get("cites") or []], "facts": [str(x) for x in f.get("facts") or []],
                     "evidence": f.get("evidence") if isinstance(f.get("evidence"), str) else None,
                     "behaviour": f.get("behaviour") if isinstance(f.get("behaviour"), bool) else None, "answer": answer,
+                    "answer_key": str(a.get("choice")) if answer_msg else None, "answer_msg": answer_msg,
                     "static": reported.get(fid) if reported is not None else None,
                     "trace": [str(c) for c in traced.get(fid) or []] if isinstance(traced, dict) else None})
     approved = t.get("approved") if state == "approved" else None
     return {"state": state, "approved": {"by": str(approved.get("by") or ""), "at": str(approved.get("at") or "")} if approved else None,
             "findings": out}
+
+
+def english(run: TeamRun, key: str, field: str) -> str:
+    """A role's English name, stage or gate label: the run's team file's, else (a run that started before the team
+    file had them) the current team file's, when it is the same team."""
+    own = str(run.roles.get(key, {}).get(field) or "")
+    return own or roster.english(run.team.get("name"), key, field)
+
+
+def question(q: dict[str, Any]) -> dict[str, Any]:
+    """A gate question with its words by code (the triage's: triage.py), read from the text for an older run."""
+    msg = q.get("q_msg") or messages.as_msg(q.get("q"), "triage.q.")
+    opts = [{**o, "msg": o.get("msg") or messages.as_msg(o.get("text"), "triage.opt.")} for o in q.get("options") or []]
+    out = {**q, "q_msg": msg if isinstance(msg, dict) else None, "options": opts}
+    out["options"] = [{**o, "msg": o["msg"] if isinstance(o["msg"], dict) else None} for o in opts]
+    return out
+
+
+def bench_history(run: TeamRun) -> list[dict[str, Any]]:
+    """The bench's action record as it concerns this run, for its replay: the requests the run made, every record
+    that names one of them, and the target and supply records while it ran (at most 200, oldest first)."""
+    from .scorecard import records  # the whole record, read only
+    me = f"{APP_NAME} {run.rid}"
+    t0, t1 = float(run.s.get("started_at") or 0), float(run.s.get("ended_at") or time.time())
+    recs = records()
+    mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") == me}
+    out = []
+    for r in recs:
+        rid = str(r.get("id") or r.get("request") or r.get("last_request") or "")
+        at = _epoch(r.get("at"))
+        if rid in mine or (r.get("event") in ("target", "supply") and at is not None and t0 <= at <= t1 + 60):
+            out.append(r)
+    return out[-200:]
+
+
+def _epoch(text: Any) -> float | None:
+    try:
+        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 def bench_view(run: TeamRun, scrub: Callable[[str], str] = str) -> dict[str, Any] | None:
@@ -188,7 +236,7 @@ def bench_view(run: TeamRun, scrub: Callable[[str], str] = str) -> dict[str, Any
     held = messages.scrubbed(b.get("held"), scrub) if b.get("held") else None  # its why and params: the bench's output
     return {"step": b.get("step"), "running": b.get("running"), "held": held, "doctor": b.get("doctor"),
             "artifact": b.get("artifact"), "run_dir": b.get("run_dir"), "baseline": str(spec["baseline"]),
-            "actions": list(b.get("actions") or []), "state": bench_mod.read_state(),
+            "actions": list(b.get("actions") or []), "state": bench_mod.read_state(), "history": bench_history(run),
             "console": shlex.join(["python3", str(console)]) if console.is_file() else None}
 
 
@@ -275,7 +323,7 @@ def lane(run: TeamRun, key: str, *, mgr: Any, scrub: Callable[[str], str], now: 
     credits = [a["credits"] for a in atts if a.get("credits") is not None]
     defaults = run.team.get("defaults", {})
     return {
-        "key": key, "title": role["title"], "title_en": role.get("title_en") or "", "emoji": role.get("emoji", ""),
+        "key": key, "title": role["title"], "title_en": english(run, key, "title_en"), "emoji": role.get("emoji", ""),
         "model": role.get("model") or defaults.get("model") or "", "status": status,
         "depends_on": list(role["depends_on"]), "writable": list(role["writable"]), "attempt": max(1, len(atts)),
         "agent": agent(att, live, mgr=mgr, scrub=scrub, now=now) if att is not None and att.get("agent") else None,
@@ -285,10 +333,10 @@ def lane(run: TeamRun, key: str, *, mgr: Any, scrub: Callable[[str], str], now: 
         "started_at": ln["started_at"], "done_at": ln["done_at"],
         "active_s": round(sum(_duration(a, live if a is att else None, now) for a in atts), 1),
         "credits": round(sum(credits), 3) if credits else None, "summary": ln["summary"],
-        "phase": role.get("phase") or "", "stage": role.get("stage") or "", "stage_en": role.get("stage_en") or "",
-        "mission": role.get("mission") or "",
+        "phase": role.get("phase") or "", "stage": role.get("stage") or "", "stage_en": english(run, key, "stage_en"),
+        "mission": role.get("mission") or "", "mission_en": english(run, key, "mission_en"),
         "aidlc_agent": role.get("aidlc_agent") or "", "gate": ln.get("gate") if role.get("gate") == "human" else None,
-        "gate_label": role.get("gate_label") or "", "gate_label_en": role.get("gate_label_en") or "", "gate_preset": str(role.get("gate_preset") or ""),
+        "gate_label": role.get("gate_label") or "", "gate_label_en": english(run, key, "gate_label_en"), "gate_preset": str(role.get("gate_preset") or ""),
         "gate_revise_preset": str(role.get("gate_revise_preset") or ""),
         "gate_revise_risk": clean_risk(role.get("gate_revise_risk")),
         "kinds": [a["kind"] for a in atts],
@@ -296,11 +344,12 @@ def lane(run: TeamRun, key: str, *, mgr: Any, scrub: Callable[[str], str], now: 
         "icon": str(role.get("icon") or key),
         "assignment": run.assignment(key),
         "doing": str((att or {}).get("label") or run.assignment(key)),
+        "doing_msg": messages.label_of((att or {}).get("label")),  # a round's own words (修 build、unit …) by code
         "member": role.get("member") or role.get("template") or "", "member_kind": _member_kind(atts, mgr),
         "optional": bool(role.get("optional")), "overrule": bool(ln.get("overrule")),
         "awaiting_member": str(ln.get("awaiting_member") or "") or None,
         "delivery_gate": bool(role.get("delivery")),
-        "questions": [dict(q, options=[dict(o) for o in q["options"]]) for q in (run.s.get("questions") or {}).get(key) or []],
+        "questions": [question(q) for q in (run.s.get("questions") or {}).get(key) or []],
         "answers": [{k: a[k] for k in ("id", "choice", "option", "text", "differs")} for a in (run.s.get("answers") or {}).get(key) or []],
         "talk": [{k: x.get(k) for k in ("who", "text", "at", "changed")} for x in (run.s.get("talks") or {}).get(key) or []],
         "can_discuss": role.get("gate") == "human" and run.discuss_allowed(key),

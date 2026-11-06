@@ -5,11 +5,12 @@
  * counts. What the app has no record of shows as —.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import type { BacklogIndex, BacklogRow, RunDetail, TriageRow } from '../types'
 import { BASE } from './format'
 import { errorText } from './useBoard'
 import { t as tr } from '../i18n'
+import { optionText } from '../i18n/events'
 
 type Filter = 'all' | 'fix' | 'later'
 const FILTERS: ReadonlyArray<[Filter, string]> = [['all', tr('board.Backlog.1')], ['fix', 'fix'], ['later', 'later']]
@@ -133,7 +134,7 @@ function TriageTable({ rows, backlog }: { rows: TriageRow[]; backlog: Map<string
                 <td className="kt-mono">{[...f.cites, ...f.facts].join(' ') || NONE}</td>
                 <td>{f.evidence ?? NONE}</td>
                 <td>{f.behaviour === null ? NONE : f.behaviour ? tr('board.Backlog.31') : tr('board.Backlog.32')}</td>
-                <td>{f.answer ?? NONE}</td>
+                <td>{f.answer_msg && f.answer_key ? `${f.answer_key} ${optionText({ text: (f.answer ?? '').slice(f.answer_key.length).trim(), msg: f.answer_msg })}` : f.answer ?? NONE}</td>
                 <td>{staticText(f.static)}</td>
                 <td className="kt-mono">{traceText(f.trace)}</td>
               </tr>

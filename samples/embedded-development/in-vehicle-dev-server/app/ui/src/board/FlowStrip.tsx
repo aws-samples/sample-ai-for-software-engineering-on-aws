@@ -5,7 +5,7 @@
  * and the bench panel keep the details. Also the 准备情况 checklist of the empty state (GET /readiness).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import type { Readiness, ReadinessItem, RunDetail } from '../types'
 import { Cmd, DecideRequest, Digest } from './Bench'
 import { BASE, fmtAgo } from './format'

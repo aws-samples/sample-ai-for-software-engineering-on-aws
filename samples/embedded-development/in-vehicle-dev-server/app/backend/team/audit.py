@@ -23,7 +23,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from . import messages
+from . import messages, roster
 from .constants import APP_NAME
 
 ACTORS = ("person", "agent", "app", "bench")
@@ -51,7 +51,7 @@ WORDS: dict[str, dict[str, str]] = {
            "title": "审计记录 · {run}", "run": "运行：{run}（{status}）", "req": "需求：{title}", "team": "团队：{team}",
            "base": "基线提交：{base}", "entries": "条目：{n}（来源：events.jsonl、台架 actions.jsonl）", "other": "其他",
            "head": "| 时间（UTC） | 谁 | 做了什么 | 证据 |", "bench_title": "台架动作（不属于任何运行）"},
-    "en": {"person": "owner", "bench": "bench", "board": "board", "console": "console", "action": "bench action", "timeout": "timed out",
+    "en": {"person": "Release owner", "bench": "bench", "board": "board", "console": "console", "action": "bench action", "timeout": "timed out",
            "request": "Requested {act} from the console: {detail}", "timed": "{act} request {verdict} ({reason})", "decision": "{verdict} {act} on the {where}",
            "gate": "Physical gate ({stage}) {passed}: {why}", "passed": "passed", "not_passed": "not passed", "result": "{act} result {result}: {detail}",
            "target": "Target state {state}: {why}", "ref_request": "request {id}", "ref_digest": "digest {digest}", "gate_open": "Gate opened: {text}",
@@ -67,6 +67,11 @@ VERDICT_EN = {"approved": "approved", "refused": "refused"}
 
 def _w(lang: str, key: str, **kw: Any) -> str:
     return WORDS[lang][key].format(**kw)
+
+
+def who_in(lang: str, who: str) -> str:
+    """A record's 谁 in *lang*: the app's own words for a person (负责人, the board) in English; a name as it is."""
+    return messages.person(who, lang)
 BOARD_MARK = "Kiro Crew 看板"
 BENCH_SHOWN = 50
 FINDING = re.compile(r"\b(?:F-\d{3}|VSTATD-[A-Z]+[-\w.]*)")
@@ -206,8 +211,12 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
     rid = str(s.get("id") or "")
     roles = [r for r in (s.get("team") or {}).get("roles") or [] if isinstance(r, dict) and r.get("key")]
     en = lang == "en"
-    titles = {str(r["key"]): str((r.get("title_en") if en else "") or r.get("title") or r["key"]) for r in roles}
-    gates = {str(r["key"]): str((r.get("gate_label_en") if en else "") or r.get("gate_label") or "") or titles[str(r["key"])] for r in roles}
+    team_name = (s.get("team") or {}).get("name")
+
+    def own(r: dict[str, Any], field: str) -> str:  # a run that started before the team file had English names
+        return str(r.get(field) or roster.english(team_name, str(r["key"]), field)) if en else ""
+    titles = {str(r["key"]): own(r, "title_en") or str(r.get("title") or r["key"]) for r in roles}
+    gates = {str(r["key"]): own(r, "gate_label_en") or str(r.get("gate_label") or "") or titles[str(r["key"])] for r in roles}
     lanes = s.get("lanes") or {}
     merges = {k: [m for m in s.get("merges") or [] if m.get("role") == k and m.get("status") == "merged"] for k in titles}
     answers = s.get("answers") or {}
@@ -247,6 +256,7 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
             if entry:
                 out.append(entry)
     out.sort(key=lambda x: x["at"])
+    out = [{**x, "who": who_in(lang, x["who"])} for x in out]
     team = s.get("team") or {}
     base = s.get("base") or (s.get("triage") or {}).get("base") or ""
     return {"run": rid, "title": str(s.get("title") or ""), "requirement": str(s.get("requirement") or ""),
@@ -262,7 +272,7 @@ def bench_only(recs: list[dict[str, Any]], lang: str = "zh") -> dict[str, Any]:
         if r.get("event") in ("request", "decision", "action") and str(r.get("id") or "") not in ours:
             entry = _bench_entry(r, "app", lang)
             if entry:
-                out.append(entry)
+                out.append({**entry, "who": who_in(lang, entry["who"])})
     out.sort(key=lambda x: x["at"])
     return {"entries": out[-BENCH_SHOWN:]}
 

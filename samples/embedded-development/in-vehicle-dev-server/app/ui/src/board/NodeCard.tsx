@@ -3,6 +3,7 @@
  * did (its own summary, its changes, the checks it answers for, its knowledge lookups) or is doing now, and the two
  * ways to look closer: 看产出 (the outputs drawer) and 在 Crew 里打开会话 (its Kiro Crew session).
  */
+import { assignmentText, doingText } from '../i18n/events'
 import type { Lane, RunDetail } from '../types'
 import { LIVE, fmtClock, fmtCredits, laneMeta } from './format'
 import { OpenSession } from './Outputs'
@@ -31,7 +32,7 @@ export function NodeCard({ run, lane, onOutputs }: { run: RunDetail; lane: Lane;
       </p>
       {lane.assignment && (
         <p className="kt-ncard-task">
-          <span className="kt-dim">{tr('board.NodeCard.5')}</span> {lane.assignment}
+          <span className="kt-dim">{tr('board.NodeCard.5')}</span> {assignmentText(lane)}
         </p>
       )}
       {missing && (
@@ -39,7 +40,7 @@ export function NodeCard({ run, lane, onOutputs }: { run: RunDetail; lane: Lane;
           {tr('board.NodeCard.6')} {missing}{tr('board.NodeCard.7')} {missing}{tr('board.NodeCard.8')}
         </p>
       )}
-      {sentBack && <p className="kt-ncard-back">{tr('board.NodeCard.9')}{lane.doing}</p>}
+      {sentBack && <p className="kt-ncard-back">{tr('board.NodeCard.9')}{doingText(lane)}</p>}
       {did && <p className="kt-ncard-did">{did}</p>}
       <ul className="kt-ncard-facts">
         {(lane.active_s > 0 || live) && <li>{tr('board.NodeCard.10')} {fmtClock(live && lane.agent ? lane.agent.elapsed_s : lane.active_s)}</li>}

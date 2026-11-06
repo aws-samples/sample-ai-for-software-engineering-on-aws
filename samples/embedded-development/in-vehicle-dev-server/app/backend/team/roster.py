@@ -3,8 +3,12 @@ whether each role's Kiro agent template is installed. Read only: one ``stat`` pe
 
 from __future__ import annotations
 
+import functools
+import json
 from pathlib import Path
 from typing import Any
+
+from .constants import TEAM_FILE
 
 WHEN = ("before_bench", "after_bench", "release")
 
@@ -38,3 +42,28 @@ def preview(team: dict[str, Any], knowledge: dict[str, Any] | None, agents_dir: 
         "knowledge": knowledge,
         "error": "",
     }
+
+
+@functools.lru_cache(maxsize=8)
+def _team_english(path: str, mtime: float) -> tuple[str, dict[str, dict[str, str]]]:
+    try:
+        team = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "", {}
+    fields = ("title_en", "stage_en", "gate_label_en", "mission_en")
+    return str(team.get("name") or ""), {str(r.get("key")): {f: str(r.get(f) or "") for f in fields}
+                                          for r in team.get("roles") or [] if isinstance(r, dict)}
+
+
+def english(team_name: Any, key: str, field: str) -> str:
+    """*field* (title_en, stage_en, gate_label_en) of role *key* in the team files beside TEAM_FILE whose name is
+    *team_name*: a run keeps the team file as it started, and one that started before the file had English names
+    gets them from it here. '' when there is none."""
+    for path in sorted(TEAM_FILE.parent.glob("team-*.json")):
+        try:
+            name, roles = _team_english(str(path), path.stat().st_mtime)
+        except OSError:
+            continue
+        if name and name == team_name and key in roles:
+            return roles[key].get(field, "")
+    return ""

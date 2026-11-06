@@ -88,7 +88,7 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     web = web if web is not None else _web
     if web is None:
         raise RuntimeError("aiohttp is not installed: pass web=")
-    kit = Kit(web, is_owner=is_owner)
+    kit = Kit(web, is_owner=is_owner, names=getattr(svc, "person_names", lambda: ()))
 
     async def health(request: Any, ctx: Any) -> Any:
         return kit.json({"ok": True, "started": svc.started})
@@ -188,7 +188,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
             raise AppError("format 只能是 md 或 json", "invalid_format")
         if not fmt:
             return kit.json(trail)
-        text = audit_mod.markdown(trail, lang) if fmt == "md" else audit_mod.as_json(trail)
+        # a copy shown as the board shows it (~, and the roles in presentation mode); the audit.md written at
+        # sign-off is a file of its own and does not come through here
+        text = kit.view().text(audit_mod.markdown(trail, lang) if fmt == "md" else audit_mod.as_json(trail))
         return web.Response(text=text, content_type="text/markdown" if fmt == "md" else "application/json", charset="utf-8",
                             headers={"Content-Disposition": f'attachment; filename="{name}{".en" if lang == "en" else ""}.{fmt}"'})
 

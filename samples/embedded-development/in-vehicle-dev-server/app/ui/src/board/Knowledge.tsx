@@ -5,7 +5,7 @@
  * both open (GET /knowledge/file: plain text, never rendered).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import type { KnowledgeChip, KnowledgeDoc, KnowledgeIndex, KnowledgeSource, KnowledgeText, Lane, RunDetail } from '../types'
 import { BASE, fmtAgo } from './format'
 import { useServerNow } from './hooks'
