@@ -401,8 +401,9 @@ been dry-run once.
    [rehearsal/build-server-run/](rehearsal/build-server-run/README.md). *`bench` done (2026-11-04):*
    [mcp/bench/](mcp/bench/README.md), its guardrail tests and a smoke test that reads the real bench and runs the
    after-bench checks; a deploy and a replay through it on the real bench ran once (2026-11-04), each approved by a
-   person on the Kiro Crew board. On a Linux bench host (2026-11-06), five runs each of a deploy, a restart refused
-   and then approved at the operator console, and a replay behaved as expected; the open items are under its
+   person on the Kiro Crew board. On a Linux bench host (2026-11-06), with a script answering at the operator console,
+   five runs each of a deploy, a restart refused and then approved, and a replay behaved as expected; `logdiff` gave
+   FAIL on an order change each time, an open question there. The open items are under its
    [Not yet verified](mcp/bench/README.md#not-yet-verified). The Kiro Crew app (item 8) does not use the
    servers yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting it to them is open.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The

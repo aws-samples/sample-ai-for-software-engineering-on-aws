@@ -150,36 +150,41 @@ outcome; the request was refused at the console. The lease of that session staye
 that gives up mid-deploy, and a server terminated mid-deploy; both failed before the fix.
 
 On a Linux bench host, 2026-11-06: Ubuntu 24.04 on x86_64 (8 vCPUs), Docker 29.8.2, QEMU 8.2.2 in the runner image,
-Python 3.12 and MCP Python SDK 2.3.0, as the bench owner's own user. `bench/build-target.sh` built the target image
-and sysroot in 68 minutes (first build), `bench/doctor.sh` reported ready, and the target was up 33 s after `cc1.sh
-start`. The build was the `build` server's PASS result of a batch of
+Python 3.12 and MCP Python SDK 2.3.0, as the bench owner's own user. A script played the person at
+`bench/console.py`'s command line throughout (`approve <id> --digest <first 6 characters>` or `refuse <id> --reason
+…`, about 3 s after the request appeared); no person answered any request. `bench/build-target.sh` built the target
+image and sysroot in 68 minutes (first build), `bench/doctor.sh` reported ready, and the target was up 33 s after
+`cc1.sh start`. The build was the `build` server's PASS result of a batch of
 [rehearsal/build-server-run/](../../rehearsal/build-server-run/README.md) (stand-in sysroot, digest
-`fa471f3d1cf7…`); the bench owner deployed it and recorded the baseline with `cc1.sh`. Then, five times, an MCP
-client over stdio played the agent and a script played the person at `bench/console.py`'s command line (`approve
-<id> --digest <first 6 characters>` or `refuse <id> --reason …`, about 3 s after the request appeared). As a
-reviewer, `request_deploy` was refused. As a developer, it took the lease and called `request_deploy` (approved,
-digest read back), `request_restart` (refused at the console: returned as a refusal and not retried),
-`request_restart` again (approved), `request_replay` (approved), both after-bench checks and `lease_release`. Every
-physical call behaved as expected in all five runs: deploy 6.6 to 6.9 s, restart 5.7 to 5.9 s, replay 17 to 20 s.
+`fa471f3d1cf7…`); the bench owner's user deployed it and recorded the baseline with `cc1.sh`. Then, five times, an
+MCP client over stdio played the agent. As a reviewer, `request_deploy` was refused. As a developer, it took the
+lease and called `request_deploy` (approved, digest read back), `request_restart` (refused at the console: returned
+as a refusal and not retried), `request_restart` again (approved), `request_replay` (approved), both after-bench
+checks and `lease_release`. Every physical call behaved as expected in all five runs; from call to result, including
+the wait for the answer, a deploy took 6.6 to 6.9 s, a restart 5.7 to 5.9 s and a replay 17 to 20 s.
 `runtime-limits` gave PASS in all five (peak RSS 5896 and 5832 of 6400 KiB in the first and the last run, baseline
 5820, 3 threads). `logdiff` gave FAIL in all five, each time for one or two order changes: a `SIGNAL_TIMEOUT` and a
 `SIGNAL_VALUE` of another message that fell on the same millisecond (see [Open questions](#open-questions)); in the
 first and the last run all 348 baseline entries paired with no other difference. The batch's final build keeps the
-F-008 wrong fix of its step 6, which writes timeouts at start-up that a correct build does not. The first run's
-`audit.jsonl` has 19 lines (9 `started`, 7 `ok`, 2 `refused`, 1 `failed`: the `logdiff` FAIL).
+F-008 wrong fix of its step 6, which writes timeouts at start-up that a correct build does not (one at 334 ms in
+this baseline). The first run's `audit.jsonl` has 19 lines (9 `started`, 7 `ok`, 2 `refused`, 1 `failed`: the
+`logdiff` FAIL).
 
-On that host the guardrail tests pass (44 OK) with `umask 022` and a temporary folder of the user's own. With
-Ubuntu's default `umask 002`, or with `TMPDIR=/tmp`,
-`test_trusted_readers_own_the_build_results_and_the_triage_only` fails: when it pretends to be another user, the
-path check refuses the test's group-writable folders, or the sticky `/tmp` holding another user's folder, as
-"writable by other users" before it reaches the owner check the test expects. The server refuses those paths as it
-should; the test's expected message is narrower than the check.
+On that host the guardrail tests pass (44 OK) with `umask 022` and a temporary folder of the user's own with mode
+755. With Ubuntu's default `umask 002`, or with `TMPDIR=/tmp`,
+`test_trusted_readers_own_the_build_results_and_the_triage_only` fails or errors: when it pretends to be another
+user, the path check refuses a group-writable folder on the path, or the sticky `/tmp` holding another user's
+folder, as "writable by other users" before it reaches the owner check the test expects. The server refuses those
+paths as it should; the test's expected message is narrower than the check.
 
 ## Not yet verified
 
 - The server as a user of its own (`benchsrv`), started by the agents' user through sudo; the runs above were as the
   bench owner's own user, so the path checks only met that user's folders.
-- `logdiff` on the Linux host with a build that has no seeded wrong fix.
+- `logdiff` on the Linux host with a build that has no seeded wrong fix, which writes no start-up timeouts (see
+  *Two steps in one millisecond* below).
+- `test_trusted_readers_own_the_build_results_and_the_triage_only` under `umask 002` or `TMPDIR=/tmp`: the test
+  expects the owner message where the check first finds a writable folder.
 
 ## Open questions
 
@@ -194,9 +199,13 @@ should; the test's expected message is narrower than the check.
 - **Approval on the board.** The board approved this server's requests as it approves the app's own: it is open to
   any request at the console, which is what the scenario page's demo advice says.
 - **Two steps in one millisecond.** `logdiff` takes the baseline entries with the same `t_ms` as one decoding step
-  and keeps their order (CC1-PN §6.3). A timeout and another message's decoding step can fall on the same
-  millisecond, and VSTATD-IF §7.3 orders entries only within one step; on the Linux host their order changed between
-  the baseline and a run of the same build. Proposed: apply the order rule to the entries of one message (a
-  `SIGNAL_TIMEOUT` with that message's `SIGNAL_VALUE` entries), and check it against the repeatability data.
+  and keeps their order (CC1-PN §6.3; `checks/lib/check_logdiff.py` groups by equal `t_ms`). A timeout and another
+  message's decoding step can fall on the same millisecond, and VSTATD-IF §7.3 orders entries within one decoding
+  step or one timeout, not across messages; on the Linux host their order changed between the baseline and a run of
+  the same build. The collisions seen involve timeouts that the F-008 wrong fix writes, so whether a correct build
+  collides is not known yet. Proposed: change CC1-PN §6.3 and the check so that the order rule applies to the
+  entries of one message (a `SIGNAL_TIMEOUT` with that message's `SIGNAL_VALUE` entries, which needs the
+  path-to-message mapping of `knowledge/vss-mapping.yaml`, since `SIGNAL_VALUE` names no message), and check it
+  against the repeatability data.
 - **Repeated replays** for the repeatability runs: each one is a separate approval; whether a person may approve a
   batch for one digest is not decided.
