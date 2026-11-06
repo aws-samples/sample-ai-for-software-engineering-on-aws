@@ -400,9 +400,10 @@ been dry-run once.
    of both. *`build` done:* [mcp/build/](mcp/build/README.md), and one batch walked through it in
    [rehearsal/build-server-run/](rehearsal/build-server-run/README.md). *`bench` done (2026-11-04):*
    [mcp/bench/](mcp/bench/README.md), its guardrail tests and a smoke test that reads the real bench and runs the
-   after-bench checks; a deploy, restart and replay through it on the real bench are not tried yet. The Kiro Crew
-   app (item 8) does not use them yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting
-   it to them is open.
+   after-bench checks; a deploy and a replay through it on the real bench ran once (2026-11-04), each approved by a
+   person on the Kiro Crew board. A restart, an approval at the operator console and the other items under its
+   [Not yet verified](mcp/bench/README.md#not-yet-verified) are open. The Kiro Crew app (item 8) does not use the
+   servers yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting it to them is open.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
    Kiro Crew app (item 8) does not need this item's configurations.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
