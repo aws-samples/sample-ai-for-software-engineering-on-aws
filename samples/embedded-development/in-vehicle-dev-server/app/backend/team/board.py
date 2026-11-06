@@ -96,7 +96,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "issue": run.issue(),
         "pr": run.pr(),
         "bench": bench_view(run, scrub),
-        "release": release_view(run),
+        "release": release_view(run, scrub),
         "backlog": backlog_view(run),
     }
 
@@ -104,7 +104,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
 EVIDENCE_SHOWN = 200_000  # characters of the evidence page the sign-off dialog gets
 
 
-def release_view(run: TeamRun) -> dict[str, Any] | None:
+def release_view(run: TeamRun, scrub: Callable[[str], str] = lambda s: s) -> dict[str, Any] | None:
     """ReleaseView: the independent rerun (D9), release.sh's verdict, the checks whose verdict changed on the rerun,
     and the evidence page for the sign-off dialog (None before the rerun)."""
     r = run.s.get("rerun")
@@ -116,8 +116,10 @@ def release_view(run: TeamRun) -> dict[str, Any] | None:
             evidence = Path(r["evidence"]).read_text(encoding="utf-8", errors="replace")[:EVIDENCE_SHOWN]
         except OSError:
             evidence = None
-    return {"at": r["at"], "head": r["head"], "results": r["results"], "release": dict(r["release"]),
-            "checks": [dict(c) for c in r["checks"]], "differs": [dict(d) for d in r["differs"]], "evidence": evidence}
+    # release.sh's reasons and the evidence page carry what the checks printed: redacted as sign_block is
+    return {"at": r["at"], "head": r["head"], "results": r["results"], "release": messages.scrubbed(dict(r["release"]), scrub),
+            "checks": [messages.scrubbed(dict(c), scrub) for c in r["checks"]], "differs": [dict(d) for d in r["differs"]],
+            "evidence": scrub(evidence) if evidence else evidence}
 
 
 def _json(path: Path) -> Any:

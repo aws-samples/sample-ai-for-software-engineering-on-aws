@@ -51,6 +51,15 @@ def test_a_review_names_who_fixes_what():
     en_t = [{**r, "title_en": {"tester": "Tester"}.get(r["key"], r["title_en"])} for r in en]
     assert targets("Send back: Developer · fix (the Tester's case on line 3)", en_t) == ["backend"]
     assert targets("Send back: developer-fix, Tester", en_t) == ["tester", "backend"]
+    # markdown, punctuation after the name, "the … role", "and" between two (each gave a target at b1f24c7)
+    for line in ("Send back: **Developer · fix**", "Send back: `Developer · fix`", "Send back: Developer · fix.",
+                 "Send back: Developer · fix: null check", "Send back: the Developer · fix role", "Send back: Developer – fix"):
+        assert targets(line, en_t) == ["backend"], line
+    assert targets("Send back: Developer · fix and Developer · refactor", en_t) == ["backend", "frontend"]
+    assert targets("Send back: Developer · fix, see docs/aidlc/triage.md", en_t) == ["backend"]
+    # a role named in parentheses is what the change is about, not whom it goes to
+    assert targets("Send back: Developer · fix (the tester case stays)", en_t) == ["backend"]
+    assert targets("打回：后端（测试的用例不用动）", roles) == ["backend"]
 
 
 def test_a_reviewers_verdict_in_either_language():
@@ -97,6 +106,12 @@ def test_a_review_that_says_change_it_goes_back_to_the_named_roles_and_is_looked
     assert any(e["kind"] == "bounce" and e["text"] == "评审要改，打回后端（第 1 轮评审）" for e in run.events)
     assert "这是第 2 轮评审" in reviews[1] and "邮箱没校验" in reviews[1]  # the reviewer checks its own list again
     assert [e["text"] for e in run.events if e["kind"] == "run"][-1] == "运行完成：审查说可以交付"
+
+
+def test_a_review_written_in_english_is_looked_at_again_too(tmp_path):
+    run, _, reviews, fixes = _review_flow(tmp_path, ["Changes needed: one\n\nSend back: backend (email not checked)", "Ready to deliver"], limit=2)
+    assert fixes == ["backend"] and run.s["status"] == "done"
+    assert "这是第 2 轮评审" in reviews[1] and "email not checked" in reviews[1]  # its own list, as it wrote it
 
 
 def test_after_its_rounds_a_review_that_still_says_change_it_goes_to_a_person(tmp_path):

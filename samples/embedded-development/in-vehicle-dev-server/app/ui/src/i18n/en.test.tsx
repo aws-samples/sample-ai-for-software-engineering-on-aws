@@ -93,8 +93,11 @@ describe('the board in English', () => {
     expect(said).toContain('Send back: Developer · fix')
     expect(said).not.toContain('退回')
     expect(errorText(new Error('API 409: {"error": "已经签过了", "code": "signed"}'))).toContain('It has been signed off already')
-    // what the app passes on stays as it said it, inside the English sentence
-    expect(errorText(new Error('API 409: {"error": "没批成：digest mismatch", "code": "bench_refused"}'))).toContain('Not approved (没批成：digest mismatch)')
+    // what the app passes on stays as it said it, inside the English sentence; the app's own Chinese words do not
+    const refused = errorText(new Error('API 409: {"error": "没批成：digest mismatch", "code": "bench_refused", "detail": "digest mismatch"}'))
+    expect(refused).toContain('Not approved (digest mismatch)')
+    expect(refused).not.toContain('没批成')
+    expect(errorText(new Error('API 400: {"error": "要写明是谁补登的（by）", "code": "invalid_finding"}'))).toBe('The finding is not valid (400)') // the app's own words are not passed on
     expect(errorText(new Error('API 409: {"error": "x", "code": "no_such_code"}'))).toContain('x')
   })
 

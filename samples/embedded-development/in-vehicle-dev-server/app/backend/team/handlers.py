@@ -88,7 +88,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     web = web if web is not None else _web
     if web is None:
         raise RuntimeError("aiohttp is not installed: pass web=")
-    kit = Kit(web, is_owner=is_owner, names=getattr(svc, "person_names", lambda: ()))
+    kit = Kit(web, is_owner=is_owner, names=getattr(svc, "person_names", lambda: ()),
+              reserved=getattr(svc, "role_keys", lambda: ()),
+              scrub=getattr(svc, "scrub", lambda s: s))
 
     async def health(request: Any, ctx: Any) -> Any:
         return kit.json({"ok": True, "started": svc.started})

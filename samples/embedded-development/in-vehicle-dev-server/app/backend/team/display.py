@@ -70,8 +70,8 @@ _IN_BOARD = re.compile(r"看板（([^，,）)]+)")
 
 
 def names_in(by: str) -> set[str]:
-    """The person's name(s) in a record's ``by``: ``lilinll``, ``lilinll@host (tty)``, ``lilinll（在 Kiro 会话里…）``,
-    ``Kiro Crew 看板（lilinll，vstatd-team）``."""
+    """The person's name(s) in a record's ``by``: ``alice``, ``alice@host (tty)``, ``alice（在 Kiro 会话里…）``,
+    ``Kiro Crew 看板（alice，vstatd-team）``."""
     by = str(by or "").strip()
     out = set(_IN_BOARD.findall(by))
     first = _SPLIT.split(by, 1)[0].strip()
@@ -83,11 +83,14 @@ def names_in(by: str) -> set[str]:
 class View:
     """How one reply is shown: the home folder always; the people as their role in presentation mode."""
 
-    def __init__(self, present: str = "", names: Iterable[str] = ()) -> None:
+    def __init__(self, present: str = "", names: Iterable[str] = (), reserved: Iterable[str] = ()) -> None:
+        """*reserved*: words a name must not be (the team's role keys and their parts: a user called ``dev`` must
+        not turn ``dev-fix`` into ``Release owner-fix``)."""
         self.homes = home_prefixes()
         self.present = present if present in OWNER else ""
         self.owner = OWNER.get(self.present, "")
-        found = set(names) | this_mac_names() if self.present else set()
+        skip = {w.lower() for k in reserved for w in [k, *re.split(r"[-_]", k)] if w}
+        found = {n for n in set(names) | this_mac_names() if n.lower() not in skip} if self.present else set()
         self.names = sorted(found, key=len, reverse=True)
         self.hosts = sorted(host_names(), key=len, reverse=True) if self.present else []
         self._rx: re.Pattern[str] | None = None
@@ -96,7 +99,7 @@ class View:
             host = "|".join(re.escape(h) for h in self.hosts) or r"(?!)"
             # a name, with what may follow it (@host or @domain, a terminal); a name inside a word of Latin letters
             # (annotate for ann) is left alone, one between - . / is not (a folder or a file named after the user)
-            self._rx = re.compile(rf"(?<![A-Za-z0-9_])(?:{alt})(?:@(?:{host}|[\w.-]+))?(?:\s*\(/dev/[^)]*\))?(?![A-Za-z0-9_])")
+            self._rx = re.compile(rf"(?<![A-Za-z0-9_])(?:{alt})(?:@(?:{host}|[\w.-]+))?(?:\s*\(/dev/[^)]*\))?(?![A-Za-z0-9_])", re.I)
         self._host = re.compile("|".join(rf"(?<![\w.-]){re.escape(h)}(?![\w-])" for h in self.hosts)) if self.hosts else None
 
     def text(self, s: str) -> str:
@@ -122,7 +125,7 @@ class View:
         return data
 
 
-def current(names: Callable[[], Iterable[str]] = lambda: ()) -> View:
+def current(names: Callable[[], Iterable[str]] = lambda: (), reserved: Callable[[], Iterable[str]] = lambda: ()) -> View:
     """The view of the reply being built (PRESENT is set per request by the route guard)."""
     present = PRESENT.get()
-    return View(present, names() if present else ())
+    return View(present, names() if present else (), reserved() if present else ())

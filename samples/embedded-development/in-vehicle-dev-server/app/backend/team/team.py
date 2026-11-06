@@ -231,8 +231,13 @@ def review_verdict(summary: Any) -> str:
 
 
 def _plain(text: str) -> str:
-    """For matching an English role name: lower case, ``·`` ``-`` ``_`` and runs of spaces as one space."""
-    return " ".join(re.sub(r"[·・\-_]", " ", text.lower()).split())
+    """For matching an English role name: lower case, without markdown ``*`` and `` ` ``, ``·`` ``-`` ``–`` ``—``
+    ``_`` and runs of spaces as one space, no trailing ``.:：。``."""
+    text = re.sub(r"[*`]", "", text.lower())
+    return " ".join(re.sub(r"[·・\-–—_]", " ", text).split()).rstrip(" .:：。")
+
+
+_ASIDE = re.compile(r"\([^)]*\)|（[^）]*）")  # what a send-back line says about the change, not whom it goes to
 
 
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
@@ -241,14 +246,14 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     writers = [r["key"] for r in roles if r.get("writable")]
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
-    chunks = lines or _OWNER_RE.findall(text or "")
+    # a role the note goes on to mention in parentheses is not sent back too
+    chunks = [_ASIDE.sub("", c) for c in lines] or _OWNER_RE.findall(text or "")
     found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
-    # English names name a target only where an item of the line starts with one, so that a role the note goes on
-    # to mention ("Send back: Developer · fix (the Tester's case…)") is not sent back too
-    items = [_plain(i) for chunk in chunks for i in re.split(r"[,，;；、/]", re.sub(r"\([^)]*\)|（[^）]*）", "", chunk))]
+    # English names name a target only where an item of the line starts with one ("the Developer · fix role" too)
+    items = [_plain(i) for chunk in chunks for i in re.split(r"[,，;；、]|\s/\s|\band\b", chunk, flags=re.I)]
     found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
-              and any(i == _plain(r["title_en"]) or i.startswith(_plain(r["title_en"]) + " ") for i in items)}
+              and any(re.match(rf"(?:the\s+)?{re.escape(_plain(r['title_en']))}(?!\w)", i) for i in items)}
     return [k for k in writers if k in found]
 
 
@@ -619,8 +624,6 @@ class TeamRun:
                 self.say("handoff", "handoff", {"r_from": dep, "outs": names, "r_role": key}, role=key, frm=dep, to=key,
                          data={"carry": "、".join(names) or "产出"})
         n = len(lane["attempts"]) + 1
-        if kind == "fix" and found:
-            caught_up = await self._catch_up(key)
         # a round's label is said by a label.* message (its Chinese words are kept; the board says them by code)
         if kind == "fix" and found:
             caught_up = await self._catch_up(key)
@@ -1668,7 +1671,9 @@ class TeamRun:
                     note_text = note
                     said = [{"id": a["id"], "choice": a["choice"] if a["choice"] != "other" else {"code": "choice.other"},
                              "differs": bool(a["differs"])} for a in picked]
-                    note = self.msg("approved.answers", {"g_gate": key, "note": note_text, "answers": said}).split("：", 1)[1]
+                    # what goes on to the roles after it: the message without its 「人批准了<关卡>：」 (a label may hold a ：)
+                    said_all, head = self.msg("approved.answers", {"g_gate": key, "note": note_text, "answers": said}), f"人批准了{self.gate_label(key)}："
+                    note = said_all[len(head):] if said_all.startswith(head) else said_all
                     lane["gate_note"] = note_text or None
                 if lane.pop("overrule", None):
                     lane["passed"] = True
@@ -2255,7 +2260,7 @@ class TeamRun:
             text = "\n".join("1. 你是只读的：不改任何文件，也不提交。" if "git add" in ln else ln for ln in text.splitlines())
         tag = self._tag(key, n)
         prev = self.lane(key)["attempts"][-1] if n > 1 and self.lane(key)["attempts"] else {}
-        if n > 1 and not role["writable"] and (prev.get("summary") or "").startswith("要改") and s.get("review_rounds"):
+        if n > 1 and not role["writable"] and review_verdict(prev.get("summary")) == "changes" and s.get("review_rounds"):
             text += (f"\n\n这是第 {int(s['review_rounds']) + 1} 轮评审。上一轮评审说「要改」，相关角色已经按意见改过并重新合入，"
                      "测试结果见测试墙。先按上一轮的问题编号（F-1、F-2……）逐条核对改好了没有（没改的，看它在提交说明或总结里给的理由是否成立），编号不变，"
                      "再看这一轮的新改动有没有引入新问题。上一轮的意见：\n\n---\n"

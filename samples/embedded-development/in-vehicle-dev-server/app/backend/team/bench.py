@@ -99,9 +99,10 @@ async def decide(lib: Path, rid: Any, verdict: Any, digest: Any, reason: Any) ->
     try:
         res = json.loads(out.decode(errors="replace").strip().splitlines()[-1])
     except (ValueError, IndexError):
-        raise AppError(f"台架没给结果：{err.decode(errors='replace').strip()[-200:]}", "bench_failed", 502)
+        why = err.decode(errors='replace').strip()[-200:]
+        raise AppError(f"台架没给结果：{why}", "bench_failed", 502, detail=why)
     if "refused" in res:
-        raise AppError(f"没批成：{res['refused']}", "bench_refused", 409)
+        raise AppError(f"没批成：{res['refused']}", "bench_refused", 409, detail=res["refused"])
     return {"ok": True, "decision": res}
 
 

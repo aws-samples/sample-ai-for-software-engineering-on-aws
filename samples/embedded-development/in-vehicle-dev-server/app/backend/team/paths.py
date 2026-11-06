@@ -28,7 +28,7 @@ def sample_dir(data_dir: Path | str | None) -> Path:
         try:
             found, where = json.loads(record.read_text(encoding="utf-8"))["sample"], str(record)
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise AppError(f"场景文件夹的记录 {record} 读不了：{exc}；重新运行 setup.sh", "no_sample", 500) from exc
+            raise AppError(f"场景文件夹的记录 {record} 读不了：{exc}；重新运行 setup.sh", "no_sample", 500, detail=exc) from exc
     elif os.environ.get("VSTATD_SAMPLE"):
         found, where = os.environ["VSTATD_SAMPLE"], "VSTATD_SAMPLE"
     elif (APP_ROOT.parent / "checks").is_dir():
@@ -38,7 +38,7 @@ def sample_dir(data_dir: Path | str | None) -> Path:
                        "no_sample", 500)
     path = Path(str(found)).expanduser()
     if not path.is_absolute():
-        raise AppError(f"场景文件夹要是绝对路径：{found}（来自 {where}）", "no_sample", 500)
+        raise AppError(f"场景文件夹要是绝对路径：{found}（来自 {where}）", "no_sample", 500, detail=found)
     missing = [n for n in NEEDED if not (path / n).is_dir()]
     if missing:
         raise AppError(f"场景文件夹 {path}（来自 {where}）里没有 {'、'.join(m + '/' for m in missing)}：文件夹移动过？"

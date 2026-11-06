@@ -18,6 +18,7 @@ from teamkit import ROOT, FakeManager, make_run, mod
 from test_service import make
 
 messages, display, team_mod, constants = mod("messages"), mod("display"), mod("team"), mod("constants")
+display_svc = mod("service")
 FIXTURE = Path(__file__).parent / "fixtures" / "r11032637"
 CJK = re.compile(r"[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]")
 HOME, USER, HOST = str(Path.home()), getpass.getuser(), socket.gethostname().split(".")[0]
@@ -168,7 +169,7 @@ def test_a_name_inside_a_word_or_a_path_is_left_alone():
     assert v.text("Kiro Crew 看板（ann，vstatd-team）") == "Kiro Crew 看板（Release owner，vstatd-team）"
     assert v.text("planning, annotate, joanna") == "planning, annotate, joanna"
     assert display.View().text(f"cd '{HOME}/a b' && ls {HOME}") == "cd ~/'a b' && ls ~"
-    assert display.names_in("lilinll（在 Kiro 会话里让 Kiro 代点）") == {"lilinll"}
+    assert display.names_in("alice（在 Kiro 会话里让 Kiro 代点）") == {"alice"}
     assert display.names_in("Kiro Crew 看板（ann，vstatd-team）") == {"ann"}
     assert display.names_in("负责人") == set() and display.names_in("bench tools") == set()
 
@@ -181,3 +182,21 @@ def test_the_signed_audit_files_are_not_rewritten(tmp_path, monkeypatch):
     md = Path(written["dir"], "audit.md").read_text(encoding="utf-8")
     assert md.startswith("# 审计记录") and USER in md  # the record as the run has it: not the board's view
     assert ROOT.exists()
+
+
+def test_a_name_in_any_case_is_found_and_a_role_key_is_never_a_name():
+    v = display.View("en", ["Alice", "dev"], reserved=["dev-fix", "tester"])
+    assert v.text("alice signed; ALICE@host") == "Release owner signed; Release owner"
+    assert v.text("dev-fix and dev") == "dev-fix and dev"  # dev is a part of a role key
+
+
+def test_the_names_are_read_again_only_when_the_records_change(tmp_path, monkeypatch):
+    svc, routes, run = service_with_the_first_delivery(tmp_path, monkeypatch)
+    calls = []
+    real = display_svc.scorecard.records
+    monkeypatch.setattr(display_svc.scorecard, "records", lambda *a: calls.append(1) or real(*a))
+    first = svc.person_names()
+    assert svc.person_names() == first and len(calls) == 1  # a second poll: nothing changed, nothing read
+    run.events.append({"seq": 999, "at": 1.0, "kind": "run", "text": "x", "data": {"by": "bob"}})
+    assert "bob" in svc.person_names() and len(calls) == 2
+    assert "dev-fix" in svc.role_keys() and "tester" in svc.role_keys()

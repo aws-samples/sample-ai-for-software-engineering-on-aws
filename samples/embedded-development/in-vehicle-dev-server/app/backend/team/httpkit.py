@@ -16,11 +16,16 @@ from .constants import APP_NAME
 class AppError(Exception):
     """An error a route answers with ``{"error", "code"}`` and *status*."""
 
-    def __init__(self, message: str, code: str = "bad_request", status: int = 400, extra: dict[str, Any] | None = None) -> None:
+    def __init__(self, message: str, code: str = "bad_request", status: int = 400, extra: dict[str, Any] | None = None,
+                 detail: Any = None) -> None:
+        """*detail*: what the app passes on from elsewhere (a reason from the bench, a path, an exception's text): the
+        English board says the error by its code with this inside; the app's own words stay out of it."""
         super().__init__(message)
         self.code = code
         self.status = status
         self.extra = extra or {}  # more fields of the reply (a refused finding's ``problems``)
+        if detail is not None and str(detail).strip():
+            self.extra["detail"] = str(detail).strip()
 
 
 def host_is_owner(request: Any) -> bool:
@@ -47,19 +52,33 @@ async def read_body(request: Any) -> dict[str, Any]:
     return data
 
 
+def _scrubbed(v: Any, scrub: Callable[[str], str]) -> Any:
+    if isinstance(v, str):
+        return scrub(v)
+    if isinstance(v, list):
+        return [_scrubbed(x, scrub) for x in v]
+    if isinstance(v, dict):
+        return {k: v[k] if k == "code" else _scrubbed(v[k], scrub) for k in v}
+    return v
+
+
 class Kit:
     def __init__(self, web: Any, *, is_owner: Callable[[Any], bool] | None = None, app_name: str = APP_NAME,
-                 names: Callable[[], Any] = lambda: ()) -> None:
-        """*names*: the people's names in the records, for presentation mode (display.py)."""
+                 names: Callable[[], Any] = lambda: (), reserved: Callable[[], Any] = lambda: (),
+                 scrub: Callable[[str], str] = lambda s: s) -> None:
+        """*names*: the people's names in the records, for presentation mode (display.py); *reserved*: the role keys,
+        never taken for a name."""
         self.web = web
         self.is_owner = is_owner or host_is_owner
         self.app_name = app_name
         self.body = read_body
         self.names = names
+        self.reserved = reserved
+        self.scrub = scrub  # an error's words go out redacted as the board's do (a reason may carry a secret)
 
     def view(self) -> display.View:
         """How this reply shows the home folder and the people (display.py)."""
-        return display.current(self.names)
+        return display.current(self.names, self.reserved)
 
     def json(self, data: Any, status: int = 200) -> Any:
         data = self.view()(data)  # ~ for the home folder, roles for names in presentation mode: nothing recorded changes
@@ -92,7 +111,8 @@ class Kit:
             try:
                 return await fn(request)
             except AppError as exc:
-                return self.json({"error": str(exc), "code": exc.code, **exc.extra}, status=exc.status)
+                body = {"error": str(exc), "code": exc.code, **exc.extra}
+                return self.json(_scrubbed(body, self.scrub), status=exc.status)
             finally:
                 display.PRESENT.reset(token)
 

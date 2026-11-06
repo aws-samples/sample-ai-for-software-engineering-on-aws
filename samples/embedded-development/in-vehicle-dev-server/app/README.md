@@ -112,6 +112,5 @@ python3 -m pytest -q                 # backend tests: Python 3.10+ and pytest; g
 (cd ui && npm run preview:build)     # the preview page, into ui/preview-dist/
 ```
 
-Two timing-based UI tests can time out on a heavily loaded machine when test files run in parallel;
-`npx vitest run --no-file-parallelism` runs them one file at a time. The tests of `setup.sh` and `cleanup.sh` are in
+The tests of `setup.sh` and `cleanup.sh` are in
 the scenario's `scripts/tests/` (`python3 -m pytest -q scripts/tests` in the scenario's folder).
