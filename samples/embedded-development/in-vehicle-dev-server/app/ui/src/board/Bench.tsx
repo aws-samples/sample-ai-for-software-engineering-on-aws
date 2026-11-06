@@ -166,13 +166,21 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
       <dl className="kt-bench-grid">
         <div>
           <dt>{tr('board.Bench.44')}</dt>
+          {bench.replay && !bench.replay.target ? (
+            <dd className="kt-dim" data-testid="kt-bench-replay-hidden">{tr('board.Bench.replayHidden')}</dd>
+          ) : (
           <dd className={target === 'known' ? 'kt-ok' : target === 'unknown' ? 'kt-bad' : ''}>
             {TARGET[target] ?? target}{st.target.why ? <span className="kt-dim"> · {str(st.target.why)}</span> : null}
           </dd>
+          )}
         </div>
         <div>
           <dt>{tr('board.Bench.45')}</dt>
+          {bench.replay && !bench.replay.supply ? (
+            <dd className="kt-dim">{tr('board.Bench.replayHidden')}</dd>
+          ) : (
           <dd>{supply ? `${str(supply.voltage_v) || '—'} V · KL15 ${str(supply.kl15) || '—'}` : <span className="kt-warn">{tr('board.Bench.46')}</span>}</dd>
+          )}
         </div>
         <div>
           <dt>doctor.sh</dt>

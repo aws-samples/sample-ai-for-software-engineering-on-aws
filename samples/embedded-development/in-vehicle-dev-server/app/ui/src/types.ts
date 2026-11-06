@@ -103,6 +103,8 @@ export type BenchView = {
   baseline: string
   actions: { action: string; at: number; outcome: 'ok' | 'refused' | 'timeout' | 'unknown' | 'failed'; why: string; rc: number | null }[]
   state: { dir: string; target: Record<string, unknown>; supply: Record<string, unknown> | null; pending: BenchRequest[]; actions: Record<string, unknown>[] }
+  /** In a replay: whether the record says the target's state and the supply at that moment (false: not shown). */
+  replay?: { target: boolean; supply: boolean }
   history?: Record<string, unknown>[] // the action record as it concerns this run (its requests and what names them, the target and supply while it ran): the bench of its replay
   console: string | null // the command that opens the operator console (python3 …/bench/console.py), null when there is none
 }

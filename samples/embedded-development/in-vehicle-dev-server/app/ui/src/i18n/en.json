@@ -1017,7 +1017,7 @@
  "scorecard.ScorecardView.9": "Scorecard",
  "scorecard.ScorecardView.10": "Only measured numbers: all from the run record, check results and the bench action log. Numbers no run has reached are left blank (",
  "scorecard.ScorecardView.11": "), not 0.",
- "scorecard.ScorecardView.12": "{p0} runs in total.",
+ "scorecard.ScorecardView.12": " {p0} runs in total.",
  "scorecard.ScorecardView.13": "Scorecard refresh failed: ",
  "scorecard.ScorecardView.14": "; showing the last data received",
  "scorecard.ScorecardView.15": "Reading the scorecard…",
@@ -1333,5 +1333,6 @@
  "board.Header.replayLead": "What this gate asked the person, as asked; each item's recommendation is marked. The replay answers nothing: what the person decided is in the feed.",
  "board.Header.close": "Close",
  "board.TeamGraph.view": "See the {p0} questions",
- "err.detail": " ({p0})"
+ "err.detail": " ({p0})",
+ "board.Bench.replayHidden": "Not shown in the replay (no bench record before this moment)"
 }

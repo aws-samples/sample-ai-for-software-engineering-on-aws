@@ -31,6 +31,19 @@ const ONE: Scorecard = {
 const cards = () => Object.fromEntries(screen.getAllByTestId('sc-card').map((c) => [c.querySelector('.cto-eyebrow')!.textContent, c.querySelector('.cto-value')!.textContent]))
 
 describe('评分卡', () => {
+  test('a card says what its figure is of on a line of its own; the cards may not run out of their width', async () => {
+    setApiRoutes({ [`GET ${API}/scorecard`]: () => clone(ONE) })
+    render(<ScorecardView pollMs={60_000} />)
+    const card = (await screen.findAllByTestId('sc-card')).find((c) => c.textContent?.startsWith('日志差异'))!
+    expect(card.querySelector('.cto-value')!.textContent).toBe('4')  // the big figure is the figure only
+    expect(within(card).getByTestId('sc-card-of')).toHaveTextContent('未解释 2')
+    // jsdom lays nothing out: the rules that keep a card's text inside it at 1920x1080 (and narrower)
+    const css = [...document.querySelectorAll('style')].map((x) => x.textContent).join('\n')
+    expect(css).toMatch(/\.sc-root \.cto-card \{ min-width: 0; overflow-wrap: anywhere; \}/)
+    expect(css).toMatch(/grid-template-columns: repeat\(auto-fill, minmax\(210px, 1fr\)\)/)
+    expect(document.querySelector('.sc-head p')!.textContent).toBe('只放量出来的数：都取自运行记录、检查结果和台架的动作记录。没有运行做到那一步的数空着（—），不写 0。共 1 次运行。')
+  })
+
   test('with no runs every figure is empty, none is 0', async () => {
     setApiRoutes({ [`GET ${API}/scorecard`]: () => clone(EMPTY) })
     render(<ScorecardView pollMs={60_000} />)
@@ -46,7 +59,7 @@ describe('评分卡', () => {
     render(<ScorecardView pollMs={60_000} />)
     await waitFor(() => expect(screen.getAllByTestId('sc-run')).toHaveLength(1))
     expect(cards()).toMatchObject({ '发现：修复 / 说明 / 延后': '17 / 2 / 3', 被推翻的说明: '1', 构建修复轮数: '1',
-      日志差异: '4 未解释 2', '台架动作：批准 / 拒绝 / 核对': '3 / 1 / 0', 独立重跑结果不同的检查: '0' })
+      日志差异: '4', '台架动作：批准 / 拒绝 / 核对': '3 / 1 / 0', 独立重跑结果不同的检查: '0' })
     const cells = within(screen.getByTestId('sc-run')).getAllByRole('cell').map((c) => c.textContent)
     expect(cells.slice(1)).toEqual(['17 / 2 / 3', '1（F-008）', '30 分钟', '1 小时 30 分', '—', '1', 'build 1、unit 2',
       '4（未解释 2）', '3 / 1 / 0', '0'])

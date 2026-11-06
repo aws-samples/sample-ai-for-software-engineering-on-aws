@@ -76,6 +76,10 @@ describe('the board in English', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Scorecard' }))
     expect(await screen.findByRole('heading', { name: 'Scorecard' })).toBeInTheDocument()
     expect(screen.getAllByText('Overturned explanations').length).toBeGreaterThan(0)
+    // two sentences, not "(—), not 0.2 runs in total."; what a figure is of on its own line
+    expect(document.querySelector('.sc-head p')!.textContent).toMatch(/left blank \(—\), not 0\. \d+ runs in total\.$/)
+    const logdiff = screen.getAllByTestId('sc-card').find((c) => c.textContent?.startsWith('Log differences'))!
+    expect(logdiff.querySelector('.cto-value')!.textContent).toMatch(/^\d+$|^—$/)
   })
 
   test('an older run whose events have only text shows that text as it is', async () => {

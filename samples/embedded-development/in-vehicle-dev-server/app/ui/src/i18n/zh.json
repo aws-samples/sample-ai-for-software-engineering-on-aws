@@ -1333,5 +1333,6 @@
  "board.Header.replayLead": "这道关卡当时问人的事，原样列出，标出了每件事的建议。回放里不作答：人当时的决定见动态。",
  "board.Header.close": "关闭",
  "board.TeamGraph.view": "看这 {p0} 件事",
- "err.detail": "（{p0}）"
+ "err.detail": "（{p0}）",
+ "board.Bench.replayHidden": "回放中，台架状态不显示（这一刻之前没有台架记录）"
 }

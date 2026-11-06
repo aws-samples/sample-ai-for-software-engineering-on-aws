@@ -200,3 +200,22 @@ def test_the_names_are_read_again_only_when_the_records_change(tmp_path, monkeyp
     run.events.append({"seq": 999, "at": 1.0, "kind": "run", "text": "x", "data": {"by": "bob"}})
     assert "bob" in svc.person_names() and len(calls) == 2
     assert "dev-fix" in svc.role_keys() and "tester" in svc.role_keys()
+
+
+def test_the_replays_bench_starts_from_what_the_bench_was_before_the_run(tmp_path, monkeypatch):
+    """bench_history: the run's requests and what names them, the target and supply while it ran, and the last
+    target and supply record from before it started (so the replay never shows the bench as it is now)."""
+    svc, routes, run = service_with_the_first_delivery(tmp_path, monkeypatch)
+    t0 = run.s["started_at"] = 1793686463.0  # 2026-11-03T06:14:23Z
+    run.s["ended_at"] = t0 + 3600
+    me = f"{constants.APP_NAME} {run.rid}"
+    recs = [{"at": "2026-11-03T01:37:16Z", "event": "target", "state": "known", "why": "older"},
+            {"at": "2026-11-03T02:15:21Z", "event": "target", "state": "known", "why": "before the run"},
+            {"at": "2026-11-03T01:40:17Z", "event": "supply", "voltage_v": 13.5, "kl15": "on"},
+            {"at": "2026-11-03T06:30:00Z", "event": "request", "id": "q1", "requested_by": me},
+            {"at": "2026-11-03T06:31:00Z", "event": "target", "state": "busy", "why": "deploy"},
+            {"at": "2026-11-03T06:32:00Z", "event": "request", "id": "q9", "requested_by": "someone else"}]
+    monkeypatch.setattr(mod("scorecard"), "records", lambda d=None: recs)
+    got = mod("board").bench_history(run)
+    assert [(r["event"], r.get("why") or r.get("id") or r.get("kl15")) for r in got] == [
+        ("supply", "on"), ("target", "before the run"), ("request", "q1"), ("target", "deploy")]

@@ -34,6 +34,32 @@ describe('回放：一次跑完的运行按记录重放', () => {
     expect(replayAt(run, events, s + 4.5).bench?.step).toBe('done')
   })
 
+  test('the bench at a moment of the replay is what the record said then; what it did not say is not shown', async () => {
+    const { benchAt } = await import('./timeline')
+    const at = (s: string) => Date.parse(s) / 1000
+    const bench = { step: 'done', running: null, held: null, doctor: null, run_dir: null, artifact: null, console: null,
+      state: { target: { state: 'off', why: 'now' }, supply: { voltage_v: 0, kl15: 'off', set_by: '' }, pending: [], actions: [] },
+      history: [
+        { at: '2026-11-03T02:15:21Z', event: 'target', state: 'known', why: 'done: replay (an earlier run)' },
+        { at: '2026-11-03T01:40:17Z', event: 'supply', voltage_v: 13.5, kl15: 'on', by: 'Release owner' },
+        { at: '2026-11-03T10:01:29Z', event: 'request', id: 'q1', action: 'deploy', digest: 'abc', detail: 'vstatd' },
+        { at: '2026-11-03T10:03:12Z', event: 'target', state: 'busy', why: 'deploy in progress' },
+      ] } as unknown as NonNullable<RunDetail['bench']>
+    const deploy = benchAt(bench, at('2026-11-03T10:02:00Z'))  // waiting at the console: the bench as it was before the run
+    expect(deploy.state.target).toEqual({ state: 'known', why: 'done: replay (an earlier run)' })
+    expect(deploy.state.supply).toMatchObject({ voltage_v: 13.5, kl15: 'on' })
+    expect(deploy.state.pending.map((p) => p.id)).toEqual(['q1'])
+    expect(benchAt(bench, at('2026-11-03T10:03:13Z')).state.target.state).toBe('busy')
+    const before = benchAt(bench, at('2026-11-03T00:00:00Z'))  // nothing recorded yet: not the bench as it is now
+    expect(before.replay).toEqual({ target: false, supply: false })
+    expect(before.state.target.state).not.toBe('off')
+    const { BenchPanel } = await import('./Bench')
+    render(<BenchPanel bench={{ ...before, doctor: null } as NonNullable<RunDetail['bench']>} />)
+    const panel = screen.getByTestId('kt-bench')
+    expect(panel).toHaveTextContent('回放中，台架状态不显示')
+    expect(panel).not.toHaveTextContent('没开机')
+  })
+
   test('tests first shows the new tests failing; after the bench, the checks that ran with what the rerun says of them', () => {
     const { run } = im()
     const s = replaySpan(run, im().events).start

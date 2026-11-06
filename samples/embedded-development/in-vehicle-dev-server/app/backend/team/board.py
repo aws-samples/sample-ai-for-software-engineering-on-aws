@@ -205,19 +205,24 @@ def question(q: dict[str, Any]) -> dict[str, Any]:
 
 def bench_history(run: TeamRun) -> list[dict[str, Any]]:
     """The bench's action record as it concerns this run, for its replay: the requests the run made, every record
-    that names one of them, and the target and supply records while it ran (at most 200, oldest first)."""
+    that names one of them, and the target and supply records while it ran, with the last of each from before it
+    started (the state the bench was in then; at most 200, oldest first)."""
     from .scorecard import records  # the whole record, read only
     me = f"{APP_NAME} {run.rid}"
     t0, t1 = float(run.s.get("started_at") or 0), float(run.s.get("ended_at") or time.time())
     recs = records()
     mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") == me}
-    out = []
+    out: list[dict[str, Any]] = []
+    before: dict[str, dict[str, Any]] = {}  # the last target and supply record before the run started
     for r in recs:
         rid = str(r.get("id") or r.get("request") or r.get("last_request") or "")
         at = _epoch(r.get("at"))
-        if rid in mine or (r.get("event") in ("target", "supply") and at is not None and t0 <= at <= t1 + 60):
+        if r.get("event") in ("target", "supply") and at is not None and at < t0:
+            before[str(r["event"])] = r
+        elif rid in mine or (r.get("event") in ("target", "supply") and at is not None and t0 <= at <= t1 + 60):
             out.append(r)
-    return out[-200:]
+    out = sorted(before.values(), key=lambda r: str(r.get("at"))) + out[-(200 - len(before)):]
+    return out
 
 
 def _epoch(text: Any) -> float | None:

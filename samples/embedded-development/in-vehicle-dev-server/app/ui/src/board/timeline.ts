@@ -250,10 +250,12 @@ export function benchAt(bench: NonNullable<RunDetail['bench']>, t: number): NonN
   }))
   return {
     ...bench,
+    // what the record does not say at t (nothing before it) is not shown, not filled in from the bench as it is now
+    replay: { target: !!target, supply: !!supply },
     state: {
       ...bench.state,
-      target: target ? { state: target.state, why: target.why } : { state: 'off', why: '' },
-      supply: supply ? { voltage_v: supply.voltage_v, kl15: supply.kl15, set_by: supply.by } : bench.state.supply,
+      target: target ? { state: target.state, why: target.why } : { state: '', why: '' },
+      supply: supply ? { voltage_v: supply.voltage_v, kl15: supply.kl15, set_by: supply.by } : null,
       pending,
       actions: seen,
     },
