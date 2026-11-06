@@ -62,6 +62,14 @@ describe('the board in English', () => {
     expect(feed).not.toHaveTextContent('运行开始')
   })
 
+  test('the triage approved with no name given says Release owner, not the app\'s Chinese word', async () => {
+    const b = vstatdBoard('bench')
+    b.run!.backlog!.triage!.approved = { by: '负责人', at: '2026-11-03T06:20:33Z' }
+    serve(b)
+    render(<VstatdTeamApp pollMs={60_000} />)
+    expect(await screen.findByTestId('kt-reqs-state')).toHaveTextContent('Triage approved (Release owner, 2026-11-03T06:20:33Z)')
+  })
+
   test('the scorecard has English titles', async () => {
     serve(vstatdBoard('release'))
     render(<VstatdTeamApp pollMs={60_000} />)

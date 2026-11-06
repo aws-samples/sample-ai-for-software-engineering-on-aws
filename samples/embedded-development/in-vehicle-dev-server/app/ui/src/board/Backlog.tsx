@@ -10,7 +10,7 @@ import type { BacklogIndex, BacklogRow, RunDetail, TriageRow } from '../types'
 import { BASE } from './format'
 import { errorText } from './useBoard'
 import { t as tr } from '../i18n'
-import { optionText } from '../i18n/events'
+import { optionText, person } from '../i18n/events'
 
 type Filter = 'all' | 'fix' | 'later'
 const FILTERS: ReadonlyArray<[Filter, string]> = [['all', tr('board.Backlog.1')], ['fix', 'fix'], ['later', 'later']]
@@ -160,7 +160,7 @@ export function BacklogPanel({ run }: { run: RunDetail }) {
           {!t
             ? tr('board.Backlog.33', { p0: b.rows.length, p1: fix })
             : t.state === 'approved'
-              ? tr('board.Backlog.34', { p0: t.approved ? tr('board.Backlog.approvedBy', { p0: t.approved.by, p1: t.approved.at }) : '', p1: t.findings.length })
+              ? tr('board.Backlog.34', { p0: t.approved ? tr('board.Backlog.approvedBy', { p0: person(t.approved.by), p1: t.approved.at }) : '', p1: t.findings.length })
               : tr('board.Backlog.35', { p0: t.findings.length })}
         </span>
       </summary>

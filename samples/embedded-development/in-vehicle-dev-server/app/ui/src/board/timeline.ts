@@ -177,11 +177,24 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
   // the test wall: the cases the last test run before t had, with the statuses it gave them
   const statusOf = new Map<string, TestCase['status']>()
   const last = lastTests as TeamEvent | null
-  const d = (last?.data ?? null) as { passed?: number; total?: number; cases?: [string, TestCase['status']][] } | null
+  const d = (last?.data ?? null) as { passed?: number; total?: number; cases?: [string, TestCase['status']][]; first?: string[]; checks?: [string, string][] } | null
   for (const [id, status] of d?.cases ?? []) statusOf.set(id, status)
   // a check's verdict as that run gave it (the record keeps the last verdict only): PASS, or the last one that was not
   const verdictAt = (c: TestCase, st: TestCase['status']): TestCase['verdict'] => (!c.verdict ? c.verdict : st === 'pass' ? 'PASS' : c.verdict !== 'PASS' ? c.verdict : 'FAIL')
-  const cases = run.tests.cases.filter((c) => statusOf.has(c.id)).map((c) => ({ ...c, status: statusOf.get(c.id)!, verdict: verdictAt(c, statusOf.get(c.id)!), message: statusOf.get(c.id) === 'fail' ? c.message : null }))
+  let cases: TestCase[] = run.tests.cases.filter((c) => statusOf.has(c.id)).map((c) => ({ ...c, status: statusOf.get(c.id)!, verdict: verdictAt(c, statusOf.get(c.id)!), message: statusOf.get(c.id) === 'fail' ? c.message : null }))
+  if (!d?.cases && d?.first?.length) {
+    // tests first: the tester's new tests, all failing on the requirement commit (the record names them only)
+    cases = d.first.map((name) => ({ id: name, ac: /\bF(\d{3})_/.exec(name) ? `F-${/\bF(\d{3})_/.exec(name)![1]}` : null, name, file: '', status: 'fail' as const, owner: null, ms: null, message: null }))
+  } else if (!d?.cases && d?.checks?.length) {
+    // after the bench, the independent rerun: the checks that ran, each with what the rerun's result says of it
+    const said = new Map((run.release?.checks ?? []).map((c) => [c.name, c]))
+    const owner = new Map(run.tests.cases.map((c) => [c.id, c.owner]))
+    cases = d.checks.map(([name, v]) => {
+      const verdict = (['PASS', 'FAIL', 'BLOCKED', 'USAGE'].includes(v) ? v : 'FAIL') as NonNullable<TestCase['verdict']>
+      return { id: name, ac: name, name, file: '', status: verdict === 'PASS' ? 'pass' as const : verdict === 'BLOCKED' ? 'blocked' as const : 'fail' as const,
+        owner: owner.get(name) ?? null, ms: null, message: said.get(name)?.summary ?? null, verdict, tier: said.get(name)?.tier ?? null }
+    })
+  }
   const passed = d?.passed ?? cases.filter((c) => c.status === 'pass').length
   const total = d?.total ?? cases.length
   const tests = { ...run.tests, at: last?.at ?? null, cases, passed, failed: total - passed, total, history }

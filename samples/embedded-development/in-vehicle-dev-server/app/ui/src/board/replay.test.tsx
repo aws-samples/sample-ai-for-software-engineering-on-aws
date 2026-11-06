@@ -34,6 +34,20 @@ describe('回放：一次跑完的运行按记录重放', () => {
     expect(replayAt(run, events, s + 4.5).bench?.step).toBe('done')
   })
 
+  test('tests first shows the new tests failing; after the bench, the checks that ran with what the rerun says of them', () => {
+    const { run } = im()
+    const s = replaySpan(run, im().events).start
+    const ev = (dt: number, data: unknown) => ({ seq: dt, at: s + dt, kind: 'tests', role: null, text: '', from: null, to: null, data, code: null, params: {} }) as unknown as TeamEvent
+    run.release = { checks: [{ name: 'logdiff', verdict: 'PASS', tier: 'emulation', summary: '328 of 328 baseline entries paired', reasons: [] }] } as unknown as RunDetail['release']
+    const events = [ev(1, { first: ['A.F003_Fails', 'B.fails'] }), ev(2, { checks: [['runtime-limits', 'PASS'], ['logdiff', 'PASS']], phase: 'after_bench' })]
+    const first = replayAt(run, events, s + 1.5).tests
+    expect([first.passed, first.total]).toEqual([0, 2])
+    expect(first.cases.map((c) => [c.ac, c.status])).toEqual([['F-003', 'fail'], [null, 'fail']])
+    const after = replayAt(run, events, s + 2.5).tests
+    expect([after.passed, after.total]).toEqual([2, 2])
+    expect(after.cases.find((c) => c.id === 'logdiff')).toMatchObject({ verdict: 'PASS', tier: 'emulation', message: '328 of 328 baseline entries paired' })
+  })
+
   test('the run spans its record; the speed plays it in about a minute and a half', () => {
     const { run, events } = im()
     const sp = replaySpan(run, events)
