@@ -54,3 +54,26 @@ export function setLang(next: Lang): void {
   current = next
   if (typeof location !== 'undefined' && !/jsdom/.test(navigator.userAgent)) location.reload()
 }
+
+/** 演示模式 / Presentation mode: the people on the board shown as their role (the backend does it: ?present=).
+ * Kept in this browser, off until the person turns it on; switching reloads the page. */
+export const PRESENT_KEY = 'vstatd-team:present'
+let presenting = (() => {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(PRESENT_KEY) === 'on'
+  } catch {
+    return false
+  }
+})()
+export const presentation = (): boolean => presenting
+export function setPresentation(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(PRESENT_KEY, 'on')
+    else localStorage.removeItem(PRESENT_KEY)
+  } catch {
+    /* storage refused: the choice lasts until the reload */
+  }
+  presenting = on
+  if (typeof location !== 'undefined' && !/jsdom/.test(navigator.userAgent)) location.reload()
+}
+

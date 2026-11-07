@@ -219,17 +219,41 @@ def money(amount: float | None) -> str:
     return f"¥{amount / 1e4:,.1f} 万" if amount >= 1e4 else f"¥{amount:,.0f}"
 
 
+_REVIEW_OK = re.compile(r"^\s*(?:可以交付|ready to deliver|can be delivered|ok to deliver)", re.I)
+_REVIEW_CHANGES = re.compile(r"^\s*(?:要改|changes? (?:needed|requested|required)|needs? changes)", re.I)
+
+
+def review_verdict(summary: Any) -> str:
+    """A reviewer's ``DONE:`` line: ``ok`` (可以交付, or "Ready to deliver" from an agent writing English), ``changes``
+    (要改, "Changes needed"), else ``""``."""
+    text = str(summary or "")
+    return "ok" if _REVIEW_OK.match(text) else "changes" if _REVIEW_CHANGES.match(text) else ""
+
+
+def _plain(text: str) -> str:
+    """For matching an English role name: lower case, without markdown ``*`` and `` ` ``, ``·`` ``-`` ``–`` ``—``
+    ``_`` and runs of spaces as one space, no trailing ``.:：。``."""
+    text = re.sub(r"[*`]", "", text.lower())
+    return " ".join(re.sub(r"[·・\-–—_]", " ", text).split()).rstrip(" .:：。")
+
+
+_ASIDE = re.compile(r"\([^)]*\)|（[^）]*）")  # what a send-back line says about the change, not whom it goes to
+
+
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     """The writing roles a 要改 review sends back, in team order: its ``打回：`` (or ``Send back:``) lines (one per role
     is fine), else every 归X it names."""
     writers = [r["key"] for r in roles if r.get("writable")]
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
-    chunks = lines or _OWNER_RE.findall(text or "")
+    # a role the note goes on to mention in parentheses is not sent back too
+    chunks = [_ASIDE.sub("", c) for c in lines] or _OWNER_RE.findall(text or "")
     found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
+    # English names name a target only where an item of the line starts with one ("the Developer · fix role" too)
+    items = [_plain(i) for chunk in chunks for i in re.split(r"[,，;；、]|\s/\s|\band\b", chunk, flags=re.I)]
     found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
-              and any(r["title_en"].lower() in chunk.lower() for chunk in chunks)}
+              and any(re.match(rf"(?:the\s+)?{re.escape(_plain(r['title_en']))}(?!\w)", i) for i in items)}
     return [k for k in writers if k in found]
 
 
@@ -600,28 +624,30 @@ class TeamRun:
                 self.say("handoff", "handoff", {"r_from": dep, "outs": names, "r_role": key}, role=key, frm=dep, to=key,
                          data={"carry": "、".join(names) or "产出"})
         n = len(lane["attempts"]) + 1
+        # a round's label is said by a label.* message (its Chinese words are kept; the board says them by code)
         if kind == "fix" and found:
             caught_up = await self._catch_up(key)
-            task, label = self._found_task(key, n, found, caught_up), f"修 {'、'.join(f['id'] for f in found)}"
+            task, label = self._found_task(key, n, found, caught_up), self.msg("label.fix", {"items": [f["id"] for f in found]})
         elif kind == "fix":
-            names = "、".join(c["ac"] or c["name"] for c in failing[:6]) + ("等" if len(failing) > 6 else "")
+            items = [c["ac"] or c["name"] for c in failing[:6]]
             caught_up = await self._catch_up(key)
-            task, label = self._fix_task(key, n, failing, caught_up, said=review), f"修 {names}"
+            task = self._fix_task(key, n, failing, caught_up, said=review)
+            label = self.msg("label.fix", {"items": items, "more": len(failing) > 6})
         elif kind == "conflict":
-            task, label = self._conflict_task(key, n, conflicts or []), "解决合入冲突"
+            task, label = self._conflict_task(key, n, conflicts or []), self.msg("label.conflict")
         elif kind == "review":
             caught_up = await self._catch_up(key)
-            task, label = self._review_task(key, n, review, caught_up), "按评审意见改"
+            task, label = self._review_task(key, n, review, caught_up), self.msg("label.review")
         elif kind == "trace":  # its commits do not cite their findings: it commits again, its worktree as it is
-            task, label = self._revise_task(key, n, review, False), "补写提交说明"
+            task, label = self._revise_task(key, n, review, False), self.msg("label.trace")
         elif kind == "revise":  # never merged yet (a wrong ownership file): it redoes its own branch as it is
             caught_up = await self._catch_up(key) if lane.get("merged_sha") else False
-            task, label = self._revise_task(key, n, review, caught_up), "按意见重写"
+            task, label = self._revise_task(key, n, review, caught_up), self.msg("label.revise")
         elif kind == "discuss":  # a person at its gate talks with it: it answers, and changes its documents if it has to
             caught_up = await self._catch_up(key) if role["writable"] and lane.get("merged_sha") else False
-            task, label = self._discuss_task(key, n, review, caught_up), "讨论"
+            task, label = self._discuss_task(key, n, review, caught_up), self.msg("label.discuss")
         else:
-            task, label = self._work_task(key, n), ("重新开工" if n > 1 else "")
+            task, label = self._work_task(key, n), (self.msg("label.again") if n > 1 else "")
         lane["attempts"].append({"n": n, "kind": kind, "label": label, "agent": None, "conv": None, "task": task,
                                  "requested_at": now, "started": None, "ended": None, "error": None, "summary": None,
                                  "credits": None, "tries": 0})
@@ -662,8 +688,8 @@ class TeamRun:
         if att["kind"] == "work" and att["n"] == 1:
             code, params = ("spawned.dispatch", {"r_role": key, "task": task}) if task else ("spawned.start", {"r_role": key})
         else:
-            code, params = "spawned.round", {"r_role": key, "n": att["n"], "label": att["label"]}
-        self.say("spawned", code, {**params, "again": again}, role=key)
+            code, params = "spawned.round", {"r_role": key, "n": att["n"], "label": messages.label_of(att["label"]) or att["label"]}
+        self.say("spawned", code, {**params, "again": messages.as_msg(again, "again.")}, role=key)
         await self.save()
 
     async def _launch(self, key: str, att: dict[str, Any], mgr: Any) -> Any | None:
@@ -781,7 +807,7 @@ class TeamRun:
             # the model backend kept failing in that session (it was told to carry on already): once more in a new one,
             # with the worktree as it was left
             att["fresh_retry"] = True
-            await self._again(key, att, "模型后端出错，换一个新会话接着做")
+            await self._again(key, att, self.msg("again.transient"))
             return
         if f["outcome"] != "completed" and att["kind"] == "discuss" and not self.ended:
             # the answer did not come: the gate is open again as it was, the person can ask once more or decide
@@ -826,7 +852,7 @@ class TeamRun:
         rev = next((k for k in self.order if not self.roles[k]["writable"] and self.lane(k)["status"] == "done"), None)
         last = self.lane(rev)["attempts"][-1] if rev and self.lane(rev)["attempts"] else {}
         targets = review_targets(last.get("reply") or "", self.team["roles"])
-        if not (str(last.get("summary") or "").startswith("要改") and targets):
+        if not (review_verdict(last.get("summary")) == "changes" and targets):
             return None
         return {"role": rev, "summary": str(last["summary"]), "targets": targets}
 
@@ -1472,19 +1498,22 @@ class TeamRun:
         failing = [r for r in rows if r["verdict"] == "FAIL"]
         rounds = self.s["tests"].setdefault("rounds", {})
         granted = self.s["tests"].get("granted") or {}  # rounds a person gave a check with a finding (TR §4.4)
-        held: list[tuple[dict[str, Any], str]] = [(r, "检查配置错误") for r in rows if r["verdict"] == "USAGE"]
+        held: list[tuple[dict[str, Any], dict[str, Any]]] = [(r, {"code": "held.usage"}) for r in rows if r["verdict"] == "USAGE"]
         if not failing:
-            held += [(r, "没法判定") for r in rows if r["verdict"] == "BLOCKED"]
+            held += [(r, {"code": "held.blocked"}) for r in rows if r["verdict"] == "BLOCKED"]
         for r in failing:
             if rounds.get(r["name"], 0) >= spec[r["name"]]["max_rounds"] + int(granted.get(r["name"]) or 0):
-                held.append((r, f"修了 {rounds.get(r['name'], 0)} 轮仍不过"))
+                held.append((r, {"code": "held.rounds", "params": {"n": rounds.get(r["name"], 0)}}))
             elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck") for o in r["owners"]):
-                held.append((r, "没过，负责的角色没法再改"))
+                held.append((r, {"code": "held.owner"}))
         owners = {o for r in failing for o in r["owners"]}
         if held:
-            why = "；".join(f"{r['name']} {what}：{(r['reasons'] or [r['summary']])[0]}" for r, what in held)[:300]
-            t["held"] = {"checks": [r["name"] for r, _ in held], "why": why}
-            self.say("failed", "failed.checks", {"why": why}, data={"checks": t["held"]["checks"]})
+            reason = messages.clean({"items": [{"check": r["name"], "what": what, "reason": (r["reasons"] or [r["summary"]])[0]}
+                                               for r, what in held]}) or {}
+            why = self.msg("checks.held", reason)[:300]
+            t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason}
+            self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
+                     data={"checks": t["held"]["checks"]})
             return
         t["held"] = None
         for r in failing:
@@ -1529,7 +1558,7 @@ class TeamRun:
         lane.update(status="done", done_at=self.d.now())
         summary = att.get("summary") or ""
         self.say("review", "review", {"summary": summary}, role=key)
-        if summary.startswith("要改"):
+        if review_verdict(summary) == "changes":
             rounds = int(s.get("review_rounds") or 0)
             limit = int(self.team.get("defaults", {}).get("max_review_rounds", 0) or 0)
             if rounds < limit and not self.ended and await self._review_bounce(key, att.get("reply") or ""):
@@ -1556,7 +1585,7 @@ class TeamRun:
             if red:  # done, but not green: said as it is, the person decides
                 self._end("done", "run.done_red", {"summary": summary[:20], "red": red})
             else:
-                self._end("done", "run.done_ok" if summary.startswith("可以交付") else "run.done")
+                self._end("done", "run.done_ok" if review_verdict(summary) == "ok" else "run.done")
 
     async def _resolve_ownership(self) -> None:
         """Once the role that writes the ownership file is merged: every role whose directories come from it gets
@@ -1636,12 +1665,15 @@ class TeamRun:
                 if note:
                     self.s.setdefault("gate_notes", {})[key] = note
                 picked = self._answers_for(key, answers)
+                said = None  # the decisions at the gate, as a message (the board says them in either language)
                 if picked:
                     self.s.setdefault("answers", {})[key] = picked
                     note_text = note
-                    note = (note + "；" if note else "") + "决定：" + "、".join(
-                        f"{a['id']} 选 {a['choice'] if a['choice'] != 'other' else '其他'}" + ("（与建议不同）" if a["differs"] else "")
-                        for a in picked)
+                    said = [{"id": a["id"], "choice": a["choice"] if a["choice"] != "other" else {"code": "choice.other"},
+                             "differs": bool(a["differs"])} for a in picked]
+                    # what goes on to the roles after it: the message without its 「人批准了<关卡>：」 (a label may hold a ：)
+                    said_all, head = self.msg("approved.answers", {"g_gate": key, "note": note_text, "answers": said}), f"人批准了{self.gate_label(key)}："
+                    note = said_all[len(head):] if said_all.startswith(head) else said_all
                     lane["gate_note"] = note_text or None
                 if lane.pop("overrule", None):
                     lane["passed"] = True
@@ -1650,7 +1682,11 @@ class TeamRun:
                     self.s["verdict"] = "人推翻了审查结论放行"
                     self.say("approved", "approved.overrule", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
                 else:
-                    self.say("approved", "approved", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
+                    if said:
+                        self.say("approved", "approved.answers", {"g_gate": key, "note": note_text, "answers": said},
+                                 role=key, frm="person", to=key)
+                    else:
+                        self.say("approved", "approved", {"g_gate": key, "note": note}, role=key, frm="person", to=key)
                 if role.get("delivery"):  # the person confirms the 交付标签 the role proposed (or changes them)
                     self.s["delivery"] = delivery_mod.clean(delivery, self.delivery())
                     self.say("plan", "plan.delivery_confirmed", {"delivery": delivery_mod.label(self.s["delivery"])}, role=key,
@@ -2224,7 +2260,7 @@ class TeamRun:
             text = "\n".join("1. 你是只读的：不改任何文件，也不提交。" if "git add" in ln else ln for ln in text.splitlines())
         tag = self._tag(key, n)
         prev = self.lane(key)["attempts"][-1] if n > 1 and self.lane(key)["attempts"] else {}
-        if n > 1 and not role["writable"] and (prev.get("summary") or "").startswith("要改") and s.get("review_rounds"):
+        if n > 1 and not role["writable"] and review_verdict(prev.get("summary")) == "changes" and s.get("review_rounds"):
             text += (f"\n\n这是第 {int(s['review_rounds']) + 1} 轮评审。上一轮评审说「要改」，相关角色已经按意见改过并重新合入，"
                      "测试结果见测试墙。先按上一轮的问题编号（F-1、F-2……）逐条核对改好了没有（没改的，看它在提交说明或总结里给的理由是否成立），编号不变，"
                      "再看这一轮的新改动有没有引入新问题。上一轮的意见：\n\n---\n"

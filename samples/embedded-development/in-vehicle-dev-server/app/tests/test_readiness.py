@@ -15,6 +15,7 @@ from teamkit import FakeManager, mod
 
 service, handlers, constants, paths = mod("service"), mod("handlers"), mod("constants"), mod("paths")
 checks_mod = mod("checks")
+shown = mod("display").View().text  # replies write the home folder ~ (display.py)
 
 DOCKER = f"""#!{sys.executable}
 import sys
@@ -106,19 +107,19 @@ def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatc
             assert items["knowledge"]["ok"] is None  # Kiro Crew's sources not read yet
             assert items["image"]["ok"] is False and items["image"]["detail"] == "镜像不在本机"
             assert items["image"]["label"] == f"构建容器镜像 vstatd-build:{arch}"
-            assert items["image"]["command"] == f"docker build --platform linux/{arch} -t vstatd-build:{arch} {sample}/reference-project/tools/"
+            assert items["image"]["command"] == f"docker build --platform linux/{arch} -t vstatd-build:{arch} {shown(str(sample))}/reference-project/tools/"
             assert items["sysroot"]["label"] == "检查用的 sysroot（vstatd-standin-sysroot）"
             assert items["sysroot"]["ok"] is False and items["sysroot"]["detail"] == "卷不在本机"
             assert items["sysroot"]["command"] == (
-                f"docker run --rm --platform linux/{arch} -v vstatd-standin-sysroot:/opt/cc1-sysroot -v {sample}:/sample:ro "
+                f"docker run --rm --platform linux/{arch} -v vstatd-standin-sysroot:/opt/cc1-sysroot -v {shown(str(sample))}:/sample:ro "
                 f"vstatd-build:{arch} python3 /sample/reference-project/tools/make-standin-sysroot.py /opt/cc1-sysroot")
             assert items["doctor"]["ok"] is False and not items["doctor"]["running"] and items["doctor"]["age_s"] >= 0
             assert "no target image" in items["doctor"]["detail"] and "the supply is not set" in items["doctor"]["detail"]
-            assert items["doctor"]["command"] == f"{sample}/bench/build-target.sh"
-            assert items["target"]["ok"] is False and items["target"]["command"] == f"{sample}/bench/cc1.sh start"
+            assert items["doctor"]["command"] == f"{shown(str(sample))}/bench/build-target.sh"
+            assert items["target"]["ok"] is False and items["target"]["command"] == f"{shown(str(sample))}/bench/cc1.sh start"
             assert items["baseline"]["ok"] is False
-            assert items["baseline"]["command"].endswith(f"replay --kind baseline --out {tmp_path / 'baseline'}")
-            assert items["console"]["ok"] is None and items["console"]["command"] == f"python3 {sample}/bench/console.py"
+            assert items["baseline"]["command"].endswith(f"replay --kind baseline --out {shown(str(tmp_path / 'baseline'))}")
+            assert items["console"]["ok"] is None and items["console"]["command"] == f"python3 {shown(str(sample))}/bench/console.py"
             assert (tmp_path / "doctor.log").read_text().count("run") == 1  # once by itself, not on every request
 
             r = await call(routes, "POST", "/readiness/doctor")
@@ -180,6 +181,6 @@ def test_the_checklist_lists_the_requests_waiting_at_the_console(tmp_path, monke
     assert [p["id"] for p in pending] == [req["id"]]
     p = pending[0]
     assert p["action"] == "deploy" and p["requested_by"] == "bench tools" and 190 <= p["left_s"] <= 200
-    assert p["approve"] == f"python3 {sample}/bench/console.py approve {req['id']} --digest bc93723c0cb0"
-    assert p["refuse"] == f"python3 {sample}/bench/console.py refuse {req['id']} --reason <原因>"
+    assert p["approve"] == f"python3 {shown(str(sample))}/bench/console.py approve {req['id']} --digest bc93723c0cb0"
+    assert p["refuse"] == f"python3 {shown(str(sample))}/bench/console.py refuse {req['id']} --reason <原因>"
     assert snapshot(state) == before  # read only

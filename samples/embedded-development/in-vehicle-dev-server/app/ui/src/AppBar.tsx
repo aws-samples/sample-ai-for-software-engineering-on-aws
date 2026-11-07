@@ -1,4 +1,4 @@
-import { lang, setLang, t as tr, type Lang } from './i18n'
+import { lang, presentation, setLang, setPresentation, t as tr, type Lang } from './i18n'
 /**
  * The app bar the views share: the app's name, the views as tabs — 团队看板 (how the run went), 评分卡 (the measured
  * figures over the runs) — 下一步需要你 (how many gates and bench requests wait for the person on the board) and 投影. It stays where it is when the view changes, and 投影 belongs to the
@@ -54,6 +54,7 @@ export function AppBar({ view, projection, onView, onProjection, needs = 0 }: { 
         </span>
       )}
       <LangSwitch />
+      <PresentSwitch />
       <button type="button" className={`kt-btn${projection ? ' is-on' : ''}`} onClick={onProjection} title={projection ? tr('AppBar.9') : tr('AppBar.10')}>
         {projection ? tr('AppBar.11') : tr('AppBar.12')}
       </button>
@@ -77,3 +78,16 @@ export function LangSwitch() {
     </span>
   )
 }
+
+/** 演示模式 / Presentation mode: the people shown as their role (负责人 / Release owner) for a recording; this
+ * Mac's home folder is always shown as ~. Kept in this browser, off by default; switching reloads the page. */
+export function PresentSwitch() {
+  const on = presentation()
+  return (
+    <button type="button" className={`kt-btn${on ? ' is-on' : ''}`} aria-pressed={on} data-testid="kt-present"
+      title={tr('AppBar.present.hint')} onClick={() => setPresentation(!on)}>
+      {tr('AppBar.present')}
+    </button>
+  )
+}
+

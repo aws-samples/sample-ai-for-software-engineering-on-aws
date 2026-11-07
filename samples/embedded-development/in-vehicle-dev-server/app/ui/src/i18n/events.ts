@@ -27,12 +27,48 @@ export function msgText(code: string, params: MsgParams | null | undefined, role
       if (v.length && v.every((x) => x && typeof x === 'object')) return v.map((x) => msgText(`${code}.${name}`, x as MsgParams, roles)).join(t('ev.sep.item'))
       return v.map((x) => value(name, x)).join(t('ev.sep.list'))
     }
+    if (name === 'by' || name === 'who') return person(String(v))
     if (name.startsWith('r_')) return by.get(String(v))?.title ?? String(v)
     if (name.startsWith('g_')) { const r = by.get(String(v)); return r?.gate_label || r?.title || String(v) }
     return String(v)
   }
   const template = t(`ev.${code}`).replace(OPT, (_m, name: string, then: string, otherwise?: string) => (truthy(p[name]) ? then : otherwise ?? ''))
   return template.replace(VAR, (m, name: string) => (name in p ? value(name, p[name]) : m))
+}
+
+/** A person as the records name them, with the app's own words around a name said in the board's language: 负责人
+ * (no name given), 「Kiro Crew 看板（name，app）」 (a decision on the board), 「name（在 Kiro 会话里让 Kiro 代点）」. */
+export function person(who: string): string {
+  if (lang() === 'zh') return who
+  if (who === '负责人') return t('common.owner') // i18n-keep: the app's word for no name
+  const board = /^Kiro Crew 看板（(.+?)，(.+?)）$/.exec(who) // i18n-keep: bench.py DECIDED_BY
+  if (board) return t('common.board', { p0: board[1], p1: board[2] })
+  if (who.endsWith('（在 Kiro 会话里让 Kiro 代点）')) return who.slice(0, -'（在 Kiro 会话里让 Kiro 代点）'.length) + t('common.viaKiro') // i18n-keep: a by the retry was given
+  return who
+}
+
+type Doing = { doing: string; doing_msg?: Msg | null; assignment?: string; mission?: string; mission_en?: string }
+
+/** A role's assignment in the board's language: the team file's mission in English when it is the mission (the
+ * planner's own line for this run stays as it wrote it). */
+export function assignmentText(l: Doing): string {
+  const a = l.assignment ?? ''
+  return lang() !== 'zh' && a && a === l.mission && l.mission_en ? l.mission_en : a
+}
+
+/** What a role is on now in the board's language: its round's label by code (doing_msg), its assignment, or its words. */
+export function doingText(l: Doing): string {
+  if (lang() === 'zh') return l.doing
+  if (l.doing_msg && has(`ev.${l.doing_msg.code}`)) return msgText(l.doing_msg.code, l.doing_msg.params)
+  return l.doing === l.assignment ? assignmentText(l) : l.doing
+}
+
+/** A gate question's words (and its options') in the board's language, by code when it has one. */
+export function questionText(q: { q: string; q_msg?: Msg | null }): string {
+  return evText({ text: q.q, code: q.q_msg?.code, params: q.q_msg?.params })
+}
+export function optionText(o: { text: string; msg?: Msg | null }): string {
+  return evText({ text: o.text, code: o.msg?.code, params: o.msg?.params })
 }
 
 /** An event's (or a status line's) words: its text in Chinese or without a known code, else its code rendered. */

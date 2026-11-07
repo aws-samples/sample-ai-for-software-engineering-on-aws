@@ -6,8 +6,9 @@
  * empty state itself: the start form first, what this Mac still needs (FlowStrip.tsx), the flow from the backlog to
  * sign-off, the knowledge documents (Knowledge.tsx) and the requirement list (Backlog.tsx), and the bench actions of no run.
  */
+import { optionText, questionText } from '../i18n/events'
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import type { Board, Delivery, GateDecision, GateQuestion, RunDetail, TalkLine, TeamPreview, TestWall } from '../types'
 import { AIDLC_AGENTS, BASE, FINISHED, PHASES, expertsOf, LIVE, WORKING, aidlcUse, fmtAgo, fmtClock, fmtCredits, fmtSpan, isRunActive, laneMeta, runMeta, saving } from './format'
 import { useChangeCount, useServerNow, useSinceSnapshot, useTween } from './hooks'
@@ -573,8 +574,10 @@ export type GateRisk = { what: string; amount: number | null }
 
 /** A gate: 批准 (with an answer for each question the role put to the person), 讨论 (it answers; the gate stays open),
  * or 退回. What was said in a 讨论 so far is shown in all three; at a writing role's gate, the stage's documents too. */
-export function GateDialog({ label, who = '', decision, preset, presetRisk, askRisk = false, split, skips, report, onReport, overrule = false, delivery, questions = [], talk = [], outputs = [], onConfirm, onCancel }: {
+export function GateDialog({ label, who = '', decision, preset, presetRisk, askRisk = false, split, skips, report, onReport, overrule = false, delivery, questions = [], talk = [], outputs = [], replay = false, onConfirm, onCancel }: {
   label: string; who?: string; decision: GateDecision; preset?: string; presetRisk?: GateRisk | null; askRisk?: boolean; split?: { key: string; title: string; icon: string; assignment: string }[]
+  /** A replay: the gate's questions as they were asked, nothing answered or sent. */
+  replay?: boolean
   skips?: { key: string; title: string; why: string }[]; report?: string; onReport?: () => void; overrule?: boolean; delivery?: Delivery
   questions?: GateQuestion[]; talk?: TalkLine[]; outputs?: { key: string; title: string; icon: string; onOpen: () => void }[]
   onConfirm: (note: string, delivery?: DeliveryPick, answers?: GateAnswers, risk?: GateRisk) => Promise<void>; onCancel: () => void
@@ -622,8 +625,10 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
       setBusy(false)
     }
   }
-  const title = discuss ? tr('board.Header.133', { p0: label }) : overrule ? (approve ? tr('board.Header.134', { p0: label }) : tr('board.Header.135', { p0: label })) : approve ? tr('board.Header.136', { p0: label }) : tr('board.Header.137', { p0: label })
-  const lead = discuss
+  const title = replay ? tr('board.Header.replayTitle', { p0: label }) : discuss ? tr('board.Header.133', { p0: label }) : overrule ? (approve ? tr('board.Header.134', { p0: label }) : tr('board.Header.135', { p0: label })) : approve ? tr('board.Header.136', { p0: label }) : tr('board.Header.137', { p0: label })
+  const lead = replay
+    ? tr('board.Header.replayLead')
+    : discuss
     ? tr('board.Header.138', { p0: who || tr('common.it') })
     : overrule ? (approve ? tr('board.Header.139') : tr('board.Header.140'))
       : report !== undefined ? (approve ? tr('board.Header.141') : tr('board.Header.reviseHint'))
@@ -651,7 +656,7 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
             return (
               <fieldset key={q.id} className="kt-gate-q" aria-label={tr('board.Header.147', { p0: q.id })}>
                 <legend>
-                  <b>{tr('board.Header.148')} {q.id}</b> {q.q}
+                  <b>{tr('board.Header.148')} {q.id}</b> {questionText(q)}
                 </legend>
                 {q.cites && q.cites.length > 0 && (
                   <span className="kt-gate-cites" data-testid="kt-gate-cites">
@@ -660,19 +665,21 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
                 )}
                 {q.options.map((o) => (
                   <label key={o.key} className={a.choice === o.key ? 'is-picked' : undefined}>
-                    <input type="radio" name={`q-${q.id}`} checked={a.choice === o.key} onChange={() => answer(q.id, { choice: o.key })} />
+                    <input type="radio" name={`q-${q.id}`} checked={a.choice === o.key} disabled={replay} onChange={() => answer(q.id, { choice: o.key })} />
                     <span>
-                      {o.key}. {o.text}
+                      {o.key}. {optionText(o)}
                       {o.key === q.recommend && <em className="kt-gate-rec">{tr('board.Header.150')}</em>}
                     </span>
                   </label>
                 ))}
-                <label className={a.choice === 'other' ? 'is-picked' : undefined}>
-                  <input type="radio" name={`q-${q.id}`} checked={a.choice === 'other'} onChange={() => answer(q.id, { choice: 'other' })} />
-                  <span>{tr('board.Header.151')}</span>
-                  {a.choice === 'other' && <input className="kt-gate-other" aria-label={tr('board.Header.152', { p0: q.id })} value={a.text} maxLength={300} onChange={(e) => answer(q.id, { text: e.target.value })} placeholder={tr('board.Header.153')} />}
-                </label>
-                {(q.why || differs) && (
+                {!replay && (
+                  <label className={a.choice === 'other' ? 'is-picked' : undefined}>
+                    <input type="radio" name={`q-${q.id}`} checked={a.choice === 'other'} onChange={() => answer(q.id, { choice: 'other' })} />
+                    <span>{tr('board.Header.151')}</span>
+                    {a.choice === 'other' && <input className="kt-gate-other" aria-label={tr('board.Header.152', { p0: q.id })} value={a.text} maxLength={300} onChange={(e) => answer(q.id, { text: e.target.value })} placeholder={tr('board.Header.153')} />}
+                  </label>
+                )}
+                {(q.why || (differs && !replay)) && (
                   <span className="kt-dim">
                     {q.why && tr('board.Header.154', { p0: q.why })}
                     {differs && <b className="kt-gate-differs">{q.why ? tr('board.Header.155') : ''}{tr('board.Header.156')}{q.recommend}{tr('board.Header.157')}</b>}
@@ -747,6 +754,13 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
           </label>
         </fieldset>
       )}
+      {replay ? (
+        <span className="kt-confirm-actions">
+          <button type="button" className="kt-btn" onClick={onCancel} autoFocus>
+            {tr('board.Header.close')}
+          </button>
+        </span>
+      ) : (<>
       <textarea className="kt-gate-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={discuss ? tr('board.Header.185') : overrule && approve ? tr('board.Header.186') : approve ? tr('board.Header.187') : tr('board.Header.188')} autoFocus aria-label={discuss ? tr('board.Header.189') : tr('board.Header.190')} />
       <span className="kt-confirm-actions">
         {preset && note !== preset && !discuss && (
@@ -761,6 +775,7 @@ export function GateDialog({ label, who = '', decision, preset, presetRisk, askR
           {tr('board.Header.110')}
         </button>
       </span>
+      </>)}
       {err && (
         <p className="kt-error" role="alert">
           {err}

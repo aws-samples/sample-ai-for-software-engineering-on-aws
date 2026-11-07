@@ -4,8 +4,12 @@
  */
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { resetStubs } from './stubs/app-sdk'
+
+// findBy… and waitFor wait up to 5 s (1 s by default): with the files run in parallel on a busy machine, a board
+// that polls, fetches and renders takes longer than a second to show what a test waits for
+configure({ asyncUtilTimeout: 5000 })
 
 const listeners = new Set<() => void>()
 

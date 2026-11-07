@@ -8,6 +8,7 @@
  * spins; queued is a marching dashed outline; stalled is hatched; awaiting approval blinks magenta;
  * failed is solid red with ✕; done is a green outline (待合并); merged is solid green with ✔.
  */
+import { doingText } from '../i18n/events'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react'
 import type { GateDecision, Lane, RunDetail } from '../types'
 import { Engine, type Item } from './engine'
@@ -17,7 +18,7 @@ import { NODE_H, NODE_W, ORCH_BOX, ROSTER, anchorBox, commandPath, headX, partic
 import { Overlay } from './overlay'
 import { RoleGlyph } from './RoleIcon'
 import { NodeCard } from './NodeCard'
-import { t as tr } from '../i18n'
+import { lang, t as tr } from '../i18n'
 
 export type FlashMap = Record<string, { n: number; tone: string }>
 
@@ -34,6 +35,8 @@ export interface TeamGraphProps {
   onRetry?: (key: string) => void
   /** A person's answer at a gate (批准 / 退回); absent: the gate is shown, not answered here (projection). */
   onGate?: (key: string, decision: GateDecision) => void
+  /** A replay: the gate's questions shown as they were asked (nothing is answered). */
+  onGateView?: (key: string) => void
   /** Projection: no live tool tickers under the nodes (a room follows the flow, not the commands). */
   quiet?: boolean
   /** 看产出 from a node's hover card. */
@@ -71,7 +74,7 @@ function ParallelDot({ reducedMotion }: { reducedMotion: boolean }) {
 /** The phase a role is drawn in: AI-DLC has no review phase of its own (a review role sits at the end of Construction). */
 export const phaseOfLane = (p?: string | null) => (p === 'review' ? 'construction' : p || '')
 
-export function TeamGraph({ run, lay, focus, onRole, flashes, reducedMotion, feed, onRetry, onGate, quiet = false, onOutputs, phase = null, onPhase }: TeamGraphProps) {
+export function TeamGraph({ run, lay, focus, onRole, flashes, reducedMotion, feed, onRetry, onGate, onGateView, quiet = false, onOutputs, phase = null, onPhase }: TeamGraphProps) {
   // the hover card: shown after the pointer rests on a node, kept while it moves into the card
   const [card, setCard] = useState<string | null>(null)
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -161,7 +164,7 @@ export function TeamGraph({ run, lay, focus, onRole, flashes, reducedMotion, fee
                 .map((l) => <RetryChip key={`retry-${l.key}`} lane={l} box={lay.nodes.get(l.key)!} onRetry={onRetry} />)}
             {run.roles
               .filter((l) => (l.gate === 'pending' || l.gate === 'discussing') && lay.nodes.get(l.key))
-              .map((l) => <GateChips key={`gate-${l.key}`} lane={l} box={lay.nodes.get(l.key)!} onGate={onGate} />)}
+              .map((l) => <GateChips key={`gate-${l.key}`} lane={l} box={lay.nodes.get(l.key)!} onGate={onGate} onView={onGateView} />)}
           </g>
           <g className="kt-particles" aria-hidden="true" ref={particlesRef} />
         </svg>
@@ -375,7 +378,7 @@ function Roster({ run, lay }: { run: RunDetail; lay: GraphLayout }) {
           const state = LIVE.has(l.status) || l.status === 'queued' ? 'busy' : l.status === 'waiting' ? 'team' : 'used'
           return (
             <g key={l.key} className={`kt-roster-item is-team${state !== 'team' ? ' is-used' : ''}${state === 'busy' ? ' is-busy' : ''}`} transform={`translate(0,${at})`} data-state={state}>
-              <title>{tr('board.TeamGraph.12', { p0: l.title, p1: l.doing || l.mission })}</title>
+              <title>{tr('board.TeamGraph.12', { p0: l.title, p1: (l.doing && doingText(l)) || (lang() !== 'zh' && l.mission_en) || l.mission })}</title>
               <rect x={-w / 2 + 8} y={-7.5} width={w - 8} height={15} rx={7.5} />
               <circle cx={-w / 2 + 18} cy={0.5} r={3.5} />
               <text x={-w / 2 + 28} y={4.5}>
@@ -529,7 +532,7 @@ function GraphNode({ lane, lanes, box, focus, off = false, flash, onRole, reduce
   if (lane.gate === 'pending') badges.push({ text: tr('board.TeamGraph.39'), tone: 'gate' })
   if (lane.awaiting_member && lane.status === 'waiting') badges.push({ text: tr('board.TeamGraph.40'), tone: 'warn' })
   const isFocus = focus === lane.key
-  const name = tr('board.TeamGraph.41', { p0: lane.stage ? `${lane.stage} · ` : '', p1: lane.title, p2: lane.doing ? tr('board.TeamGraph.doing', { p0: lane.doing }) : '', p3: meta.label, p4: lane.attempt > 1 ? tr('board.TeamGraph.round', { p0: lane.attempt }) : '', p5: lane.violations.length ? tr('board.TeamGraph.violated', { p0: lane.violations.join(tr('common.sep')) }) : '', p6: lane.status === 'waiting' ? tr('board.TeamGraph.waiting', { p0: waitingText(lane, lanes) }) : '', p7: ticker ? tr('board.TeamGraph.now', { p0: ticker }) : '' })
+  const name = tr('board.TeamGraph.41', { p0: lane.stage ? `${lane.stage} · ` : '', p1: lane.title, p2: lane.doing ? tr('board.TeamGraph.doing', { p0: doingText(lane) }) : '', p3: meta.label, p4: lane.attempt > 1 ? tr('board.TeamGraph.round', { p0: lane.attempt }) : '', p5: lane.violations.length ? tr('board.TeamGraph.violated', { p0: lane.violations.join(tr('common.sep')) }) : '', p6: lane.status === 'waiting' ? tr('board.TeamGraph.waiting', { p0: waitingText(lane, lanes) }) : '', p7: ticker ? tr('board.TeamGraph.now', { p0: ticker }) : '' })
   const onKey = (e: KeyboardEvent<SVGGElement>) => {
     if (e.key !== 'Enter' && e.key !== ' ') return
     e.preventDefault()
@@ -565,7 +568,7 @@ function GraphNode({ lane, lanes, box, focus, off = false, flash, onRole, reduce
       </text>
       {lane.doing && (
         <text className={`kt-node-task${lane.doing !== lane.assignment ? ' is-sent-back' : ''}`} x={-w / 2 + 66} y={4}>
-          {clip(lane.doing, 9.2)}
+          {clip(doingText(lane), lang() === 'en' ? 16 : 9.2)}
         </text>
       )}
       <text className="kt-node-sub" x={-w / 2 + 66} y={lane.doing ? 23 : 16}>
@@ -631,7 +634,7 @@ function RetryChip({ lane, box, onRetry }: { lane: Lane; box: NodeBox; onRetry: 
 }
 
 /** Under a gated node: the person approves (the roles after it start) or sends it back. */
-function GateChips({ lane, box, onGate }: { lane: Lane; box: NodeBox; onGate?: (key: string, decision: GateDecision) => void }) {
+function GateChips({ lane, box, onGate, onView }: { lane: Lane; box: NodeBox; onGate?: (key: string, decision: GateDecision) => void; onView?: (key: string) => void }) {
   const label = lane.gate_label || lane.title
   if (lane.gate === 'discussing') {
     return (
@@ -680,6 +683,13 @@ function GateChips({ lane, box, onGate }: { lane: Lane; box: NodeBox; onGate?: (
           {lane.overrule ? chip('approve', tr('board.TeamGraph.47'), -28, 104) : chip('approve', tr('board.TeamGraph.48', { p0: label }), -28, 104)}
           {chip('revise', lane.overrule ? tr('board.TeamGraph.50') : tr('board.TeamGraph.51'), lane.overrule ? 60 : 52, lane.overrule ? 68 : 52)}
         </>
+      )}
+      {onView && (lane.questions?.length ?? 0) > 0 && (
+        <g className="kt-gate-chip is-discuss" transform="translate(0,32)" role="button" tabIndex={0} aria-label={tr('board.TeamGraph.view', { p0: lane.questions.length })}
+          onClick={() => onView(lane.key)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView(lane.key) } }}>
+          <rect x={-70} y={-13} width={140} height={26} rx={13} />
+          <text y={5} textAnchor="middle">{tr('board.TeamGraph.view', { p0: lane.questions.length })}</text>
+        </g>
       )}
     </g>
   )

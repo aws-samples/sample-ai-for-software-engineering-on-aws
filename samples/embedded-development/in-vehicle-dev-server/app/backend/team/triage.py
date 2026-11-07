@@ -21,6 +21,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from . import messages
+
 FINDING_ID = re.compile(r"\bF-\d{3}\b")
 DECISIONS = ("fix", "justify", "defer")
 EVIDENCE = ("unit-test", "static-analysis", "build")
@@ -148,24 +150,29 @@ def questions(t: dict[str, Any], rows: dict[str, dict[str, str]]) -> list[dict[s
     for f in t["findings"]:
         fid, decision, row = f["id"], f["decision"], rows.get(f["id"])
         where = row["location"] if row else str((f.get("added") or {}).get("location") or "")
-        label = f"（待办标的是 {row['label']}）" if row and row["label"] != decision else ""
+        label = row["label"] if row and row["label"] != decision else ""
         if f.get("added"):
-            q = f"{fid} 是分诊新加的（{_clip(f['added'].get('found_by'), 40)}），定为 {decision}：{where}"
-            opts = ["同意加入本批", "不同意：不加入（退回分诊）"]
+            q = ("triage.q.added", {"id": fid, "found_by": _clip(f["added"].get("found_by"), 40), "decision": decision,
+                                    "where": where})
+            opts = ["triage.opt.add", "triage.opt.no_add"]
             why = _clip(f.get("note") or f.get("reason") or (f["added"].get("tool") or ""), 200)
         elif decision == "justify":
-            q = f"{fid} 分诊建议说明为误报或无害、不修{label}：{where}"
-            opts = ["同意说明（评审还会复核引用）", "不同意：本批修复（退回分诊补齐证据和行为）"]
+            q = ("triage.q.justify", {"id": fid, "label": label, "where": where})
+            opts = ["triage.opt.justify", "triage.opt.fix"]
             why = _clip(f.get("note") or f.get("reason"), 200)
         elif decision == "defer":
-            q = f"{fid} 分诊建议延后{label}：{where}"
-            opts = ["同意延后", "不同意：本批修复（退回分诊补齐证据和行为）"]
+            q = ("triage.q.defer", {"id": fid, "label": label, "where": where})
+            opts = ["triage.opt.defer", "triage.opt.fix"]
             why = _clip(f"{f.get('reason') or ''}；什么时候再处理：{f.get('pick_up_when') or ''}", 200)
         elif label:
-            q, opts, why = f"{fid} 的决定和待办不同{label}：{decision}，{where}", ["同意", "不同意（退回分诊）"], _clip(f.get("note"), 200)
+            q = ("triage.q.differs", {"id": fid, "label": label, "decision": decision, "where": where})
+            opts, why = ["triage.opt.agree", "triage.opt.disagree"], _clip(f.get("note"), 200)
         else:
             continue
-        out.append({"id": fid, "q": _clip(q, 160), "options": [{"key": k, "text": x} for k, x in zip("AB", opts)],
+        params = messages.clean(q[1]) or {}
+        out.append({"id": fid, "q": _clip(messages.render(q[0], params), 160), "q_msg": {"code": q[0], "params": params},
+                    "options": [{"key": k, "text": messages.ZH[x], "msg": {"code": x, "params": None}}
+                                for k, x in zip("AB", opts)],
                     "recommend": AGREE, "why": why, "cites": [str(c) for c in f.get("cites") or []], "decision": decision})
     return out
 

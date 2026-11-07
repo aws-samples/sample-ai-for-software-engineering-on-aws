@@ -5,9 +5,9 @@
  * and the console command for it, and the end of the action record. A person approves or refuses a request here or at
  * the console; either way the bench's own decide() decides (D3).
  */
-import { evText } from '../i18n/events'
+import { evText, person } from '../i18n/events'
 import { useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import type { BenchView } from '../types'
 import { auditChanged } from './Audit'
 import { BASE } from './format'
@@ -116,10 +116,10 @@ const str = (x: unknown) => (x === null || x === undefined ? '' : String(x))
 /** One line of the action record (bench/lib/benchstate.py: event and its fields). */
 export function actionLine(a: Record<string, unknown>): string {
   const ev = str(a.event)
-  const who = a.by ? tr('board.Bench.27', { p0: str(a.by) }) : ''
+  const who = a.by ? tr('board.Bench.27', { p0: person(str(a.by)) }) : ''
   switch (ev) {
     case 'request':
-      return tr('board.Bench.28', { p0: str(a.action), p1: str(a.digest).slice(0, 12), p2: str(a.requested_by) })
+      return tr('board.Bench.28', { p0: str(a.action), p1: str(a.digest).slice(0, 12), p2: person(str(a.requested_by)) })
     case 'decision':
       return `${a.verdict === 'approved' ? tr('board.Bench.10') : tr('board.Bench.29')} ${str(a.action)} ${str(a.digest).slice(0, 12)}${who}${a.reason ? tr('board.Bench.30', { p0: str(a.reason) }) : ''}`
     case 'action':
@@ -166,13 +166,21 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
       <dl className="kt-bench-grid">
         <div>
           <dt>{tr('board.Bench.44')}</dt>
+          {bench.replay && !bench.replay.target ? (
+            <dd className="kt-dim" data-testid="kt-bench-replay-hidden">{tr('board.Bench.replayHidden')}</dd>
+          ) : (
           <dd className={target === 'known' ? 'kt-ok' : target === 'unknown' ? 'kt-bad' : ''}>
             {TARGET[target] ?? target}{st.target.why ? <span className="kt-dim"> · {str(st.target.why)}</span> : null}
           </dd>
+          )}
         </div>
         <div>
           <dt>{tr('board.Bench.45')}</dt>
+          {bench.replay && !bench.replay.supply ? (
+            <dd className="kt-dim">{tr('board.Bench.replayHidden')}</dd>
+          ) : (
           <dd>{supply ? `${str(supply.voltage_v) || '—'} V · KL15 ${str(supply.kl15) || '—'}` : <span className="kt-warn">{tr('board.Bench.46')}</span>}</dd>
+          )}
         </div>
         <div>
           <dt>doctor.sh</dt>
@@ -200,7 +208,7 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
           <ul>
             {st.pending.map((r) => (
               <li key={r.id}>
-                <span><b>{r.action}</b> · {r.requested_by}{r.expired ? <span className="kt-bad"> {tr('board.Bench.52')}</span> : null}</span>
+                <span><b>{r.action}</b> · {person(String(r.requested_by ?? ''))}{r.expired ? <span className="kt-bad"> {tr('board.Bench.52')}</span> : null}</span>
                 <span>{tr('board.Bench.53')} <Digest digest={r.digest} /></span>
                 {r.detail && <span className="kt-dim">{r.detail}</span>}
                 {!r.expired && <DecideRequest id={r.id} digest={r.digest} />}

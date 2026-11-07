@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import audit, board, checks, flow, library, messages, outputs, paths, readiness, roster, scorecard
+from . import audit, board, checks, display, flow, library, messages, outputs, paths, readiness, roster, scorecard
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -29,8 +29,11 @@ _SECRETS = re.compile(r"(?i)((?:password|passwd|secret|token|api[_-]?key|authori
                       r"|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}")
 
 
+REDACTED = "[REDACTED]"  # the same in both languages of the board
+
+
 def basic_scrub(text: str) -> str:
-    return _SECRETS.sub(lambda m: (m.group(1) or "") + "[已隐去]", text)
+    return _SECRETS.sub(lambda m: (m.group(1) or "") + REDACTED, text)
 
 
 class Service:
@@ -73,6 +76,58 @@ class Service:
     def manager(self) -> Any:
         """The agent manager the runs, the board and 产出 use: the role sessions."""
         return self._agents
+
+    def role_keys(self) -> set[str]:
+        """The team's role keys and those of every run (presentation mode never takes one for a person's name)."""
+        if getattr(self, "_team_keys", None) is None:
+            try:
+                self._team_keys = {r["key"] for r in load_team(self.team_file)["roles"]}
+            except Exception:  # noqa: BLE001 - no team file: the runs' roles only
+                self._team_keys = set()
+        keys = set(self._team_keys)
+        for run in list(self.runs.values()):
+            keys |= set(getattr(run, "roles", {}) or {})
+        return keys
+
+    def person_names(self) -> set[str]:
+        """The people's names in the records, for presentation mode (display.py): who signed, registered, decided
+        or retried in each run, and who decided or set the supply at the bench. Read again only when a run's events
+        or the bench's files have changed since (a board poll in presentation mode reads two file times)."""
+        def mtime(p: Path) -> int:
+            try:
+                return p.stat().st_mtime_ns
+            except OSError:
+                return 0
+        try:
+            bench_dir = bench_mod.state_dir()
+        except Exception:  # noqa: BLE001 - no bench on this Mac
+            bench_dir = None
+        sig = (tuple((rid, len(r.events), (r.events[-1].get("seq") if r.events else None), str((r.s.get("signoff") or {}).get("by") or "")) for rid, r in list(self.runs.items())),
+               tuple(mtime(bench_dir / f) for f in ("actions.jsonl", "supply.json")) if bench_dir else ())
+        cached = getattr(self, "_names_cache", None)
+        if cached and cached[0] == sig:
+            return set(cached[1])
+        found: set[str] = set()
+
+        def by(v: Any) -> None:
+            if isinstance(v, str) and v:
+                found.update(display.names_in(v))
+        for run in list(self.runs.values()):
+            s = run.s
+            by((s.get("signoff") or {}).get("by"))
+            by((s.get("triage") or {}).get("approved_by"))
+            for e in run.events:
+                by((e.get("data") or {}).get("by"))
+                by((e.get("params") or {}).get("by"))
+        for r in scorecard.records():
+            for k in ("by", "requested_by", "set_by"):
+                by(r.get(k))
+        try:
+            by((bench_mod.read_state().get("supply") or {}).get("set_by"))
+        except Exception:  # noqa: BLE001 - no bench state on this Mac
+            pass
+        self._names_cache = (sig, frozenset(found))
+        return found
 
     def scrub(self, text: str) -> str:
         """KiroCrew's own outbound redaction (``ctx.scrub``) when there is one, else a few obvious patterns."""
@@ -218,7 +273,7 @@ class Service:
                 raise AppError(f"已经有一个运行在跑（{active[0]}），先停掉它", "run_active", 409)
             src = Path(source).expanduser() if source else None
             if src is not None and not src.is_dir():
-                raise AppError(f"接手的项目目录不存在：{source}", "bad_source")
+                raise AppError(f"接手的项目目录不存在：{source}", "bad_source", detail=source)
             team_dir = self.team_file.parent
             team_file = team_dir / team_name if team_name else self.team_file
             try:
@@ -229,13 +284,13 @@ class Service:
                 tmpl_file = team_dir / (tmpl_name or "task_template.md")
                 template = await asyncio.to_thread(tmpl_file.read_text, encoding="utf-8")
             except (OSError, ValueError) as exc:
-                raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+                raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
             if paths.SAMPLE_VAR in json.dumps(team, ensure_ascii=False):  # the scenario's folders, used in place (D12)
                 team = paths.expand(team, paths.sample_dir(self.data_dir))
             if src is None and isinstance(team.get("source"), str):  # the team works on the customer's own repository
                 src = Path(team["source"]).expanduser()
                 if not src.is_dir():
-                    raise AppError(f"这个团队要改的项目不在这台电脑上：{team['source']}", "bad_source")
+                    raise AppError(f"这个团队要改的项目不在这台电脑上：{team['source']}", "bad_source", detail=team["source"])
             if (team.get("needs_source") or self._deps.template is None) and src is None:
                 raise AppError("这个团队要在一个已有的项目上做事：先指定项目目录（source）", "needs_source")
             if model:
@@ -352,6 +407,8 @@ class Service:
     def _trail(self, run: TeamRun, lang: str = "zh") -> dict[str, Any]:
         """Blocking: the run's audit trail in *lang*, its text scrubbed as /events sends it."""
         evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
+        if lang != "zh":  # the Chinese trail is the events' own text (and the audit.md written at sign-off is that one)
+            evs = messages.with_codes(evs, (run.s.get("team") or {}).get("roles") or [])
         out = audit.build(run.s, evs, scorecard.records(), lang)
         out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
         return out
@@ -387,7 +444,7 @@ class Service:
             raise AppError("导入的内容要有 run（运行记录）和 events（事件列表）", "invalid_import")
         rid = str(state.get("id") or "")
         if not RID_RE.match(rid):
-            raise AppError(f"运行编号不对：{rid!r}", "invalid_import")
+            raise AppError(f"运行编号不对：{rid!r}", "invalid_import", detail=repr(rid))
         if state.get("status") not in team_mod.ENDED:
             raise AppError("只能导入已经结束的运行", "invalid_import")
         if not isinstance(state.get("lanes"), dict) or not isinstance(state.get("team"), dict):
@@ -405,7 +462,7 @@ class Service:
         try:
             self.runs[rid] = TeamRun(state, self._deps, events[-200:])
         except Exception as exc:  # noqa: BLE001
-            raise AppError(f"运行记录读不了：{exc}", "invalid_import") from exc
+            raise AppError(f"运行记录读不了：{exc}", "invalid_import", detail=exc) from exc
         return {"ok": True, "run": rid, "title": state.get("title"), "events": len(events)}
 
     def _not_imported(self, run: TeamRun, what: str) -> None:
@@ -453,6 +510,7 @@ class Service:
         """Every event of a run, for the replay (the board carries only the latest ones)."""
         run = self._run(rid)
         evs = await asyncio.to_thread(store_mod.all_events, self.data_dir / "runs" / run.rid / "events.jsonl")
+        evs = messages.with_codes(evs, (run.s.get("team") or {}).get("roles") or [])  # an older run's: its code, from its text
         return {"run": run.rid, "events": [{**e, "text": self.scrub(str(e.get("text", ""))),
                                             "params": messages.scrubbed(e.get("params"), self.scrub)} for e in evs]}
 
@@ -462,6 +520,7 @@ class Service:
 
         def read() -> dict[str, Any]:
             evs = store_mod.all_events(self.data_dir / "runs" / run.rid / "events.jsonl")
+            evs = messages.with_codes(evs, (run.s.get("team") or {}).get("roles") or [])
             out = flow.build(run.s, evs, scorecard.records(), time.time())
             # event text and params, as /events sends them
             out["marks"] = [{**m, "label": self.scrub(m["label"]), "params": messages.scrubbed(m.get("params"), self.scrub)}
@@ -489,7 +548,7 @@ class Service:
         try:
             done = await self.sessions.cleanup(keep)
         except Exception as exc:  # noqa: BLE001
-            raise AppError(f"清理会话失败：{exc}"[:300], "cleanup_failed", 502)
+            raise AppError(f"清理会话失败：{exc}"[:300], "cleanup_failed", 502, detail=str(exc)[:280])
         return {"ok": True, **done, "kept_runs": sorted(r.rid for r in self.runs.values() if not r.ended or r.s.get("signoff"))}
 
     async def scorecard(self) -> dict[str, Any]:
@@ -507,7 +566,7 @@ class Service:
         try:
             _, sample = await asyncio.to_thread(self._default_team)
         except (OSError, ValueError) as exc:
-            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
         return await bench_mod.decide(sample / "bench" / "lib", rid, verdict, digest, reason)
 
     async def readiness(self, doctor: bool = False) -> dict[str, Any]:
@@ -519,7 +578,7 @@ class Service:
         except AppError as exc:  # no scenario folder recorded: setup.sh has not run
             return {"at": now, "team": "", "items": [], "pending": [], "error": str(exc)}
         except (OSError, ValueError) as exc:
-            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
         self.probes.refresh(team, doctor=doctor)
         state = await asyncio.to_thread(bench_mod.read_state)
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
@@ -534,7 +593,7 @@ class Service:
         except AppError as exc:  # no scenario folder recorded: setup.sh has not run
             return {"docs": [], "source": None, "error": str(exc)}
         except (OSError, ValueError) as exc:
-            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
         return {"docs": await asyncio.to_thread(library.docs, sample / "knowledge"), "error": "",
                 "source": self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))}
 
@@ -545,7 +604,7 @@ class Service:
         except AppError as exc:
             return {"name": "", "roles": [], "checks": [], "templates": [], "knowledge": None, "error": str(exc)}
         except (OSError, ValueError) as exc:
-            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
         return await asyncio.to_thread(roster.preview, team, kb, self.agents_dir)
 
@@ -561,11 +620,11 @@ class Service:
         except AppError as exc:
             return {"work_item": "", "rows": [], "next_id": "", "error": str(exc)}
         except (OSError, ValueError) as exc:
-            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500)
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
         try:
             rows, next_id = await asyncio.to_thread(library.backlog_rows, sample / "knowledge")
         except (OSError, IndexError) as exc:
-            raise AppError(f"读不了待办 findings-backlog.md：{exc}", "bad_backlog", 500)
+            raise AppError(f"读不了待办 findings-backlog.md：{exc}", "bad_backlog", 500, detail=exc)
         return {"work_item": str(team.get("work_item") or ""), "rows": rows, "next_id": next_id, "error": ""}
 
     def board(self, rid: str | None = None) -> dict[str, Any]:

@@ -62,12 +62,24 @@ describe('the board in English', () => {
     expect(feed).not.toHaveTextContent('运行开始')
   })
 
+  test('the triage approved with no name given says Release owner, not the app\'s Chinese word', async () => {
+    const b = vstatdBoard('bench')
+    b.run!.backlog!.triage!.approved = { by: '负责人', at: '2026-11-03T06:20:33Z' }
+    serve(b)
+    render(<VstatdTeamApp pollMs={60_000} />)
+    expect(await screen.findByTestId('kt-reqs-state')).toHaveTextContent('Triage approved (Release owner, 2026-11-03T06:20:33Z)')
+  })
+
   test('the scorecard has English titles', async () => {
     serve(vstatdBoard('release'))
     render(<VstatdTeamApp pollMs={60_000} />)
     await userEvent.click(await screen.findByRole('tab', { name: 'Scorecard' }))
     expect(await screen.findByRole('heading', { name: 'Scorecard' })).toBeInTheDocument()
     expect(screen.getAllByText('Overturned explanations').length).toBeGreaterThan(0)
+    // two sentences, not "(—), not 0.2 runs in total."; what a figure is of on its own line
+    expect(document.querySelector('.sc-head p')!.textContent).toMatch(/left blank \(—\), not 0\. \d+ runs in total\.$/)
+    const logdiff = screen.getAllByTestId('sc-card').find((c) => c.textContent?.startsWith('Log differences'))!
+    expect(logdiff.querySelector('.cto-value')!.textContent).toMatch(/^\d+$|^—$/)
   })
 
   test('an older run whose events have only text shows that text as it is', async () => {
@@ -84,7 +96,13 @@ describe('the board in English', () => {
     const said = errorText(new Error('API 400: {"error": "退回要写明打回给谁", "code": "no_target"}'))
     expect(said).toContain('Send back: Developer · fix')
     expect(said).not.toContain('退回')
-    expect(errorText(new Error('API 409: {"error": "已经签过了", "code": "signed"}'))).toContain('已经签过了')
+    expect(errorText(new Error('API 409: {"error": "已经签过了", "code": "signed"}'))).toContain('It has been signed off already')
+    // what the app passes on stays as it said it, inside the English sentence; the app's own Chinese words do not
+    const refused = errorText(new Error('API 409: {"error": "没批成：digest mismatch", "code": "bench_refused", "detail": "digest mismatch"}'))
+    expect(refused).toContain('Not approved (digest mismatch)')
+    expect(refused).not.toContain('没批成')
+    expect(errorText(new Error('API 400: {"error": "要写明是谁补登的（by）", "code": "invalid_finding"}'))).toBe('The finding is not valid (400)') // the app's own words are not passed on
+    expect(errorText(new Error('API 409: {"error": "x", "code": "no_such_code"}'))).toContain('x')
   })
 
   test('the English audit trail downloads as audit-<run>.en.*, not as the signed audit.md', async () => {

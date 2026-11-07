@@ -101,6 +101,23 @@ describe('the vstatd board', () => {
     expect(within(screen.getByRole('group', { name: '决定 F-021' })).queryByTestId('kt-gate-cites')).toBeNull()
   })
 
+  test('in a replay the triage gate shows its questions and answers nothing', async () => {
+    const user = userEvent.setup()
+    const q = vstatdBoard('triage').run!.roles.find((l) => l.key === 'triage')!.questions
+    const onConfirm = vi.fn(async () => {})
+    const onCancel = vi.fn()
+    render(<GateDialog label="分诊" decision="approve" questions={q} replay onConfirm={onConfirm} onCancel={onCancel} />)
+    const dialog = screen.getByTestId('kt-gate-dialog')
+    expect(dialog).toHaveTextContent('分诊关卡（回放）')
+    expect(within(dialog).getByTestId('kt-gate-questions')).toBeInTheDocument()
+    expect(within(screen.getByRole('group', { name: '决定 F-008' })).getAllByRole('radio').every((r) => (r as HTMLInputElement).disabled)).toBe(true)
+    expect(within(dialog).queryByRole('textbox')).toBeNull()
+    expect(within(dialog).queryByRole('button', { name: /批准/ })).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: '关闭' }))
+    expect(onCancel).toHaveBeenCalled()
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   test('sign-off: release.sh\'s verdict, the check that differed, the evidence page as text, then the signature', async () => {
     const user = userEvent.setup()
     serve(vstatdBoard('release'))

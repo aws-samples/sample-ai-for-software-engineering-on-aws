@@ -7,7 +7,7 @@
  * per attempt, with commits, merges, bounces and violations marked where they happened. Read down the
  * lanes and the parallel work lines up like a Gantt chart.
  */
-import { evText } from '../i18n/events'
+import { doingText, evText } from '../i18n/events'
 import { useEffect, useRef } from 'react'
 import type { Lane, RunDetail, TestCase } from '../types'
 import { LIVE, WORKING, baseName, caseMeta, fmtAgo, fmtClock, fmtCredits, fmtSpan, laneMeta, toolIcon, waitingFor, waitingText } from './format'
@@ -228,7 +228,7 @@ function LaneId({ lane, focused, onRole, onOutputs }: { lane: Lane; focused: boo
           <span>{lane.title}</span>
           {lane.attempt > 1 && <span className="kt-badge tone-fix">{tr('board.Lanes.16')} {lane.attempt} {tr('board.Lanes.17')}</span>}
         </div>
-        {lane.doing && <div className={`kt-lane-doing${lane.doing !== lane.assignment ? ' is-sent-back' : ''}`}>{lane.doing}</div>}
+        {lane.doing && <div className={`kt-lane-doing${lane.doing !== lane.assignment ? ' is-sent-back' : ''}`}>{doingText(lane)}</div>}
         <div className="kt-lane-tag">
           <span className={`kt-pill tone-${meta.tone}`} title={meta.hint}>
             <i aria-hidden="true">{meta.icon}</i>

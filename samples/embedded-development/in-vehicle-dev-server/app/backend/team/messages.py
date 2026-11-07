@@ -14,6 +14,8 @@ and the reasons the app passes on from the checks and the bench.
 """
 from __future__ import annotations
 
+import functools
+import json
 import re
 from typing import Any, Callable
 
@@ -106,6 +108,9 @@ ZH: dict[str, str] = {
     "talk.answer": "{r_role}回答：{answer}",
     "talk.failed": "{r_role}没有回答：{error}",
     "approved": "人批准了{g_gate}[[note|：{note}]]",
+    "approved.answers": "人批准了{g_gate}：[[note|{note}；]]决定：{answers}",
+    "approved.answers.answers": "{id} 选 {choice}[[differs|（与建议不同）]]",
+    "choice.other": "其他",
     "approved.overrule": "人推翻审查结论，批准了{g_gate}：{note}",
     "plan.split": "{r_role}提议分工：{plan}[[skip|；这次不要：{skip}]]",
     "plan.split.plan": "{r_role} · {what}",
@@ -138,6 +143,34 @@ ZH: dict[str, str] = {
     "result.same": "一致",
     "result.fail": "不过",
     "result.pass": "通过",
+    # what a round is for (an attempt's label: the lanes, the graph, the delivery details)
+    "label.fix": "修 {items}[[more|等]]",
+    "label.conflict": "解决合入冲突",
+    "label.review": "按评审意见改",
+    "label.trace": "补写提交说明",
+    "label.revise": "按意见重写",
+    "label.discuss": "讨论",
+    "label.again": "重新开工",
+    "again.transient": "模型后端出错，换一个新会话接着做",
+    # why the checks hold the run for a person: one item per check
+    "checks.held": "{items}",
+    "checks.held.items": "{check} {what}：{reason}",
+    "held.usage": "检查配置错误",
+    "held.blocked": "没法判定",
+    "held.rounds": "修了 {n} 轮仍不过",
+    "held.owner": "没过，负责的角色没法再改",
+    # the triage gate's questions and options (triage.py)
+    "triage.q.added": "{id} 是分诊新加的（{found_by}），定为 {decision}：{where}",
+    "triage.q.justify": "{id} 分诊建议说明为误报或无害、不修[[label|（待办标的是 {label}）]]：{where}",
+    "triage.q.defer": "{id} 分诊建议延后[[label|（待办标的是 {label}）]]：{where}",
+    "triage.q.differs": "{id} 的决定和待办不同（待办标的是 {label}）：{decision}，{where}",
+    "triage.opt.add": "同意加入本批",
+    "triage.opt.no_add": "不同意：不加入（退回分诊）",
+    "triage.opt.justify": "同意说明（评审还会复核引用）",
+    "triage.opt.fix": "不同意：本批修复（退回分诊补齐证据和行为）",
+    "triage.opt.defer": "同意延后",
+    "triage.opt.agree": "同意",
+    "triage.opt.disagree": "不同意（退回分诊）",
     # why a run cannot be signed off yet
     "sign.not_ended": "运行结束以后才能签字",
     "sign.release": "独立重跑后 release.sh 没通过，不能签字放行：{why}",
@@ -229,6 +262,9 @@ EN: dict[str, str] = {
     "talk.answer": "{r_role} answers: {answer}",
     "talk.failed": "{r_role} did not answer: {error}",
     "approved": "The person approved {g_gate}[[note|: {note}]]",
+    "approved.answers": "The person approved {g_gate}: [[note|{note}; ]]decisions: {answers}",
+    "approved.answers.answers": "{id} {choice}[[differs| (differs from the proposal)]]",
+    "choice.other": "other",
     "approved.overrule": "The person overruled the review and approved {g_gate}: {note}",
     "plan.split": "{r_role} proposes the division: {plan}[[skip|; not this time: {skip}]]",
     "plan.split.plan": "{r_role} · {what}",
@@ -260,6 +296,31 @@ EN: dict[str, str] = {
     "result.same": "same",
     "result.fail": "failed",
     "result.pass": "passed",
+    "label.fix": "fix {items}[[more| and more]]",
+    "label.conflict": "resolve the merge conflict",
+    "label.review": "change as the review says",
+    "label.trace": "rewrite the commit messages",
+    "label.revise": "redo as asked",
+    "label.discuss": "discussion",
+    "label.again": "start again",
+    "again.transient": "the model backend failed; continuing in a new session",
+    "checks.held": "{items}",
+    "checks.held.items": "{check} {what}: {reason}",
+    "held.usage": "is misconfigured",
+    "held.blocked": "cannot be judged",
+    "held.rounds": "still fails after {n} rounds",
+    "held.owner": "failed, and the role that owns it can no longer change it",
+    "triage.q.added": "{id} was added by triage ({found_by}), decided {decision}: {where}",
+    "triage.q.justify": "{id}: triage proposes to explain it as a false positive or harmless, not fix it[[label| (the backlog says {label})]]: {where}",
+    "triage.q.defer": "{id}: triage proposes to defer it[[label| (the backlog says {label})]]: {where}",
+    "triage.q.differs": "{id}: the decision differs from the backlog (the backlog says {label}): {decision}, {where}",
+    "triage.opt.add": "Agree to add it to this batch",
+    "triage.opt.no_add": "Disagree: do not add it (send back to triage)",
+    "triage.opt.justify": "Agree to explain it (the review still checks the citations)",
+    "triage.opt.fix": "Disagree: fix it in this batch (send back to triage for evidence and behaviour)",
+    "triage.opt.defer": "Agree to defer it",
+    "triage.opt.agree": "Agree",
+    "triage.opt.disagree": "Disagree (send back to triage)",
     "sign.not_ended": "A run can be signed off only after it ends",
     "sign.release": "release.sh did not pass on the independent rerun, so it cannot be signed off: {why}",
     "sign.failed": "The run failed and delivered nothing, so it cannot be signed off (you can retry the failed roles)",
@@ -269,6 +330,7 @@ EN: dict[str, str] = {
 
 TEMPLATES = {"zh": ZH, "en": EN}
 SEPS = {"zh": ("、", "；"), "en": (", ", "; ")}  # a list, a list of objects
+LIST_JOINED = {"approved.answers.answers"}  # item templates whose items are joined like a plain list
 PARAM_MAX = 300  # a param is one line on the board, as the text is
 
 _OPT = re.compile(r"\[\[(\w+)\|([^|\]]*)(?:\|([^\]]*))?\]\]")
@@ -300,6 +362,25 @@ def scrubbed(params: Any, scrub: Callable[[str], str]) -> Any:
     return params
 
 
+_BOARD_BY = re.compile(r"^Kiro Crew 看板（(.+?)，(.+?)）$")  # a decision on the board at the bench (bench.py DECIDED_BY)
+_VIA_KIRO = "（在 Kiro 会话里让 Kiro 代点）"  # a retry the person asked Kiro to click for them
+
+
+def person(who: str, lang: str = "zh") -> str:
+    """A record's person in *lang*: the app's own words around a name (负责人, the board, a click via Kiro) in English;
+    the name as it is. The UI's i18n/events.ts person() says the same."""
+    if lang != "en":
+        return who
+    if who == "负责人":
+        return "Release owner"
+    m = _BOARD_BY.match(who)
+    if m:
+        return f"Kiro Crew board ({m.group(1)}, {m.group(2)})"
+    if who.endswith(_VIA_KIRO):
+        return who[: -len(_VIA_KIRO)] + " (asked Kiro to click it in a Kiro session)"
+    return who
+
+
 def render(code: str, params: dict[str, Any] | None = None, title: Callable[[str], str] = str,
            gate: Callable[[str], str] | None = None, lang: str = "zh") -> str:
     """The text of *code* with *params* in *lang* (Chinese by default: the event's text); *title* and *gate* name a
@@ -313,8 +394,11 @@ def render(code: str, params: dict[str, Any] | None = None, title: Callable[[str
             return render(v["code"], v.get("params"), title, gate, lang)
         if isinstance(v, list):
             if v and all(isinstance(x, dict) for x in v):
-                return item_sep.join(render(f"{code}.{name}", x, title, gate, lang) for x in v)
+                sep = list_sep if f"{code}.{name}" in LIST_JOINED else item_sep
+                return sep.join(render(f"{code}.{name}", x, title, gate, lang) for x in v)
             return list_sep.join(value(name, x) for x in v)
+        if name in ("by", "who") and isinstance(v, str):
+            return person(v, lang)
         if name.startswith("r_"):
             return title(str(v))
         if name.startswith("g_"):
@@ -326,3 +410,201 @@ def render(code: str, params: dict[str, Any] | None = None, title: Callable[[str
 
     text = _OPT.sub(opt, template)
     return _VAR.sub(lambda m: value(m.group(1), p[m.group(1)]) if m.group(1) in p else m.group(0), text)
+
+
+# --- reading older events: their Chinese text back into a code and params -------------------------------------- #
+# A run recorded before events carried a code has only the text. infer() matches it against the Chinese templates
+# (with the run's role names), so that the board can say it in English too. Nothing is written back.
+
+_LISTS = {"outs", "paths", "cases", "ids", "globs", "checks", "differs", "files", "items", "r_roles", "r_owners"}
+_NUMBERS = {"n", "rounds", "round", "red", "passed", "total", "listed", "pr"}
+_NESTED = {("failed.bench", "why"): ("hold.",), ("run.held", "why"): ("hold.", "checks.held"),
+           ("failed.checks", "why"): ("checks.held",), ("spawned.round", "label"): ("label.",),
+           ("flow.agent", "label"): ("label.",), ("spawned.dispatch", "again"): ("again.",),
+           ("spawned.start", "again"): ("again.",), ("spawned.round", "again"): ("again.",),
+           ("checks.held.items", "what"): ("held.",), ("approved.answers.answers", "choice"): ("choice.",)}
+_TOKEN = re.compile(r"\[\[(\w+)\|([^|\]]*)(?:\|([^\]]*))?\]\]|\{(\w+)\}")
+
+
+def _alt(names: list[str]) -> str:
+    return "|".join(re.escape(n) for n in sorted(set(names), key=len, reverse=True) if n) or "(?!)"
+
+
+def _compile(template: str, titles: tuple[str, ...], gates: tuple[str, ...]) -> tuple[re.Pattern[str], list[tuple[str, str]], int]:
+    """A template as a regex: each {name} a group (role names as alternatives of the run's titles or gate labels,
+    numbers as digits), each [[name|then|else]] a choice; returns it, the groups (group, param or ?opt), and how
+    many literal characters it has (the more, the better a match)."""
+    groups: list[tuple[str, str]] = []
+    literal = 0
+
+    def var(name: str) -> str:
+        g = f"g{len(groups)}"
+        groups.append((g, name))
+        role = _alt(list(titles)) if name.startswith("r_") else _alt(list(gates) + list(titles)) if name.startswith("g_") else ""
+        if role and name in _LISTS:
+            body = f"(?:{role})(?:、(?:{role}))*"
+        elif role:
+            body = f"(?:{role})"
+        else:
+            body = r"\d+" if name in _NUMBERS else r".*?"
+        return f"(?P<{g}>{body})"
+
+    def part(text: str) -> str:
+        nonlocal literal
+        out, at = [], 0
+        for m in _TOKEN.finditer(text):
+            out.append(re.escape(text[at:m.start()]))
+            literal += m.start() - at
+            out.append(var(m.group(4)) if m.group(4) else "")
+            at = m.end()
+        out.append(re.escape(text[at:]))
+        literal += len(text) - at
+        return "".join(out)
+
+    out, at = [], 0
+    for m in _TOKEN.finditer(template):
+        out.append(part(template[at:m.start()]))
+        if m.group(4):
+            out.append(var(m.group(4)))
+        else:
+            g = f"g{len(groups)}"
+            groups.append((g, "?" + m.group(1)))
+            # the else part first: "[[outs|{outs}|产出]]" reads 产出 as no outputs, not as outputs named 产出
+            out.append(f"(?:{part(m.group(3) or '')}|(?P<{g}>{part(m.group(2))}))" if m.group(3)
+                       else f"(?:(?P<{g}>{part(m.group(2))})|)")
+        at = m.end()
+    out.append(part(template[at:]))
+    return re.compile("".join(out), re.S), groups, literal
+
+
+@functools.lru_cache(maxsize=64)
+def _patterns(titles: tuple[str, ...], gates: tuple[str, ...]) -> list[tuple[str, re.Pattern[str], list[tuple[str, str]], int]]:
+    out = [(code, *_compile(t, titles, gates)) for code, t in ZH.items()]
+    return sorted(out, key=lambda x: -x[3])
+
+
+Roles = tuple[tuple[str, str, str], ...]  # (key, title, gate label) of a run's roles
+
+
+def _items() -> set[str]:
+    """The item templates (plan.split.plan, checks.held.items …): matched only inside their list."""
+    out = set()
+    for code in ZH:
+        parent, _, last = code.rpartition(".")
+        if parent in ZH and ("{" + last + "}") in ZH[parent]:
+            out.add(code)
+    return out
+
+
+def _value(code: str, name: str, raw: str, roles: Roles) -> Any:
+    if name.startswith("r_"):
+        by_title = {t: k for k, t, _ in roles}
+        keys = [by_title.get(x, x) for x in raw.split("、")]
+        return keys if name in _LISTS else keys[0]
+    if name.startswith("g_"):
+        return next((k for k, t, g in roles if raw in (g, t)), raw)
+    if name in _NUMBERS:
+        return int(raw)
+    for prefix in _NESTED.get((code, name), ()):
+        found = _match(raw, roles, prefix)
+        if found:
+            return {"code": found[0], "params": found[1]}
+    sub = f"{code}.{name}"
+    if sub in ZH:  # a list of objects, one message each
+        parts, items = raw.split("、" if sub in LIST_JOINED else "；"), []
+        for i, part in enumerate(parts):
+            found = _match(part, roles, sub, exact=True)
+            if found:
+                items.append(found[1])
+            elif i == len(parts) - 1 and items:
+                break  # the text was cut there
+            else:
+                return raw
+        return items
+    if name in _LISTS:
+        return [x for x in raw.split("、") if x]
+    return raw
+
+
+def kind_of(code: str) -> str:
+    """The event kind a code is emitted as ('' for the templates that are no event's: labels, reasons, segments)."""
+    head = code.split(".")[0]
+    if head in ("flow", "result", "sign", "label", "again", "checks", "held", "hold", "choice", "triage"):
+        return ""
+    return {"retry": "run"}.get(head, head)
+
+
+def _match(text: str, roles: Roles, prefix: str = "", exact: bool = False, kind: str = "") -> tuple[str, dict[str, Any]] | None:
+    """The best template for *text*: among those starting with *prefix* (exactly *prefix* with *exact*) and emitted
+    as *kind*, the matching one with the most literal characters; item templates only as items."""
+    titles = tuple(t for _, t, _ in roles)
+    gates = tuple(g for _, _, g in roles if g)
+    items = _ITEMS
+    for code, rx, groups, _ in _patterns(titles, gates):
+        if (exact and code != prefix) or (not exact and (not code.startswith(prefix) or code in items)):
+            continue
+        if kind and kind_of(code) != kind:
+            continue
+        m = rx.fullmatch(text)
+        if not m:
+            continue
+        params: dict[str, Any] = {}
+        for g, name in groups:  # the values first, then whether each optional part was there
+            raw = m.group(g)
+            if not name.startswith("?") and raw is not None and name not in params:
+                params[name] = _value(code, name, raw, roles)
+        for g, name in groups:
+            if name.startswith("?"):
+                params.setdefault(name[1:], m.group(g) is not None)
+        return code, {k: v for k, v in params.items() if v is not False and v is not None and v != "" and v != []}
+    return None
+
+
+def infer(text: str, roles: list[dict[str, Any]], kind: str) -> tuple[str, dict[str, Any]] | None:
+    """The code and params of an event of *kind* recorded with its Chinese text only, or None when no template of
+    that kind says it."""
+    key: Roles = tuple((str(r["key"]), str(r.get("title") or r["key"]), str(r.get("gate_label") or "")) for r in roles)
+    text = " ".join(str(text or "").split())
+    return _infer(text, key, kind) if text and kind else None
+
+
+@functools.lru_cache(maxsize=8192)
+def _infer(text: str, roles: Roles, kind: str) -> tuple[str, dict[str, Any]] | None:
+    found = _match(text, roles, kind=kind)
+    return (found[0], json.loads(json.dumps(found[1]))) if found else None
+
+
+def with_codes(events: list[dict[str, Any]], roles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """*events* as the board reads them: one recorded without a code gets the one its text says, if any (a copy;
+    the record is not changed)."""
+    out = []
+    for e in events:
+        if e.get("code") or not e.get("text"):
+            out.append(e)
+            continue
+        found = infer(str(e["text"]), roles, str(e.get("kind") or ""))
+        out.append({**e, "code": found[0], "params": json.loads(json.dumps(found[1]))} if found else e)
+    return out
+
+
+def label_of(label: Any) -> dict[str, Any] | None:
+    """An attempt's label (its Chinese words) as a message, for the board in English."""
+    found = _match(" ".join(str(label or "").split()), (), "label.") if label else None
+    return {"code": found[0], "params": found[1]} if found else None
+
+
+_ITEMS = _items()
+
+
+def as_msg(text: Any, prefix: str) -> Any:
+    """*text* as a message of a template starting with *prefix* when one says it, else *text* as it is."""
+    if not isinstance(text, str) or not text:
+        return text
+    found = _match(" ".join(text.split()), (), prefix)
+    return {"code": found[0], "params": found[1]} if found else text
+
+
+# The params that hold what people, agents and tools wrote (and the requirement): never translated. The tests take
+# them out before they look for Chinese in an English event.
+FREE_TEXT = {"title", "summary", "task", "subject", "note", "answer", "tool", "reason", "error", "why", "by",
+             "what", "path", "location", "outs", "files", "paths", "found_by", "where"}

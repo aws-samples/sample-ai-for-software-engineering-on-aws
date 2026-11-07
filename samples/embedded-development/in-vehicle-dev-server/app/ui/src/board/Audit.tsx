@@ -5,7 +5,7 @@
  * baseline made on the board is seen too. A decision made on the board (DecideRequest) refreshes both.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import type { AuditActor, AuditEntry, AuditTrail } from '../types'
 import { FLOW } from './flow'
 import { BASE } from './format'

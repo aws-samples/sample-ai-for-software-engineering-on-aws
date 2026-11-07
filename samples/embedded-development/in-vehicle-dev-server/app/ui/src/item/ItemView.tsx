@@ -6,7 +6,7 @@
  */
 import { localizeFlow } from '../i18n/events'
 import { useEffect, useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import { BOARD_CSS } from '../board/styles'
 import { fmtClock, fmtCredits, fmtSpan, paths, runMeta } from '../board/format'
 import { RoleIcon } from '../board/RoleIcon'

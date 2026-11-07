@@ -75,6 +75,9 @@ def test_the_board_has_the_backlog_then_the_triage_with_what_the_app_recorded(tm
     rows = {r["id"]: r for r in t["findings"]}
     assert set(rows["F-003"]) == types["TriageRow"]
     assert rows["F-008"]["answer"] == "A 同意说明（评审还会复核引用）" and rows["F-021"]["answer"] == "其他：本批修"
+    # the option's words are the app's: said by code in English too; the person's own words are not
+    assert rows["F-008"]["answer_key"] == "A" and rows["F-008"]["answer_msg"] == {"code": "triage.opt.justify", "params": {}}
+    assert rows["F-021"]["answer_msg"] is None
     assert rows["F-003"]["answer"] is None and rows["F-003"]["evidence"] == "static-analysis" and rows["F-003"]["behaviour"] is False
     assert rows["F-008"]["cites"] == ["[VSTATD-IF p.7 §4.2]"] and rows["F-008"]["evidence"] is None and rows["F-008"]["behaviour"] is None
     assert rows["F-031"]["added"] and not rows["F-003"]["added"]

@@ -20,6 +20,60 @@ const at = (dt: number) => {
 const lane = (r: RunDetail, key: string) => r.roles.find((l) => l.key === key)!
 
 describe('回放：一次跑完的运行按记录重放', () => {
+  test("a check's verdict and the bench's step are what the record said by then, not how the run ended", () => {
+    const { run } = im()
+    const s = replaySpan(run, im().events).start
+    const ev = (dt: number, kind: string, code: string, data: unknown = null) => ({ seq: dt, at: s + dt, kind, role: null, text: code, from: null, to: null, data, code, params: {} }) as unknown as TeamEvent
+    run.tests.cases = [{ ...run.tests.cases[0], id: 'build', status: 'pass', verdict: 'PASS' }]
+    run.bench = { step: 'done', running: null, held: null, history: [], state: { supply: null } } as unknown as RunDetail['bench']
+    const events = [ev(1, 'tests', 'tests.score', { passed: 0, total: 1, cases: [['build', 'fail']] }), ev(2, 'bench', 'bench.go'), ev(3, 'bench', 'bench.replay'), ev(4, 'run', 'run.done_ok')]
+    const r1 = replayAt(run, events, s + 1.5)
+    expect(r1.tests.cases[0]).toMatchObject({ status: 'fail', verdict: 'FAIL' })
+    expect(r1.bench?.step).toBeNull()
+    expect(replayAt(run, events, s + 3.5).bench?.step).toBe('replay')
+    expect(replayAt(run, events, s + 4.5).bench?.step).toBe('done')
+  })
+
+  test('the bench at a moment of the replay is what the record said then; what it did not say is not shown', async () => {
+    const { benchAt } = await import('./timeline')
+    const at = (s: string) => Date.parse(s) / 1000
+    const bench = { step: 'done', running: null, held: null, doctor: null, run_dir: null, artifact: null, console: null,
+      state: { target: { state: 'off', why: 'now' }, supply: { voltage_v: 0, kl15: 'off', set_by: '' }, pending: [], actions: [] },
+      history: [
+        { at: '2026-11-03T02:15:21Z', event: 'target', state: 'known', why: 'done: replay (an earlier run)' },
+        { at: '2026-11-03T01:40:17Z', event: 'supply', voltage_v: 13.5, kl15: 'on', by: 'Release owner' },
+        { at: '2026-11-03T10:01:29Z', event: 'request', id: 'q1', action: 'deploy', digest: 'abc', detail: 'vstatd' },
+        { at: '2026-11-03T10:03:12Z', event: 'target', state: 'busy', why: 'deploy in progress' },
+      ] } as unknown as NonNullable<RunDetail['bench']>
+    const deploy = benchAt(bench, at('2026-11-03T10:02:00Z'))  // waiting at the console: the bench as it was before the run
+    expect(deploy.state.target).toEqual({ state: 'known', why: 'done: replay (an earlier run)' })
+    expect(deploy.state.supply).toMatchObject({ voltage_v: 13.5, kl15: 'on' })
+    expect(deploy.state.pending.map((p) => p.id)).toEqual(['q1'])
+    expect(benchAt(bench, at('2026-11-03T10:03:13Z')).state.target.state).toBe('busy')
+    const before = benchAt(bench, at('2026-11-03T00:00:00Z'))  // nothing recorded yet: not the bench as it is now
+    expect(before.replay).toEqual({ target: false, supply: false })
+    expect(before.state.target.state).not.toBe('off')
+    const { BenchPanel } = await import('./Bench')
+    render(<BenchPanel bench={{ ...before, doctor: null } as NonNullable<RunDetail['bench']>} />)
+    const panel = screen.getByTestId('kt-bench')
+    expect(panel).toHaveTextContent('回放中，台架状态不显示')
+    expect(panel).not.toHaveTextContent('没开机')
+  })
+
+  test('tests first shows the new tests failing; after the bench, the checks that ran with what the rerun says of them', () => {
+    const { run } = im()
+    const s = replaySpan(run, im().events).start
+    const ev = (dt: number, data: unknown) => ({ seq: dt, at: s + dt, kind: 'tests', role: null, text: '', from: null, to: null, data, code: null, params: {} }) as unknown as TeamEvent
+    run.release = { checks: [{ name: 'logdiff', verdict: 'PASS', tier: 'emulation', summary: '328 of 328 baseline entries paired', reasons: [] }] } as unknown as RunDetail['release']
+    const events = [ev(1, { first: ['A.F003_Fails', 'B.fails'] }), ev(2, { checks: [['runtime-limits', 'PASS'], ['logdiff', 'PASS']], phase: 'after_bench' })]
+    const first = replayAt(run, events, s + 1.5).tests
+    expect([first.passed, first.total]).toEqual([0, 2])
+    expect(first.cases.map((c) => [c.ac, c.status])).toEqual([['F-003', 'fail'], [null, 'fail']])
+    const after = replayAt(run, events, s + 2.5).tests
+    expect([after.passed, after.total]).toEqual([2, 2])
+    expect(after.cases.find((c) => c.id === 'logdiff')).toMatchObject({ verdict: 'PASS', tier: 'emulation', message: '328 of 328 baseline entries paired' })
+  })
+
   test('the run spans its record; the speed plays it in about a minute and a half', () => {
     const { run, events } = im()
     const sp = replaySpan(run, events)

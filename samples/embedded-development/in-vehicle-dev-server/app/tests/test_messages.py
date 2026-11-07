@@ -109,7 +109,7 @@ def test_the_audit_trail_in_english_and_an_older_event_without_a_code():
     assert [x["what"] for x in zh["entries"]] == ["关卡打开，等人批准：分诊", "人批准了分诊：好", "分诊完成：旧的记录"]
     assert [x["what"] for x in en["entries"]] == ["Gate opened: Waiting for approval: Triage", "The person approved Triage: 好",
                                                    "分诊完成：旧的记录"]
-    assert [x["who"] for x in en["entries"]] == ["app", "owner", "Triage"]
+    assert [x["who"] for x in en["entries"]] == ["app", "Release owner", "Triage"]
     md = audit.markdown(en, "en")
     assert md.startswith("# Audit trail · r1") and "| Time (UTC) | Who | What | Evidence |" in md and "## Gate: triage" in md
     assert audit.markdown(zh).startswith("# 审计记录 · r1")  # the audit.md written at sign-off: Chinese, as before
@@ -149,11 +149,65 @@ def test_params_go_out_redacted_as_the_text_does(tmp_path, monkeypatch):
     async def go():
         for path in (f"/runs/{s['id']}/events", f"/runs/{s['id']}/flow"):
             out = json.dumps((await call(routes, "GET", path)).body, ensure_ascii=False)
-            assert secret not in out and "[已隐去]" in out, path
+            assert secret not in out and "[REDACTED]" in out, path
     asyncio.run(go())
 
     run = make_run(tmp_path / "b", FakeManager())
     run.say("approved", "approved", {"g_gate": run.order[0], "note": f"token={secret}"}, role=run.order[0], frm="person")
     out = board.build({run.rid: run}, None, mgr=None, scrub=service.basic_scrub, now=1.0)["run"]
     assert secret not in json.dumps(out["events"], ensure_ascii=False)
-    assert out["events"][-1]["params"]["note"] == "token=[已隐去]"
+    assert out["events"][-1]["params"]["note"] == "token=[REDACTED]"
+
+
+def test_the_status_lines_go_out_redacted_too(tmp_path):
+    """Why a run cannot be signed (from release.sh), why the checks or the bench hold the run (from their output),
+    the rerun's verdicts and its evidence page: nowhere in the run's reply, and not in an error's body either."""
+    import asyncio
+    from http_fakes import FakeRequest, FakeWeb
+    from teamkit import FakeManager, make_run
+
+    service, board, httpkit = mod("service"), mod("board"), mod("httpkit")
+    secret = "sk-ABCDEFGHIJKLMNOPQRSTUV"
+    run = make_run(tmp_path, FakeManager())
+    (tmp_path / "evidence.md").write_text(f"# Evidence\nrelease FAIL: token={secret}\n", encoding="utf-8")
+    run.s["tests"]["held"] = {"checks": ["release"], "why": f"release FAIL: token={secret}"}
+    run.s["status"], run.s["ended_at"] = "done", 1.0
+    run.s["rerun"] = {"at": 1.0, "head": "c0ffee", "results": "/r", "differs": [], "evidence": str(tmp_path / "evidence.md"),
+                      "checks": [{"name": "logdiff", "verdict": "FAIL", "tier": "emulation", "summary": f"token={secret}",
+                                  "reasons": [f"token={secret}"]}],
+                      "release": {"verdict": "FAIL", "reasons": [f"api_key={secret}"], "summary": f"token={secret}"}}
+    out = board.build({run.rid: run}, None, mgr=None, scrub=service.basic_scrub, now=1.0)["run"]
+    text = json.dumps(out, ensure_ascii=False)  # every key of the run
+    assert secret not in text and "[REDACTED]" in json.dumps(out["release"], ensure_ascii=False)
+
+    async def refuse(request):
+        raise httpkit.AppError(run.sign_block(), "not_signable", 409, detail=f"token={secret}")
+    kit = httpkit.Kit(FakeWeb, is_owner=lambda r: True, scrub=service.basic_scrub)
+    body = json.dumps(asyncio.run(kit.guarded(refuse)(FakeRequest(), None)).body, ensure_ascii=False)
+    assert secret not in body and "[REDACTED]" in body and '"code": "not_signable"' in body
+    held = {"step": "deploy", "why": f"secret={secret}", "code": "hold.release", "params": {"why": f"secret={secret}"},
+            "commands": [], "at": 1.0}
+    run.s["bench"] = {"held": held}
+    run.team["bench"] = {"deploy": ["/nonexistent/cc1.sh", "deploy"], "baseline": "/b"}
+    view = json.dumps(board.bench_view(run, service.basic_scrub), ensure_ascii=False)
+    assert secret not in view and view.count("[REDACTED]") == 2
+
+
+def test_every_error_the_app_answers_with_has_both_languages():
+    """The English board says an error by its code (err.<code> in ui/src/i18n): every code an AppError or the
+    request guard answers with has an entry in both dictionaries."""
+    import ast
+    codes = set()
+    for f in (ROOT / "backend").rglob("*.py"):
+        for n in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(n, ast.Call) and (getattr(n.func, "id", None) or getattr(n.func, "attr", None)) in ("AppError", "err"):
+                if len(n.args) >= 2 and isinstance(n.args[1], ast.Constant):
+                    codes.add(n.args[1].value)
+                codes |= {k.value.value for k in n.keywords if k.arg == "code" and isinstance(k.value, ast.Constant)}
+                if (getattr(n.func, "id", None) or getattr(n.func, "attr", None)) == "AppError" and len(n.args) < 2 \
+                        and not any(k.arg == "code" for k in n.keywords):
+                    codes.add("bad_request")  # AppError's default code
+    assert len(codes) > 40
+    for lang in ("zh", "en"):
+        d = json.loads((I18N / f"{lang}.json").read_text(encoding="utf-8"))
+        assert codes - {k[4:] for k in d if k.startswith("err.")} == set(), lang

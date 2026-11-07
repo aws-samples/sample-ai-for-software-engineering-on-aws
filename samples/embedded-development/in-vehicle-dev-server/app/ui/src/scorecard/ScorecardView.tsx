@@ -5,7 +5,7 @@
  * figures of the scenario page are left out. The cards and blocks are the kit's (kit.ts), as the CTO view's were.
  */
 import { useEffect, useState } from 'react'
-import { useAppApi } from '@kirocrew/app-sdk'
+import { useAppApi } from '../api'
 import { BOARD_CSS } from '../board/styles'
 import { fmtSpan, paths, runMeta } from '../board/format'
 import { errorText } from '../board/useBoard'
@@ -21,6 +21,8 @@ const SC_CSS = `
 .sc-head h2 { margin: 0 0 4px; font-size: 1.4em; color: var(--text-strong); }
 .sc-head p { margin: 0; color: var(--muted); }
 .sc-root .cto-value.is-empty { color: var(--muted); }
+.sc-root .cto-card { min-width: 0; overflow-wrap: anywhere; }
+.sc-of { color: var(--muted); font-size: .95em; font-weight: 600; margin-top: 2px; }
 .sc-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .sc-table th, .sc-table td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
 .sc-table th { color: var(--muted); font-weight: 650; font-size: .93em; }
@@ -38,14 +40,15 @@ const n = (x: number | null | undefined) => (x === null || x === undefined ? EMP
 const span = (x: number | null) => (x === null ? EMPTY : fmtSpan(x))
 const isEmpty = (x: unknown) => x === null || x === undefined
 
+/** A card: its figure, and under it (a line of its own, so that a long one never runs out of the card) what it is of. */
 function Card({ label, value, of, empty }: { label: string; value: string; of?: string; empty: boolean }) {
   return (
     <div className="cto-card" data-testid="sc-card">
       <div className="cto-eyebrow">{label}</div>
       <div className={`cto-value${empty ? ' is-empty' : ''}`} title={empty ? tr('scorecard.ScorecardView.1') : undefined}>
         {value}
-        {of && !empty && <span className="cto-of"> {of}</span>}
       </div>
+      {of && !empty && <div className="sc-of" data-testid="sc-card-of">{of}</div>}
     </div>
   )
 }

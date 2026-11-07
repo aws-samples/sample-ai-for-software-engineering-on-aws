@@ -38,7 +38,7 @@ if spec == "wait":  # a request at the console, decided by the person (the test)
         sys.exit(1)
     spec = "ok"
 if spec == "refuse":
-    print("refused: refused (lilin@cc1-host (ttys003)): not this build", file=sys.stderr)
+    print("refused: refused (alice@cc1-host (ttys003)): not this build", file=sys.stderr)
     sys.exit(1)
 if spec == "timeout":
     print("refused: refused (bench (timeout)): no answer at the operator console within 300 s", file=sys.stderr)
@@ -191,7 +191,7 @@ def test_a_refusal_at_the_console_goes_to_a_person_and_a_retry_carries_on(tmp_pa
         await until(run, mgr, lambda: run.ended)
         held = run.s["bench"]["held"]
         assert run.s["status"] == "failed" and held["step"] == "deploy"
-        assert held["why"] == "部署没做成（refused）：lilin@cc1-host (ttys003) 在操作台上拒绝了：not this build"
+        assert held["why"] == "部署没做成（refused）：alice@cc1-host (ttys003) 在操作台上拒绝了：not this build"
         assert [c["argv"][0] for c in rig.calls()] == ["deploy"]  # nothing retried, no replay
         assert run.events[-1]["text"].startswith("运行停下，交给人决定：部署没做成")
         rig.set()

@@ -64,7 +64,7 @@ def finding_body(body: dict[str, Any]) -> dict[str, Any]:
             raise AppError("要写明给它加哪些可写路径（paths）", "invalid_finding")
         bad = [g for g in out["paths"] if not scope_glob(g)]
         if bad:
-            raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding")
+            raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding", detail=", ".join(bad))
         return out
     if body.get("decision") not in ("fix", "justify", "defer"):
         raise AppError("decision 只能是 fix、justify 或 defer", "invalid_finding")
@@ -80,7 +80,7 @@ def finding_body(body: dict[str, Any]) -> dict[str, Any]:
     out.update(facts=_texts(body, "facts", 40), cites=_texts(body, "cites", 60), paths=_texts(body, "paths"))
     bad = [g for g in out["paths"] if not scope_glob(g)]
     if bad:
-        raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding")
+        raise AppError(f"paths 要是项目里的相对路径或通配：{'、'.join(bad)}", "invalid_finding", detail=", ".join(bad))
     return out
 
 
@@ -88,7 +88,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     web = web if web is not None else _web
     if web is None:
         raise RuntimeError("aiohttp is not installed: pass web=")
-    kit = Kit(web, is_owner=is_owner)
+    kit = Kit(web, is_owner=is_owner, names=getattr(svc, "person_names", lambda: ()),
+              reserved=getattr(svc, "role_keys", lambda: ()),
+              scrub=getattr(svc, "scrub", lambda s: s))
 
     async def health(request: Any, ctx: Any) -> Any:
         return kit.json({"ok": True, "started": svc.started})
@@ -188,7 +190,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
             raise AppError("format 只能是 md 或 json", "invalid_format")
         if not fmt:
             return kit.json(trail)
-        text = audit_mod.markdown(trail, lang) if fmt == "md" else audit_mod.as_json(trail)
+        # a copy shown as the board shows it (~, and the roles in presentation mode); the audit.md written at
+        # sign-off is a file of its own and does not come through here
+        text = kit.view().text(audit_mod.markdown(trail, lang) if fmt == "md" else audit_mod.as_json(trail))
         return web.Response(text=text, content_type="text/markdown" if fmt == "md" else "application/json", charset="utf-8",
                             headers={"Content-Disposition": f'attachment; filename="{name}{".en" if lang == "en" else ""}.{fmt}"'})
 
