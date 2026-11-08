@@ -7,7 +7,7 @@ from typing import Any
 
 import re
 
-MODEL_RE = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,63}$")
+from .constants import MODEL_RE
 
 from .httpkit import AppError, Kit
 
@@ -61,6 +61,9 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         if requirement is not None and not isinstance(requirement, str):
             raise AppError("requirement 必须是字符串", "invalid_requirement")
         return kit.json(svc.route((requirement or "")[:MAX_REQUIREMENT]))
+
+    async def models(request: Any) -> Any:
+        return kit.json(await svc.models())
 
     async def cleanup_sessions(request: Any) -> Any:
         return kit.json(await svc.cleanup_sessions())
@@ -149,6 +152,7 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         AppRoute("GET", "/runs", kit.guarded(runs)),
         AppRoute("POST", "/runs", kit.guarded(create_run)),
         AppRoute("POST", "/route", kit.guarded(route)),
+        AppRoute("GET", "/models", kit.guarded(models)),
         AppRoute("POST", "/sessions/cleanup", kit.guarded(cleanup_sessions)),
         AppRoute("POST", "/runs/import", kit.guarded(import_run)),
         AppRoute("POST", "/runs/{rid}/stop", kit.guarded(stop_run)),

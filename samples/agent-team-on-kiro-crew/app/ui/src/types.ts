@@ -404,6 +404,14 @@ export type RouteTeam = {
   people?: RosterPerson[] | null
 }
 
+/** A model Kiro Crew offers (GET /models): the start form's 模型. */
+export interface ModelChoice {
+  id: string
+  name: string
+  description: string
+  rate: number | null
+}
+
 export type RoutePick = {
   team: RouteTeam | null
   matched: string[]

@@ -6,7 +6,7 @@
  * empty state itself: an introduction to the 8-role team.
  */
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
-import type { Board, Delivery, GateDecision, GateQuestion, RoutePick, RunDetail, TalkLine, TestWall } from '../types'
+import type { Board, Delivery, GateDecision, GateQuestion, ModelChoice, RoutePick, RunDetail, TalkLine, TestWall } from '../types'
 import { AIDLC_AGENTS, FINISHED, expertsOf, officialOf, LIVE, PHASES, WORKING, aidlcUse, fmtAgo, fmtClock, fmtCredits, fmtSpan, isRunActive, laneMeta, runMeta, saving } from './format'
 import { useChangeCount, useServerNow, useSinceSnapshot, useTween } from './hooks'
 import { groupByAc } from './TestWall'
@@ -382,12 +382,21 @@ function CreditsKpi({ credits, reducedMotion }: { credits: number | null; reduce
 export interface StartOptions {
   source?: string
   team?: string
+  /** The model of the whole run (every role, one the team file gives its own model included); none: the team's own. */
+  model?: string
 }
 export type StartFn = (requirement: string, opts?: StartOptions) => Promise<void>
 
 /** A one-sentence requirement for tests and the preview page. */
 export const DEMO_REQUIREMENT = '给山野咖啡做一个网上小店的 MVP：顾客能按分类逛商品、看详情、加购物车并下单。'
 export type PreviewFn = (requirement: string) => Promise<RoutePick>
+/** The models Kiro Crew offers for the start form (an empty list when it cannot say). */
+export type ModelsFn = () => Promise<ModelChoice[]>
+
+/** One model in the 模型 list: its name and Kiro's credit rate. */
+export function modelLabel(m: ModelChoice): string {
+  return m.rate != null ? `${m.name} · ${m.rate}x credits` : m.name
+}
 
 /** Ready-made requirements at the example company 桃源科技 (fictitious): one fills the requirement box. */
 export const SCENARIOS: ReadonlyArray<{ label: string; hint: string; text: string }> = [
@@ -491,10 +500,22 @@ export function TeamPick({ pick }: { pick: RoutePick | null }) {
  * members every 5 s) shows up in the preview without retyping the requirement. */
 export const PREVIEW_REFRESH_MS = 5000
 
-export function StartForm({ onStart, onCancel, preview, refreshMs = PREVIEW_REFRESH_MS }: { onStart: StartFn; onCancel?: () => void; preview?: PreviewFn; refreshMs?: number }) {
+export function StartForm({ onStart, onCancel, preview, models, refreshMs = PREVIEW_REFRESH_MS }: { onStart: StartFn; onCancel?: () => void; preview?: PreviewFn; models?: ModelsFn; refreshMs?: number }) {
   const [text, setText] = useState(SCENARIOS[0].text)
   const [source, setSource] = useState('')
   const [team, setTeam] = useState('auto')
+  const [model, setModel] = useState('') // '': the team file's models
+  const [choices, setChoices] = useState<ModelChoice[]>([])
+  useEffect(() => {
+    if (!models) return
+    let alive = true
+    models()
+      .then((m) => alive && setChoices(m))
+      .catch(() => alive && setChoices([]))
+    return () => {
+      alive = false
+    }
+  }, [models])
   const [pick, setPick] = useState<RoutePick | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -525,7 +546,7 @@ export function StartForm({ onStart, onCancel, preview, refreshMs = PREVIEW_REFR
     try {
       const src = source.trim()
       const t = team === 'team.json' ? undefined : team // the app's default team file needs no name
-      await onStart(text.trim(), { ...(src ? { source: src } : {}), ...(t ? { team: t } : {}) })
+      await onStart(text.trim(), { ...(src ? { source: src } : {}), ...(t ? { team: t } : {}), ...(model ? { model } : {}) })
     } catch (x) {
       setErr(errorText(x))
     } finally {
@@ -546,6 +567,20 @@ export function StartForm({ onStart, onCancel, preview, refreshMs = PREVIEW_REFR
       <p className="kt-dim kt-req-hint">写一句话就行：编排器按需求组队，团队先把它整理成范围、验收标准和分工，你在关卡上批准后才往下做。</p>
       <textarea id="kt-req" value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder={SCENARIOS[0].text} />
       {preview && team === 'auto' && <TeamPick pick={pick} />}
+      {choices.length > 0 && (
+        <label className="kt-start-field kt-start-model">
+          <span>模型（这次运行的全部角色都用它）</span>
+          <select value={model} onChange={(e) => setModel(e.target.value)} title={choices.find((c) => c.id === model)?.description || '按团队文件里写的模型'}>
+            <option value="">按团队设置</option>
+            {choices.map((c) => (
+              <option key={c.id} value={c.id} title={c.description}>
+                {modelLabel(c)}
+              </option>
+            ))}
+          </select>
+          {model && choices.find((c) => c.id === model)?.description && <small className="kt-dim">{choices.find((c) => c.id === model)?.description}</small>}
+        </label>
+      )}
       <details className="kt-start-more" open={team !== 'auto' || !!source}>
       <summary>高级选项</summary>
       <div className="kt-start-row">
@@ -874,7 +909,7 @@ const TEAM_INTRO: Array<{ phase: string; title: string; roles: Array<Array<{ key
   { phase: '✓ 评审关卡', title: '独立、只读，要改就打回', roles: [[{ key: 'reviewer', title: '评审', does: '最多打回两轮，然后交给人' }]] },
 ]
 
-export function EmptyStart({ onStart, preview }: { onStart: StartFn; preview?: PreviewFn }) {
+export function EmptyStart({ onStart, preview, models }: { onStart: StartFn; preview?: PreviewFn; models?: ModelsFn }) {
   return (
     <section className="kt-empty" data-testid="kt-empty" aria-label="还没有运行">
       <div className="kt-empty-hero">
@@ -911,7 +946,7 @@ export function EmptyStart({ onStart, preview }: { onStart: StartFn; preview?: P
           </li>
         ))}
       </ol>
-      <StartForm onStart={onStart} preview={preview} />
+      <StartForm onStart={onStart} preview={preview} models={models} />
     </section>
   )
 }

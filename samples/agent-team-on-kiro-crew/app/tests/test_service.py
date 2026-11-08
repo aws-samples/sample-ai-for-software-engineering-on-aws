@@ -275,3 +275,49 @@ def test_a_run_signed_before_the_signature_merged_its_pr_is_merged_once_when_the
     sig = again.runs[rid].s["signoff"]
     assert sig["merged"] == git(repo, "rev-parse", "--short", "main") and git(repo, "rev-parse", "main") == git(repo, "rev-parse", branch)
     assert again.runs[rid].pr()["state"] == "merged"
+
+
+def test_the_start_form_lists_kiro_crews_models_read_at_most_once_a_minute(tmp_path):
+    calls = []
+
+    class Gw:
+        async def models(self):
+            calls.append(1)
+            return [{"model_id": "kimi-k3", "model_name": "kimi-k3", "description": "Kimi K3 is a Kiro Excluded Model.",
+                     "rate_multiplier": 2.4}, {"model_id": "Not an id", "model_name": "x"}]
+
+    svc, routes = make(tmp_path, FakeManager(), sessions=SimpleNamespace(gw=Gw()))
+
+    async def go():
+        r = await call(routes, "GET", "/models")
+        assert r.status == 200 and r.body == {"models": [{"id": "kimi-k3", "name": "kimi-k3", "rate": 2.4,
+                                                          "description": "Kimi K3 is a Kiro Excluded Model."}]}
+        assert (await call(routes, "GET", "/models")).body["models"][0]["id"] == "kimi-k3" and len(calls) == 1
+        r = await call(routes, "GET", "/models", owner=False)
+        assert (r.status, r.code) == (403, "owner_only")
+
+    asyncio.run(go())
+
+
+def test_a_model_picked_for_the_run_is_every_roles_model_a_roles_own_included(tmp_path):
+    mgr = FakeManager()
+    svc, routes = make(tmp_path, mgr, tick_s=60)
+
+    async def go():
+        await svc.start()
+        try:
+            body = {"requirement": "给总部做一个内部通讯录", "team": "team-aidlc.json"}
+            r = await call(routes, "POST", "/runs", json_body={**body, "model": "kimi-k3"})
+            assert r.status == 200, r.body
+            roles = (await call(routes, "GET", f"/board?run={r.body['run']}")).body["run"]["roles"]
+            assert {x["model"] for x in roles} == {"kimi-k3"}  # the architect, compliance and reviewer name opus in the file
+            await call(routes, "POST", f"/runs/{r.body['run']}/stop")
+            r = await call(routes, "POST", "/runs", json_body=body)  # no model picked: the team file's own
+            roles = (await call(routes, "GET", f"/board?run={r.body['run']}")).body["run"]["roles"]
+            assert {x["key"]: x["model"] for x in roles}["architect"] == "claude-opus-5.5"
+            assert {x["key"]: x["model"] for x in roles}["intent"] == "claude-sonnet-5.5"
+            await call(routes, "POST", f"/runs/{r.body['run']}/stop")
+        finally:
+            await svc.stop()
+
+    asyncio.run(go())

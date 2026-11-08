@@ -164,6 +164,12 @@ class Gateway:
         rows = data.get("agents") if isinstance(data, dict) else data
         return [r for r in rows or [] if isinstance(r, dict)]
 
+    async def models(self) -> list[dict[str, Any]]:
+        """The models Kiro Crew offers (``/api/models``, in the app's permissions): id, name, description, credit rate."""
+        data = await self.request("GET", "/api/models")
+        rows = data.get("models") if isinstance(data, dict) else data
+        return [r for r in rows or [] if isinstance(r, dict)]
+
     async def knowledge_sources(self) -> list[dict[str, Any]]:
         """The knowledge base's sources (「知识库 → 来源」), with their item counts and sync state."""
         data = await self.request("GET", "/api/knowledge/sources")

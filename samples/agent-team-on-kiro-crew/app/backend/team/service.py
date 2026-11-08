@@ -14,7 +14,8 @@ from typing import Any, Callable
 from . import board, checks, cto as cto_mod, outputs, routing
 from . import standards as standards_mod
 from . import store as store_mod
-from .constants import APP_NAME, APP_ROOT, TARGET_TEMPLATE, TASK_TEMPLATE_FILE, TEAM_DIR, TEAM_FILE, TICK_S, WORK_ROOT
+from .constants import (APP_NAME, APP_ROOT, MODEL_RE, MODELS_TTL_S, TARGET_TEMPLATE, TASK_TEMPLATE_FILE, TEAM_DIR,
+                        TEAM_FILE, TICK_S, WORK_ROOT)
 from .gateway import Gateway, GatewayError
 from .sessions import SessionManager
 from .httpkit import AppError
@@ -66,6 +67,7 @@ class Service:
         self.crew: dict[str, Any] = {"at": float("-inf"), "members": None, "knowledge": None, "error": ""}
         self._live_runs: set[str] = set()  # the runs seen going last pulse: one that has ended since keeps its roster
         self._events_cache: dict[str, tuple[int, list[dict[str, Any]]]] = {}  # rid → (seq, every event): the CTO view
+        self._models: tuple[float, list[dict[str, Any]]] | None = None  # (read at, the models): the start form's list
 
     def manager(self) -> Any:
         """The agent manager the runs, the board and 产出 use: the role sessions."""
@@ -165,6 +167,26 @@ class Service:
                 errors.append(f"{key}: {exc}"[:160])
         self.crew["error"] = "；".join(errors)
 
+    async def models(self) -> dict[str, Any]:
+        """开工 form's 模型: the models Kiro Crew offers (id, name, what it is, credit rate), read at most every
+        MODELS_TTL_S; an empty list (and why) when Kiro Crew does not answer, and the form offers the team's own then."""
+        if self._models is not None and time.monotonic() - self._models[0] < MODELS_TTL_S:
+            return {"models": self._models[1]}
+        try:
+            rows = await self.sessions.gw.models()
+        except (GatewayError, AttributeError) as exc:
+            return {"models": [], "error": f"{exc}"[:160]}
+        out = []
+        for r in rows:
+            mid = str(r.get("model_id") or r.get("id") or "")
+            if MODEL_RE.match(mid):
+                rate = r.get("rate_multiplier")
+                out.append({"id": mid, "name": str(r.get("model_name") or r.get("name") or mid),
+                            "description": str(r.get("description") or "")[:300],
+                            "rate": rate if isinstance(rate, (int, float)) and not isinstance(rate, bool) else None})
+        self._models = (time.monotonic(), out)
+        return {"models": out}
+
     async def freeze_roster(self, run: TeamRun) -> None:
         """A run that just ended keeps the team's members as they were then (Crew's 「代理」 page, its workspace): looking
         back at it later shows that team, not whoever joined since. Runs that ended before this never got one."""
@@ -196,8 +218,8 @@ class Service:
 
     async def create_run(self, requirement: str, model: str | None = None, source: str | None = None,
                          team_name: str | None = None) -> str:
-        """One run at a time: every run spends real credits. *model* (optional) replaces the team's default model
-        for every role of this run that does not name its own. *source* (optional) is an existing project the team
+        """One run at a time: every run spends real credits. *model* (optional, picked in the start form) is the model
+        of every role of this run, a role the team file gives a model of its own included. *source* (optional) is an existing project the team
         takes over instead of the demo template; *team_name* (optional) is a ``team-*.json`` under team/."""
         if not self.started:
             raise AppError("app 还没启动好，稍后再试", "not_started", 503)
@@ -225,7 +247,8 @@ class Service:
             if team.get("needs_source") and src is None:
                 raise AppError("这个团队要在一个已有的项目上做事：先指定项目目录（source）", "needs_source")
             if model:
-                team = {**team, "defaults": {**team.get("defaults", {}), "model": model}}
+                team = {**team, "defaults": {**team.get("defaults", {}), "model": model},
+                        "roles": [{**r, "model": model} if r.get("model") else r for r in team["roles"]]}
             rid = new_rid(self.runs)
             state = new_state(rid, requirement, team, template, self.work_root, self._deps.template, self._deps.now(),
                               source=src)
