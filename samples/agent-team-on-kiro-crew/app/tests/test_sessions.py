@@ -37,10 +37,13 @@ class FakeGateway:
         return list(self.slot_rows.values())
 
     absent = ()  # Crew members that are not there (a slot asking for one as a member gets 409)
+    templates = None  # the template files of ~/.kiro/agents (None: any template asked for is there)
 
     async def create_slot(self, name, title, folder_id, model="", memory_mode="incognito", agent="", agent_kind=""):
         if agent and agent_kind == "member" and agent in self.absent:
             raise GatewayError(409, "no such member", "agent_choice_unavailable")
+        if agent and agent_kind == "template" and self.templates is not None and agent not in self.templates:
+            raise GatewayError(409, "no such template", "agent_choice_unavailable")
         self.calls.append(("agent", agent, agent_kind))
         self.slot_rows[name] = {"key": name, "title": title, "folder_id": folder_id, "app": "aidlc-team", "running": False}
         self.msgs[name] = []
@@ -120,6 +123,7 @@ def test_a_role_boots_its_crew_member_or_the_template_of_that_name_and_its_knowl
     async def go():
         gw, mgr = make(tmp_path)
         gw.absent = ("taoyuan-motion-agent",)
+        gw.templates = {"aidlc-product-agent", "taoyuan-motion-agent"}  # Kiro Crew 0.8/0.9: templates named as members
         gw.script = [[{"role": "tool", "content": "🔧 Running: @kirocrew-core/local_knowledge_search",
                        "meta": {"tool_name": "local_knowledge_search", "mcp_server": "kirocrew-core",
                                 "input": '{"query": "年会抽奖规则 RULE-1"}'}},
@@ -137,6 +141,21 @@ def test_a_role_boots_its_crew_member_or_the_template_of_that_name_and_its_knowl
         await settle(mgr, gw, product.slot)
         hits = mgr.knowledge_hits(product.id)
         assert [(h["tool"], h["detail"]) for h in hits] == [("查知识库", "年会抽奖规则 RULE-1")]
+
+    asyncio.run(go())
+
+
+def test_on_kiro_crew_0_11_a_role_boots_its_member_template(tmp_path):
+    async def go():
+        gw, mgr = make(tmp_path)
+        gw.templates = {"aidlc-product-agent-template"}  # scripts/install-example.sh: <member>-template
+        gw.script = [[{"role": "assistant", "content": "DONE: ok", "meta": {}}]]
+        info = mgr.spawn_session("t", parent_session_key="aidlc-team:r9", cwd=str(tmp_path / "a" / "b" / "c"),
+                                 title="产品 agent", agent="aidlc-product-agent")
+        await asyncio.sleep(0)
+        await asyncio.gather(*mgr._tasks)
+        assert [c[1:] for c in gw.calls if c[0] == "agent"] == [("aidlc-product-agent-template", "template")]
+        assert mgr.agent_of(info.id) == {"name": "aidlc-product-agent", "kind": "template"}
 
     asyncio.run(go())
 

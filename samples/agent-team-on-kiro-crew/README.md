@@ -279,7 +279,8 @@ bash setup.sh
    It asks once whether the app may auto-approve the sessions it opens (see [Guardrails](#guardrails)). If Kiro Crew
    keeps its trusted apps in a local configuration file that the API cannot change, setup says so: add `aidlc-team`
    to the trusted apps in Kiro Crew's settings and run `setup.sh` again;
-3. installs the example: files under `~/workplace/taoyuan/`, 15 agent templates in `~/.kiro/agents/`, a Kiro Crew
+3. installs the example: files under `~/workplace/taoyuan/`, 15 agent templates in `~/.kiro/agents/`
+   (`<member>-template.json`, since Kiro Crew 0.11 does not let a member share its template's name), a Kiro Crew
    workspace, 15 members and a knowledge source. What exists already is kept; an agent template with the same name
    and other content is backed up to `~/.kiro/agents/.aidlc-team-sample-backup/` before it is replaced;
 4. waits until Kiro Crew has indexed the knowledge source.

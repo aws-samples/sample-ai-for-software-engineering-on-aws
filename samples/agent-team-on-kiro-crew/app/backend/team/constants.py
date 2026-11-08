@@ -41,7 +41,8 @@ def _node() -> str:
         return _os.environ["KIROCREW_TEAM_NODE"]
     nvm = sorted(_glob.glob(_os.path.expanduser("~/.nvm/versions/node/v*/bin/node")),
                  key=lambda p: [int(x) for x in p.split("/v")[-1].split("/")[0].split(".") if x.isdigit()], reverse=True)
-    found = [p for p in ("/opt/homebrew/bin/node", _shutil.which("node") or "", "/usr/local/bin/node", *nvm)
+    found = [p for p in ("/opt/homebrew/bin/node", _shutil.which("node") or "", "/usr/local/bin/node",
+                         _os.path.expanduser("~/.local/bin/node"), *nvm)  # ~/.local/bin: not on the gateway's PATH
              if p and _os.access(p, _os.X_OK)]
     for path in found:
         try:
