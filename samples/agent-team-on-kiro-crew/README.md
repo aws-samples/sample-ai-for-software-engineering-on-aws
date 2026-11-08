@@ -260,7 +260,7 @@ agent.*
 
 - A Mac with macOS. The scripts and the app have been tested on macOS on Apple silicon only.
 - [Kiro Crew](https://kiro.dev/docs/crew/) 0.8.0 or newer, running and signed in, with credits on the account. The
-  sample has been run end to end on Kiro Crew 0.8.0.9 and 0.9.0.4.
+  sample has been run end to end on Kiro Crew 0.8.0.9, 0.9.0.4 and 0.11.2.
 - Node.js 22 or newer, git and python3 (`xcode-select --install` provides git and python3).
 - Network access to registry.npmjs.org for the board's build dependencies (about 100 MB).
 
