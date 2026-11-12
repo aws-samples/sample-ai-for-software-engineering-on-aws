@@ -293,7 +293,9 @@ Keep the folder where it is after setup: Kiro Crew installs the app from it.
    **团队看板** (team board) in the app bar.
 2. Click **新需求** (new requirement). Pick the ready-made promotion scenario to fill in the box, or write your own
    requirement in one sentence. Leave the team on automatic: the preview shows which team the words select, which
-   members it uses and which standards apply. Click **交给团队** (hand to the team).
+   members it uses and which standards apply. Leave **模型** (model) on **按团队设置** (the team's setting), or pick
+   one of the models Kiro Crew offers for every role of this run; the list shows each model's credit rate and Kiro's
+   description of it, including whether it is a Kiro Excluded Model. Click **交给团队** (hand to the team).
 3. Watch the team graph. Hover over a role to see its task, what it did and the credits it used, and to open its
    Kiro Crew session. The test wall turns green as checks pass; failures go back to their owners.
 4. At each gate, click **✓ 批准** (approve), **讨论** (discuss) or **退回** (send back). The dialog shows the role's

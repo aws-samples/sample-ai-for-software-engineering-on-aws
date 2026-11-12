@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppApi, useNavigate, type AppApi } from '@kirocrew/app-sdk'
-import type { GateDecision, RunDetail, RoutePick } from './types'
+import type { GateDecision, ModelChoice, RunDetail, RoutePick } from './types'
 import { Conveyor } from './board/Conveyor'
 import type { BoardDiff } from './board/diff'
 import type { Item } from './board/engine'
@@ -27,7 +27,7 @@ import { EventFeed } from './board/EventFeed'
 import { LIVE, PHASES, POLL_MS, fmtClock, isRunActive, paths } from './board/format'
 import { FolderPanel } from './board/Folder'
 import { OutputsDrawer, type OutputsTarget } from './board/Outputs'
-import { EmptyStart, ExpertStrip, GateDialog, Kpis, StartForm, StopConfirm, TopBar, type DeliveryPick, type GateAnswers, type GateRisk, type PreviewFn } from './board/Header'
+import { EmptyStart, ExpertStrip, GateDialog, Kpis, StartForm, StopConfirm, TopBar, type DeliveryPick, type GateAnswers, type GateRisk, type ModelsFn, type PreviewFn } from './board/Header'
 import { ClockContext, useReducedMotion, type SnapshotClock } from './board/hooks'
 import { Lanes } from './board/Lanes'
 import { layoutGraph, visibleGraph } from './board/layout'
@@ -255,11 +255,12 @@ export function TeamPage({ pollMs = POLL_MS, entry, onCto, onItem, onRun, onBack
   }, [projection, exitProjection, outputs])
 
   const start = useCallback(
-    async (requirement: string, opts?: { source?: string; team?: string }) => {
+    async (requirement: string, opts?: { source?: string; team?: string; model?: string }) => {
       const body: Record<string, string> = {}
       if (requirement) body.requirement = requirement
       if (opts?.source) body.source = opts.source
       if (opts?.team) body.team = opts.team
+      if (opts?.model) body.model = opts.model
       const res = await api.post<{ run?: string } | null>(paths.runs(), body)
       const id = typeof res?.run === 'string' ? res.run : null
       setStartOpen(false)
@@ -324,6 +325,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onCto, onItem, onRun, onBack
     [api, run, reload],
   )
   const preview = useCallback<PreviewFn>((requirement) => api.post<RoutePick>(paths.route(), { requirement }), [api])
+  const models = useCallback<ModelsFn>(() => api.get<{ models?: ModelChoice[] } | null>(paths.models()).then((r) => r?.models ?? []), [api])
   const hide = useCallback(
     async (id: string) => {
       await api.post(paths.hide(id), {})
@@ -399,10 +401,10 @@ export function TeamPage({ pollMs = POLL_MS, entry, onCto, onItem, onRun, onBack
           </div>
         )}
         {!board && loading && <p className="kt-loading">正在连接看板…</p>}
-        {!projection && !inReplay && startOpen && run && <StartForm onStart={start} preview={preview} onCancel={() => setStartOpen(false)} />}
+        {!projection && !inReplay && startOpen && run && <StartForm onStart={start} preview={preview} models={models} onCancel={() => setStartOpen(false)} />}
         {!projection && !inReplay && stopAsk && run && <StopConfirm run={run} onConfirm={stop} onCancel={() => setStopAsk(false)} />}
         {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : (gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset) || GATE_PRESETS[gateLane?.gate_label || '']} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: l.assignment }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
-        {board && !run && board.runs.length === 0 && <EmptyStart onStart={start} preview={preview} />}
+        {board && !run && board.runs.length === 0 && <EmptyStart onStart={start} preview={preview} models={models} />}
         {run && lay && (
           <>
             <Kpis key={`${run.id}${inReplay ? ':replay' : ''}`} run={run} reducedMotion={reducedMotion} onRole={onRole} />

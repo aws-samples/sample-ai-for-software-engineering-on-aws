@@ -13,7 +13,7 @@ detail** (交付详情, one delivery) and the **team board** (团队看板, how 
 
 | Step | What happens | Code |
 | --- | --- | --- |
-| 1 Requirement | The team is chosen by the words in the requirement: every team file with a `scope` and without `"routable": false` matches when one of its `keywords` occurs; the lowest `priority` wins; with no match the `fallback` team runs. One run at a time | `routing.route`, `service.create_run` |
+| 1 Requirement | The team is chosen by the words in the requirement: every team file with a `scope` and without `"routable": false` matches when one of its `keywords` occurs; the lowest `priority` wins; with no match the `fallback` team runs. The start form may pick the run's model from the models Kiro Crew offers (`GET /models`); every role then uses it, a role with its own `model` included. One run at a time | `routing.route`, `service.create_run`, `service.models` |
 | 2 Team | The team file is validated (dependency order, keys, gates, paths inside the app). The task template, the company standards that match, the roster and the knowledge source are read. An optional role whose member is missing sits the run out | `team.check_team`, `standards.py`, `team.leave_out_unhired` |
 | 3 Repository | `~/workplace/aidlc-team/runs/<run>/repo` starts from the team's `starter`, its `source` or `demo/target-template`; the requirement goes into the README; the `spec_pack` is overlaid, including its `tests/enterprise/` checks | `team._setup`, `gitwork.create_repo` |
 | 4 Tick | Every 2 seconds the sessions are polled and each live run advances one step | `service.pulse`, `team.TeamRun.tick` |
@@ -74,7 +74,7 @@ Role level:
 | `delivery` | File on the run branch with the proposed delivery labels |
 | `optional` | Sits the run out when its member does not exist or the approved work split leaves it out |
 | `deploy` `{mode: local, port, health}` | Deploy on this machine |
-| `model` | The role's own model |
+| `model` | The role's own model (a model picked in the start form replaces it for that run) |
 
 ## Test
 

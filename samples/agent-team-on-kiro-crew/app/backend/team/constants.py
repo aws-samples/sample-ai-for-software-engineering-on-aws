@@ -2,6 +2,7 @@
 
 import glob as _glob
 import os as _os
+import re as _re
 import shutil as _shutil
 import subprocess as _subprocess
 from pathlib import Path as _Path
@@ -55,6 +56,8 @@ def _node() -> str:
 
 
 NODE_BIN = _node()
+MODEL_RE = _re.compile(r"^[a-z0-9][a-z0-9.\-]{1,63}$")  # a model id POST /runs takes (Kiro Crew's ids: kimi-k3, claude-sonnet-5.5)
+MODELS_TTL_S = 60.0  # the start form's model list is read from Kiro Crew at most this often
 # The real git before macOS's /usr/bin/git, an xcrun shim that costs ~30 ms per call.
 GIT_BIN = _binary("KIROCREW_TEAM_GIT", ("/opt/homebrew/bin/git", "/usr/local/bin/git",
                                          "/Library/Developer/CommandLineTools/usr/bin/git",
