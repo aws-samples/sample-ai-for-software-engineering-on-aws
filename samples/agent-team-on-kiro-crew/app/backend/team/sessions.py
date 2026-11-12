@@ -8,8 +8,10 @@ through its HTTP API (``gateway.py``) and never reaches into the Crew process.
 carry what ``agent_fields`` below reads. Tests pass a fake with the same surface.
 
 A role may name the Crew member it is (``member``, e.g. ``aidlc-product-agent`` of the 「代理」 page): its session boots
-that member's template (prompt, tools, model). A member that is not there (deleted, not added yet) falls back to the
-template file of the same name, else to Crew's default agent; ``agent_kind`` says which it got.
+that member's template (prompt, tools, model): the template ``<member>-template`` itself where scripts/install-example.sh
+wrote one (Kiro Crew 0.11), else the member (Kiro Crew 0.8 and 0.9, where the template had the member's name). A member
+that is not there (deleted, not added yet) falls back to the template file of the same name, else to Crew's default
+agent; ``agent_kind`` says which it got.
 
 What a session takes (checked by ``scripts/probe-sessions.py``): ``POST /api/chat/slots`` in the run's folder, then
 its project directory set to the role's worktree (the agent's cwd), then ``trust`` for that one slot (the app holds
@@ -42,6 +44,7 @@ RESENDS = 2             # a turn KiroCrew refused to start is sent again at most
 NO_START_S = 90.0       # sent, idle and nothing in the transcript for this long: send again
 STALL_S = 180.0         # busy with no new transcript row for this long: shown as 卡住
 STUCK_S = 240.0         # busy with nothing new for this long: the turn is stopped and the agent told to carry on
+TEMPLATE_SUFFIX = "-template"  # the member templates scripts/install-example.sh writes (<member>-template)
 NUDGES = 2              # a turn cut short (a transient model error, or stuck) is continued at most this often
 TRANSIENT = re.compile(r"transient|5\d\d|runtime failed|timed? ?out|overloaded|rate.?limit|throttl|temporarily|unavailable",
                        re.I)
@@ -389,15 +392,19 @@ class SessionManager:
         self._dirty = True
 
     async def _create(self, info: SessionInfo, name: str, folder_id: str) -> dict[str, Any]:
-        """The slot, booting the role's Crew member; its template file when the member is not there; else the default."""
-        kinds = ("member", "template", "") if info.agent else ("",)
-        for kind in kinds:
+        """The slot, booting the role's member template ``<member>-template`` (on Kiro Crew 0.11 a member that has its
+        own crewmate file runs its chat on Crew's conductor, which advertises no mode of the member's name, so the session
+        boots the template itself); else the Crew member (0.8 and 0.9, where the template has the member's name); else
+        its template file of the same name; else Crew's default agent."""
+        tries = ([("template", info.agent + TEMPLATE_SUFFIX), ("member", info.agent), ("template", info.agent)]
+                 if info.agent else []) + [("", "")]
+        for kind, agent in tries:
             try:
                 row = await self.gw.create_slot(name=name, title=info.title, folder_id=folder_id, model=info.model,
-                                                agent=info.agent if kind else "", agent_kind=kind)
+                                                agent=agent, agent_kind=kind)
             except GatewayError as exc:
                 if kind and exc.status in (400, 404, 409):
-                    self.log.info("aidlc-team: %s as a %s is not there (%s), trying the next", info.agent, kind, exc.code)
+                    self.log.info("aidlc-team: %s as a %s is not there (%s), trying the next", agent, kind, exc.code)
                     continue
                 raise
             info.agent_kind = kind

@@ -260,7 +260,7 @@ agent.*
 
 - A Mac with macOS. The scripts and the app have been tested on macOS on Apple silicon only.
 - [Kiro Crew](https://kiro.dev/docs/crew/) 0.8.0 or newer, running and signed in, with credits on the account. The
-  sample has been run end to end on Kiro Crew 0.8.0.9 and 0.9.0.4.
+  sample has been run end to end on Kiro Crew 0.8.0.9, 0.9.0.4 and 0.11.2.
 - Node.js 22 or newer, git and python3 (`xcode-select --install` provides git and python3).
 - Network access to registry.npmjs.org for the board's build dependencies (about 100 MB).
 
@@ -279,7 +279,8 @@ bash setup.sh
    It asks once whether the app may auto-approve the sessions it opens (see [Guardrails](#guardrails)). If Kiro Crew
    keeps its trusted apps in a local configuration file that the API cannot change, setup says so: add `aidlc-team`
    to the trusted apps in Kiro Crew's settings and run `setup.sh` again;
-3. installs the example: files under `~/workplace/taoyuan/`, 15 agent templates in `~/.kiro/agents/`, a Kiro Crew
+3. installs the example: files under `~/workplace/taoyuan/`, 15 agent templates in `~/.kiro/agents/`
+   (`<member>-template.json`, since Kiro Crew 0.11 does not let a member share its template's name), a Kiro Crew
    workspace, 15 members and a knowledge source. What exists already is kept; an agent template with the same name
    and other content is backed up to `~/.kiro/agents/.aidlc-team-sample-backup/` before it is replaced;
 4. waits until Kiro Crew has indexed the knowledge source.

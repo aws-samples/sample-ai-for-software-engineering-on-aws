@@ -4,7 +4,8 @@
 #
 #   bash scripts/install-example.sh
 #
-# Creates: ~/workplace/taoyuan/ (knowledge files, data, brand), 15 Kiro agent templates in ~/.kiro/agents/, the Kiro
+# Creates: ~/workplace/taoyuan/ (knowledge files, data, brand), 15 Kiro agent templates in ~/.kiro/agents/
+# (<member>-template.json: Kiro Crew 0.11 does not let a member share its template's name), the Kiro
 # Crew workspace "taoyuan", 15 members (Customize -> Teammates) and the knowledge source "桃源科技". A template that
 # already exists with other content is backed up to ~/.kiro/agents/.aidlc-team-sample-backup/ before it is replaced.
 # Everything it creates is recorded in .install-state.json, and cleanup.sh removes only that.
@@ -58,8 +59,19 @@ fi
 echo "4/5 Team members (workspace $WORKSPACE)"
 for m in "${MEMBERS[@]}"; do
   if has /api/agents agents name "$m"; then echo "   $m exists"; continue; fi
-  desc="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["description"])' "$HOME/.kiro/agents/$m.json")"
-  post /api/agents "$(body name="$m" kiro_agent="$m" workspace="$WORKSPACE" display_name="${desc%% · *}" description="$desc")"
+  # A template named like the member (an earlier install of this sample wrote them) makes Kiro Crew 0.11 refuse the
+  # member: this sample's own goes, anyone else's is backed up first (cleanup.sh puts it back)
+  old="$HOME/.kiro/agents/$m.json"
+  if [ -e "$old" ]; then
+    if ! state has templates "$m" && ! state has backed_up "$m"; then
+      keep="$BACKUP/$m.json"; [ -e "$keep" ] && keep="$BACKUP/$m.$(date +%Y%m%d%H%M%S).json"
+      mkdir -p "$BACKUP" && cp -p "$old" "$keep" && state add backed_up "$m"
+      echo "   $m.json would block the member $m: backed up to $keep"
+    fi
+    rm -f "$old"
+  fi
+  desc="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["description"])' "$HOME/.kiro/agents/$m-template.json")"
+  post /api/agents "$(body name="$m" kiro_agent="$m-template" workspace="$WORKSPACE" display_name="${desc%% · *}" description="$desc")"
   state add members "$m"
   echo "   + $m"
 done

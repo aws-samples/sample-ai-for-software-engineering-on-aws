@@ -3,8 +3,10 @@ verbatim as the prompt, plus how to work in Kiro Crew at that company) and one e
 
     python3 make_templates.py <vendor/aidlc-workflows/agents> <out dir> <kirocrew binary>
 
-桃源科技: the 14 experts under their official names and taoyuan-motion-agent.
-Writes <out>/<name>.json, one per agent. Nothing else is touched; scripts/install-example.sh copies them to
+桃源科技: the 14 experts under their official names and taoyuan-motion-agent. Each template is named after its member
+plus ``-template`` (aidlc-product-agent-template for the member aidlc-product-agent): Kiro Crew 0.11 does not let a
+member share its template's name.
+Writes <out>/<name>-template.json, one per agent. Nothing else is touched; scripts/install-example.sh copies them to
 ~/.kiro/agents/.
 """
 import json
@@ -31,6 +33,7 @@ TEAM = {
     "aidlc-composer-agent": ("组队 Composer", "AI-DLC 组队：按 scope 选阶段和专家"),
 }
 CUSTOM = "taoyuan-motion-agent"
+SUFFIX = "-template"  # template = member name + SUFFIX
 
 CREW = """
 
@@ -57,7 +60,7 @@ def official_prompt(name: str) -> str:
 
 def template(name: str, display: str, desc: str, prompt: str) -> dict:
     return {
-        "name": name,
+        "name": name + SUFFIX,
         "description": f"{display} · {desc}",
         "prompt": prompt,
         "tools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],
@@ -85,7 +88,7 @@ AWS AI-DLC 的 14 位官方专家里没有动效这个角色。桃源科技的�
 
 
 def write(name: str, t: dict) -> None:
-    (OUT / f"{name}.json").write_text(json.dumps(t, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (OUT / f"{name}{SUFFIX}.json").write_text(json.dumps(t, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> None:
