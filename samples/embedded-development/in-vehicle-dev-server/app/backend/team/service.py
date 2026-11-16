@@ -56,7 +56,8 @@ class Service:
         self.team_file = Path(team_file) if team_file else TEAM_FILE
         self._opener = opener or _open_on_this_mac
         # every role's agent is a Kiro Crew chat session, opened through the gateway's chat API
-        self.sessions = sessions or SessionManager(Gateway(self.name, APP_ROOT / ".app_secret"), app=self.name,
+        gateway = Gateway(self.name, APP_ROOT / ".app_secret", app_token=getattr(ctx, "app_token", None))
+        self.sessions = sessions or SessionManager(gateway, app=self.name,
                                                    state_file=self.data_dir / "sessions.json", log=self.log,
                                                    scrub=self.scrub)
         self._agents = manager if manager is not None else self.sessions

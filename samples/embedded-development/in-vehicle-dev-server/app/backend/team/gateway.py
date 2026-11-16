@@ -1,8 +1,10 @@
 """The gateway's own chat API, called as this app (the backend runs inside the gateway process).
 
-Auth: the install secret ``<app dir>/.app_secret`` is exchanged at
-``POST /api/apps/<app>/token`` (header ``X-App-Secret``) for a 5-minute token sent as ``?token=``; it is renewed a
-minute early, and a credential refusal (``X-Auth-Required``) is retried once with a fresh one. Only loopback is
+Auth: the gateway's own app token, from ``AppContext.app_token()`` where the gateway has it (Kiro Crew keeps the
+app secret where no app code reads it, and removed the folder's ``.app_secret``); else the install secret
+``<app dir>/.app_secret``, exchanged at ``POST /api/apps/<app>/token`` (header ``X-App-Secret``). The token is sent as
+``?token=``; it is renewed a minute early, and a credential refusal (``X-Auth-Required``) is retried once with a
+fresh one. Only loopback is
 ever called, and neither the secret nor the token goes into a log line or an error message.
 """
 
@@ -12,7 +14,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
 TOKEN_MAX_AGE = 240.0
@@ -50,8 +52,10 @@ def q(key: str) -> str:
 
 class Gateway:
     def __init__(self, app: str, secret_file: Path, *, base: Callable[[], str] = base_url,
-                 clock: Callable[[], float] | None = None) -> None:
+                 clock: Callable[[], float] | None = None,
+                 app_token: Callable[[], Awaitable[str]] | None = None) -> None:
         self.app, self._secret_file, self._base = app, Path(secret_file), base
+        self._app_token = app_token  # AppContext.app_token: the gateway's token for this app, no secret needed
         self._clock = clock
         self._token: str | None = None
         self._token_at = 0.0
@@ -80,6 +84,12 @@ class Gateway:
             if self._token and self._now() - self._token_at < TOKEN_MAX_AGE:
                 return self._token
             path = f"/api/apps/{self.app}/token"
+            if self._app_token is not None and not self._secret_file.is_file():
+                token = await self._app_token()
+                if not token:
+                    raise GatewayError(0, "the gateway gave no app token (is the app enabled?)", "no_token", path)
+                self._token, self._token_at = token, self._now()
+                return token
             secret = (await asyncio.to_thread(self._secret_file.read_text, encoding="utf-8")).strip()
             if not secret:
                 raise GatewayError(0, "the app secret is empty", "no_secret", path)
