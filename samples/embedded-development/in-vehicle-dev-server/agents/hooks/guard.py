@@ -82,20 +82,22 @@ def segments(command):
     out, cur, redirect = [], [], False
     try:
         for tok in lex:
-            if tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok):
-                if cur and re.fullmatch(r"\d+", cur[-1]):  # 2>/dev/null: the fd belongs to the redirection
-                    cur.pop()
-                redirect = not tok.endswith("&") or tok in ("&>", ">&")  # the next word is its target
+            if not (tok and set(tok) <= OPERATORS):
+                if redirect:  # the target of a redirection, not a word of the command
+                    redirect = False
+                else:
+                    cur.append(tok)
                 continue
-            if tok and set(tok) <= OPERATORS:
+            # shlex merges neighbouring operators (`;>`, `&&>`, `|>`): a control part, then maybe a redirection
+            m = re.match(r"((?:&&|\|\||;|\||&(?!>)|\(|\)|`|\n)*)(.*)", tok, re.S)
+            control, rest = m.group(1), m.group(2)
+            if control or rest.endswith("("):  # also <( and >(: process substitution starts a command
                 out.append(cur)
                 cur, redirect = [], False
-            elif redirect:
-                redirect = False
-                if not re.fullmatch(r"\d+|-", tok):  # 2>&1: the fd was the target
-                    continue
-            else:
-                cur.append(tok)
+            if rest and not rest.endswith("(") and ("<" in rest or ">" in rest):
+                if cur and re.fullmatch(r"\d+", cur[-1]):  # 2>/dev/null: the fd belongs to the redirection
+                    cur.pop()
+                redirect = True  # the next word is its target (a file, or an fd after >& and <&)
     except ValueError:
         raw = re.sub(r"[\"'\\]", "", command)
         return [seg.split() for seg in re.split(r"[;&|()<>`\n]", raw)]
@@ -226,7 +228,7 @@ def judge_segment(ws, states, runs, depth=0):
             git_subcommand(unwrap(ws))[0] == "":
         return "git whose subcommand xargs supplies"
     raw, ws = ws, unwrap(ws)
-    for script in inner_scripts(raw) + inner_scripts(ws):
+    for script in dict.fromkeys(inner_scripts(raw) + inner_scripts(ws)):
         why = judge_command(script, states, runs, depth + 1)
         if why:
             return why
@@ -261,16 +263,71 @@ def judge_command(command, states, runs, depth=0):
     why = mentions_protected(command, states, runs)
     if why:
         return why
-    # Command substitutions run even inside double quotes. Each one is judged from its `$(` or backtick to the end of
-    # the line, which covers nested parentheses at the cost of judging some text after it too.
-    starts = [m.end() for m in re.finditer(r"\$\(|`", command)]
-    if len(starts) > MAX_SUBSTITUTIONS:
+    # Command substitutions run, also inside double quotes but not inside single quotes; each is judged on its own.
+    inner = substitutions(command)
+    if len(inner) > MAX_SUBSTITUTIONS:
         return f"more than {MAX_SUBSTITUTIONS} command substitutions"
-    for start in starts:
-        why = judge_words(command[start:], states, runs, depth + 1)
+    for text in inner:
+        why = judge_command(text, states, runs, depth + 1)
         if why:
             return why
     return judge_words(command, states, runs, depth)
+
+
+def close_paren(s, j):
+    """The index of the `)` that closes a `$(` whose text starts at `j`, with the quotes and substitutions inside it
+    skipped as the shell would; the end of `s` if it is not closed."""
+    n, depth, quote = len(s), 1, None
+    while j < n:
+        c = s[j]
+        if c == "\\" and quote != "'":
+            j += 2
+            continue
+        if quote == "'":
+            quote = None if c == "'" else quote
+        elif s.startswith("$(", j) and not s.startswith("$((", j):
+            j = close_paren(s, j + 2) + 1
+            continue
+        elif quote == '"':
+            quote = None if c == '"' else quote
+        elif c in "'\"":
+            quote = c
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if not depth:
+                return j
+        j += 1
+    return n
+
+
+def substitutions(command):
+    """The text of each top-level `$(...)` and backtick substitution outside single quotes. An unclosed one runs to
+    the end of the line, which errs on the side of refusing."""
+    out, i, n, quote = [], 0, len(command), None
+    while i < n:
+        c = command[i]
+        if c == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote == "'":
+            quote = None if c == "'" else quote
+        elif c == "'" and quote is None:
+            quote = "'"
+        elif c == '"':
+            quote = None if quote == '"' else '"'
+        elif c == "`":
+            end = command.find("`", i + 1)
+            end = n if end < 0 else end
+            out.append(command[i + 1:end])
+            i = end
+        elif command.startswith("$(", i) and not command.startswith("$((", i):
+            end = close_paren(command, i + 2)
+            out.append(command[i + 2:end])
+            i = end
+        i += 1
+    return out
 
 
 def judge_words(command, states, runs, depth):
@@ -315,7 +372,10 @@ def main():
             raise ValueError("not an object")
     except ValueError as e:
         return refuse(f"unreadable hook input ({e})")
-    why = judge(event)
+    try:
+        why = judge(event)
+    except Exception as e:  # noqa: BLE001 - whatever the hook cannot judge is refused
+        why = f"a call the hook could not judge ({type(e).__name__})"
     return refuse(why) if why else 0
 
 

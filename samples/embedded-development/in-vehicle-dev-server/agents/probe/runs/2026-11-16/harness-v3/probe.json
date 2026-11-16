@@ -2,7 +2,7 @@
   "kiro": "kiro-cli 2.34.0",
   "harness": "v3",
   "exit_status": 4,
-  "seconds": 6,
+  "seconds": 7,
   "hook_calls": 0,
   "hook_saw_bench_state": false,
   "tool_names": [],

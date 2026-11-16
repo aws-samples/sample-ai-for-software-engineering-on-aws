@@ -21,6 +21,10 @@ HERE = pathlib.Path(__file__).resolve().parent
 GUARD = HERE / "guard.py"
 
 REFUSED = [
+    # operators that shlex merges with a redirection, and fd redirections
+    "true&&>/dev/null git push", "true;>/dev/null git push", "true|>/dev/null git push", "(>/dev/null git push)",
+    "x=1;>a git push", "false ||>x docker ps", "<&0 git push", "2<&0 git push", ">|out git push",
+    "diff <(git push) x", "$(" * 2000 + "git push",
     # line continuations, redirections, wrapper options with values, nested substitutions, config in the environment
     "git \\\n push", "git -C repo \\\n push origin main", ">/dev/null git push", "2>/dev/null git push",
     "git >/dev/null push", "git 2>&1 push", "</dev/null docker ps", "env -u HOME git push", "env -C /tmp git push",
@@ -73,7 +77,13 @@ ALLOWED = [
     "git commit -m \"docs (docker not used)\"", "grep -rnE 'docker|podman' docs/", "grep -n 'pull\\|git push' x",
     "echo '(ssh to 127.0.0.1)'", "git reset --soft HEAD~1", "git branch -d merged", "git tag -l", "ls build/",
     "git config --get remote.origin.url", "rg 'TODO|FIXME' src", "ls /opt/cc1-sysroot/usr/include",
-    "grep -rn CMAKE_SYSROOT cmake/", "git checkout -b fix/f021", "git switch main", "command -v docker",
+    "grep -rn CMAKE_SYSROOT cmake/", "git commit -m 'docs: `docker` is not used'",
+    "echo 'run `make` then (docker build)'", "grep -n '$(docker' x",
+    "echo \"$(date)\" ; echo '(docker not used)'", "git commit -m \"fix $(date +%F) (docker not used)\"",
+    "git commit -m \"$(date)\" -m \"see the docs\"", "echo hi >&2", "ls &>log", "cat <<<'hello'",
+    "exec 3>&1; git status", "ninja -C build 2>&1 | tail -20", "cmake -S . -B build > /tmp/cfg.log 2>&1",
+    "echo $((1+2))", "[[ -f x ]] && echo y",
+    "git checkout -b fix/f021", "git switch main", "command -v docker",
     "which docker ssh",
 ]
 
@@ -127,6 +137,15 @@ class Guard(unittest.TestCase):
         for c in ALLOWED:
             with self.subTest(c):
                 self.assertEqual(run(shell(c)), (0, ""), c)
+
+    def test_long_commands_are_judged_quickly(self):
+        import time
+        for c in ("echo " + "$(date) " * 64 + "a " * 25000, "echo " + "$(date) " * 64 + "sh -c a; " * 6000,
+                  "a|" * 30000):
+            with self.subTest(len(c)):
+                t0 = time.time()
+                run(shell(c))
+                self.assertLess(time.time() - t0, 5, "a slow hook may time out, and Kiro's behaviour then is unknown")
 
     def test_known_bypasses_still_get_through(self):
         for c in GETS_THROUGH:

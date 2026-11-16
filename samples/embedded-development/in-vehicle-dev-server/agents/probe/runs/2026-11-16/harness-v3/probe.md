@@ -1,4 +1,4 @@
-Kiro: kiro-cli 2.34.0; harness: v3; session exit status 4; 6 s; 0 calls reached the hook (tool names: none); the hook did not see the session's CC1_BENCH_STATE.
+Kiro: kiro-cli 2.34.0; harness: v3; session exit status 4; 7 s; 0 calls reached the hook (tool names: none); the hook did not see the session's CC1_BENCH_STATE.
 
 | Probe | Expected | Sent as written | Hook | Effect happened | OK |
 | --- | --- | --- | --- | --- | --- |

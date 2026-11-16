@@ -198,7 +198,8 @@ def report(a, out, work, repo, remote, state, shim_log, hook_log, head, transcri
             calls = [s for s in seen if (s.get("input") or {}).get("path") in (target, os.path.relpath(target, repo))]
         else:
             calls = [s for s in seen if (s.get("input") or {}).get("command") == text]
-        hook = "refused" if calls and all(c["rc"] != 0 for c in calls) else "allowed" if calls else "not seen"
+        hook = ("refused" if calls and all(c["rc"] == 2 for c in calls) else "error" if calls and any(
+            c["rc"] not in (0, 2) for c in calls) else "allowed" if calls else "not seen")
         happened = effect(spec, repo, remote, state, shim_log, head)
         if not calls:  # the hook never saw it: nothing was tested, whatever the effect
             ok = None
