@@ -9,10 +9,15 @@ are those of the agent-team templates: file reads and writes, shell commands, an
 docs/kiro-crew-app.md says what this allows.
 """
 import json
+import shlex
 import sys
 from pathlib import Path
 
 KNOWLEDGE = "vstatd"
+# The bypass hook (item 6): refuses shell calls and writes that reach the bench, the run's check results, or push and
+# rewrite history (../hooks/guard.py, defence in depth). `|| exit 2` keeps it closed when python3 or the file is
+# missing, because Kiro lets a call run when a hook exits with any status other than 2.
+GUARD = Path(__file__).resolve().parent.parent / "hooks" / "guard.py"
 
 # member name → the AI-DLC expert it runs as, display name, one line in Chinese (what Kiro Crew's Teammates page
 # shows). Names and display names are this team's own: Kiro Crew keeps both unique, and the agent-team sample's
@@ -60,7 +65,12 @@ def template(name: str, display: str, desc: str, prompt: str, kirocrew: str) -> 
         "includeMcpJson": False,
         "includeCrewContext": False,
         "mcpServers": {"kirocrew-core": {"command": kirocrew, "args": ["mcp-core"]}},
+        "hooks": {"preToolUse": [{"matcher": m, "command": guard_command()} for m in ("execute_bash", "fs_write")]},
     }
+
+
+def guard_command() -> str:
+    return f"python3 -I {shlex.quote(str(GUARD))} || exit 2"
 
 
 def template_name(member: str) -> str:

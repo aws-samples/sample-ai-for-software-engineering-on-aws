@@ -187,7 +187,8 @@ make the other paths fail too:
   patterns are easy to get around, for example with `git -C <dir> push` or a compound command, so the build server
   also holds no push credentials.
 - A probe test tries these commands and their variants against the agent configurations. Run it again after each
-  Kiro or Kiro Crew update, because how rules match commands can change between versions.
+  Kiro or Kiro Crew update, because how rules match commands can change between versions. The hook and the probe are
+  in [agents/](agents/README.md), with what the hook does not stop and the probe's last run.
 
 Neither server needs `--trust-all-tools`, and the sample's agent configurations do not use it.
 
@@ -409,7 +410,9 @@ been dry-run once.
    under its [Not yet verified](mcp/bench/README.md#not-yet-verified). The Kiro Crew app (item 8) does not use the
    servers yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting it to them is open.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
-   Kiro Crew app (item 8) does not need this item's configurations.
+   Kiro Crew app (item 8) does not need this item's configurations. *Done in part (2026-11-16):* the bypass hook in
+   the roles' templates, its tests and the permission probe, run with kiro-cli 2.34.0 ([agents/](agents/README.md)).
+   Open: the templates in a Kiro Crew session, an agent in the Kiro CLI V3 format, the Kiro IDE.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
    Record the time and credits it used.
@@ -434,7 +437,7 @@ The optional model-based profile adds `model/` (the model, its generated code an
 | `knowledge/` | Synthetic interface specification, CAN database, VSS mapping, platform notes, fact entries, team rules, findings backlog, consistency check |
 | `checks/` | The seven checks, the release check, the evidence page generator, their limits and their tests |
 | `mcp/` | `build` and `bench` servers and their guardrail tests |
-| `agents/` | `kiro-crew/make_templates.py`, the roles' Kiro agent templates; to come (item 6): the Kiro configurations, the bypass hook, the permission probe test |
+| `agents/` | `kiro-crew/make_templates.py`, the roles' Kiro agent templates with the bypass hook (`hooks/`), and the permission probe (`probe/`); see [agents/README.md](agents/README.md) |
 | `app/` | The Kiro Crew app `vstatd-team`: orchestrator, board and scorecard ([app/README.md](app/README.md)) |
 | `vendor/` | The four AI-DLC expert definitions the templates use, unmodified ([vendor/aidlc-workflows/SOURCE.md](vendor/aidlc-workflows/SOURCE.md)) |
 | `scripts/` | What `setup.sh` and `cleanup.sh` share: the install record, the templates, the team's install, and their tests |
