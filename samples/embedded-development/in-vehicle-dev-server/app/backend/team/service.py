@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from . import bench as bench_mod
 from . import audit, board, checks, display, flow, library, messages, outputs, paths, readiness, roster, scorecard
+from . import servers as servers_mod
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -60,7 +61,7 @@ class Service:
                                                    scrub=self.scrub)
         self._agents = manager if manager is not None else self.sessions
         self._deps = Deps(store=Store(self.data_dir / "runs"), manager=self.manager,
-                          run_tests=run_tests or checks.run_checks, template=Path(template) if template else None,
+                          run_tests=run_tests or servers_mod.run_tests, template=Path(template) if template else None,
                           scrub=self.scrub, now=now, log=self.log, members=self.member_names)
         self._loop: asyncio.Task[None] | None = None
         self._ticks: dict[str, asyncio.Task[None]] = {}
@@ -432,7 +433,8 @@ class Service:
 
     async def audit_bench(self, lang: str = "zh") -> dict[str, Any]:
         """The bench's requests no run made (the baseline set up at the console or on the board), and their outcome."""
-        out = await asyncio.to_thread(lambda: audit.bench_only(scorecard.records(), lang))
+        known = {r for run in list(self.runs.values()) for r in servers_mod.ours(run.rid, run.s.get("repo"))}
+        out = await asyncio.to_thread(lambda: audit.bench_only(scorecard.records(), lang, known))
         out["entries"] = [{**x, "what": self.scrub(x["what"]), "evidence": self.scrub(x["evidence"])} for x in out["entries"]]
         return out
 
@@ -564,9 +566,11 @@ class Service:
         """批准 / 拒绝 a bench request on the board (D3): the bench's own decide() does it, with its rules (the digest
         prefix a person typed, once, not after the timeout), recording the dashboard owner as who decided."""
         try:
-            _, sample = await asyncio.to_thread(self._default_team)
+            team, sample = await asyncio.to_thread(self._default_team)
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
+        if servers_mod.on(team):  # D17: the requests are the bench server's; a person decides at the console
+            raise AppError("servers 模式下台架请求只在操作台 bench/console.py 上批", "decide_off", 409)
         return await bench_mod.decide(sample / "bench" / "lib", rid, verdict, digest, reason)
 
     async def readiness(self, doctor: bool = False) -> dict[str, Any]:
@@ -576,7 +580,7 @@ class Service:
         try:
             team, sample = await asyncio.to_thread(self._default_team)
         except AppError as exc:  # no scenario folder recorded: setup.sh has not run
-            return {"at": now, "team": "", "items": [], "pending": [], "error": str(exc)}
+            return {"at": now, "team": "", "items": [], "pending": [], "board_decides": True, "error": str(exc)}
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
         self.probes.refresh(team, doctor=doctor)
@@ -584,7 +588,7 @@ class Service:
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
         return {"at": now, "team": str(team.get("name") or ""), "error": "",
                 "items": readiness.items(team, self.probes, kb, state, sample, now),
-                "pending": readiness.pending(team, state, now)}
+                "pending": readiness.pending(team, state, now), "board_decides": not servers_mod.on(team)}
 
     async def knowledge(self) -> dict[str, Any]:
         """知识库 (home page): the scenario's knowledge documents with figures counted now, and Crew's source state."""

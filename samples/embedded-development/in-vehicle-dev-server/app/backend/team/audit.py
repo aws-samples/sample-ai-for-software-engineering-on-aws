@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import messages, roster
+from . import servers as servers_mod
 from .constants import APP_NAME
 
 ACTORS = ("person", "agent", "app", "bench")
@@ -104,7 +105,8 @@ def where(by: str, lang: str = "zh") -> str:
     return _w(lang, "board") if BOARD_MARK in by else _w(lang, "console")
 
 
-def _bench_entry(r: dict[str, Any], app_who: str, lang: str = "zh") -> dict[str, Any] | None:
+def _bench_entry(r: dict[str, Any], app_who: str, lang: str = "zh",
+                 ours: set[str] = frozenset()) -> dict[str, Any] | None:
     at = _epoch(r.get("at"))
     if at is None:
         return None
@@ -115,7 +117,7 @@ def _bench_entry(r: dict[str, Any], app_who: str, lang: str = "zh") -> dict[str,
     bench = _w(lang, "bench")
     if ev == "request":
         by = str(r.get("requested_by") or "")
-        mine = by.startswith(APP_NAME + " ")
+        mine = by.startswith(APP_NAME + " ") or by in ours  # ours: the run's bench server sessions (D17)
         return _entry(at, "app" if mine else "bench", app_who if mine else by or bench,
                       "bench", _w(lang, "request", act=act, detail=r.get("detail") or "").rstrip("：: "), ref)
     if ev == "decision":
@@ -248,11 +250,11 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
         if entry:
             out.append({**entry, "seq": int(e["seq"]) if e.get("seq") is not None else None,
                         "flags": {**entry["flags"], **flags}})
-    me = f"{APP_NAME} {rid}"
-    mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") == me}
+    me = servers_mod.ours(rid, s.get("repo"))
+    mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") in me}
     for r in recs:
         if str(r.get("id") or r.get("request") or r.get("last_request") or "") in mine:
-            entry = _bench_entry(r, "app", lang)
+            entry = _bench_entry(r, "app", lang, me)
             if entry:
                 out.append(entry)
     out.sort(key=lambda x: x["at"])
@@ -264,9 +266,11 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
             "entries": out}
 
 
-def bench_only(recs: list[dict[str, Any]], lang: str = "zh") -> dict[str, Any]:
-    """The bench's request, decision and action records whose request no run of this app made: newest BENCH_SHOWN."""
-    ours = {str(r.get("id")) for r in recs if r.get("event") == "request" and str(r.get("requested_by") or "").startswith(APP_NAME + " ")}
+def bench_only(recs: list[dict[str, Any]], lang: str = "zh", known: set[str] = frozenset()) -> dict[str, Any]:
+    """The bench's request, decision and action records whose request no run of this app made (*known*: the runs'
+    bench server sessions, D17): newest BENCH_SHOWN."""
+    ours = {str(r.get("id")) for r in recs if r.get("event") == "request" and (
+        str(r.get("requested_by") or "").startswith(APP_NAME + " ") or r.get("requested_by") in known)}
     out = []
     for r in recs:
         if r.get("event") in ("request", "decision", "action") and str(r.get("id") or "") not in ours:

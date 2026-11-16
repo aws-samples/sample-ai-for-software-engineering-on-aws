@@ -320,16 +320,44 @@ def check_argv(check: dict[str, Any], results: Path, values: dict[str, Path | No
     return argv
 
 
+def add_result(rows: list[dict[str, Any]], cases: list[dict[str, Any]], check: dict[str, Any], res: dict[str, Any],
+               project: Path, team: dict[str, Any], ms: int) -> None:
+    """One check's result on the test wall: its row, and a case per owner it goes back to (D7)."""
+    name = check["name"]
+    groups = attribute(check, res, project, team) if res["verdict"] != "PASS" else {check.get("owner"): []}
+    rows.append({"name": name, "verdict": res["verdict"], "tier": res.get("tier"), "summary": res["summary"],
+                 "owners": [o for o in groups if o], "files": files_named(res["reasons"], project),
+                 "reasons": res["reasons"][:20], "ms": ms})
+    for owner, reasons in groups.items():
+        cases.append({"id": name if len(groups) == 1 else f"{name}#{owner or 'person'}", "ac": name,
+                      "name": f"{name}.sh", "file": (files_named(reasons, project) or [""])[0],
+                      "status": STATUS[res["verdict"]], "verdict": res["verdict"], "tier": res.get("tier"),
+                      "owner": owner,
+                      "ms": ms, "message": "；".join(reasons[:REASONS_SHOWN])[:400] or None})
+
+
+def wall(names: list[str], rows: list[dict[str, Any]], cases: list[dict[str, Any]], head: str,
+         results: Path) -> dict[str, Any]:
+    passed = sum(c["status"] == "pass" for c in cases)
+    failed = sum(c["status"] != "pass" for c in cases)
+    return {"at": time.time(), "command": " ".join(names), "cases": cases, "passed": passed, "failed": failed,
+            "total": len(cases), "head": head, "checks": rows, "results": str(results)}
+
+
 async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: Path, phase: str = "before_bench",
-                     triage: Path | None = None, run: Path | None = None, baseline: Path | None = None) -> dict[str, Any]:
-    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall."""
+                     triage: Path | None = None, run: Path | None = None, baseline: Path | None = None,
+                     inputs_ro: tuple[Path, ...] = ()) -> dict[str, Any]:
+    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall.
+    *inputs_ro*: files a release check reads besides its arguments, mounted read-only (servers mode, D17)."""
     runner = team["check_runner"]
     results = Path(results)
     results.mkdir(parents=True, exist_ok=True)
     project = await snapshot(Path(run_wt), head)
     root = Path(run_wt).parents[1]  # runs/<run>/: the repository, its worktrees and the results
     values = {"project": project, "triage": triage, "run": run, "baseline": baseline}
-    rows, cases, names = [], [], []
+    rows: list[dict[str, Any]] = []
+    cases: list[dict[str, Any]] = []
+    names: list[str] = []
     for check in [c for c in team.get("checks") or [] if c["when"] == phase]:
         name = check["name"]
         names.append(name)
@@ -343,26 +371,14 @@ async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: 
             # a release check reads again every input the other checks recorded (the baseline too): it sees them all
             mounts += [(str(Path(v)), False) for k, v in values.items() if (k in check["args"] or check["when"] == "release")
                        and v is not None and not Path(v).resolve().is_relative_to(root.resolve()) and k != "project"]
+            mounts += [(str(p), False) for p in inputs_ro]
             container = f"vstatd-check-{uuid.uuid4().hex[:12]}"
             cmd = docker_command(runner, mounts, argv, name=container)
             (results / f"{name}.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")
             rc, why = await _exec(cmd, results / f"{name}.run.log", float(check["timeout_s"]), container)
             res = _read_result(results, name, rc, why)
-        ms = round((time.time() - started) * 1000)
-        groups = attribute(check, res, project, team) if res["verdict"] != "PASS" else {check.get("owner"): []}
-        rows.append({"name": name, "verdict": res["verdict"], "tier": res.get("tier"), "summary": res["summary"],
-                     "owners": [o for o in groups if o], "files": files_named(res["reasons"], project),
-                     "reasons": res["reasons"][:20], "ms": ms})
-        for owner, reasons in groups.items():
-            cases.append({"id": name if len(groups) == 1 else f"{name}#{owner or 'person'}", "ac": name,
-                          "name": f"{name}.sh", "file": (files_named(reasons, project) or [""])[0],
-                          "status": STATUS[res["verdict"]], "verdict": res["verdict"], "tier": res.get("tier"),
-                          "owner": owner,
-                          "ms": ms, "message": "；".join(reasons[:REASONS_SHOWN])[:400] or None})
-    passed = sum(c["status"] == "pass" for c in cases)
-    failed = sum(c["status"] != "pass" for c in cases)
-    return {"at": time.time(), "command": " ".join(names), "cases": cases, "passed": passed, "failed": failed,
-            "total": len(cases), "head": head, "checks": rows, "results": str(results)}
+        add_result(rows, cases, check, res, project, team, round((time.time() - started) * 1000))
+    return wall(names, rows, cases, head, results)
 
 
 # --- tests first (D6, TR §4.1) ----------------------------------------------------------------------------------- #
@@ -421,6 +437,31 @@ async def _extract(repo: Path, rev: str, dest: Path, *paths: str) -> None:
     await asyncio.to_thread(unpack)
 
 
+async def new_tests(run_wt: Path, *, base: str, head: str,
+                    triage: dict[str, Any]) -> tuple[dict[str, list[str]], list[str]]:
+    """The tests new or changed at *head* that name each finding triaged fix with evidence unit-test, and the reasons
+    for the findings no such test names."""
+    before, after = await _blocks_at(run_wt, base), await _blocks_at(run_wt, head)
+    changed = {n: text for n, text in after.items() if before.get(n) != text}
+    wanted = sorted(f["id"] for f in triage.get("findings") or [] if isinstance(f, dict)
+                    and f.get("decision") == "fix" and f.get("evidence") == "unit-test")
+    named = {fid: [n for n, text in changed.items() if id_pattern(fid).search(text)] for fid in wanted}
+    return named, [f"{fid}：分诊定为修复、证据是单元测试，但没有新写或改过的测试写了这个编号"
+                   for fid, ns in named.items() if not ns]
+
+
+def judge_first(named: dict[str, list[str]], ran: dict[str, bool], base: str, reasons: list[str]) -> list[str]:
+    """What keeps the new tests from counting as written first: each must have run on the base and failed there."""
+    out = list(reasons)
+    for fid, ns in named.items():
+        for n in ns:
+            if n not in ran:
+                out.append(f"{fid}：测试 {n} 在需求提交上没有跑")
+            elif not ran[n]:
+                out.append(f"{fid}：测试 {n} 在需求提交 {base[:12]} 上通过了，它要先失败（TR §4.1）")
+    return out
+
+
 async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: str, triage: dict[str, Any],
                       results: Path) -> dict[str, Any]:
     """The tests that are new or changed at *head*, built with the code of *base* in the team's build container and
@@ -428,12 +469,7 @@ async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: st
     fail there, and each such finding needs one. → {ok, reasons, tests: {finding: [Suite.Name]}, results}."""
     run_wt, results = Path(run_wt), Path(results)
     results.mkdir(parents=True, exist_ok=True)
-    before, after = await _blocks_at(run_wt, base), await _blocks_at(run_wt, head)
-    changed = {n: text for n, text in after.items() if before.get(n) != text}
-    wanted = sorted(f["id"] for f in triage.get("findings") or [] if isinstance(f, dict)
-                    and f.get("decision") == "fix" and f.get("evidence") == "unit-test")
-    named = {fid: [n for n, text in changed.items() if id_pattern(fid).search(text)] for fid in wanted}
-    reasons = [f"{fid}：分诊定为修复、证据是单元测试，但没有新写或改过的测试写了这个编号" for fid, ns in named.items() if not ns]
+    named, reasons = await new_tests(run_wt, base=base, head=head, triage=triage)
     out = {"ok": False, "reasons": reasons, "tests": named, "results": str(results), "base": base, "head": head}
     names = sorted({n for ns in named.values() for n in ns})
     if not names:
@@ -466,12 +502,7 @@ async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: st
         for t in suite.get("testsuite") or []:
             n = _normalize(f"{suite.get('name')}.{t.get('name')}")
             ran[n] = ran.get(n, False) or bool(t.get("failures"))
-    for fid, ns in named.items():
-        for n in ns:
-            if n not in ran:
-                reasons.append(f"{fid}：测试 {n} 在需求提交上没有跑")
-            elif not ran[n]:
-                reasons.append(f"{fid}：测试 {n} 在需求提交 {base[:12]} 上通过了，它要先失败（TR §4.1）")
+    reasons = judge_first(named, ran, base, reasons)
     out.update(ok=not reasons, reasons=reasons, failed=sorted(n for n in names if ran.get(n)))
     return out
 

@@ -16,6 +16,7 @@ handed over (未入职), or the planner's 分工提案 leaves it out and the per
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -30,6 +31,7 @@ from typing import Any, Awaitable, Callable
 from . import bench as bench_mod
 from . import checks, gitwork, messages
 from . import delivery as delivery_mod
+from . import servers as servers_mod
 from . import triage as triage_mod
 from .constants import APP_NAME, APP_ROOT, EVENTS_KEPT, TAG_PREFIX
 from .store import Store
@@ -153,6 +155,7 @@ def check_team(team: Any) -> dict[str, Any]:
     if team.get("source") is not None and not (isinstance(team["source"], str) and team["source"].strip()):
         raise ValueError("team.json：source 要写成要改的项目目录（可以用 ${sample}/…）")
     checks.check_config(team, keys)
+    servers_mod.check(team)
     delivery_mod.check(team)
     return team
 
@@ -863,6 +866,19 @@ class TeamRun:
         async with self._lock:
             failed = [k for k in self.order if self.lane(k)["status"] == "failed"]
             bench = self.s.get("bench") or {}
+            held = self.s.get("servers_held")
+            if not keys and not failed and self.ended and held:  # the servers could not do it (D17): again
+                self._resume()
+                self.s["servers_held"] = None
+                if held == "checks":
+                    t = self.s["tests"]
+                    t.update(held=None, head=None)
+                    self.s["needs_test"] = True
+                self.say("run", "retry.servers", {"by": by, "note": note},
+                         data={"by": by, "note": note} if by else None)
+                self._settle()
+                await self.save()
+                return ["servers"]
             if not keys and not failed and self.ended and bench.get("held"):  # a person dealt with the bench: carry on
                 self._resume()
                 bench["held"] = None
@@ -1228,7 +1244,7 @@ class TeamRun:
             t.update({k: wall[k] for k in ("at", "cases", "passed", "failed", "total")}, head=head,
                      command=wall.get("command") or t.get("command", ""))
             if checked:
-                t.update(checks=wall["checks"], results=wall["results"])
+                t.update(checks=wall["checks"], results=wall["results"], server_held=wall.get("server_held") or [])
             t["history"] = (t.get("history", []) + [{"at": wall["at"], "passed": wall["passed"], "failed": wall["failed"]}])[-60:]
             green = bool(t["total"] and not t["failed"])
             red = bool(not green and t["total"] and not t["passed"] and not any(self.lane(k)["status"] == "merged" for k in self.impl))
@@ -1263,8 +1279,25 @@ class TeamRun:
             return self.d.run_tests(run_wt, self._tested_team())
         t, root = self.s["tests"], Path(self.s["repo"]).parent
         t["round"] = int(t.get("round") or 0) + 1
-        return self.d.run_tests(run_wt, self._tested_team(), head=head, results=root / "results" / str(t["round"]),
-                                triage=root / TRIAGE_FILE)
+        return self._round(head=head, results=root / "results" / str(t["round"]), triage=root / TRIAGE_FILE)
+
+    def _round(self, **kw: Any) -> Awaitable[dict[str, Any]]:
+        """A round of the team file's checks (kw as checks.run_checks); in servers mode (D17) one the servers held by
+        another run cannot run is BLOCKED with that reason, for a person."""
+        why = self._servers_busy()
+        if why:
+            return servers_mod.held_round(self._tested_team(), why, **kw)
+        return self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), **kw)
+
+    def _servers_busy(self) -> str:
+        """Servers mode: "" when this run may use the build and bench servers now (it takes them), else why not."""
+        if not servers_mod.on(self.team):
+            return ""
+        try:
+            servers_mod.take(servers_mod.setup(self.team), self.rid, self.d.store.root)
+        except (servers_mod.Unavailable, OSError) as exc:
+            return str(exc)
+        return ""
 
     def cancel_tests(self) -> None:
         """Stop the test run in the background (its checks remove their containers)."""
@@ -1300,7 +1333,12 @@ class TeamRun:
         if self._first is None:
             root = Path(self.s["repo"]).parent
             n = sum(a["kind"] in ("work", "revise", "fix") for a in lane["attempts"])
-            self._first = (head, asyncio.create_task(checks.tests_first(
+            busy = self._servers_busy()
+            if busy:
+                await self._servers_hold("tests_first", busy)
+                return
+            first = servers_mod.tests_first if servers_mod.on(self.team) else checks.tests_first
+            self._first = (head, asyncio.create_task(first(
                 Path(self.s["run_wt"]), self.team, base=str(triage.get("base") or ""), head=head, triage=triage,
                 results=root / "results" / "tests-first" / str(n))))
             await asyncio.sleep(0)
@@ -1309,7 +1347,12 @@ class TeamRun:
         task, self._first = self._first[1], None
         try:
             res = task.result()
-        except (checks.TestsUnavailable, gitwork.GitError) as exc:
+        except (checks.TestsUnavailable, gitwork.GitError, servers_mod.Unavailable, OSError) as exc:
+            if servers_mod.on(self.team) and not isinstance(exc, checks.TestsUnavailable):
+                await self._servers_hold("tests_first", str(exc))  # the servers' problem: 重试 tries again (D17)
+                return
+            if isinstance(exc, OSError):
+                raise
             await self.stop(status="failed", code="run.tests_first_failed", params={"error": str(exc)})
             return
         lane["first"] = {"status": "passed" if res["ok"] else "failed", "head": head, "base": res["base"],
@@ -1325,6 +1368,12 @@ class TeamRun:
         lane["first"]["status"] = "sent_back"
         self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
+
+    async def _servers_hold(self, what: str, why: str) -> None:
+        """Servers mode (D17): the servers could not do *what* (the tests first, a round of checks); the run ends for a
+        person, and 重试 tries it again."""
+        self.s["servers_held"] = what
+        await self.stop(status="failed", code="run.servers_held", params={"error": why[:300]})
 
     def _finale_due(self) -> bool:
         """Every role is in, the reviewer let it through, and the latest round of the checks before the bench passed
@@ -1345,10 +1394,17 @@ class TeamRun:
         b = self.s.get("bench")
         if b is None or b["head"] != t["head"]:  # a new build: the bench starts over with it
             n = int((b or {}).get("n") or 0) + 1
+            artifact = Path(t["results"]) / bench_mod.ARTIFACT
+            run_dir: str | None = str(root / "bench" / f"run-{n}")
+            if servers_mod.on(self.team):  # the bench server deploys what the build server published (D17)
+                try:
+                    artifact = servers_mod.setup(self.team).build_state / "results" / bench_mod.ARTIFACT
+                except servers_mod.Unavailable:
+                    pass
+                run_dir = None  # the bench server's runs/run-<n>, known once the replay is done
             b = self.s["bench"] = {"head": t["head"], "n": n, "step": "doctor", "running": None, "held": None,
                                    "doctor": (b or {}).get("doctor"), "actions": list((b or {}).get("actions") or []),
-                                   "artifact": str(Path(t["results"]) / bench_mod.ARTIFACT),
-                                   "run_dir": str(root / "bench" / f"run-{n}"), "after": None}
+                                   "artifact": str(artifact), "run_dir": run_dir, "after": None}
             self.say("bench", "bench.go", {"n": n})
         if b["held"] or b["step"] == "done":
             return
@@ -1357,7 +1413,11 @@ class TeamRun:
                 b["running"] = None
                 self._bench_hold("hold.restart", {"step": b["step"]})
                 return
-            if b["step"] == "deploy" and not Path(b["artifact"]).is_file():
+            busy = self._servers_busy() if b["step"] != "doctor" else ""
+            if busy:
+                self._bench_hold("hold.servers", {"why": busy})
+                return
+            if b["step"] == "deploy" and not servers_mod.on(self.team) and not Path(b["artifact"]).is_file():
                 self._bench_hold("hold.no_artifact", {"artifact": b["artifact"]})
                 return
             b["running"] = b["step"]
@@ -1383,10 +1443,11 @@ class TeamRun:
         if step == "rerun":
             return self._rerun(b)
         if step == "after":
-            return self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), head=b["head"],
-                                    results=root / "results" / f"after-{b['n']}", phase="after_bench",
-                                    triage=root / TRIAGE_FILE, run=Path(b["run_dir"]),
-                                    baseline=Path(spec["baseline"]).expanduser())
+            return self._round(head=b["head"], results=root / "results" / f"after-{b['n']}", phase="after_bench",
+                               triage=root / TRIAGE_FILE, run=Path(b["run_dir"]) if b["run_dir"] else None,
+                               baseline=Path(spec["baseline"]).expanduser())
+        if servers_mod.on(self.team):  # deploy and replay through the bench server (D17)
+            return servers_mod.physical(self.team, root, step, f"{step} {b['n']}")
         cmd = bench_mod.argv(spec[step], {"artifact": b["artifact"], "run": b["run_dir"]})
         return bench_mod.run(cmd, log, bench_mod.ACTION_TIMEOUT_S, env={"CC1_REQUESTER": f"{APP_NAME} {self.rid}"})
 
@@ -1400,6 +1461,24 @@ class TeamRun:
                 return
             b["step"] = "deploy"
             self.say("bench", "bench.deploy", {"artifact": Path(b["artifact"]).name})
+        elif step in ("deploy", "replay") and servers_mod.on(self.team):
+            kind, why, out = res["kind"], res["why"], res["out"]
+            if kind == "ok" and step == "deploy" and out.get("commit") != b["head"]:
+                kind, why = "failed", f"bench 服务器部署的是 {str(out.get('commit'))[:12]} 的构建，不是这一轮的 {b['head'][:12]}"
+            if kind == "ok" and step == "replay":
+                if not out.get("result") or not out.get("run"):
+                    kind, why = "failed", "回放结束了，但 bench 服务器的运行目录里没有 run-result.json"
+                else:
+                    with contextlib.suppress(servers_mod.Unavailable):
+                        b["run_dir"] = str(servers_mod.setup(self.team).bench_state / "runs" / str(out["run"]))
+            b["actions"].append({"action": step, "at": self.d.now(), "outcome": kind, "why": why, "rc": None,
+                                 **{k: out[k] for k in ("request", "digest") if out.get(k)}})
+            if kind != "ok":
+                self._bench_hold("hold.deploy" if step == "deploy" else "hold.replay", {"kind": kind, "why": why})
+                return
+            b["step"] = "replay" if step == "deploy" else "after"
+            self.say("bench", "bench.replay" if step == "deploy" else "bench.replayed",
+                     {"run_dir": b["run_dir"]} if step != "deploy" else None)
         elif step in ("deploy", "replay"):
             rc, tail = res
             kind, why = bench_mod.outcome(rc, tail, bench_mod.read_state()["target"])
@@ -1512,10 +1591,14 @@ class TeamRun:
                                                for r, what in held]}) or {}
             why = self.msg("checks.held", reason)[:300]
             t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason}
+            server = wall is None and all(r["name"] in (t.get("server_held") or []) for r, _ in held)
+            self.s["servers_held"] = "checks" if server else None  # the servers' problem: 重试 runs the round again
             self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
                      data={"checks": t["held"]["checks"]})
             return
         t["held"] = None
+        if self.s.get("servers_held") == "checks":
+            self.s["servers_held"] = None
         for r in failing:
             rounds[r["name"]] = rounds.get(r["name"], 0) + 1
         for key in [k for k in self.order if k in owners]:
