@@ -1,0 +1,75 @@
+{
+  "check": "logdiff",
+  "verdict": "FAIL",
+  "commit": null,
+  "local": false,
+  "tier": "emulation",
+  "inputs": {
+    "triage": {
+      "path": "/m/triage.json",
+      "sha256": "79d9b70ef3f28a9ab6f79b444fe367a8a29dbecd7a1e51b44b8c206e285ff1bb"
+    },
+    "run_result": {
+      "path": "/m/runs/f008-r08/run-result.json",
+      "sha256": "369e805065b8053ae01c477ac1aff023e6f4522e141fb301548b8c28b0ba0893"
+    },
+    "run_log": {
+      "path": "/m/runs/f008-r08/run.jsonl",
+      "sha256": "931008cae897702797be1d29e75ee1c548b25453573a5e5637d68f20e85155ec"
+    },
+    "baseline_result": {
+      "path": "/m/baseline/baseline-result.json",
+      "sha256": "3855914e102981b12696d406a28a23df63ce523ac6c2a4c4825935db42d4f2cb"
+    },
+    "baseline_log": {
+      "path": "/m/baseline/baseline.jsonl",
+      "sha256": "0d134fc2e8d5639f5c0b7dc379acfadf345585e414648baf4cc335351e97a260"
+    }
+  },
+  "details": {
+    "replay_id": "drive-01@39a3d0dec2ab+62abaaf5",
+    "target": "emulated-cc1",
+    "deployed_digest": "66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7",
+    "approved_digest": "66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7",
+    "baseline_entries": 328,
+    "run_entries": 348,
+    "paired": 328,
+    "differences": 20,
+    "allowed": [],
+    "unexplained": 20,
+    "order_changes": 0,
+    "allowed_not_seen": [],
+    "window_ms": 20,
+    "window_ms_by_event": {
+      "CLIENT_CONNECTED": 50,
+      "SERVICE_STOP": 50
+    },
+    "diff": "/m/results/f008-r08/logdiff.diff"
+  },
+  "reasons": [
+    "only in the run: {\"t_ms\":97,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"VCU_Speed\"}",
+    "only in the run: {\"t_ms\":185,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"VCU_Gear\"}",
+    "only in the run: {\"t_ms\":234,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"VCU_Speed\"}",
+    "only in the run: {\"t_ms\":284,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"VCU_Gear\"}",
+    "only in the run: {\"t_ms\":339,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"BMS_Status\"}",
+    "only in the run: {\"t_ms\":339,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"BCM_Lights\"}",
+    "only in the run: {\"t_ms\":341,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"BCM_Closures\"}",
+    "only in the run: {\"t_ms\":435,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"BMS_Status\"}",
+    "only in the run: {\"t_ms\":534,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"BCM_Lights\"}",
+    "only in the run: {\"t_ms\":635,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"BCM_Closures\"}",
+    "only in the run: {\"t_ms\":20195,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"VCU_Speed\"}",
+    "only in the run: {\"t_ms\":20284,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"VCU_Gear\"}",
+    "only in the run: {\"t_ms\":20334,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"VCU_Speed\"}",
+    "only in the run: {\"t_ms\":20384,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"VCU_Gear\"}",
+    "only in the run: {\"t_ms\":20435,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"BMS_Status\"}",
+    "only in the run: {\"t_ms\":20435,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"BCM_Lights\"}",
+    "only in the run: {\"t_ms\":20435,\"ev\":\"SIGNAL_TIMEOUT\",\"message\":\"BCM_Closures\"}",
+    "only in the run: {\"t_ms\":20534,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"BMS_Status\"}",
+    "only in the run: {\"t_ms\":20635,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"BCM_Lights\"}",
+    "only in the run: {\"t_ms\":20735,\"ev\":\"SIGNAL_RECOVERED\",\"message\":\"BCM_Closures\"}"
+  ],
+  "tools": {},
+  "started": "2026-11-16T01:01:51Z",
+  "ended": "2026-11-16T01:01:51Z",
+  "summary": "328 of 328 baseline entries paired; 20 unexplained difference(s), 0 allowed, 0 order change(s); emulation"
+}

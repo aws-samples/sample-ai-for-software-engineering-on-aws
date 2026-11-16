@@ -23,7 +23,10 @@ to 6,872 KiB ([repeatability/](repeatability/README.md)). The wrong fix has the 
 On another host, before the rehearsal, replay both the baseline and the wrong fix 5 to 10 times each, built as in
 [repeatability/](repeatability/README.md). If the baseline comes within about 300 KiB of the limit, or the wrong fix
 within about 200 KiB of it or under it, calibrate the limit again from replays on that host; never ship a limit the
-wrong fix passes. A Kiro Crew knowledge source indexed before 2026-11-04 still says 8 MiB: run `setup.sh` again.
+wrong fix passes. Done on an x86_64 Linux host on 2026-11-16, 10 runs each: the release build peaked at 5,768 to
+5,964 KiB, the wrong fix at 6,644 to 6,832 KiB, so the limit holds there (the builds of check-examples, which also
+carry steps 3 to 5 of its batch; [check-examples/](check-examples/README.md#last-run-on-the-bench)). A Kiro Crew
+knowledge source indexed before 2026-11-04 still says 8 MiB: run `setup.sh` again.
 
 Notes for item 2:
 

@@ -10,9 +10,10 @@ environment (reference-project/tools/Dockerfile) with the sysroot in /opt/cc1-sy
         vstatd-build python3 /sample/rehearsal/check-examples/run.py
 
 Builds a git copy of reference-project/ in a temporary directory and walks a batch commit by commit, running the
-check that each step is about and comparing its exit status with the expected one. The after-deploy checks
-(runtime-limits, logdiff) need the bench of build plan item 3; see README.md. Prints a table and exits non-zero when
-any check gave another verdict than expected.
+check that each step is about and comparing its exit status with the expected one. It keeps the stripped builds of
+three steps in OUT/artifacts/ (release, f008, f021) with the approved triage, for the after-deploy checks on the bench
+(bench.py); to keep them on the host, mount a new directory as OUT (README.md has the command). Prints a table and
+exits non-zero when any check gave another verdict than expected.
 """
 
 import json
@@ -73,6 +74,12 @@ def expect(step, name, want, *args):
     return results
 
 
+def keep(name, results):
+    """Copy the stripped vstatd that checks/build.sh left in results/ to OUT/artifacts/<name>, for bench.py."""
+    (OUT / "artifacts").mkdir(exist_ok=True)
+    shutil.copyfile(results / "artifacts" / "vstatd", OUT / "artifacts" / name)
+
+
 def triage(path, base, decided):
     t = {"batch": "vstatd batch 1 (facilitator example)", "base": base,
          "approved": {"by": "release owner", "at": "2026-11-02"}, "findings": [], "allowed_log_differences": [],
@@ -128,7 +135,7 @@ def main():
                                    "location": "cmake/cc1-aarch64.cmake"}}}
     t1 = triage(OUT / "t1.json", base, decided)
     expect("2 sysroot", "size", "BLOCKED", *p)  # no build result yet
-    expect("2 sysroot", "build", "PASS", *p)
+    keep("release", expect("2 sysroot", "build", "PASS", *p))
     expect("2 sysroot", "size", "PASS", *p)
     expect("2 sysroot", "static", "PASS", *p, "--triage", t1)
     expect("2 sysroot", "unit", "FAIL", *p, "--triage", t1)
@@ -166,7 +173,7 @@ def main():
     expect("5 F-007 suppressed without an ID", "static", "FAIL", *p, "--triage", t3)
     patch("src/frame_decoder.cpp", "// NOLINT(bugprone-implicit-widening-of-multiplication-result)",
           "// NOLINT(bugprone-implicit-widening-of-multiplication-result) F-007 justified")
-    commit("F-007: justified by VSTATD-IF p.6 §3.3 (DEC-INTEGER-PRODUCT): the product stays below 2^32")
+    before_f008 = commit("F-007: justified by VSTATD-IF p.6 §3.3 (DEC-INTEGER-PRODUCT): the product stays below 2^32")
     expect("5 F-007 suppressed, triage defers it", "static", "FAIL", *p, "--triage", t3)
     decided["F-007"] = {"decision": "justify", "cites": ["[VSTATD-IF p.6 §3.3]"], "facts": ["DEC-INTEGER-PRODUCT"]}
     t4 = triage(OUT / "t4.json", base, decided)
@@ -182,6 +189,24 @@ def main():
     expect("6 F-008 wrong fix", "static", "PASS", *p, "--triage", t5)
     expect("6 F-008 wrong fix", "trace", "PASS", *p, "--triage", t5)
     expect("6 F-008 wrong fix", "unit", "FAIL", *p, "--triage", t5)  # no test names F-008
+    keep("f008", expect("6 F-008 wrong fix", "build", "PASS", *p))
+
+    # F-021: the correct fix that breaks the memory limit, on its own, on a branch from before the F-008 wrong fix.
+    # Static analysis and trace pass; on the bench, checks/runtime-limits.sh catches it (README.md).
+    git("checkout", "-q", "-b", "f021", before_f008)
+    del decided["F-008"]
+    patch("src/client_session.h", "std::array<std::array<char, kMaxLine>, kQueueLines> lines_;",
+          "std::array<std::array<char, kMaxLine>, kQueueLines> lines_{};")
+    commit("F-021: value-initialise lines_ (cppcoreguidelines-pro-type-member-init)")
+    decided["F-021"] = {"decision": "fix", "behaviour": False, "evidence": "static-analysis"}
+    t6 = triage(OUT / "t6.json", base, decided)
+    expect("7 F-021 wrong fix", "static", "PASS", *p, "--triage", t6)
+    expect("7 F-021 wrong fix", "trace", "PASS", *p, "--triage", t6)
+    keep("f021", expect("7 F-021 wrong fix", "build", "PASS", *p))
+    # The approved triage the bench examples give checks/logdiff.sh (bench.py). logdiff reads only its allowed log
+    # differences, none here, so this one judges the F-008 build too.
+    shutil.copyfile(t6, OUT / "artifacts" / "triage.json")
+    shutil.copyfile(str(t6) + ".sha256", OUT / "artifacts" / "triage.json.sha256")
 
     print(f"\n{len(rows) - failed} of {len(rows)} as expected; results in {OUT / 'results'}")
     return 1 if failed else 0
