@@ -71,6 +71,18 @@ def test_a_review_names_who_fixes_what():
     assert targets("Send back: `Developer · fix` / `Tester`", en_t) == ["tester", "backend"]
     three = "Send back: Developer · fix / Developer · refactor / Tester"
     assert targets(three, en_t) == ["tester", "backend", "frontend"]
+    # third review of #41: a note after " / Tester" keeps the second role (main gave both)
+    for line in ("Send back: Developer · fix / Tester: add a test", "Send back: Developer · fix / Tester -- tests missing",
+                 "Send back: Developer · fix / Tester to add a test", "Send back: Developer · fix/Tester: add a test"):
+        assert targets(line, en_t) == ["tester", "backend"], line
+    # a / inside backticks is a path, not two roles; backticks around each role's name are not
+    for path in ("`Tester/plan`", "`Tester/README`"):
+        assert targets(f"Send back: Developer · fix, {path}", en_t) == ["backend"], path
+    assert targets("Send back: `Developer · fix` / `Tester`", en_t) == ["tester", "backend"]
+    # a role key in a path's segment is no role either
+    assert targets("Send back: Developer · fix, see qa/tester", en_t) == ["backend"]
+    assert targets("Send back: backend, see feature/tester-cases", en_t) == ["backend"]
+    assert targets("打回：后端/测试", roles) == ["tester", "backend"]  # two role names around a / are both
     # a path, a URL, a branch or a two-part name with a role's name inside is no role, however it is written
     for path in ("`docs/Tester-notes.md`", "`tests/Tester/case_1.cpp:12`", '"src/Tester.cpp"', "'Tester/plan.md'",
                  "fix:docs/Tester.md", "https://wiki.example.com/qa/Tester-guide", "feature/Tester-cases",
