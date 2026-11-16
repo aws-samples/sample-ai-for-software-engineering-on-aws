@@ -165,7 +165,8 @@ whose result changed on the independent rerun. A figure with no run behind it st
 the CTO view are reused.
 
 The scorecard's "tool calls by permission class" comes from the audit log of the `build` and `bench` MCP servers. In
-this app the agents use no such server (D2, D3), so the view leaves that figure out rather than showing zero.
+this app the agents use no such server (D2, D3), so the view leaves that figure out rather than showing zero. In
+`servers` mode (D17) it counts the app's own calls.
 
 How (step 8): `GET /scorecard` reads each run's `run.json`, `events.jsonl`, approved triage and results directories,
 and the bench's `actions.jsonl` (entries tied to the run by the requester the app passes to `cc1.sh`). A
@@ -377,6 +378,182 @@ Alternatives considered: translating `text` in the backend for each request (it 
 an older run's events have); one language per installation (the person at the board and the one reviewing the audit
 may not read the same one).
 
+### D17. App 通过 build / bench 服务器跑检查和台架
+
+Proposed on 2026-11-16; phase 1 (this design and a read-only trial) is done, the implementation is not.
+
+**Two modes, one switch.** The team file's `"connectors"` picks one, `"direct"` by default:
+
+- `direct` is what D7, D9 and D10 describe: the app runs the checks in its own containers and calls `bench/cc1.sh`.
+- `servers` makes the same steps tool calls of the [`build`](../mcp/build/README.md) and
+  [`bench`](../mcp/bench/README.md) MCP servers, through the app's own stdio client (`backend/team/mcpclient.py`,
+  no MCP SDK in Kiro Crew's Python). Both servers run as the current user, which `mcp/build/README.md` (Running)
+  says suits a trial only. The team file's `servers` gives the two command lines (with the server's `--config` and
+  `--role developer`), the work tree and the triage folder; the same command lines with `sudo -n -u buildsrv` and
+  `-u benchsrv` are the separate-user set-up.
+
+The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
+and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A
+server's refusal (`ToolRefused`), a call that times out (`McpTimeout`, the client then ends the server) and a server
+that exits (`McpExited`) hold the run for a person like BLOCKED, with the server's own message; 重试 carries on from
+that step.
+
+**Each step and its tool.**
+
+| App step | Server and tool |
+| --- | --- |
+| Before-bench checks (D7) | build `run_check` `build`, `static`, `unit`, `size`, `trace`, one call each |
+| Tests first (D6) | build `run_check unit` on a temporary commit (below) |
+| Bench readiness (D10) | bench `bench_status`, beside `bench/doctor.sh` |
+| Deploy | bench `lease_acquire`, then `request_deploy` |
+| Replay | bench `request_replay` |
+| After-bench checks | bench `run_check` `runtime-limits`, `logdiff`, then `lease_release` |
+| Independent rerun (D9) | build `run_check` for each before-bench check, bench `run_check` for each after-bench one |
+| Release (D9) | build `run_check release` once #42 is merged; until then `direct` |
+
+- Each build `run_check` judges a clean clone of the work tree's committed HEAD with no cache, which is also what
+  D9's rerun needs.
+- `bench/doctor.sh` stays as the board's readiness read.
+- `request_deploy` deploys the build that `build` published last; the app checks that its digest is the round's.
+- `request_replay` writes into the bench server's `runs/run-<n>`, not the run's `bench/` folder; the after-bench
+  checks judge that replay.
+
+The app keeps each call's `result` (the check's own result file) as `results/<round>/<check>.json` beside the run's
+repository, so attribution, the board, the audit trail and the scorecard read the same files as in `direct` mode.
+
+```mermaid
+sequenceDiagram
+    participant A as App
+    participant B as build server
+    participant C as bench server
+    participant P as Person at bench/console.py
+    A->>A: move the work tree to the round's commit
+    A->>B: workspace_status (HEAD is that commit, no changes)
+    loop build, static, unit, size, trace
+        A->>B: run_check
+        B-->>A: verdict and result
+    end
+    A->>C: bench_status, lease_acquire
+    A->>C: request_deploy
+    C->>P: request with the build's digest
+    P-->>C: approve
+    C-->>A: deployed, digest read back
+    A->>C: request_replay
+    C->>P: request
+    P-->>C: approve
+    C-->>A: run-n
+    A->>C: run_check runtime-limits, run_check logdiff
+    A->>C: lease_release
+    Note over A,C: independent rerun on the final commit
+    A->>B: run_check for each before-bench check
+    A->>C: lease_acquire, run_check runtime-limits and logdiff, lease_release
+    A->>B: run_check release (after #42)
+    A->>A: sign-off enabled when release passes
+```
+
+**Fixed paths, and one run at a time.** The build server's `paths.workspace`, `paths.triage` and `paths.state` are
+fixed in its configuration (`mcp/build/buildserver/core.py`, from line 320), and before every call it checks that each
+mounted folder is still the one it saw at start, by device and inode (`check_mounts()`, line 396). So:
+
+- **Work tree:** `~/workplace/vstatd-team/server/worktree`, a clone of the run's repository with its own `.git`. A
+  `git worktree` does not work: its `.git` points outside the folder the server mounts. Before each round the app
+  fetches the round's commit from the run's repository into the clone, runs `git checkout --detach <commit>` and
+  `git clean -fdx` there, and requires `workspace_status` to name that commit with no changes. The folder is moved
+  in place and never removed or recreated.
+- **Triage folder:** `~/workplace/vstatd-team/server/triage/`, the folder of `paths.triage` in both servers. When
+  the triage gate is approved (D4), and each time D15 writes the triage again, the app writes `triage.json` and
+  `triage.json.sha256` there as well as beside the run's repository. The files are replaced, the folder is kept.
+- **One run at a time:** the servers' state is one per installation: `build`'s published results, its repair count
+  and its HEAD, and `bench`'s runs and published results. So a run takes the servers at its first server call and
+  gives them back at sign-off or when it is stopped (`server/holder.json` names the run). Another run in `servers`
+  mode is held before its first check, with the run that holds them on the board.
+- **Bench state:** in the trial the bench server's `paths.bench_state` is the user's `~/.cc1-bench`, the same as
+  `bench/cc1.sh` uses in `direct` mode.
+
+The app starts the `build` server for each check round and the `bench` server for each bench step, and ends each
+session afterwards; each start checks the folders again. A physical call waits for the person, so its client
+timeout is the server's approval timeout plus the action's (300 s plus 600 s for a deploy, plus 900 s for a replay,
+by default) and a minute more.
+
+**Tests first.** `run_check unit` judges HEAD only, so the app makes HEAD the code to test: in the work tree it makes
+a detached commit with the base commit's code and the tests of the round's commit (what `tests_first()` builds
+today), runs `run_check unit`, reads the `FAILED Suite.Name` lines of its `reasons`, and moves the work tree back to
+the round's commit. The commit is on no branch and never reaches the run's repository. Two differences from
+`direct`:
+
+- `unit.sh` builds plain, ThreadSanitizer and AddressSanitizer, where `direct` builds plain only, so it takes longer.
+- `unit.sh` lists at most ten failed tests per build. With more new tests than that, the app cannot tell which ones
+  passed on the base and holds the run for a person.
+
+The unit result `build` publishes for the temporary commit is replaced by the next round's unit check; the rerun
+runs every check again before release.
+
+**Bench.** The lease belongs to the bench server's session, so one session lasts the whole bench step: acquire,
+deploy, replay, the after-bench checks, release. A session that ends gives the lease back. While `request_deploy` or
+`request_replay` waits, the board shows the pending request read from the bench state (as today, D3): the action,
+the digest, the time left, and that it is approved at `bench/console.py`. The bench server names itself and its
+session as the requester (`bench MCP server (role developer, session …)`), not `vstatd-team <rid>`. So the app takes
+the session from the call's first line in the bench server's audit log, and records the request ID each call
+returns; the audit trail (D14) and the scorecard tie the run's bench records by those IDs. A refusal at the console,
+the physical gate, an approval timeout or a failed action reaches the app as a refusal. The run is held with the
+server's message and nothing is retried. After an interrupted action the bench marks the target `unknown` until a
+person reconciles it at the console.
+
+**Approvals stay at the console.** In `servers` mode the requests are written to the bench state as before, but the
+board shows them without 批准 and 拒绝, as the scenario README advises for a demo on one machine. With the servers
+as their own users the board could not approve anyway. It approves by writing the bench state as the app's user
+(`benchstate.decide()`, D3), and the bench server requires every folder down to that state to belong to root or its
+own user and to be writable by no other user (`check_trusted()`). If the app's user could write it, so could the
+agents, who run as the same user. In the trial the buttons would still work, so they are turned off by design and not
+by permissions.
+
+**Scorecard.** "Tool calls by permission class" (D8) comes from both servers' `audit.jsonl`: the lines written
+while the run held the servers (the app keeps both files' sizes when it takes and gives back the servers). Each call
+writes a `started` line and a line with its outcome; a call refused before it starts writes only the second, so the
+count is of outcome lines. The figure counts the app's calls; the agents make none.
+
+**Open questions.**
+
+1. **The evidence page.** Neither server has a tool for `checks/evidence-page.sh`. Asked of the build server's owner
+   on #42; until the answer, the app runs it as in `direct` mode.
+2. **The log comparison's repair rounds.** `build` counts the cross build's (its `repair.json`, reset by a person
+   with `buildserver.admin reset-repair`) and writes `repair-rounds.json` with that count only. Who counts
+   `logdiff`'s two rounds for `release.sh` is asked on #42 too; until then the app counts both, as now, and a
+   refusal of `build`'s own bound goes to a person.
+3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
+   Not decided: a triage tool of the server, or a person copying the approved file into place.
+4. **Release** waits for #42 (`run_check release` reads the bench server's published results). Until it is merged,
+   release in `servers` mode stays `direct`.
+
+**Trust boundary.** `servers` mode connects the app to the servers' interface, and no more. With both servers
+running as the current user, an agent's shell can still write their state, audit logs, published results, the
+triage folder and the bench state, and can reach Docker. The three paths of D2 and D12 stay open. Only separate
+server users (`buildsrv`, `benchsrv`), with the agents unable to reach Docker, close them.
+
+Measured in the read-only trial (2026-11-16, Apple Silicon Mac, both servers as the current user, MCP SDK 2.3.0
+servers, protocol 2025-11-25): `build` with role `developer` on a clone of `r11032637`'s final commit and its approved
+triage, `bench` with role `reviewer` (read-only only):
+
+| Server | Call | Time | Answer |
+| --- | --- | --- | --- |
+| `build` | start and `initialize` | 837 ms | protocol 2025-11-25 |
+| `build` | `workspace_status` | 458 ms | the commit, no changes |
+| `build` | `run_check build` | 3,529 ms | PASS, the same digest as the first delivery's round 4 and rerun |
+| `build` | `run_check static` | 19,933 ms | PASS, 9 findings, consistent with the triage |
+| `build` | `read_result build`, `read_result static` | 35 ms, 28 ms | the published results |
+| `build` | `run_check nope` | 28 ms | refused: the check is not one of the six |
+| `bench` | start and `initialize` | 585 ms | protocol 2025-11-25 |
+| `bench` | `bench_status`, `read_actions` | 339 ms, 2 ms | the target's state, the action record |
+| `bench` | `request_deploy` | 1 ms | refused: role `reviewer` is not granted `physical` |
+
+Each audit line held `t`, `role`, `tool`, `class`, `args` and `outcome`, and on the outcome line `duration_ms`,
+`exit_status`, and where there is one, `verdict`, `digest` or the refusal's `detail`; `bench`'s lines also name the
+session.
+
+Alternatives considered: the agents calling the servers themselves (the open trust-boundary question of
+`mcp/bench/README.md`, for after this); keeping tests first in `direct` mode (no temporary commit, but one check
+outside the servers); a `git worktree` as the server's work tree (its `.git` lies outside the mounted folder).
+
 ## Implementation plan
 
 Each step ends with its verification; a step is done when that verification passes. Steps 1 to 11 run without the
@@ -416,6 +593,11 @@ bench images; step 12 needs them.
     build took. *Verify:* `release.sh` passes on the rerun and the scorecard shows the run. *Done* 2026-11-03 (run
     `r11032637`, bench actions approved on the board, D3); the image build was not timed, the rest is in the
     scenario README's [Cost](../README.md#cost) and in the next section.
+13. **The servers mode (D17).** The stdio client, then each step of D17's table behind `"connectors": "servers"`,
+    `direct` unchanged. *Verify:* the client's tests (an answer, a server error, a timeout, a server that exits); a
+    whole round with stand-in servers, a failing check going to its owner and a refusal going to a person; every
+    existing test still passing; one delivery end to end with the bench actions approved at the console. *Done so
+    far:* the client and its tests, and the read-only trial in D17 (2026-11-16).
 
 ## Seen in the first delivery
 
