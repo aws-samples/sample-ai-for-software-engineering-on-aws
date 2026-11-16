@@ -126,7 +126,8 @@ running other work: the 1-minute load average at the start of a replay was 7.3 t
   (CC1-PN §3); `logdiff` finds no difference (328 of 328 baseline entries paired within the time window). The F-021
   build also carries steps 3 to 5 of the batch (the race fix, F-013 and the F-007 justification), and so does the
   F-008 build. The F-021 runs show that these steps leave the log unchanged as `logdiff` sees it; the F-008 runs, which
-  carry them too, peak within the release's range, so they do not change peak RSS beyond the run-to-run spread.
+  carry them too, peak at 5,676 to 5,944 KiB, no higher than the release's 5,964, so they do not raise peak RSS
+  beyond the run-to-run spread.
 - **Time window.** The largest time difference of a paired entry was 17 ms in any run (20 ms allowed, CC1-PN §6.3).
 - **The F-021 limit on this host.** [facilitator-notes.md](../facilitator-notes.md) asks for this check on any host
   other than the one the limit was calibrated on: the release peaked at most 5,964 KiB, 436 KiB under the limit

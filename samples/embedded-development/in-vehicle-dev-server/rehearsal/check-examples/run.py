@@ -10,10 +10,10 @@ environment (reference-project/tools/Dockerfile) with the sysroot in /opt/cc1-sy
         vstatd-build python3 /sample/rehearsal/check-examples/run.py
 
 Builds a git copy of reference-project/ in a temporary directory and walks a batch commit by commit, running the
-check that each step is about and comparing its exit status with the expected one. It keeps the stripped
-builds of three steps in OUT/artifacts/ (release, f008, f021) with the approved triage, for the after-deploy checks on
-the bench (bench.py); to keep them on the host, mount a new directory as OUT (README.md has the command). Prints a table and exits non-zero when
-any check gave another verdict than expected.
+check that each step is about and comparing its exit status with the expected one. It keeps the stripped builds of
+three steps in OUT/artifacts/ (release, f008, f021) with the approved triage, for the after-deploy checks on the bench
+(bench.py); to keep them on the host, mount a new directory as OUT (README.md has the command). Prints a table and
+exits non-zero when any check gave another verdict than expected.
 """
 
 import json

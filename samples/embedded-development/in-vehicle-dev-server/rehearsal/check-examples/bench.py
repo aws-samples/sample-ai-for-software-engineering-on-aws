@@ -8,14 +8,14 @@ through bench/cc1.sh, so each one waits for an approval at the operator console 
 directory given; nothing here approves anything.
 
     bench.py --state <bench state dir> --artifacts <run.py's OUT>/artifacts --out <data dir> [--runs 5] \\
-             [--image vstatd-build:arm64]
+             [--image vstatd-build:<arm64|amd64>]
 
 One fresh boot of the emulated CC-1 (stop, start --shift 3, wait). The release build is deployed and replayed once as
-the baseline, then each build is deployed and replayed --runs times: the release, the F-008 wrong fix and the F-021
-wrong fix. checks/logdiff.sh and checks/runtime-limits.sh judge every run against that baseline in the build
-container, with the approved triage of run.py, which allows no log difference. One row per run goes to
-<out>/runs.csv; the table of verdicts against the expected ones is printed at the end. Exits non-zero when any check
-gave another verdict than expected.
+the baseline, then replayed --runs times on that deploy; the F-008 wrong fix and the F-021 wrong fix are then deployed
+in turn and replayed --runs times each. checks/logdiff.sh and checks/runtime-limits.sh judge every run against that
+baseline in the build container, with the approved triage of run.py, which allows no log difference. One row per run
+goes to <out>/runs.csv; the table of verdicts against the expected ones is printed at the end. Exits non-zero when any
+check gave another verdict than expected.
 """
 import argparse
 import csv
@@ -93,7 +93,11 @@ def main():
     ap.add_argument("--image", default=f"vstatd-build:{arch}")
     ap.add_argument("--docker", default=shutil.which("docker") or "docker")
     a = ap.parse_args()
-    if subprocess.run([a.docker, "image", "inspect", a.image], capture_output=True).returncode != 0:
+    try:
+        found = subprocess.run([a.docker, "image", "inspect", a.image], capture_output=True).returncode == 0
+    except OSError as e:
+        raise SystemExit(f"cannot run {a.docker}: {e}")
+    if not found:
         raise SystemExit(f"no image {a.image}; build it from reference-project/tools/Dockerfile or give --image")
     art, out = pathlib.Path(a.artifacts).resolve(), pathlib.Path(a.out).resolve()
     if out.exists():
@@ -111,7 +115,7 @@ def main():
     sh([*cc1, "stop"], env, check=False)
     try:
         bench_runs(a, art, out, triage, digests, env, cc1, rows)
-    finally:  # also after a refused or timed-out request, which stops measure.sh
+    finally:  # also when a refused or timed-out request makes measure.sh() raise SystemExit
         sh([*cc1, "stop"], env, check=False)
 
     failed = 0
