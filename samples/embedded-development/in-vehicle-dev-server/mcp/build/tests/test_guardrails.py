@@ -632,6 +632,161 @@ class Mounts(Env):
             os.environ.pop("DOCKER_HOST")
 
 
+class BenchResults(Env):
+    """`run_check release` with the bench server's published after-deploy results (paths.bench_*)."""
+
+    def setUp(self):
+        super().setUp()
+        b = self.tmp / "bench"
+        self.bres, self.bruns, self.bbase = b / "state" / "results", b / "state" / "runs", b / "baseline"
+        for d in (self.bres, self.bruns / "run-1", self.bbase):
+            d.mkdir(parents=True)
+        self.triage = self.tmp / "srv" / "triage" / "triage.json"
+        self.triage.write_text("{}\n")
+        for f in ("run-result.json", "run.jsonl"):
+            (self.bruns / "run-1" / f).write_text(f + "\n")
+        for f in ("baseline-result.json", "baseline.jsonl"):
+            (self.bbase / f).write_text(f + "\n")
+        self.publish_bench()
+
+    def bench_paths(self):
+        return {"bench_results": self.bres, "bench_runs": self.bruns, "bench_baseline": self.bbase}
+
+    def publish_bench(self, **override):
+        """Writes both after-deploy results as the bench server publishes them; `override` replaces input paths."""
+        inputs = {"run_result": self.bruns / "run-1" / "run-result.json", "run_log": self.bruns / "run-1" / "run.jsonl",
+                  "baseline_result": self.bbase / "baseline-result.json", "baseline_log": self.bbase / "baseline.jsonl"}
+        for check in core.BENCH_CHECKS:
+            ins = {**inputs, **({"triage": self.triage} if check == "logdiff" else {}), **override}
+            data = {"check": check, "verdict": "PASS", "commit": None, "inputs": {
+                k: {"path": str(v), "sha256": "0"} for k, v in ins.items()}}
+            (self.bres / f"{check}.json").write_text(json.dumps(data))
+            (self.bres / f"{check}.log").write_text(f"{check}: PASS\n")
+
+    def record(self, **paths):
+        self.write_config(**{**self.bench_paths(), **paths})
+        s = self.service()
+        calls, real = [], s.sandbox.run
+
+        def run(cmd, log, timeout, ro=(), rw=(), workdir=None, extra=()):
+            if not str(cmd[0]).startswith(str(self.checks)):  # taking HEAD: git runs as usual
+                return real(cmd, log, timeout, ro=ro, rw=rw, workdir=workdir, extra=extra)
+            calls.append({"cmd": [str(c) for c in cmd], "ro": list(ro), "rw": list(rw)})
+            return {"outcome": "failed", "exit_status": 1}
+        s.sandbox.run = run
+        return s, calls
+
+    def test_all_three_paths_or_none(self):
+        self.write_config(bench_results=self.bres)
+        with self.assertRaisesRegex(ConfigError, "give all of bench_results, bench_runs, bench_baseline or none"):
+            self.service()
+        self.write_config(**{**self.bench_paths(), "bench_runs": "relative/runs"})
+        with self.assertRaisesRegex(ConfigError, "must be absolute"):
+            self.service()
+        self.write_config(**{**self.bench_paths(), "bench_baseline": self.tmp / "missing"})
+        with self.assertRaisesRegex(ConfigError, "bench_baseline: .* is not a folder"):
+            self.service()
+
+    def test_bench_paths_the_agents_or_others_could_change_are_rejected(self):
+        (self.ws / "runs").mkdir()
+        self.write_config(**{**self.bench_paths(), "bench_runs": self.ws / "runs"})
+        with self.assertRaisesRegex(ConfigError, "bench_runs lies inside the agents' work tree"):
+            self.service()
+        (self.st / "results").mkdir(parents=True)
+        self.write_config(**{**self.bench_paths(), "bench_results": self.st / "results"})
+        with self.assertRaisesRegex(ConfigError, "bench_results and paths.state must not contain each other"):
+            self.service()
+        self.bruns.chmod(0o777)
+        self.write_config(**self.bench_paths())
+        with self.assertRaisesRegex(ConfigError, "paths.bench_runs: .* is writable by other users"):
+            self.service()
+        self.bruns.chmod(0o755)
+        self.write_config(extra='[trust]\nreaders = ["no-such-user-of-this-test"]\n', **self.bench_paths())
+        with self.assertRaisesRegex(ConfigError, "trust.readers: no user"):
+            self.service()
+
+    def test_release_reads_the_bench_results_and_mounts_their_folders_read_only(self):
+        s, calls = self.record()
+        s.call("run_check", check="release")
+        ro = [str(p) for p in calls[0]["ro"]]
+        for folder in (self.bruns / "run-1", self.bbase, self.triage.parent):
+            self.assertIn(str(folder.resolve()), ro)
+        self.assertNotIn(str(self.bruns.resolve()), ro, "only the run the results name, not every run")
+        self.assertNotIn(str(self.bres.resolve()), ro, "the bench's results folder itself is copied, not mounted")
+        self.assertEqual(calls[0]["rw"], [self.st.resolve() / "run"])
+        copied = self.st / "run" / "results"
+        for check in core.BENCH_CHECKS:
+            self.assertEqual((copied / f"{check}.json").read_text(), (self.bres / f"{check}.json").read_text())
+            self.assertEqual((copied / f"{check}.log").read_text(), f"{check}: PASS\n")
+
+    def test_other_checks_and_a_server_without_the_bench_paths_mount_nothing_of_the_bench(self):
+        s, calls = self.record()
+        s.call("run_check", check="static")
+        self.assertFalse(any("bench" in str(p) for p in calls[0]["ro"]))
+        self.assertFalse((self.st / "run" / "results" / "logdiff.json").exists())
+        self.write_config()
+        s = self.service()
+        seen, real = [], s.sandbox.run
+        s.sandbox.run = lambda cmd, log, timeout, ro=(), **k: (
+            seen.append(list(ro)) or {"outcome": "failed", "exit_status": 1}
+            if str(cmd[0]).startswith(str(self.checks)) else real(cmd, log, timeout, ro=ro, **k))
+        s.call("run_check", check="release")
+        self.assertEqual(len(seen), 1)
+        self.assertFalse(any("bench" in str(p) for p in seen[0]))
+        self.assertFalse((self.st / "run" / "results" / "logdiff.json").exists())
+
+    def test_a_result_the_bench_has_not_published_stays_missing(self):
+        (self.bres / "runtime-limits.json").unlink()
+        s, calls = self.record()
+        s.call("run_check", check="release")
+        self.assertEqual(len(calls), 1)
+        self.assertFalse((self.st / "run" / "results" / "runtime-limits.json").exists())
+        self.assertTrue((self.st / "run" / "results" / "logdiff.json").exists())
+
+    def refused(self, why, **override):
+        self.publish_bench(**override)
+        s, calls = self.record()
+        out = s.call("run_check", check="release")
+        self.assertEqual(calls, [], "nothing runs")
+        self.assertEqual(out["verdict"], "ERROR")
+        self.assertRegex(out["problem"], why)
+        published = json.loads((self.st / "results" / "release.json").read_text())
+        self.assertEqual(published["verdict"], "ERROR")
+        self.assertRegex(published["reasons"][0], why)
+        self.assertIn(("run_check", "refused"), self.outcomes())
+
+    def test_inputs_outside_the_bench_folders_refuse_the_call(self):
+        (self.tmp / "elsewhere").mkdir()
+        (self.tmp / "elsewhere" / "x").write_text("x")
+        self.refused("outside the bench's runs and baseline", run_log=self.tmp / "elsewhere" / "x")
+        self.refused("outside the bench's runs and baseline", run_log=self.bruns / "run-1" / "deeper" / "x")
+        self.refused("outside the bench's runs and baseline", run_log=self.bres / "logdiff.log")
+
+    def test_relative_and_dotted_paths_refuse_the_call(self):
+        self.refused("not an absolute path", run_log="runs/run-1/run.jsonl")
+        self.refused("not an absolute path", run_log=f"{self.bruns}/run-1/../run-1/run.jsonl")
+
+    def test_symlinks_and_missing_inputs_refuse_the_call(self):
+        (self.tmp / "forged").mkdir()
+        (self.tmp / "forged" / "run.jsonl").write_text("forged\n")
+        (self.bruns / "run-2").symlink_to(self.tmp / "forged")
+        self.refused("missing or not a regular file", run_log=self.bruns / "run-2" / "run.jsonl")
+        (self.bruns / "run-1" / "link.jsonl").symlink_to(self.bruns / "run-1" / "run.jsonl")
+        self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "link.jsonl")
+        self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "gone.jsonl")
+
+    def test_a_run_folder_others_can_write_refuses_the_call(self):
+        (self.bruns / "run-1").chmod(0o777)
+        self.refused("writable by other users", run_log=self.bruns / "run-1" / "run.jsonl")
+
+    def test_a_malformed_bench_result_refuses_the_call(self):
+        (self.bres / "logdiff.json").write_text('{"check": "runtime-limits"}')
+        s, calls = self.record()
+        out = s.call("run_check", check="release")
+        self.assertEqual((calls, out["verdict"]), ([], "ERROR"))
+        self.assertRegex(out["problem"], "logdiff result is malformed")
+
+
 class Screen(Env):
     """The MCP middleware on requests the SDK would reject on its own."""
 
