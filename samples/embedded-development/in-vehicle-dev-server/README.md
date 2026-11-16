@@ -184,8 +184,8 @@ make the other paths fail too:
   gateway socket. A hook also refuses shell commands that reach the target directly, for example `ssh` or `scp` to
   the emulated CC-1.
 - The agent configurations deny `git push` and history rewrites (`push --force`, `rebase`, `reset --hard`). Command
-  patterns are easy to get around, for example with `git -C <dir> push` or a compound command, so the build server
-  also holds no push credentials.
+  patterns are easy to get around, for example by writing the command to a script and running it, so the build
+  server also holds no push credentials.
 - A probe test tries these commands and their variants against the agent configurations. Run it again after each
   Kiro or Kiro Crew update, because how rules match commands can change between versions. The hook and the probe are
   in [agents/](agents/README.md), with what the hook does not stop and the probe's last run.
