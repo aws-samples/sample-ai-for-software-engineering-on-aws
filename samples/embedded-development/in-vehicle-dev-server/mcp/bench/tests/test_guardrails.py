@@ -522,6 +522,21 @@ class Deploy(Env):
         self.assertTrue(out["request"].startswith("req-deploy-"))
         self.assertEqual(self.audit()[-1]["request"], out["request"])
 
+    def test_a_refused_action_is_audited_with_its_request_and_digest(self):
+        """At the console and with the target busy (approved, not begun): the audit line of the refusal names the
+        request and the build's digest, as the README's audit row says."""
+        for mode in ("refuse", "busy"):
+            s = self.with_lease()
+            digest = self.publish_build()
+            (self.fake / "mode").write_text(mode)
+            with self.assertRaises(Refused, msg=mode):
+                s.call("request_deploy")
+            last = self.audit()[-1]
+            self.assertEqual(last["outcome"], "refused", mode)
+            self.assertTrue(str(last.get("request")).startswith("req-deploy-"), (mode, last))
+            self.assertEqual(last.get("digest"), digest, mode)
+            s.call("lease_release")
+
     def test_an_approved_action_the_busy_target_did_not_begin_is_refused_not_failed(self):
         s = self.with_lease()
         self.publish_build()

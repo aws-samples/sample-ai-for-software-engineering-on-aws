@@ -78,7 +78,12 @@ RUN_NAME = re.compile(r"run-(\d{1,6})")
 
 
 class Refused(Exception):
-    """The call is not allowed, or the bench refused it; nothing more was done."""
+    """The call is not allowed, or the bench refused it; nothing more was done. *request* and *digest*: the bench
+    request the refused action made and its build's digest, for the audit line, when there was one."""
+
+    def __init__(self, message, request=None, digest=None):
+        super().__init__(message)
+        self.request, self.digest = request, digest
 
 
 class ConfigError(Exception):
@@ -470,7 +475,8 @@ class BenchService:
                     self.sandbox.reap()
                 result = getattr(self, "_" + tool)(**args)
             except Refused as e:
-                self.audit({**entry, "outcome": "refused", "detail": str(e)})
+                self.audit({**entry, "outcome": "refused", "detail": str(e),
+                            **{k: getattr(e, k) for k in ("request", "digest") if getattr(e, k, None)}})
                 raise
             except Exception as e:  # noqa: BLE001 - audited, then reported without internals
                 self.audit({**entry, "outcome": "error", "detail": f"{type(e).__name__}: {e}"})
@@ -661,20 +667,20 @@ class BenchService:
         decision = next((e for e in mine if e.get("event") == "decision"), None)
         if decision and decision.get("verdict") != "approved":
             by, reason = decision.get("by") or "the console", decision.get("reason") or "no reason given"
-            raise Refused(f"refused ({by}): {reason} (not retried)")
+            raise Refused(f"refused ({by}): {reason} (not retried)", rid, digest)
         gate = next((e for e in mine if e.get("event") == "gate" and not e.get("passed")), None)
         if gate:
-            raise Refused(f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)")
+            raise Refused(f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)", rid, digest)
         began = any(e.get("event") in ("action", "target") for e in mine)
         if not began:  # refused before the request, or approved but not begun (the target busy): nothing ran
             text = (read_nofollow(r["log"]) or b"").decode(errors="replace")
             lines = [ln for ln in text.splitlines() if ln.strip()]
             if lines and lines[-1].startswith("refused"):
                 ran = " after the approval; nothing ran on the target" if decision else ""
-                raise Refused(f"{lines[-1]}{ran} (not retried)")
+                raise Refused(f"{lines[-1]}{ran} (not retried)", rid, digest)
         if r["outcome"] == "timeout":
             raise Refused(f"{action} did not finish within its timeout; the bench marks the target unknown until a "
-                          "person reconciles it at the operator console (not retried)")
+                          "person reconciles it at the operator console (not retried)", rid, digest)
         return {**out, "outcome": "failed"}
 
     def judged_build(self):
