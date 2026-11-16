@@ -245,9 +245,19 @@ def test_only_a_lowercase_ascii_login_is_taken_for_a_word(monkeypatch):
 
 
 def test_a_short_login_right_after_by_to_from_or_with_is_the_person(monkeypatch):
-    """Second review of #41 (optional): "Approved by will today" names the person; "The tester will check it" not."""
+    """Second review of #41 (optional): "Approved by will today" names the person; "The tester will check it" not.
+    (Not after "to": see the next test.)"""
     monkeypatch.setattr(display, "this_mac_names", lambda: set())
     v = display.View("en", ["will"])
-    assert v.text("Approved by will today; sent to will for a look, from will, with will") == (
-        "Approved by Release owner today; sent to Release owner for a look, from Release owner, with Release owner")
+    assert v.text("Approved by will today; from will, with will") == (
+        "Approved by Release owner today; from Release owner, with Release owner")
     assert v.text("The tester will check it") == "The tester will check it"
+
+
+def test_a_short_login_after_to_is_the_word(monkeypatch):
+    """Third review of #41: "to" is no sign of a person ("We need to mark the finding"); by, from and with are."""
+    monkeypatch.setattr(display, "this_mac_names", lambda: set())
+    v = display.View("en", ["mark"])
+    assert v.text("We need to mark the finding") == "We need to mark the finding"
+    assert v.text("sent by mark, with mark, from mark today") == (
+        "sent by Release owner, with Release owner, from Release owner today")
