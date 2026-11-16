@@ -341,6 +341,8 @@ class BuildService:
             if inside(path, self.workspace):
                 raise ConfigError(f"paths.{name} lies inside the agents' work tree; the agents could change it")
         for name, path in self.bench.items():
+            if inside(self.workspace, path):
+                raise ConfigError(f"paths.{name} contains the agents' work tree")
             if inside(path, self.state) or inside(self.state, path):
                 raise ConfigError(f"paths.{name} and paths.state must not contain each other")
             if not real_dir(path):
@@ -619,14 +621,26 @@ class BuildService:
         run folder directly under paths.bench_runs, in paths.bench_baseline or in the approved triage's folder;
         anything else refuses the call. A result the bench has not published stays missing, and release.sh reports
         it."""
+        try:
+            return self._bench_results_into(results)
+        except OSError as e:  # an unreadable lock, input or folder: refused, so the release result becomes ERROR
+            raise Refused(f"cannot read the bench's results: {e}") from None
+
+    def _bench_results_into(self, results):
         runs, baseline = self.bench["bench_runs"], self.bench["bench_baseline"]
         folders = []
+        # The bench server's publishing lock, next to its results folder: the json, log and diff of one check come
+        # from one call. The bench server makes it before it first publishes; without it, nothing is read.
         lock = self.bench["bench_results"].parent / "results.lock"
+        if not os.path.lexists(lock):
+            if any(os.path.lexists(self.bench["bench_results"] / f"{c}.json") for c in BENCH_CHECKS):
+                raise Refused(f"the bench's publishing lock {lock} is missing; is paths.bench_results the bench "
+                              "server's <state>/results?")
+            return folders
         with contextlib.ExitStack() as stack:
-            if os.path.lexists(lock):  # the bench server's publishing lock: no json, log and diff of two calls mixed
-                fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW)
-                stack.callback(os.close, fd)
-                fcntl.flock(fd, fcntl.LOCK_SH)
+            fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW)
+            stack.callback(os.close, fd)
+            fcntl.flock(fd, fcntl.LOCK_SH)
             blobs = {}
             for check in BENCH_CHECKS:
                 for suffix in ("json", "log", "diff"):
@@ -654,8 +668,11 @@ class BuildService:
                 else:
                     raise Refused(f"the bench's {check} result records input {name} at {path}, outside the bench's "
                                   "runs and baseline and the approved triage's folder")
+                if not real_dir(folder):
+                    raise Refused(f"the bench's {check} input {name} ({path}) lies in {folder}, which is a link or "
+                                  "not a folder")
                 st = os.lstat(p) if os.path.lexists(p) else None
-                if st is None or not stat.S_ISREG(st.st_mode) or not real_dir(folder):
+                if st is None or not stat.S_ISREG(st.st_mode):
                     raise Refused(f"the bench's {check} input {name} ({path}) is missing or not a regular file")
                 if folder.parent == runs:
                     try:

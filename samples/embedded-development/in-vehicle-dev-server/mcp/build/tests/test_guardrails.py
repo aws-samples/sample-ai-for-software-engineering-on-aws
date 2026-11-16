@@ -641,6 +641,7 @@ class BenchResults(Env):
         self.bres, self.bruns, self.bbase = b / "state" / "results", b / "state" / "runs", b / "baseline"
         for d in (self.bres, self.bruns / "run-1", self.bbase):
             d.mkdir(parents=True)
+        (self.bres.parent / "results.lock").write_text("")  # the bench server makes it before it first publishes
         self.triage = self.tmp / "srv" / "triage" / "triage.json"
         self.triage.write_text("{}\n")
         for f in ("run-result.json", "run.jsonl"):
@@ -770,10 +771,68 @@ class BenchResults(Env):
         (self.tmp / "forged").mkdir()
         (self.tmp / "forged" / "run.jsonl").write_text("forged\n")
         (self.bruns / "run-2").symlink_to(self.tmp / "forged")
-        self.refused("missing or not a regular file", run_log=self.bruns / "run-2" / "run.jsonl")
+        self.refused("which is a link or not a folder", run_log=self.bruns / "run-2" / "run.jsonl")
         (self.bruns / "run-1" / "link.jsonl").symlink_to(self.bruns / "run-1" / "run.jsonl")
         self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "link.jsonl")
         self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "gone.jsonl")
+
+    def test_a_fifo_and_inputs_beside_or_below_the_allowed_folders_refuse_the_call(self):
+        os.mkfifo(self.bruns / "run-1" / "fifo.jsonl")
+        self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "fifo.jsonl")
+        (self.bruns / "loose.jsonl").write_text("x\n")
+        self.refused("outside the bench's runs and baseline", run_log=self.bruns / "loose.jsonl")
+        (self.bbase / "sub").mkdir()
+        (self.bbase / "sub" / "baseline.jsonl").write_text("x\n")
+        self.refused("outside the bench's runs and baseline", baseline_log=self.bbase / "sub" / "baseline.jsonl")
+
+    def test_a_missing_or_unreadable_publishing_lock_refuses_the_call(self):
+        lock = self.bres.parent / "results.lock"
+        lock.unlink()
+        self.refused("publishing lock .* is missing")
+        lock.write_text("")
+        lock.chmod(0)
+        try:
+            if os.access(lock, os.R_OK):
+                self.skipTest("runs as a user who can read any file")
+            self.refused("cannot read the bench's results")
+        finally:
+            lock.chmod(0o644)
+        lock.unlink()
+        lock.symlink_to(self.tmp / "elsewhere-lock")
+        (self.tmp / "elsewhere-lock").write_text("")
+        self.refused("cannot read the bench's results")
+
+    def test_no_lock_and_nothing_published_is_two_missing_results(self):
+        (self.bres.parent / "results.lock").unlink()
+        for f in self.bres.iterdir():
+            f.unlink()
+        s, calls = self.record()
+        s.call("run_check", check="release")
+        self.assertEqual(len(calls), 1)
+        self.assertFalse((self.st / "run" / "results" / "logdiff.json").exists())
+
+    def test_trusted_readers_own_the_bench_paths_only(self):
+        """Two uids: the server runs as another user (os.getuid patched) than the one who owns the test's folders,
+        who stands for benchsrv."""
+        import pwd
+        owner, real = pwd.getpwuid(os.getuid()).pw_name, os.getuid
+        try:
+            core.os.getuid = lambda: real() + 4242
+            for path, name in ((self.bres, "bench_results"), (self.bruns, "bench_runs"),
+                               (self.bbase, "bench_baseline")):
+                with self.assertRaisesRegex(ConfigError, f"paths.{name}: "):  # the owner, or /tmp's sticky child
+                    core.check_trusted(path, name)
+                core.check_trusted(path, name, extra=(real(),))
+            self.write_config(extra=f'[trust]\nreaders = ["{owner}"]\n', **self.bench_paths())
+            with self.assertRaisesRegex(ConfigError, r"paths\.(workspace|state)"):  # not the server's own paths
+                self.service()
+        finally:
+            core.os.getuid = real
+
+    def test_bench_paths_that_contain_the_work_tree_are_rejected(self):
+        self.write_config(**{**self.bench_paths(), "bench_baseline": self.tmp})
+        with self.assertRaisesRegex(ConfigError, "bench_baseline contains the agents' work tree"):
+            self.service()
 
     def test_a_run_folder_others_can_write_refuses_the_call(self):
         (self.bruns / "run-1").chmod(0o777)

@@ -106,12 +106,13 @@ only, as the bench server's own `trust.readers` trusts the build server's user f
 server's user needs read access to them, for example through a group. Both servers keep the same approved triage,
 because `checks/release.sh` requires that `logdiff` judged it.
 
-The bench server records the inputs of its checks at their host paths, because its sandbox mounts every folder at
-its host path, so the build server finds them at the same paths. While it copies the results, the build server holds
-the bench's publishing lock (`<state>/results.lock`) shared, so the json, log and diff come from one check. The bench
-folders are checked like the server's own at start and before every call; recording a new baseline into a new folder
-means changing `bench_baseline` and restarting the server, and replacing the folder under the same path is refused
-until a person restarts it.
+The bench server records the inputs of its checks at their host paths, because its sandbox mounts every folder at its
+host path, so the build server finds them at the same paths. While it copies the results, the build server holds the
+bench's publishing lock (`<state>/results.lock`, next to `bench_results`) shared, so the json, log and diff come from
+one check; its user needs read access to the lock too. A missing or unreadable lock refuses the call. The paths of the
+bench folders are checked like the server's own at start, and their identity before every call; recording a new baseline
+into a new folder means changing `bench_baseline` and restarting the server, and replacing the folder under the same
+path is refused until a person restarts it.
 
 ## Running
 
@@ -186,14 +187,14 @@ then found every input the published build result recorded. The probe's 16 check
 nor any path outside the build folder of its call, its background writers stopped with their containers, and no forged
 result was published. The checks' own runs are in [`rehearsal/check-examples/`](../../rehearsal/check-examples/).
 
-2026-11-16, on an x86_64 Ubuntu 24.04 host with Docker 29.8.2 and MCP Python SDK 2.3.0: 59 guardrail tests OK, ten
-of them for [the bench's results](#the-benchs-results). Then `run_check release` in its container, through the
-server, with the bench server's published results of a Linux bench host (2026-11-06): with the bench's results of a
-correct build and the build server's result of the same build, `checks/release.sh` found both after-deploy results,
-every input they recorded, the same digest on the bench as built, and the same run and baseline in both; it failed
-only on the four checks that build server had not run (`static`, `unit`, `size`, `trace`: no result). With the
-results of a bench whose `logdiff` had judged another triage, the call was refused before anything ran and the
-release result became an `ERROR` naming that input.
+2026-11-16, on an x86_64 Ubuntu 24.04 host with Docker 29.8.2 and MCP Python SDK 2.3.0: 64 guardrail tests OK, 15 of
+them for [the bench's results](#the-benchs-results). Then `run_check release` in its container, through the server's
+call path (its guardrails, audit and Docker sandbox, without MCP stdio), with the bench server's published results of a
+Linux bench host (2026-11-06): with the bench's results of a correct build and the build server's result of the same
+build, `checks/release.sh` found both after-deploy results, every input they recorded, the same digest on the bench as
+built, and the same run and baseline in both; it failed only on the four checks that build server had not run (`static`,
+`unit`, `size`, `trace`: no result). With the results of a bench whose `logdiff` had judged another triage, the call was
+refused before anything ran and the release result became an `ERROR` naming that input.
 
 ## Prerequisites, cost and cleanup
 
