@@ -347,6 +347,9 @@ class BuildService:
                 raise ConfigError(f"paths.{name} and paths.state must not contain each other")
             if not real_dir(path):
                 raise ConfigError(f"paths.{name}: {path} is not a folder")
+        if self.bench and self.bench["bench_runs"] != self.bench["bench_results"].parent / "runs":
+            raise ConfigError("paths.bench_runs must be the runs folder beside paths.bench_results (the bench server's "
+                              "<state>/runs and <state>/results)")
         if inside(config_path, self.workspace):
             raise ConfigError("the configuration lies inside the agents' work tree; the agents could change it")
         if inside(self.workspace, self.state) or inside(self.triage, self.state):

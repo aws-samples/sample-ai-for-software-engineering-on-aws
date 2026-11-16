@@ -82,7 +82,8 @@ def git(repo, *args):
 
 class Env(unittest.TestCase):
     def setUp(self):
-        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="buildserver-test-"))
+        # resolved: on macOS /tmp and /var are links to /private/..., and the server resolves its paths
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="buildserver-test-")).resolve()
         self.ws = self.tmp / "work"
         (self.ws / "cmake").mkdir(parents=True)
         (self.ws / "src.cpp").write_text("int main() {}\n")
@@ -683,6 +684,10 @@ class BenchResults(Env):
             self.service()
         self.write_config(**{**self.bench_paths(), "bench_runs": "relative/runs"})
         with self.assertRaisesRegex(ConfigError, "must be absolute"):
+            self.service()
+        (self.tmp / "other-runs").mkdir()
+        self.write_config(**{**self.bench_paths(), "bench_runs": self.tmp / "other-runs"})
+        with self.assertRaisesRegex(ConfigError, "bench_runs must be the runs folder beside paths.bench_results"):
             self.service()
         self.write_config(**{**self.bench_paths(), "bench_baseline": self.tmp / "missing"})
         with self.assertRaisesRegex(ConfigError, "bench_baseline: .* is not a folder"):

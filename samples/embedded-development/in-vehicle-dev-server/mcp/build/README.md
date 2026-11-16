@@ -100,7 +100,8 @@ where `checks/limits.json` says (`sysroot`). A person approves the triage by wri
 
 For `run_check release` to see the after-deploy checks, set the three bench paths in `[paths]` to the folders of
 the [`bench` server](../bench/README.md)'s configuration: its published results (`<state>/results`), its run folders
-(`<state>/runs`) and the baseline it compares with. Give all three or none. The bench server runs as a user of its
+(`<state>/runs`) and the baseline it compares with. Give all three or none; the runs folder must be the one beside the
+results folder. The bench server runs as a user of its
 own (`benchsrv`), which owns these folders; name it in `trust.readers`, which trusts that user for these three paths
 only, as the bench server's own `trust.readers` trusts the build server's user for the build's results. The build
 server's user needs read access to them, for example through a group. Both servers keep the same approved triage,
