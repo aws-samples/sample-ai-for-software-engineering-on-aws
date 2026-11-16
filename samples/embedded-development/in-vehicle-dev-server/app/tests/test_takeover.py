@@ -72,8 +72,10 @@ def test_a_review_names_who_fixes_what():
     three = "Send back: Developer · fix / Developer · refactor / Tester"
     assert targets(three, en_t) == ["tester", "backend", "frontend"]
     # third review of #41: a note after " / Tester" keeps the second role (main gave both)
-    for line in ("Send back: Developer · fix / Tester: add a test", "Send back: Developer · fix / Tester -- tests missing",
-                 "Send back: Developer · fix / Tester to add a test", "Send back: Developer · fix/Tester: add a test"):
+    for line in ("Send back: Developer · fix / Tester: add a test",
+                 "Send back: Developer · fix / Tester -- tests missing",
+                 "Send back: Developer · fix / Tester to add a test",
+                 "Send back: Developer · fix/Tester: add a test"):
         assert targets(line, en_t) == ["tester", "backend"], line
     # a / inside backticks is a path, not two roles; backticks around each role's name are not
     for path in ("`Tester/plan`", "`Tester/README`"):

@@ -266,9 +266,12 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
     # a role the note goes on to mention in parentheses is not sent back too, nor one a path's folder is named after
-    chunks = [_PATH.sub(" ", _URL.sub(" ", _TICKED.sub(lambda m: " " if "/" in m.group(1) else m.group(0),
-                                                     _ASIDE.sub("", c)))) for c in lines] or _OWNER_RE.findall(text or "")
-    # a word with a / (后端/测试, qa/tester) names each part only when every part is a role's name, else its first only
+    def plain_line(c: str) -> str:
+        c = _TICKED.sub(lambda m: " " if "/" in m.group(1) else m.group(0), _ASIDE.sub("", c))
+        return _PATH.sub(" ", _URL.sub(" ", c))
+    chunks = [plain_line(c) for c in lines] or _OWNER_RE.findall(text or "")
+    # a word with a / (后端/测试, qa/tester) names each part only when every part is a role's name,
+    # else its first part only
     found: set[str | None] = set()
     for chunk in chunks:
         for word in re.split(r"[、,，和及与\s]+", chunk):
