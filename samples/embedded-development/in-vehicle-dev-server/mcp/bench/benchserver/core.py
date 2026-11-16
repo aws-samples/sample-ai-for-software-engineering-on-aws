@@ -415,6 +415,17 @@ class BenchService:
         self.lock = threading.Lock()
         self.publish_lock = threading.Lock()
         self.lock_path = self.state / "lock"
+        self.sweep_read_logs()
+
+    def sweep_read_logs(self):
+        """Removes the logs of reads a killed session left in this server's logs folder (read-*.log, regular files
+        only): those older than a read may take, so that a read another session has in progress keeps its log."""
+        cutoff = time.time() - float(self.timeouts["read"]) - 60
+        for p in (self.state / "logs").glob("read-*.log"):
+            with contextlib.suppress(OSError):
+                st = os.lstat(p)
+                if stat.S_ISREG(st.st_mode) and st.st_mtime < cutoff:
+                    os.unlink(p)
 
     @contextlib.contextmanager
     def exclusive(self):

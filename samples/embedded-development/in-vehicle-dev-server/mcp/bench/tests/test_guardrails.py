@@ -301,6 +301,27 @@ class Calls(Env):
         self.assertEqual(args, {"n": f"<int, {(10 ** 4999).bit_length()} bits>", "small": 42, "flag": True,
                                 "none": None, "x": 1.5})
 
+    def test_the_logs_of_reads_a_killed_session_left_are_swept_at_start(self):
+        """A session killed mid-read leaves logs/read-*.log behind: the next server removes those older than a read
+        can take, in its own logs folder only; a read another session has in progress, other logs and what a link
+        points to stay."""
+        self.service()  # makes the state folders
+        logs = self.st / "logs"
+        stale, fresh = logs / "read-target-111-aaaaaa.log", logs / "read-supply-222-bbbbbb.log"
+        other, outside = logs / "check-logdiff.out", self.tmp / "keep.txt"
+        for f in (stale, fresh, other, outside):
+            f.write_text("x\n")
+        link = logs / "read-probe-333-cccccc.log"
+        link.symlink_to(outside)
+        old = time.time() - 3600
+        for f in (stale, other):
+            os.utime(f, (old, old))
+        os.utime(link, (old, old), follow_symlinks=False)
+        self.service("reviewer")
+        self.assertFalse(stale.exists())
+        self.assertTrue(fresh.exists() and other.exists() and outside.exists())
+        self.assertTrue(link.is_symlink())  # only regular files are removed
+
     def test_reads_do_not_wait_for_a_call_in_progress(self):
         """A read-only call takes no lock: another session sees the request waiting at the console."""
         import threading
