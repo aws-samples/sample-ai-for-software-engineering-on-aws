@@ -191,8 +191,6 @@ paths as it should; the test's expected message is narrower than the check.
 
 - The server as a user of its own (`benchsrv`), started by the agents' user through sudo; the runs above were as the
   bench owner's own user, so the path checks only met that user's folders.
-- `test_trusted_readers_own_the_build_results_and_the_triage_only` under `umask 002` or `TMPDIR=/tmp`: the test
-  expects the owner message where the check first finds a writable folder.
 
 ## Open questions
 

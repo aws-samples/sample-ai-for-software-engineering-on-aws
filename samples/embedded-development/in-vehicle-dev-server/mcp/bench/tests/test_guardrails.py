@@ -114,6 +114,9 @@ sys.exit({"PASS": 0, "FAIL": 1, "BLOCKED": 3}[v])
 
 class Env(unittest.TestCase):
     def setUp(self):
+        # the folders the tests make have the permissions the tests mean, whatever the caller's umask (002 makes
+        # them group-writable, which the server rightly refuses)
+        self.umask = os.umask(0o022)
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="benchserver-test-")).resolve()  # macOS: /var is /private/var
         os.chmod(self.tmp, 0o700)
         self.fake = self.tmp / "fake"
@@ -143,6 +146,7 @@ class Env(unittest.TestCase):
     def tearDown(self):
         os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
         shutil.rmtree(self.tmp, ignore_errors=True)
+        os.umask(self.umask)
 
     def write_config(self, extra="", **paths):
         p = {"bench": self.bench, "checks": self.checks, "state": self.st, "bench_state": self.bstate,
@@ -374,7 +378,10 @@ class Paths(Env):
 
     def test_trusted_readers_own_the_build_results_and_the_triage_only(self):
         """Two uids: the server runs as another user (os.getuid patched) than the one who owns the test's folders,
-        who stands for buildsrv."""
+        who stands for buildsrv. To that user, a folder of the test's is someone else's; when the test's folder lies
+        in a sticky folder others can write (TMPDIR=/tmp), the check first finds that folder writable by others:
+        either reason is a refusal."""
+        refused = "not root, the server's user|is writable by other users"
         import pwd
         owner = pwd.getpwuid(os.getuid()).pw_name
         real = os.getuid
@@ -384,7 +391,7 @@ class Paths(Env):
             core.os.getuid = lambda: real() + 4242
             for path, name in ((self.results, "build_results"), (self.triage.parent, "triage"),
                                (self.triage, "triage")):
-                with self.assertRaisesRegex(ConfigError, "not root, the server's user"):
+                with self.assertRaisesRegex(ConfigError, refused):
                     core.check_trusted(path, name)
                 core.check_trusted(path, name, (real(),))  # a trusted reader's
             self.config = self.write_config(f'[trust]\nreaders = ["{owner}"]\n')
