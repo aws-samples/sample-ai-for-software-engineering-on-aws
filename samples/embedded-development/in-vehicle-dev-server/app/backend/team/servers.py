@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from . import checks, gitwork, mcpclient
-from .constants import APP_NAME
+from .constants import APP_NAME, DOCKER_BIN
 
 MODES = ("direct", "servers")
 BUILD_CHECKS = ("build", "static", "unit", "size", "trace")  # before the bench, on the build server
@@ -228,7 +228,7 @@ class Session:
     def __init__(self, st: Setup, which: str, calls: Path, label: str) -> None:
         self.which, self.calls, self.label = which, Path(calls), label
         self.audit = (st.build_state if which == "build" else st.bench_state) / "audit.jsonl"
-        self.client = mcpclient.StdioClient(st.build if which == "build" else st.bench, env=mcpclient.server_env())
+        self.client = mcpclient.StdioClient(st.build if which == "build" else st.bench, env=env())
         self.start = 0
 
     async def __aenter__(self) -> "Session":
@@ -260,6 +260,14 @@ class Session:
         self.calls.parent.mkdir(parents=True, exist_ok=True)
         with open(self.calls, "a", encoding="utf-8") as f:
             f.write(json.dumps(line, ensure_ascii=False) + "\n")
+
+
+def env() -> dict[str, str]:
+    """A server's environment: the app's PATH with docker's folder first (the servers run `docker` from PATH, and
+    Kiro Crew's gateway has /usr/bin:/bin:/usr/sbin:/sbin only)."""
+    path = os.environ.get("PATH") or "/usr/bin:/bin"
+    docker = str(Path(DOCKER_BIN).parent) if os.path.isabs(DOCKER_BIN) else ""
+    return mcpclient.server_env({"PATH": f"{docker}:{path}" if docker and docker not in path.split(":") else path})
 
 
 def sessions(root: Path) -> list[dict[str, Any]]:

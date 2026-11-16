@@ -369,6 +369,14 @@ def approve_triage_at(root: Path) -> None:
     (root / "triage.json").write_text(json.dumps({"approved": {"by": "alice"}, "findings": []}), encoding="utf-8")
 
 
+def test_a_server_finds_docker_with_the_gateways_path(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")  # what Kiro Crew's gateway has
+    monkeypatch.setattr(servers, "DOCKER_BIN", "/opt/alice/bin/docker")
+    assert servers.env()["PATH"] == "/opt/alice/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    monkeypatch.setattr(servers, "DOCKER_BIN", "docker")  # none found: PATH as it is
+    assert servers.env()["PATH"] == "/usr/bin:/bin:/usr/sbin:/sbin"
+
+
 def test_the_board_does_not_decide_in_servers_mode(tmp_path, monkeypatch):
     rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
     assert rig.view()["board_decides"] is False
