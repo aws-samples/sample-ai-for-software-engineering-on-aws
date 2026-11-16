@@ -405,12 +405,13 @@ class BenchService:
         env_path = cfg.get("environment", {}).get("path", "/usr/local/bin:/usr/bin:/bin")
         label = hashlib.sha256(str(self.state).encode()).hexdigest()[:16]
         self.sandbox = Sandbox(cfg.get("sandbox", {}), env_path, label)
-        self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"  # this session's lease identity
+        self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"  # this session's lease identity, inside the lease only
+        self.session = secrets.token_hex(8)  # who the requests and the audit name: no pid, nothing of the lease
         self.current = {}  # the calls in progress (reads run beside a write), for the audit if the session ends
         self.call_ids = itertools.count()
         # who the bench's requests name: unique to this session, so that this call's request is told from another's
         # (the app's own, another session's) in the action record
-        self.requester = f"bench MCP server (role {role}, session {self.holder})"
+        self.requester = f"bench MCP server (role {role}, session {self.session})"
         self.lock = threading.Lock()
         self.publish_lock = threading.Lock()
         self.lock_path = self.state / "lock"
@@ -428,7 +429,7 @@ class BenchService:
     # ------------------------------------------------------------------------------------------ audit and calls
 
     def audit(self, entry):
-        line = json.dumps({"t": now(), "role": self.role, "session": self.holder, **entry}, ensure_ascii=False,
+        line = json.dumps({"t": now(), "role": self.role, "session": self.session, **entry}, ensure_ascii=False,
                           sort_keys=True, default=repr)
         fd = os.open(self.audit_log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o640)
         try:

@@ -481,12 +481,26 @@ class Deploy(Env):
         src = (self.fake / "deployed-from").read_text().strip()
         self.assertEqual(pathlib.Path(src), self.st / "builds" / digest)  # not the build server's file
         env = (self.fake / "env-cc1").read_text()
-        self.assertIn(f"CC1_REQUESTER=bench MCP server (role developer, session {s.holder})", env)
+        self.assertIn(f"CC1_REQUESTER=bench MCP server (role developer, session {s.session})", env)
         self.assertIn(f"CC1_BENCH_STATE={self.bstate}", env)
         self.assertIn("CC1_APPROVAL_TIMEOUT_S=2", env)
         self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
         last = self.audit()[-1]
         self.assertEqual((last["outcome"], last["digest"], last["request"]), ("ok", digest, out["request"]))
+
+    def test_the_session_is_named_by_an_id_of_its_own_not_by_the_lease_holder(self):
+        """The requester in the action record and the audit name a random session ID; the holder (role:pid:token)
+        stays inside the lease, which no read shows."""
+        s = self.with_lease()
+        self.publish_build()
+        s.call("request_deploy")
+        self.assertRegex(s.session, r"^[0-9a-f]{16}$")
+        self.assertNotIn(s.session, s.holder)
+        shown = json.dumps([s.call("bench_status"), s.call("read_actions")])
+        self.assertIn(f"session {s.session}", shown)  # the request names it
+        self.assertNotIn(s.holder, shown)
+        self.assertNotIn(s.holder.split(":")[2], (self.st / "audit.jsonl").read_text())
+        self.assertEqual({e["session"] for e in self.audit()}, {s.session})
 
     def test_a_result_of_another_check_is_not_a_build(self):
         s = self.with_lease()
