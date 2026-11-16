@@ -67,6 +67,7 @@ TOOLS = {
 OPTIONAL = {("build", "target")}
 VERDICTS = {0: "PASS", 1: "FAIL", 2: "USAGE", 3: "BLOCKED"}
 TAIL_BYTES = 8192
+EVIDENCE, EVIDENCE_LIMIT = "evidence.md", 512 * 1024  # the batch's evidence page, published after a passing release
 SAFE_GIT = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.attributesFile=/dev/null"]
 DOCKER_CLIENT_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH",
                      "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
@@ -696,7 +697,7 @@ class BuildService:
         """The files of the results folder that belong to a check: its result, log and diff, its work folder and,
         for build, the artifacts. Paths relative to the results folder."""
         return ([f"{check}.json", f"{check}.log", f"{check}.diff", f"work/{check}"] +
-                (["artifacts"] if check == "build" else []))
+                (["artifacts"] if check == "build" else []) + ([EVIDENCE] if check == "release" else []))
 
     def drop(self, base, check):
         for rel in self.owned(check):
@@ -742,6 +743,9 @@ class BuildService:
         else:
             self.publish(results, check, data)
         out = {**r, "check": check, "commit": head, "verdict": verdict, "summary": tail(log, 2048)}
+        if check == "release" and verdict == "PASS" and not problem:
+            why = self.evidence_page(run, results, ro)
+            out["evidence_page"] = "published" if why is None else f"not published: {why}"
         if problem:
             out["problem"] = problem
         else:
@@ -752,6 +756,23 @@ class BuildService:
         if charged:
             out["repair"] = self.settle_cross_attempt(charged, "passed" if verdict == "PASS" else "failed")
         return out
+
+    def evidence_page(self, run, results, ro):
+        """After a release that passed: checks/evidence-page.sh writes the batch's page from this run's results and the
+        approved triage, in the sandbox with the release's own read-only mounts, and the server publishes it as
+        results/evidence.md. The person signs off from this page. None, or why it was not published."""
+        log = self.state / "logs" / "evidence-page.out"
+        cmd = [self.checks / "evidence-page.sh", "--results", results, "--triage", self.triage]
+        r = self.sandbox.run(cmd, log, self.timeouts["check"], ro=ro, rw=[run], workdir=run)
+        if r["exit_status"] != 0:
+            return f"checks/evidence-page.sh exited with {r['exit_status']} ({r['outcome']})"
+        page = read_nofollow(results / EVIDENCE, limit=EVIDENCE_LIMIT + 1)
+        if not page:
+            return "checks/evidence-page.sh wrote no page"
+        if len(page) > EVIDENCE_LIMIT:
+            return f"the page is over {EVIDENCE_LIMIT // 1024} KiB"
+        write_atomic(self.state / "results" / EVIDENCE, page)
+        return None
 
     @staticmethod
     def judge(results, check, verdict, call_start, head):
@@ -815,7 +836,11 @@ class BuildService:
             data = json.loads(read_nofollow(self.state / "results" / f"{check}.json") or b"")
         except ValueError:
             data = None
-        return {"check": check, "result": data, "log_tail": tail(self.state / "results" / f"{check}.log")}
+        out = {"check": check, "result": data, "log_tail": tail(self.state / "results" / f"{check}.log")}
+        if check == "release":
+            page = read_nofollow(self.state / "results" / EVIDENCE, limit=EVIDENCE_LIMIT)
+            out["evidence_page"] = page.decode(errors="replace") if page else None
+        return out
 
     def _read_log(self, kind, profile):
         self.pick("kind", kind, LOG_KINDS)

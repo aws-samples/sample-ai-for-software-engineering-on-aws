@@ -12,7 +12,7 @@ whatever the agent session allows. The `bench` server (build plan item 5, with t
 | `configure` | controlled-write | CMake configure of the work tree for a profile: `cross` (the project's toolchain file), `host`, `tsan` or `asan`, into the server's build directory for that profile |
 | `build` | controlled-write | Ninja build of a configured profile; target `vstatd`, `vstatd_tests` or `all` |
 | `run_check` | controlled-write | One of the [checks](../../checks/README.md) `build`, `static`, `unit`, `size`, `trace` or `release`, on a clean clone of the committed HEAD, with fixed arguments; returns the verdict from the exit status (0 PASS, 1 FAIL, 3 BLOCKED) |
-| `read_result` | read-only | A check's last published result and the tail of its log |
+| `read_result` | read-only | A check's last published result and the tail of its log; for `release`, also the evidence page published after it passed |
 | `read_log` | read-only | The tail of the last configure or build log of a profile |
 
 No tool takes a command, a path, a check option or a limit. No tool commits, pushes, merges, tags or publishes. The
@@ -95,6 +95,15 @@ Output returned to the agent is cut to the last 8 KiB of a log. Refusals and err
 the roles and their classes, timeouts, the `PATH` inside the container and the tool commands. The sysroot is mounted
 where `checks/limits.json` says (`sysroot`). A person approves the triage by writing its approval record next to it
 (see the [checks](../../checks/README.md#the-approved-triage)).
+
+### The evidence page
+
+After `run_check release` passed, the server runs `checks/evidence-page.sh` on that call's results and the approved
+triage, in the sandbox with the release's own read-only mounts, and publishes the page as `results/evidence.md`;
+`read_result release` returns it. The person signs off from this page, so it comes from the server that judged the
+release, not from an agent. A release that does not pass publishes no page and removes the last one, so a page always
+belongs to the latest release result. If the script fails or writes no page, the release result stands and the call's
+`evidence_page` says why.
 
 ### The bench's results
 
@@ -196,6 +205,11 @@ build, `checks/release.sh` found both after-deploy results, every input they rec
 built, and the same run and baseline in both; it failed only on the four checks that build server had not run (`static`,
 `unit`, `size`, `trace`: no result). With the results of a bench whose `logdiff` had judged another triage, the call was
 refused before anything ran and the release result became an `ERROR` naming that input.
+
+Later the same day, with the evidence page: 69 guardrail tests OK, four of them for the page. In the build container,
+through the server's call path, `checks/evidence-page.sh` wrote the page from the same bench host's results and the
+build server's result: the build's digest, the runtime-limits and logdiff results (PASS, emulation) and the four
+source checks that build server had not run, marked missing.
 
 ## Prerequisites, cost and cleanup
 

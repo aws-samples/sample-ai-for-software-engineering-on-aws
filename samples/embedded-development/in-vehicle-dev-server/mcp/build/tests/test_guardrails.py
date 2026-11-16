@@ -869,6 +869,69 @@ class BenchResults(Env):
         self.assertRegex(out["problem"], "logdiff result is malformed")
 
 
+FAKE_EVIDENCE = """#!/bin/sh
+printf '%s\\n' "$@" > "$FAKE_STATE/argv-evidence"
+while [ $# -gt 0 ]; do case "$1" in --results) r=$2; shift;; esac; shift; done
+mode=$(cat "$FAKE_STATE/evidence-mode" 2>/dev/null)
+[ "$mode" = fail ] && exit 2
+[ "$mode" = none ] && exit 0
+[ "$mode" = link ] && { ln -s "$FAKE_STATE/secret" "$r/evidence.md"; exit 0; }
+printf '# Evidence page\\n\\nrelease: PASS\\n' > "$r/evidence.md"
+"""
+
+
+class EvidencePage(Env):
+    """After a release that passed, the server publishes checks/evidence-page.sh's page as results/evidence.md."""
+
+    def setUp(self):
+        super().setUp()
+        p = self.checks / "evidence-page.sh"
+        p.write_text(FAKE_EVIDENCE.replace("$FAKE_STATE", str(self.fake)))
+        p.chmod(0o755)
+        (self.fake / "secret").write_text("not for the agents")
+
+    def release(self, verdict, mode=""):
+        self.flag("verdict", verdict)
+        self.flag("evidence-mode", mode)
+        s = self.service()
+        return s, s.call("run_check", check="release")
+
+    def test_a_passing_release_publishes_the_page_and_read_result_returns_it(self):
+        s, out = self.release("PASS")
+        self.assertEqual((out["verdict"], out["evidence_page"]), ("PASS", "published"))
+        self.assertEqual((self.st / "results" / "evidence.md").read_text(), "# Evidence page\n\nrelease: PASS\n")
+        argv = (self.fake / "argv-evidence").read_text().split("\n")
+        self.assertEqual(argv[0], "--results")
+        self.assertIn("--triage", argv)
+        self.assertNotIn("--agent-summary", argv, "the page shows the checks' verdicts, not an agent's word")
+        self.assertEqual(s.call("read_result", check="release")["evidence_page"], "# Evidence page\n\nrelease: PASS\n")
+        self.assertIsNone(s.call("read_result", check="build").get("evidence_page"))
+
+    def test_a_release_that_does_not_pass_leaves_no_page(self):
+        s, _ = self.release("PASS")
+        self.assertTrue((self.st / "results" / "evidence.md").exists())
+        (self.fake / "argv-evidence").unlink()
+        _, out = self.release("FAIL")
+        self.assertNotIn("evidence_page", out)
+        self.assertFalse((self.fake / "argv-evidence").exists(), "no page for a release that failed")
+        self.assertFalse((self.st / "results" / "evidence.md").exists(), "the page of the last pass is removed")
+        self.assertIsNone(s.call("read_result", check="release")["evidence_page"])
+
+    def test_a_page_the_script_did_not_write_is_not_published(self):
+        for mode, why in (("fail", "exited with 2"), ("none", "wrote no page"), ("link", "wrote no page")):
+            with self.subTest(mode):
+                _, out = self.release("PASS", mode)
+                self.assertEqual(out["verdict"], "PASS", "the release result stands")
+                self.assertIn(why, out["evidence_page"])
+                self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_other_checks_make_no_page(self):
+        self.flag("verdict", "PASS")
+        out = self.service().call("run_check", check="build")
+        self.assertNotIn("evidence_page", out)
+        self.assertFalse((self.fake / "argv-evidence").exists())
+
+
 class Screen(Env):
     """The MCP middleware on requests the SDK would reject on its own."""
 
