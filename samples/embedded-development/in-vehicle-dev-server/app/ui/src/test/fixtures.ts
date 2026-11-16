@@ -829,9 +829,10 @@ export function scorecardOf(b: Board): Scorecard {
     times: { triage_s: 1800, first_pass_s: 5400, signoff_s: r.signoff ? r.signoff.at - r.started_at : null },
     build_rounds: 1, caught: { build: 1, static: 1, unit: 1, size: 0, trace: 0 }, logdiff: { differences: 2, unexplained: 0 },
     bench: { approved: 2, refused: 0, reconciled: 0 }, rerun_differs: r.release ? r.release.differs.map((d) => d.name) : null,
+    tool_calls: null,
   }
   return { runs: [row], total: { runs: 1, findings: row.findings, overturned: 1, build_rounds: 1, caught: row.caught, logdiff: row.logdiff,
-    bench: row.bench, rerun_differs: row.rerun_differs?.length ?? null } }
+    bench: row.bench, rerun_differs: row.rerun_differs?.length ?? null, tool_calls: null } }
 }
 
 export const FIXTURES = {

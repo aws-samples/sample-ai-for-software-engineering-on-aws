@@ -11,7 +11,8 @@ const API = '/api/apps/vstatd-team'
 
 const EMPTY: Scorecard = {
   runs: [],
-  total: { runs: 0, findings: null, overturned: null, build_rounds: null, caught: null, logdiff: null, bench: null, rerun_differs: null },
+  total: { runs: 0, findings: null, overturned: null, build_rounds: null, caught: null, logdiff: null, bench: null,
+    rerun_differs: null, tool_calls: null },
 }
 
 const ONE: Scorecard = {
@@ -21,11 +22,11 @@ const ONE: Scorecard = {
     overturned: { ids: ['F-008'], by_person: [], by_reviewer: ['F-008'] },
     times: { triage_s: 1800, first_pass_s: 5400, signoff_s: null },
     build_rounds: 1, caught: { build: 1, static: 0, unit: 2 }, logdiff: { differences: 4, unexplained: 2 },
-    bench: { approved: 3, refused: 1, reconciled: 0 }, rerun_differs: [],
+    bench: { approved: 3, refused: 1, reconciled: 0 }, rerun_differs: [], tool_calls: null,
   }],
   total: { runs: 1, findings: { fixed: 17, justified: 2, deferred: 3 }, overturned: 1, build_rounds: 1,
     caught: { build: 1, static: 0, unit: 2 }, logdiff: { differences: 4, unexplained: 2 },
-    bench: { approved: 3, refused: 1, reconciled: 0 }, rerun_differs: 0 },
+    bench: { approved: 3, refused: 1, reconciled: 0 }, rerun_differs: 0, tool_calls: null },
 }
 
 const cards = () => Object.fromEntries(screen.getAllByTestId('sc-card').map((c) => [c.querySelector('.cto-eyebrow')!.textContent, c.querySelector('.cto-value')!.textContent]))
@@ -64,6 +65,15 @@ describe('评分卡', () => {
     expect(cells.slice(1)).toEqual(['17 / 2 / 3', '1（F-008）', '30 分钟', '1 小时 30 分', '—', '1', 'build 1、unit 2',
       '4（未解释 2）', '3 / 1 / 0', '0'])
     expect(within(screen.getByTestId('sc-caught')).getAllByRole('row').map((r) => r.textContent)).toEqual(['检查失败的轮数', 'build1', 'static0', 'unit2'])
+  })
+
+  test('in servers mode the tool calls by permission class have a card of their own', async () => {
+    const one = clone(ONE)
+    one.total.tool_calls = { 'read-only': 4, 'controlled-write': 31, physical: 2 }
+    setApiRoutes({ [`GET ${API}/scorecard`]: () => one })
+    render(<ScorecardView pollMs={60_000} />)
+    await waitFor(() => expect(screen.getAllByTestId('sc-card')).toHaveLength(7))
+    expect(cards()).toMatchObject({ '工具调用：只读 / 受控写 / 物理': '4 / 31 / 2' })
   })
 
   test('评分卡 is a tab next to 团队看板', async () => {

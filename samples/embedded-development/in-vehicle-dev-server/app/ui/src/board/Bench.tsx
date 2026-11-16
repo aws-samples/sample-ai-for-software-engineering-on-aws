@@ -211,7 +211,10 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
                 <span><b>{r.action}</b> · {person(String(r.requested_by ?? ''))}{r.expired ? <span className="kt-bad"> {tr('board.Bench.52')}</span> : null}</span>
                 <span>{tr('board.Bench.53')} <Digest digest={r.digest} /></span>
                 {r.detail && <span className="kt-dim">{r.detail}</span>}
-                {!r.expired && <DecideRequest id={r.id} digest={r.digest} />}
+                {!r.expired && bench.board_decides !== false && <DecideRequest id={r.id} digest={r.digest} />}
+                {!r.expired && bench.board_decides === false && (
+                  <span className="kt-dim" data-testid="kt-console-only">{tr('board.Bench.consoleOnly')}</span>
+                )}
               </li>
             ))}
           </ul>

@@ -67,6 +67,18 @@ describe('the vstatd board', () => {
     expect(record.at(-1)).toContain('电源 13.5 V，KL15 on（李工）')
   })
 
+  test('in servers mode (D17) a waiting request is approved at the console: no 批准 / 拒绝 on the board', async () => {
+    const b = vstatdBoard('bench')
+    expect(b.run!.bench!.state.pending.length).toBeGreaterThan(0)
+    b.run!.bench!.board_decides = false
+    serve(b)
+    render(<TeamPage pollMs={60_000} />)
+    const pending = within(await screen.findByTestId('kt-bench')).getByTestId('kt-bench-pending')
+    expect(within(pending).queryByTestId('kt-decide')).toBeNull()
+    expect(within(pending).getByTestId('kt-console-only')).toHaveTextContent('在操作台 bench/console.py 上批')
+    expect(within(pending).getAllByTestId('kt-cli').length).toBe(3)  // the console commands stay
+  })
+
   test('the merge conveyor shows only once there is a merge', async () => {
     const b = vstatdBoard('bench')
     expect(b.run!.merges).toEqual([])

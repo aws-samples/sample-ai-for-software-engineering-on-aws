@@ -101,12 +101,17 @@ export type BenchView = {
   artifact: string | null // the build deployed: build.sh's stripped vstatd
   run_dir: string | null // where the replay writes the run directory
   baseline: string
-  actions: { action: string; at: number; outcome: 'ok' | 'refused' | 'timeout' | 'unknown' | 'failed'; why: string; rc: number | null }[]
+  actions: {
+    action: string; at: number; why: string; rc: number | null
+    outcome: 'ok' | 'refused' | 'timeout' | 'unknown' | 'failed'
+    request?: string; digest?: string // servers mode (D17): from the bench server's answer
+  }[]
   state: { dir: string; target: Record<string, unknown>; supply: Record<string, unknown> | null; pending: BenchRequest[]; actions: Record<string, unknown>[] }
   /** In a replay: whether the record says the target's state and the supply at that moment (false: not shown). */
   replay?: { target: boolean; supply: boolean }
   history?: Record<string, unknown>[] // the action record as it concerns this run (its requests and what names them, the target and supply while it ran): the bench of its replay
   console: string | null // the command that opens the operator console (python3 …/bench/console.py), null when there is none
+  board_decides?: boolean // false in servers mode (D17): no 批准 / 拒绝 here, a person decides at the console
 }
 
 /** A request waiting at the operator console: the action and the digest the person approves. */
@@ -117,6 +122,7 @@ export type Readiness = {
   team: string
   items: ReadinessItem[]
   pending?: PendingRequest[] // bench requests waiting at the operator console now, from a run or from setting up the baseline
+  board_decides?: boolean // false in servers mode (D17): the requests are approved at the console only
   error: string // the scenario folder is not known (setup.sh has not run): no items
 }
 
@@ -607,6 +613,7 @@ export type ScoreRun = {
   logdiff: ScoreLogdiff | null // over the replays on the bench
   bench: ScoreBench | null // the console's decisions on the run's requests, and reconciles after them
   rerun_differs: string[] | null // checks whose verdict differed on the independent rerun
+  tool_calls: ScoreToolCalls | null // servers mode (D17): the app's calls in the build and bench servers' audit logs
 }
 
 export type ScoreFindings = { fixed: number; justified: number; deferred: number }
@@ -615,6 +622,7 @@ export type ScoreOverturned = { ids: string[]; by_person: string[]; by_reviewer:
 export type ScoreTimes = { triage_s: number | null; first_pass_s: number | null; signoff_s: number | null }
 export type ScoreLogdiff = { differences: number; unexplained: number }
 export type ScoreBench = { approved: number; refused: number; reconciled: number }
+export type ScoreToolCalls = { 'read-only': number; 'controlled-write': number; physical: number }
 
 /** Sums over the runs (of the figures that exist); times are per run only. */
 export type ScoreTotal = {
@@ -626,4 +634,5 @@ export type ScoreTotal = {
   logdiff: ScoreLogdiff | null
   bench: ScoreBench | null
   rerun_differs: number | null
+  tool_calls: ScoreToolCalls | null
 }
