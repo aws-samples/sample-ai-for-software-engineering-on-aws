@@ -85,6 +85,14 @@ def test_a_review_names_who_fixes_what():
     assert targets("Send back: Developer · fix, see qa/tester", en_t) == ["backend"]
     assert targets("Send back: backend, see feature/tester-cases", en_t) == ["backend"]
     assert targets("打回：后端/测试", roles) == ["tester", "backend"]  # two role names around a / are both
+    # review of f58ecc5: backticks around two roles with a / name both (main gave at least one); a word joined to a
+    # role's name by a hyphen after a / is not that role (fix/Tester-notes; main gave the fix role only)
+    assert targets("Send back: `Developer · fix/Tester`", en_t) == ["tester", "backend"]
+    assert targets("Send back: `Developer · fix / Tester`", en_t) == ["tester", "backend"]
+    assert targets("打回：`后端/测试`", roles) == ["tester", "backend"]
+    assert targets("Send back: Developer · fix/Tester-notes", en_t) == ["backend"]
+    assert targets("Send back: Developer · fix / Tester-cases branch", en_t) == ["backend"]
+    assert targets("Send back: developer-fix/Tester", en_t) == ["tester", "backend"]  # a hyphen inside a name is fine
     # a path, a URL, a branch or a two-part name with a role's name inside is no role, however it is written
     for path in ("`docs/Tester-notes.md`", "`tests/Tester/case_1.cpp:12`", '"src/Tester.cpp"', "'Tester/plan.md'",
                  "fix:docs/Tester.md", "https://wiki.example.com/qa/Tester-guide", "feature/Tester-cases",

@@ -265,10 +265,27 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     writers = [r["key"] for r in roles if r.get("writable")]
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
+    en = {r["key"]: _plain(r["title_en"]) for r in roles if r.get("writable") and r.get("title_en")}
+
+    def starts(part: str, key: str) -> bool:
+        return bool(re.match(rf"(?:the\s+)?{re.escape(en[key])}(?!\w)", part))
+
+    def starts_word(raw: str, key: str) -> bool:
+        """As starts(), on the part as written: a word joined to the name by a hyphen (Tester-notes) is not it."""
+        sep = r"[\s·・\-_–—]+"
+        name = sep.join(map(re.escape, en[key].split()))
+        return bool(re.match(rf"(?:the\s+)?{name}(?![\w-])", re.sub(r"[*`]", "", raw).strip().lower()))
+
+    def a_role(part: str) -> bool:
+        return bool(names.get(part.strip(" `*_（）()"))) or any(starts_word(part, k) for k in en)
+
+    def ticked(m: re.Match[str]) -> str:
+        """A backticked span with a / is a path (`Tester/plan`), unless each of its parts is a role's name."""
+        return m.group(0) if "/" not in m.group(1) or all(map(a_role, m.group(1).split("/"))) else " "
+
     # a role the note goes on to mention in parentheses is not sent back too, nor one a path's folder is named after
     def plain_line(c: str) -> str:
-        c = _TICKED.sub(lambda m: " " if "/" in m.group(1) else m.group(0), _ASIDE.sub("", c))
-        return _PATH.sub(" ", _URL.sub(" ", c))
+        return _PATH.sub(" ", _URL.sub(" ", _TICKED.sub(ticked, _ASIDE.sub("", c))))
     chunks = [plain_line(c) for c in lines] or _OWNER_RE.findall(text or "")
     # a word with a / (后端/测试, qa/tester) names each part only when every part is a role's name,
     # else its first part only
@@ -280,17 +297,14 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
     # English names name a target only where an item of the line starts with one ("the Developer · fix role" too);
     # items are split on , ; 、 and "and". An item with a / ("Developer · fix/Tester", " / Tester: add a test") names
-    # each of its parts only when every part starts with a role's name; else only its first part counts, so that
-    # what a path, a branch or a two-part name ("qa/Tester", "feature/Tester-cases") holds after a / is no role
-    en = {r["key"]: _plain(r["title_en"]) for r in roles if r.get("writable") and r.get("title_en")}
-
-    def starts(part: str, key: str) -> bool:
-        return bool(re.match(rf"(?:the\s+)?{re.escape(en[key])}(?!\w)", part))
-
+    # each of its parts only when every part starts with a role's name (after a /, not joined to a word by a hyphen:
+    # fix/Tester-notes); else only its first part counts, so that what a path, a branch or a two-part name
+    # ("qa/Tester", "feature/Tester-cases") holds after a / is no role
     for chunk in chunks:
         for item in re.split(r"[,，;；、]|\band\b", chunk, flags=re.I):
-            parts = [_plain(p) for p in item.split("/")]
-            named = [{k for k in en if starts(p, k)} for p in parts]
+            raw = item.split("/")
+            named = [{k for k in en if starts(_plain(raw[0]), k)},
+                     *({k for k in en if starts_word(p, k)} for p in raw[1:])]
             found |= set().union(*named) if all(named) else named[0]
     return [k for k in writers if k in found]
 
