@@ -63,6 +63,10 @@ case $1 in
       busy)   printf '{"event": "decision", "id": "%s", "verdict": "approved", "by": "alice"}\n' "$rid" \
                 >> "$S/actions.jsonl"
               echo "refused: the target is busy: replay in progress (one action at a time)" >&2; exit 1 ;;
+      gate-fail)  # the physical gate refuses after the request (the supply off, KL15 off …)
+              printf '{"event": "gate", "id": "%s", "action": "%s", "stage": "%s", "passed": false, "why": "%s"}\n' \
+                "$rid" "$1" "$1" "KL15 is off" >> "$S/actions.jsonl"
+              echo "refused: the physical gate: KL15 is off" >&2; exit 1 ;;
       hang)   sleep 30 ;;
     esac
     if [[ $1 == deploy ]]; then cp "$2" "$F/deployed-file"; echo "$2" > "$F/deployed-from"; fi
@@ -577,6 +581,23 @@ class Deploy(Env):
             self.assertEqual(last["outcome"], "refused", mode)
             self.assertTrue(str(last.get("request")).startswith("req-deploy-"), (mode, last))
             self.assertEqual(last.get("digest"), digest, mode)
+            s.call("lease_release")
+
+    def test_a_refused_restart_or_replay_is_audited_with_the_digest_of_its_request(self):
+        """restart and replay name no build of their own: the digest in their audit line is the one the bench wrote
+        in this call's request record (at the console, at the physical gate)."""
+        for tool, mode in (("request_restart", "refuse"), ("request_replay", "gate-fail")):
+            s = self.with_lease()
+            self.publish_build()
+            (self.fake / "mode").write_text(mode)
+            with self.assertRaises(Refused, msg=tool):
+                s.call(tool)
+            last = self.audit()[-1]
+            req = [json.loads(ln) for ln in (self.bstate / "actions.jsonl").read_text().splitlines()]
+            req = next(r for r in req if r.get("event") == "request" and r.get("id") == last.get("request"))
+            self.assertEqual(last["outcome"], "refused", tool)
+            self.assertEqual(last.get("digest"), req["digest"], (tool, last))
+            self.assertRegex(last["digest"], r"^[0-9a-f]{64}$")
             s.call("lease_release")
 
     def test_an_approved_action_the_busy_target_did_not_begin_is_refused_not_failed(self):

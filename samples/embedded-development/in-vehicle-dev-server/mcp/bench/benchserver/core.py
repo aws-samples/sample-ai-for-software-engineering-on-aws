@@ -668,11 +668,14 @@ class BenchService:
         offset = os.path.getsize(record) if os.path.isfile(record) else 0
         r = self.cc1(args, timeout + self.timeouts["approval"], action)
         new = self.records_from(offset)
-        rid = next((e.get("id") for e in new if e.get("event") == "request" and e.get("action") == action
+        req = next((e for e in new if e.get("event") == "request" and e.get("action") == action
                     and e.get("requested_by") == self.requester and (digest is None or e.get("digest") == digest)),
-                   None)
+                   {})
+        rid = req.get("id")
+        if digest is None and isinstance(req.get("digest"), str):  # restart, replay: the build the bench requested
+            digest = req["digest"] or None
         out = {**{k: v for k, v in r.items() if k != "log"}, "action": action, "request": rid,
-               "log_tail": tail(r["log"], 2048)}
+               "log_tail": tail(r["log"], 2048), **({"digest": digest} if digest else {})}
         if r["outcome"] == "ok":
             return out
         mine = [e for e in new if rid is not None and rid in (e.get("id"), e.get("request"))]
@@ -728,7 +731,7 @@ class BenchService:
         run = self.state / "runs" / f"run-{max(runs, default=0) + 1}"
         out = self.physical("replay", ["replay", "--kind", "run", "--out", run], self.timeouts["replay"])
         res = read_json(run / "run-result.json")
-        return {**out, "run": run.name, "digest": (res or {}).get("approved_digest"),
+        return {**out, "run": run.name, "digest": (res or {}).get("approved_digest") or out.get("digest"),
                 "result": {k: v for k, v in (res or {}).items() if k in ("replay_id", "replay_finished",
                                                                           "figures_after_replay_end", "vm_hwm_kib",
                                                                           "threads_at_end", "vstatd_restarts")}}
