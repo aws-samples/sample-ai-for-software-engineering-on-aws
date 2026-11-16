@@ -102,8 +102,10 @@ After `run_check release` passed, the server runs `checks/evidence-page.sh` on t
 triage, in the sandbox with the release's own read-only mounts, and publishes the page as `results/evidence.md`;
 `read_result release` returns it. The person signs off from this page, so it comes from the server that judged the
 release, not from an agent. A release that does not pass publishes no page and removes the last one, so a page always
-belongs to the latest release result. If the script fails or writes no page, the release result stands and the call's
-`evidence_page` says why.
+belongs to the latest release result. If the script fails, times out (`timeouts.evidence`, 120 s) or writes no page,
+the release result stands and the call's `evidence_page` says why. The page's SHA-256 is in the call's result, its
+audit line and `read_result release`, so the page a person signs can be matched to the call that published it. The
+script runs with the sample and the triage folder read-only and only the call's results folder writable.
 
 ### The bench's results
 
@@ -206,10 +208,12 @@ built, and the same run and baseline in both; it failed only on the four checks 
 `unit`, `size`, `trace`: no result). With the results of a bench whose `logdiff` had judged another triage, the call was
 refused before anything ran and the release result became an `ERROR` naming that input.
 
-Later the same day, with the evidence page: 69 guardrail tests OK, four of them for the page. In the build container,
-through the server's call path, `checks/evidence-page.sh` wrote the page from the same bench host's results and the
-build server's result: the build's digest, the runtime-limits and logdiff results (PASS, emulation) and the four
-source checks that build server had not run, marked missing.
+Later the same day, with the evidence page: 71 guardrail tests OK, six of them for the page. In the build container, the
+server's evidence step (`BuildService.evidence_page`, called directly, because that build server's release does not
+pass) wrote the page from the same bench host's results and the build server's result: the build's digest, the
+runtime-limits and logdiff results (PASS, emulation) and the four source checks that build server had not run, marked
+missing. The step after a passing `run_check release` is covered by the guardrail tests only; it has not run after a
+real passing release yet.
 
 ## Prerequisites, cost and cleanup
 

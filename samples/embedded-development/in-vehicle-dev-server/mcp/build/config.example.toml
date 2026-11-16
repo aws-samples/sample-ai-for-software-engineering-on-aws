@@ -44,6 +44,7 @@ snapshot = 300                                 # taking HEAD as a bundle and clo
 configure = 600
 build = 1800
 check = 3600
+evidence = 120                                 # checks/evidence-page.sh after a release that passed
 
 [environment]
 path = "/usr/local/bin:/usr/bin:/bin"          # PATH inside the sandbox

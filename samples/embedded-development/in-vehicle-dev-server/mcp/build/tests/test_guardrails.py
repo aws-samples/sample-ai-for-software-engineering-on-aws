@@ -876,6 +876,7 @@ mode=$(cat "$FAKE_STATE/evidence-mode" 2>/dev/null)
 [ "$mode" = fail ] && exit 2
 [ "$mode" = none ] && exit 0
 [ "$mode" = link ] && { ln -s "$FAKE_STATE/secret" "$r/evidence.md"; exit 0; }
+[ "$mode" = huge ] && { head -c 600000 /dev/zero | tr '\\0' x > "$r/evidence.md"; exit 0; }
 printf '# Evidence page\\n\\nrelease: PASS\\n' > "$r/evidence.md"
 """
 
@@ -901,10 +902,15 @@ class EvidencePage(Env):
         self.assertEqual((out["verdict"], out["evidence_page"]), ("PASS", "published"))
         self.assertEqual((self.st / "results" / "evidence.md").read_text(), "# Evidence page\n\nrelease: PASS\n")
         argv = (self.fake / "argv-evidence").read_text().split("\n")
-        self.assertEqual(argv[0], "--results")
-        self.assertIn("--triage", argv)
+        self.assertEqual(argv[argv.index("--results") + 1], str(self.st.resolve() / "run" / "results"))
+        self.assertEqual(argv[argv.index("--triage") + 1], str(s.triage))
         self.assertNotIn("--agent-summary", argv, "the page shows the checks' verdicts, not an agent's word")
-        self.assertEqual(s.call("read_result", check="release")["evidence_page"], "# Evidence page\n\nrelease: PASS\n")
+        res = s.call("read_result", check="release")
+        self.assertEqual(res["evidence_page"], "# Evidence page\n\nrelease: PASS\n")
+        self.assertEqual(res["evidence_sha256"], out["evidence_sha256"])
+        last = self.audit()[-3]  # the run_check's outcome line, before the two read_result calls
+        self.assertEqual((last["tool"], last["evidence_page"], last["evidence_sha256"]),
+                         ("run_check", "published", out["evidence_sha256"]))
         self.assertIsNone(s.call("read_result", check="build").get("evidence_page"))
 
     def test_a_release_that_does_not_pass_leaves_no_page(self):
@@ -918,12 +924,26 @@ class EvidencePage(Env):
         self.assertIsNone(s.call("read_result", check="release")["evidence_page"])
 
     def test_a_page_the_script_did_not_write_is_not_published(self):
-        for mode, why in (("fail", "exited with 2"), ("none", "wrote no page"), ("link", "wrote no page")):
+        for mode, why in (("fail", "exited with 2"), ("none", "wrote no page"), ("link", "wrote no page"),
+                          ("huge", "over 512 KiB")):
             with self.subTest(mode):
                 _, out = self.release("PASS", mode)
                 self.assertEqual(out["verdict"], "PASS", "the release result stands")
                 self.assertIn(why, out["evidence_page"])
                 self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_the_page_of_an_earlier_pass_is_never_published_again(self):
+        self.release("PASS")
+        _, out = self.release("PASS", "none")  # the script writes nothing this time
+        self.assertIn("wrote no page", out["evidence_page"])
+        self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_an_error_record_removes_the_page(self):
+        s, _ = self.release("PASS")
+        self.flag("mode", "stale")  # the release result is not this run's: the server publishes an ERROR record
+        out = s.call("run_check", check="release")
+        self.assertEqual(out["verdict"], "ERROR")
+        self.assertFalse((self.st / "results" / "evidence.md").exists())
 
     def test_other_checks_make_no_page(self):
         self.flag("verdict", "PASS")
