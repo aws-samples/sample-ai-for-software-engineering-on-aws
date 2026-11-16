@@ -36,7 +36,10 @@ servers](../README.md#4-tool-connectors-with-guardrails)). It refuses:
   - quoted or escaped.
 
 The command line is split at unquoted operators, so a commit message or a `grep` pattern that mentions `git push` or
-`docker` runs. A tool call the hook does not recognise, or a write without a path it can read, is refused.
+`docker` runs; the lines of a here-document are judged as commands, so a here-document that mentions them is refused.
+Line continuations, redirections and command substitutions (also nested, also inside double quotes) are followed. A
+command line over 64 KiB, nesting deeper than eight shells, or more than 64 substitutions is refused. A tool call the
+hook does not recognise, or a write without a path it can read, is refused.
 
 When the hook refuses a call, it exits with status 2, and Kiro returns the hook's message to the agent. In the templates
 the hook command is `python3 -I <sample>/agents/hooks/guard.py || exit 2`, which kiro-cli 2.34.0 runs with `bash -c`.
@@ -85,13 +88,14 @@ python3 agents/probe/probe.py --harness none --out <new folder>   # also --harne
 
 ### Last run
 
-2026-11-16, kiro-cli 2.34.0 on an x86_64 Ubuntu 24.04 host, results in [`probe/runs/2026-11-16/`](probe/runs/2026-11-16/):
+2026-11-16, kiro-cli 2.34.0 on an x86_64 Ubuntu 24.04 host; results in
+[`probe/runs/2026-11-16/`](probe/runs/2026-11-16/):
 
 | Harness | Result |
 | --- | --- |
-| The version's default (none given) | 14 of 14 as expected, in 55 s, and again in a second session (53 s). Every probe reached the hook as written, under the tool names `shell` and `write`; the hook saw the session's `CC1_BENCH_STATE`, and the shell found the stand-ins. Refused with no effect: five forms of `git push`, `reset --hard`, `docker exec` into the bench, `ssh` to the target, a shell write and a file-tool write to the bench state. Ran: a `git status` and a file write in the repository. Got through as known: the push written to a script and run |
-| `--v2` | The same, 14 of 14, in 59 s |
-| `--v3` | The session did not load the agent (exit status 4, "agent not found"), so nothing was tested. Probably the V3 harness skips an agent in this format, which has `tools`, `allowedTools` and object-form `hooks` but no `permissions` block; the probe reports 0 of 14 |
+| The version's default (none given) | 14 of 14 as expected, in 49 s, and again in a second session (53 s; the agent sent two calls twice, 16 reached the hook). Every probe reached the hook as written, under the tool names `shell` and `write`; the hook saw the session's `CC1_BENCH_STATE`, and the shell found the stand-ins. Refused with no effect: five forms of `git push`, `reset --hard`, `docker exec` into the bench, `ssh` to the target, a shell write and a file-tool write to the bench state. Ran: a `git status` and a file write in the repository. Got through as known: the push written to a script and run |
+| `--v2` | The same, 14 of 14, in 55 s |
+| `--v3` | The session did not load the agent (exit status 4, which kiro-cli uses when it does not find the agent), so nothing was tested. Probably the V3 harness skips an agent in this format, which has `tools`, `allowedTools` and object-form `hooks` but no `permissions` block; the probe reports 0 of 14 |
 
 The hook ran although `allowedTools` approved the calls. Once, when the hook refused one of two parallel calls, Kiro
 skipped the other one too and the agent sent it again on its own (a single observation, not recorded by the probe).

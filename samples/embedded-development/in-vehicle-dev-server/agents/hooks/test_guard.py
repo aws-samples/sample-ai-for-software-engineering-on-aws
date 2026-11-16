@@ -11,6 +11,7 @@ move it to REFUSED. `../probe/probe.py` runs the same commands through a real Ki
 import json
 import os
 import pathlib
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,16 @@ HERE = pathlib.Path(__file__).resolve().parent
 GUARD = HERE / "guard.py"
 
 REFUSED = [
+    # line continuations, redirections, wrapper options with values, nested substitutions, config in the environment
+    "git \\\n push", "git -C repo \\\n push origin main", ">/dev/null git push", "2>/dev/null git push",
+    "git >/dev/null push", "git 2>&1 push", "</dev/null docker ps", "env -u HOME git push", "env -C /tmp git push",
+    "env -S 'git push'", "exec -a x git push", "stdbuf -o L git push", "flock /tmp/l -c 'git push'",
+    "bash -c -- 'git push'", "echo push | xargs git", "git --attr-source HEAD push", 'git commit -m "$( (git push) )"',
+    'echo "$(echo ")"; git push; echo "(")"', "git checkout -Bmain", "git switch --force-create=main",
+    "git -c include.path=/tmp/a p", "git config include.path /tmp/a",
+    "GIT_CONFIG_PARAMETERS=\"'alias.p=push'\" git p",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p",
+    "x=" + "y" * 70000,
     # git push and history rewrites, with options, wrappers, quoting and compound commands
     "git push", "git push --force origin main", "git -C /tmp/x push", "git -c user.name=x push origin HEAD",
     "/usr/bin/git push", "\\git push", '"git" "push"', "g\\it pu\\sh", "env GIT_TRACE=1 git push",
@@ -62,7 +73,8 @@ ALLOWED = [
     "git commit -m \"docs (docker not used)\"", "grep -rnE 'docker|podman' docs/", "grep -n 'pull\\|git push' x",
     "echo '(ssh to 127.0.0.1)'", "git reset --soft HEAD~1", "git branch -d merged", "git tag -l", "ls build/",
     "git config --get remote.origin.url", "rg 'TODO|FIXME' src", "ls /opt/cc1-sysroot/usr/include",
-    "grep -rn CMAKE_SYSROOT cmake/", "git checkout -b fix/f021", "git switch main", "command -v docker", "which docker ssh",
+    "grep -rn CMAKE_SYSROOT cmake/", "git checkout -b fix/f021", "git switch main", "command -v docker",
+    "which docker ssh",
 ]
 
 # Known bypasses: the command text does not show what runs. The README says so; the real boundary is a build server
@@ -72,7 +84,7 @@ GETS_THROUGH = [
     "python3 -c \"import subprocess; subprocess.run(['git', 'pu' + 'sh'])\"",
     "echo Z2l0IHB1c2g= | base64 -d | sh",
     "G=git; $G push",
-    "sh <<< 'git push'", "echo 'git push' | sh", "$'\\x67it' push", "env -S 'git push'",
+    "sh <<< 'git push'", "echo 'git push' | sh", "$'\\x67it' push",
     "cd ~/workplace/vstatd-team/runs/r1 && echo PASS > results/static.json", "gh pr merge 1",
     "curl telnet://127.0.0.1:2222",
 ]
@@ -90,6 +102,17 @@ def run(event, env=None):
 def shell(command):
     return {"hook_event_name": "preToolUse", "cwd": "/tmp", "tool_name": "shell", "tool_tags": ["shell", "@builtin"],
             "tool_input": {"command": command}}
+
+
+def nested(depth):
+    cmd = "true"
+    for _ in range(depth):
+        cmd = "sh -c " + shlex.quote(cmd)
+    return cmd
+
+
+REFUSED.append(nested(10))  # deeper than the hook judges: refused, not let through
+ALLOWED.append(nested(3))
 
 
 class Guard(unittest.TestCase):

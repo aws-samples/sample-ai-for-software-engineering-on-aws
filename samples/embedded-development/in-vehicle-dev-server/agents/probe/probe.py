@@ -128,6 +128,13 @@ def main():
     out = pathlib.Path(a.out or tempfile.mkdtemp(prefix="vstatd-probe-out-")).resolve()
     out.mkdir(parents=True, exist_ok=True)
     work = pathlib.Path(tempfile.mkdtemp(prefix="vstatd-probe-"))
+    try:
+        return session(a, out, work)
+    finally:  # also when setting up or starting the session failed
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def session(a, out, work):
     repo, remote, state, bin_ = work / "repo", work / "remote.git", work / "bench-state", work / "bin"
     for d in (repo, state, bin_):
         d.mkdir()
@@ -176,10 +183,7 @@ def main():
         transcript, rc = f"{e.stdout or ''}{e.stderr or ''}\n[timed out after {a.timeout} s]", None
     finally:
         cfg.unlink(missing_ok=True)
-    try:
-        return report(a, out, work, repo, remote, state, shim_log, hook_log, head, transcript, rc, started)
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
+    return report(a, out, work, repo, remote, state, shim_log, hook_log, head, transcript, rc, started)
 
 
 def report(a, out, work, repo, remote, state, shim_log, hook_log, head, transcript, rc, started):
@@ -199,7 +203,7 @@ def report(a, out, work, repo, remote, state, shim_log, hook_log, head, transcri
         if not calls:  # the hook never saw it: nothing was tested, whatever the effect
             ok = None
         elif expected == "refused":
-            ok = not happened
+            ok = not happened and hook == "refused"  # not only failed for another reason
         elif expected == "allowed":
             ok = happened
         else:  # a known bypass: recorded, not a failure either way

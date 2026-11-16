@@ -45,12 +45,13 @@ BENCH_SCRIPTS = re.compile(r"(^|/)(cc1\.sh|console\.py)$")
 WRAPPERS = ("{", "}", "!", "if", "then", "else", "elif", "do", "while", "until",  # shell words before a command
             "env", "sudo", "doas", "command", "builtin", "exec", "nohup", "nice", "ionice", "time", "timeout",
             "stdbuf", "setsid", "xargs", "chronic", "unbuffer", "flock", "watch")
-CONFIG_KEYS = (r"(alias\.|core\.(hookspath|sshcommand|gitproxy)|url\.|"
+CONFIG_KEYS = (r"(alias\.|include(if)?\.|core\.(hookspath|sshcommand|gitproxy)|url\.|"
                r"remote\.[^=]*\.(url|pushurl|receivepack))")
 SHELLS = ("sh", "bash", "dash", "zsh", "ksh", "fish", "busybox")
-GIT_GLOBAL_WITH_VALUE = ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env")
-OPERATORS = set(";&|()<>\n")
-SUBSTITUTION = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")  # judged even inside quotes: "$(git push)" runs
+GIT_GLOBAL_WITH_VALUE = ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env",
+                         "--attr-source", "--super-prefix", "--list-cmds")
+OPERATORS = set(";&|()<>`\n")
+MAX_DEPTH, MAX_COMMAND, MAX_SUBSTITUTIONS = 8, 64 * 1024, 64
 
 
 def home():
@@ -73,21 +74,31 @@ def segments(command):
     """The simple commands of a command line, as lists of words: split at unquoted ; & | ( ) < > and newlines, with
     quotes and backslashes resolved as the shell would, as far as shlex can. An unbalanced quote falls back to a
     split that ignores quotes, which errs on the side of refusing."""
-    lex = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>\n")
+    command = command.replace("\\\n", " ")  # a line continuation is a space
+    lex = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>`\n")
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
     lex.commenters = ""
-    out, cur = [], []
+    out, cur, redirect = [], [], False
     try:
         for tok in lex:
+            if tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok):
+                if cur and re.fullmatch(r"\d+", cur[-1]):  # 2>/dev/null: the fd belongs to the redirection
+                    cur.pop()
+                redirect = not tok.endswith("&") or tok in ("&>", ">&")  # the next word is its target
+                continue
             if tok and set(tok) <= OPERATORS:
                 out.append(cur)
-                cur = []
+                cur, redirect = [], False
+            elif redirect:
+                redirect = False
+                if not re.fullmatch(r"\d+|-", tok):  # 2>&1: the fd was the target
+                    continue
             else:
                 cur.append(tok)
     except ValueError:
         raw = re.sub(r"[\"'\\]", "", command)
-        return [seg.split() for seg in re.split(r"[;&|()<>\n]", raw)]
+        return [seg.split() for seg in re.split(r"[;&|()<>`\n]", raw)]
     out.append(cur)
     return [seg for seg in out if seg]
 
@@ -96,7 +107,9 @@ def unwrap(ws):
     """Drops variable assignments and wrapper words, so `env X=1 sudo -u u git push` is judged as `git push`."""
     with_value = {"sudo": ("-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"), "doas": ("-u", "-C"),
                   "nice": ("-n",), "ionice": ("-c", "-n"), "xargs": ("-I", "-n", "-L", "-P", "-d", "-a", "-E", "-s"),
-                  "timeout": ("-s", "-k"), "watch": ("-n", "-d")}
+                  "timeout": ("-s", "-k"), "watch": ("-n", "-d"), "env": ("-u", "-C", "--unset", "--chdir"),
+                  "exec": ("-a",), "stdbuf": ("-i", "-o", "-e"), "flock": ("-w", "-E", "--timeout"),
+                  "nohup": (), "setsid": ()}
     i = 0
     while i < len(ws):
         w, base = ws[i], os.path.basename(ws[i])
@@ -119,16 +132,27 @@ def unwrap(ws):
     return ws[i:]
 
 
+def config_env(ws):
+    """Git configuration given in the environment of a command: `GIT_CONFIG_PARAMETERS=...`, `GIT_CONFIG_COUNT=...`."""
+    return any(re.match(r"(GIT_CONFIG_(PARAMETERS|COUNT|KEY_\d+|VALUE_\d+)|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM)=", w)
+               for w in ws)
+
+
 def inner_scripts(ws):
     """The command strings a shell word runs: `sh -c '<script>'`, `bash -lc '<script>'`, `eval <script>`."""
     out = []
     if ws and os.path.basename(ws[0]) in SHELLS:
         for j, w in enumerate(ws[1:], 1):
             if re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", w) and j + 1 < len(ws):
-                out.append(ws[j + 1])
+                out.append(ws[j + 2] if ws[j + 1] == "--" and j + 2 < len(ws) else ws[j + 1])
                 break
     if ws and ws[0] == "eval":
         out.append(" ".join(ws[1:]))
+    for flag in ("-c", "--command", "-S", "--split-string"):  # flock <file> -c <command>, env -S <command>
+        if ws and os.path.basename(ws[0]) in ("flock", "env") and flag in ws[1:]:
+            k = ws.index(flag)
+            if k + 1 < len(ws):
+                out.append(ws[k + 1])
     if "foreach" in ws[1:]:  # git submodule foreach <command>
         out.append(" ".join(ws[ws.index("foreach") + 1:]))
     for flag in ("-exec", "-execdir", "-ok", "-okdir"):  # find ... -exec <command> ;
@@ -160,7 +184,7 @@ def git_refusal(sub, args, config=()):
         return "git -c of aliases, hooks or remotes"
     if sub in ("push", "send-pack", "http-push"):
         return "git push"
-    if sub in ("checkout", "switch") and any(a in ("-B", "-C", "--force-create") for a in args):
+    if sub in ("checkout", "switch") and any(re.match(r"-[a-zA-Z]*[BC]|--force-create", a) for a in args):
         return f"git {sub} -B/-C moves a branch"
     if sub in ("rebase", "filter-branch", "filter-repo", "update-ref", "replace"):
         return f"git {sub} rewrites history"
@@ -196,14 +220,18 @@ def mentions_protected(text, states, runs):
 
 
 def judge_segment(ws, states, runs, depth=0):
-    ws = unwrap(ws)
+    if config_env(ws):
+        return "git configuration in the environment (aliases, hooks)"
+    if any(os.path.basename(w) == "xargs" for w in ws) and git_subcommand(unwrap(ws)) and \
+            git_subcommand(unwrap(ws))[0] == "":
+        return "git whose subcommand xargs supplies"
+    raw, ws = ws, unwrap(ws)
+    for script in inner_scripts(raw) + inner_scripts(ws):
+        why = judge_command(script, states, runs, depth + 1)
+        if why:
+            return why
     if not ws:
         return None
-    for script in inner_scripts(ws):
-        if depth < 5:
-            why = judge_command(script, states, runs, depth + 1)
-            if why:
-                return why
     cmd = os.path.basename(ws[0])
     if cmd in CONTAINER_TOOLS or cmd.startswith("docker"):
         return f"{cmd}: the agents reach the bench only through the bench server"
@@ -222,6 +250,10 @@ def judge_segment(ws, states, runs, depth=0):
 
 
 def judge_command(command, states, runs, depth=0):
+    if depth > MAX_DEPTH:
+        return "commands nested too deeply to judge"
+    if len(command) > MAX_COMMAND:
+        return f"a command line over {MAX_COMMAND // 1024} KiB"
     if BENCH_NAMES.search(command) or any(k in command for k in SOCKETS):
         return "the bench's container or volumes, or a container runtime's socket"
     if re.search(r"(/dev/tcp/|/dev/udp/)[^/\s]+/" + TARGET_PORT, command):
@@ -229,11 +261,19 @@ def judge_command(command, states, runs, depth=0):
     why = mentions_protected(command, states, runs)
     if why:
         return why
-    if depth < 5:
-        for m in SUBSTITUTION.finditer(command):
-            why = judge_command(m.group(1) or m.group(2) or "", states, runs, depth + 1)
-            if why:
-                return why
+    # Command substitutions run even inside double quotes. Each one is judged from its `$(` or backtick to the end of
+    # the line, which covers nested parentheses at the cost of judging some text after it too.
+    starts = [m.end() for m in re.finditer(r"\$\(|`", command)]
+    if len(starts) > MAX_SUBSTITUTIONS:
+        return f"more than {MAX_SUBSTITUTIONS} command substitutions"
+    for start in starts:
+        why = judge_words(command[start:], states, runs, depth + 1)
+        if why:
+            return why
+    return judge_words(command, states, runs, depth)
+
+
+def judge_words(command, states, runs, depth):
     for ws in segments(command):
         why = judge_segment(ws, states, runs, depth)
         if why:
