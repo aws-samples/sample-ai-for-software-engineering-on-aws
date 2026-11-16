@@ -69,7 +69,8 @@ def test_a_review_names_who_fixes_what():
     # second review of #41: " / " between roles splits them as "/" does (main did), with backticks and three roles
     assert targets("Send back: Developer · fix / Tester", en_t) == ["tester", "backend"]
     assert targets("Send back: `Developer · fix` / `Tester`", en_t) == ["tester", "backend"]
-    assert targets("Send back: Developer · fix / Developer · refactor / Tester", en_t) == ["tester", "backend", "frontend"]
+    three = "Send back: Developer · fix / Developer · refactor / Tester"
+    assert targets(three, en_t) == ["tester", "backend", "frontend"]
     # a path, a URL, a branch or a two-part name with a role's name inside is no role, however it is written
     for path in ("`docs/Tester-notes.md`", "`tests/Tester/case_1.cpp:12`", '"src/Tester.cpp"', "'Tester/plan.md'",
                  "fix:docs/Tester.md", "https://wiki.example.com/qa/Tester-guide", "feature/Tester-cases",
