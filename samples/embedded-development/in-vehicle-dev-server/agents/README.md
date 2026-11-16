@@ -44,10 +44,15 @@ than 64 substitutions is refused, and so is anything the hook fails to judge. A 
 or a write without a path it can read, is refused.
 
 **One file for both engines.** The templates are in the format that kiro-cli's V2 and V3 engines both load. They have
-`tools` and `allowedTools` for V2 and a `permissions` block for V3, which allows reads, writes, the shell and the
-Kiro Crew MCP server's tools without asking. The hook is in the array form: one entry each for the tags `shell` and
-`write`. V2 does not evaluate regular expressions in a matcher, so the tags are used. The two engines name the tools
-differently: V2 says `shell` and `write`, V3 says `execute_bash` and `fs_write`. The hook knows both.
+`tools` and `allowedTools` for V2 and a `permissions` block for V3, which allows reads, writes, the shell, skills and
+the Kiro Crew MCP server's tools without asking. The hook is in the array form: one entry each for the tags `shell`
+and `write`. V2 does not evaluate regular expressions in a matcher, so the tags are used. The two engines name the
+tools differently: V2 says `shell` and `write`, V3 says `execute_bash` and `fs_write`. The hook knows both.
+
+Two differences remain. In V3 the roles get `fs_write`, which writes a whole file; V2's `fs_write` also replaces and
+appends, so under V3 a partial edit is a whole-file write or a shell command. V3 also keeps Kiro's own limits: writes
+to `.git/**` and `.kiro/agents` ask, which a session without a person treats as a deny (commits go through the
+shell, so they are not affected). `kiro-cli agent upgrade` leaves these files alone, as files it did not write.
 
 When the hook refuses a call, it exits with status 2, and Kiro returns the hook's message to the agent. In the templates
 the hook command is `python3 -I <sample>/agents/hooks/guard.py || exit 2`, which kiro-cli 2.34.0 runs with `bash -c`.
@@ -101,9 +106,13 @@ python3 agents/probe/probe.py --harness none --out <new folder>   # also --harne
 
 | Harness | Result |
 | --- | --- |
-| The version's default (none given, V2) | 14 of 14 as expected, in 45 s. Every probe reached the hook as written, under the tool names `shell` and `write`; the hook saw the session's `CC1_BENCH_STATE`, and the shell found the stand-ins. Refused with no effect: five forms of `git push`, `reset --hard`, `docker exec` into the bench, `ssh` to the target, a shell write and a file-tool write to the bench state. Ran: a `git status` and a file write in the repository. Got through as known: the push written to a script and run |
+| The version's default (none given, V2) | 14 of 14 as expected, in 49 s (the agent sent one call twice, so 15 reached the hook). Every probe reached the hook as written, under the tool names `shell` and `write`; the hook saw the session's `CC1_BENCH_STATE`, and the shell found the stand-ins. Refused with no effect: five forms of `git push`, `reset --hard`, `docker exec` into the bench, `ssh` to the target, a shell write and a file-tool write to the bench state. Ran: a `git status` and a file write in the repository. Got through as known: the push written to a script and run |
 | `--v2` | The same, 14 of 14, in 42 s |
-| `--v3` | The same, 14 of 14, in 41 s and again in a second session (40 s), under the tool names `execute_bash` and `fs_write` |
+| `--v3` | The same, 14 of 14, in 44 s and again in a second session (44 s), under the tool names `execute_bash` and `fs_write` |
+
+The templates themselves, generated with this host's Kiro Crew MCP server, were also loaded once in each engine
+in a throwaway repository with a local bare remote: asked to `git push`, the developer role's session was refused by
+the hook under `--v3` and under `--v2`, and nothing reached the remote.
 
 Before the templates had a `permissions` block, the V3 engine did not load them at all (exit status 4: agent not
 found), and the probe reported nothing tested. The hook ran although `allowedTools` and `permissions` approved the

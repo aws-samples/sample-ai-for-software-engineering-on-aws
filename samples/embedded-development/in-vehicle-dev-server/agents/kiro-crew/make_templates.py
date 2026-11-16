@@ -71,9 +71,10 @@ def template(name: str, display: str, desc: str, prompt: str, kirocrew: str) -> 
 
 
 def permissions(servers: list) -> dict:
-    """The V3 engine's equivalent of allowedTools: read, write and the shell without asking, and the named MCP
-    servers' tools. Kiro's own fixed limits still apply (a headless session treats every ask as a deny)."""
-    rules = [{"capability": c, "effect": "allow"} for c in ("fs_read", "fs_write", "shell")]
+    """The V3 engine's equivalent of allowedTools: read, write, the shell and skills without asking (V3 always offers
+    its skill tools, as `kiro-cli agent upgrade` allows them), and the named MCP servers' tools. Kiro's own fixed
+    limits still apply: writes to .git/** and .kiro/agents ask, which a headless session treats as a deny."""
+    rules = [{"capability": c, "effect": "allow"} for c in ("fs_read", "fs_write", "shell", "skill")]
     return {"rules": rules + [{"capability": "mcp", "match": [f"{s}/*"], "effect": "allow"} for s in servers]}
 
 

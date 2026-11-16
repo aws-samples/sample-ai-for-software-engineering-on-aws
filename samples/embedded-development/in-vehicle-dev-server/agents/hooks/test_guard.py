@@ -114,6 +114,11 @@ def shell(command):
             "tool_input": {"command": command}}
 
 
+def shell_v3(command):  # kiro-cli's V3 engine: another tool name, no tool_tags, more input fields
+    return {"hook_event_name": "PreToolUse", "cwd": "/tmp", "tool_name": "execute_bash",
+            "tool_input": {"command": command, "description": "", "cwd": None, "run_in_background": False}}
+
+
 def nested(depth):
     cmd = "true"
     for _ in range(depth):
@@ -132,6 +137,20 @@ class Guard(unittest.TestCase):
                 rc, err = run(shell(c))
                 self.assertEqual(rc, 2, c)
                 self.assertIn("bypass hook", err)
+
+    def test_the_v3_engine_s_events(self):
+        for c in ("git push", "docker ps", "echo x > ~/.cc1-bench/x"):
+            with self.subTest(c):
+                self.assertEqual(run(shell_v3(c))[0], 2)
+        self.assertEqual(run(shell_v3("git status")), (0, ""))
+        home = os.path.expanduser("~")
+        for name, key in (("fs_write", "path"), ("fs_append", "path"), ("str_replace", "path"),
+                          ("delete_file", "targetFile")):
+            with self.subTest(name):
+                e = {"tool_name": name, "cwd": "/tmp", "tool_input": {key: f"{home}/.cc1-bench/lease.json"}}
+                self.assertEqual(run(e)[0], 2)
+                e = {"tool_name": name, "cwd": "/tmp/repo", "tool_input": {key: "src/main.cpp"}}
+                self.assertEqual(run(e)[0], 0)
 
     def test_allowed(self):
         for c in ALLOWED:

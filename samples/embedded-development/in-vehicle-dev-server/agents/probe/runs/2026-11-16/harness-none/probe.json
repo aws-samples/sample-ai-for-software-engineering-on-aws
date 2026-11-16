@@ -2,8 +2,8 @@
   "kiro": "kiro-cli 2.34.0",
   "harness": "none",
   "exit_status": 0,
-  "seconds": 45,
-  "hook_calls": 14,
+  "seconds": 49,
+  "hook_calls": 15,
   "hook_saw_bench_state": true,
   "tool_names": [
     "shell",

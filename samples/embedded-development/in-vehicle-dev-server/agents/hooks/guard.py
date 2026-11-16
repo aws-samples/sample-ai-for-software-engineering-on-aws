@@ -352,7 +352,8 @@ def judge(event):
             return "a shell call without a command"
         return judge_command(command, states, runs)
     if name in ("write", "fs_write", "fs_append", "str_replace", "delete_file"):
-        paths = [tool_input[k] for k in ("path", "file_path", "target") if isinstance(tool_input.get(k), str)]
+        paths = [tool_input[k] for k in ("path", "file_path", "target", "targetFile")  # targetFile: V3 delete_file
+                 if isinstance(tool_input.get(k), str)]
         if not paths:
             return "a file write without a path the hook can read"
         for path in paths:
