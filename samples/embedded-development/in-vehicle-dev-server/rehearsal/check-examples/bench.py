@@ -24,7 +24,9 @@ import importlib.util
 import json
 import os
 import pathlib
+import platform
 import shutil
+import subprocess
 import sys
 import time
 
@@ -48,29 +50,8 @@ def reason(out, run, name):
     return (res.get("reasons") or [""])[0][:110]
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--state", required=True)
-    ap.add_argument("--artifacts", required=True, help="run.py's OUT/artifacts: release, f008, f021, triage.json")
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--runs", type=int, default=5)
-    ap.add_argument("--image", default="vstatd-build:arm64")
-    ap.add_argument("--docker", default=shutil.which("docker") or "docker")
-    a = ap.parse_args()
-    art, out = pathlib.Path(a.artifacts).resolve(), pathlib.Path(a.out).resolve()
-    if out.exists():
-        raise SystemExit(f"{out} exists; give a new data directory")
-    (out / "runs").mkdir(parents=True)
-    triage = out / "triage.json"
-    shutil.copyfile(art / "triage.json", triage)
-    shutil.copyfile(art / "triage.json.sha256", str(triage) + ".sha256")
-    digests = {b: hashlib.sha256((art / b).read_bytes()).hexdigest() for b in EXPECTED}
-    (out / "builds.json").write_text(json.dumps(digests, indent=2) + "\n")
-    env = {**os.environ, "CC1_BENCH_STATE": a.state, "CC1_REQUESTER": "check examples on the bench"}
-    cc1 = ["bash", SAMPLE / "bench" / "cc1.sh"]
-    t0, rows = time.time(), []
+def bench_runs(a, art, out, triage, digests, env, cc1, rows):
     sh = measure.sh
-    sh([*cc1, "stop"], env, check=False)
     sh([*cc1, "start", "--shift", "3"], env)
     sh([*cc1, "wait", "900"], env)
     with open(out / "runs.csv", "w", newline="") as f:
@@ -100,10 +81,42 @@ def main():
                 rows.append(row)
                 measure.log(f"{build} run {n}: logdiff {row['logdiff']}, runtime-limits {row['runtime_limits']}, "
                             f"VmHWM {row['vm_hwm_kib']} KiB")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--state", required=True)
+    ap.add_argument("--artifacts", required=True, help="run.py's OUT/artifacts: release, f008, f021, triage.json")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--runs", type=int, default=5)
+    arch = "arm64" if platform.machine() in ("arm64", "aarch64") else "amd64"
+    ap.add_argument("--image", default=f"vstatd-build:{arch}")
+    ap.add_argument("--docker", default=shutil.which("docker") or "docker")
+    a = ap.parse_args()
+    if subprocess.run([a.docker, "image", "inspect", a.image], capture_output=True).returncode != 0:
+        raise SystemExit(f"no image {a.image}; build it from reference-project/tools/Dockerfile or give --image")
+    art, out = pathlib.Path(a.artifacts).resolve(), pathlib.Path(a.out).resolve()
+    if out.exists():
+        raise SystemExit(f"{out} exists; give a new data directory")
+    (out / "runs").mkdir(parents=True)
+    triage = out / "triage.json"
+    shutil.copyfile(art / "triage.json", triage)
+    shutil.copyfile(art / "triage.json.sha256", str(triage) + ".sha256")
+    digests = {b: hashlib.sha256((art / b).read_bytes()).hexdigest() for b in EXPECTED}
+    (out / "builds.json").write_text(json.dumps(digests, indent=2) + "\n")
+    env = {**os.environ, "CC1_BENCH_STATE": a.state, "CC1_REQUESTER": "check examples on the bench"}
+    cc1 = ["bash", SAMPLE / "bench" / "cc1.sh"]
+    t0, rows = time.time(), []
+    sh = measure.sh
     sh([*cc1, "stop"], env, check=False)
+    try:
+        bench_runs(a, art, out, triage, digests, env, cc1, rows)
+    finally:  # also after a refused or timed-out request, which stops measure.sh
+        sh([*cc1, "stop"], env, check=False)
 
     failed = 0
-    print("\n| Build | Runs | `logdiff` expected | `logdiff` | `runtime-limits` expected | `runtime-limits` | VmHWM KiB |")
+    print("\n| Build | Runs | `logdiff` expected | `logdiff` | `runtime-limits` expected | `runtime-limits` "
+          "| VmHWM KiB |")
     print("| --- | --- | --- | --- | --- | --- | --- |")
     for build, (want_ld, want_rl) in EXPECTED.items():
         rs = [r for r in rows if r["build"] == build]

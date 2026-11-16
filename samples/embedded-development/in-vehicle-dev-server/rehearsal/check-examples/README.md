@@ -29,11 +29,11 @@ clang-tidy 18.1.3, git 2.43.0), Buildroot sysroot from the volume `cc1-sysroot`.
 table is that run's ([`bench-data/run-py.md`](bench-data/run-py.md)); the checks no longer print a reason when they
 pass, and ThreadSanitizer names the race with the absolute path of the check's copy.
 
-Earlier runs: 2026-11-03, native arm64 image on Apple Silicon, stand-in sysroot, the 23 rows up to step 6 as expected
+Earlier runs: 2026-11-03, native arm64 image on Apple Silicon, stand-in sysroot, the 23 rows of then as expected
 in 215 s; with `cc1-sysroot` 23 of 23 in 359 s once `bench/build-target.sh` exported the C++ headers (2026-11-04),
 before that the seven `static` rows from step 2 on were BLOCKED. The amd64 image under Rosetta cannot run
-ThreadSanitizer, so there the `unit` rows fail for that reason. `checks/test/test_checks.py` had 72 tests OK in the
-arm64 container on 2026-11-03.
+ThreadSanitizer, so there the `unit` rows fail for that reason. `checks/test/test_checks.py`: 72 tests OK in the
+arm64 container on 2026-11-03, 76 OK in the amd64 image on the x86_64 host on 2026-11-16.
 
 | Step | Check | Expected | Verdict | First reason |
 | --- | --- | --- | --- | --- |
@@ -69,7 +69,8 @@ Step 6 is the point of the F-008 seed: the wrong fix removes the finding, is tra
 static analysis and trace pass. Here `unit.sh` fails only because the example adds no test that names F-008; with such a test, it
 would pass unless the test covers the start-up grace period, which no baseline test does. `logdiff.sh` on the bench
 catches it ([After deploy, on the bench](#after-deploy-on-the-bench)). Step 7 is the opposite case: the F-021 fix is
-correct, so every check before the bench passes, and only `runtime-limits.sh` on the bench sees what it costs.
+correct, so static analysis, trace and the build pass (step 7 runs those three), and only `runtime-limits.sh` on the
+bench sees what it costs.
 
 ## After deploy, on the bench
 
@@ -78,27 +79,33 @@ correct, so every check before the bench passes, and only `runtime-limits.sh` on
 
 1. boots the emulated CC-1 once (`bench/cc1.sh stop`, `start --shift 3`, `wait`);
 2. deploys the release build and replays the recorded drive once as the baseline;
-3. deploys each build in turn, the release, the F-008 wrong fix and the F-021 wrong fix, and replays it `--runs`
-   times;
+3. replays the release `--runs` times on that deploy, then deploys the F-008 wrong fix and the F-021 wrong fix in
+   turn and replays each `--runs` times;
 4. after each replay runs both checks in the build container against that baseline, with the triage `run.py`
    approved last, which allows no log difference, and compares their verdicts with the expected ones.
 
 ```bash
-mkdir /tmp/check-examples
+OUT_DIR=$(mktemp -d)                                  # run.py needs a new, empty directory
 docker run --rm --security-opt seccomp=unconfined --user "$(id -u):$(id -g)" -e HOME=/tmp -e OUT=/out \
-    -v /tmp/check-examples:/out -v "$PWD":/sample:ro -v cc1-sysroot:/opt/cc1-sysroot:ro \
+    -v "$OUT_DIR":/out -v "$PWD":/sample:ro -v cc1-sysroot:/opt/cc1-sysroot:ro \
     vstatd-build:amd64 python3 /sample/rehearsal/check-examples/run.py      # vstatd-build:arm64 on Apple Silicon
+export CC1_BENCH_STATE=<state dir of its own>         # console.py and bench.py must use the same one
 python3 bench/console.py supply --voltage 13.5 --kl15 on
-CC1_BENCH_STATE=<state dir> python3 rehearsal/check-examples/bench.py --state <state dir> \
-    --artifacts /tmp/check-examples/artifacts --out <new data dir> --runs 10 --image vstatd-build:amd64
+python3 rehearsal/check-examples/bench.py --state "$CC1_BENCH_STATE" --artifacts "$OUT_DIR/artifacts" \
+    --out <new data dir> --runs 10                    # --image defaults to vstatd-build:<arm64|amd64> of this host
 ```
 
-Each deploy and replay is a request that waits for a person at `bench/console.py` for the same state directory;
-`bench.py` approves nothing. Give it a state directory of its own, not the Kiro Crew app's.
+Each deploy and replay is a request that waits for a person at the operator console, in a second shell with the same
+`CC1_BENCH_STATE`: `python3 bench/console.py status`, then `approve <id> --digest <first 6 characters>`. `bench.py`
+approves nothing. Give it a state directory of its own, not the Kiro Crew app's, and do not run it while the app uses
+the bench: there is one emulated CC-1, and `bench.py` stops and restarts it. Afterwards, reconcile the app's bench
+state at `bench/console.py` before the app uses the bench again. `bench.py` checks that the build image exists before
+it boots the target, and stops the target when it ends, also after a refused request.
 
-### Last run
+### Last run on the bench
 
-2026-11-16, on the x86_64 host of the build container above (AMD EPYC 7R13, 8 vCPUs, Docker 29.8.2), QEMU 8.2.2,
+2026-11-16, on the x86_64 host of the build container above (AMD EPYC 7R13, 8 vCPUs, Docker 29.8.2; the amd64 image
+was tagged `vstatd-build` there), QEMU 8.2.2,
 `-icount shift=3,sleep=off`, the target image of `bench/build-target.sh`, drive `drive-01@39a3d0dec2ab+62abaaf5`.
 30 of 30 runs as expected, in 14.1 minutes. **Approvals were scripted:** a small local script outside this repository
 approved at `bench/console.py`, in a state directory of its own, exactly the deploys and replays of the three digests
@@ -116,20 +123,22 @@ running other work: the 1-minute load average at the start of a replay was 7.3 t
   baseline does not have, for example `only in the run: {"t_ms":97,"ev":"SIGNAL_TIMEOUT","message":"VCU_Speed"}`. Its
   memory stays within the limit.
 - **F-021.** Every run fails `runtime-limits`, for example `peak RSS 6772 KiB is over the limit of 6400 KiB
-  (CC1-PN §3)`; its log equals the baseline's. The F-021 build also carries steps 3 to 5 of the batch (the race fix,
-  F-013 and the F-007 justification), and so does the F-008 build; the release runs and the F-021 runs show that these
-  steps change neither the log nor the memory figure.
+  (CC1-PN §3); `logdiff` finds no difference (328 of 328 baseline entries paired within the time window). The F-021
+  build also carries steps 3 to 5 of the batch (the race fix, F-013 and the F-007 justification), and so does the
+  F-008 build. The F-021 runs show that these steps leave the log unchanged as `logdiff` sees it; the F-008 runs, which
+  carry them too, peak within the release's range, so they do not change peak RSS beyond the run-to-run spread.
 - **Time window.** The largest time difference of a paired entry was 17 ms in any run (20 ms allowed, CC1-PN §6.3).
 - **The F-021 limit on this host.** [facilitator-notes.md](../facilitator-notes.md) asks for this check on any host
   other than the one the limit was calibrated on: the release peaked at most 5,964 KiB, 436 KiB under the limit
   (more than the 300 KiB it asks for), the wrong fix at least 6,644 KiB, 244 KiB over it (more than 200 KiB). The
   6,400 KiB limit holds here without a new calibration.
 - **Same build, two hosts.** The release build has the digest of the normal build of the repeatability measurement
-  on Apple Silicon ([repeatability/](../repeatability/README.md), `bc93723c…`): the cross build is reproducible across
-  the two build hosts.
+  on Apple Silicon ([repeatability/](../repeatability/README.md), `bc93723c…`): the same source gave the same bytes on
+  both build hosts (one build compared).
 
 [`bench-data/`](bench-data/) holds everything the table was computed from: `runs.csv` (one row per run with both
 verdicts, their first reasons, `vm_hwm_kib`, threads, CPU, the largest |dt| and the load), `builds.json` (the three
 digests), each run's `run-result.json` and `run.jsonl` under `runs/`, the baseline under `baseline/`, both checks'
 results per run under `results/`, the triage given to `logdiff`, and `bench.log`, what `bench.py` ran and printed (the
-scenario folder is written `<sample>`, the data directory `<data>`).
+scenario folder is written `<sample>`, the data directory `<data>`, and the directory of run.py's `OUT` lies under
+`<scratch>`).
