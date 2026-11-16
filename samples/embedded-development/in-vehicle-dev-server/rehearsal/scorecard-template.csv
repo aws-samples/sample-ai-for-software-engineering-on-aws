@@ -1,0 +1,40 @@
+section,item,value,unit,source,note
+run,board,,,Hand,
+run,date,,,Hand,
+run,host,,,Hand,"OS, CPU, memory"
+run,kiro_crew_version,,,Hand,
+run,kiro_cli_version,,,Hand,
+run,bypass_hook_in_templates,,yes/no,Hand,
+run,credits,,credits,Hand,from Kiro Crew
+run,baseline,,,Hand,"team history or control group, and where its figures come from"
+hours,triage,,minutes,Hand,summed over the board's engineers
+hours,gates,,minutes,Hand,
+hours,review,,minutes,Hand,
+hours,bench,,minutes,Hand,
+hours,signoff,,minutes,Hand,
+hours,per_finding,,minutes,Hand,total minutes / findings the approved triage decided
+bench,console_minutes,,minutes,Hand,the bench owner's minutes at the operator console
+bench,bench_minutes,,minutes,Hand,"doctor, start, reset"
+findings,fixed,,count,App,
+findings,justified,,count,App,
+findings,deferred,,count,App,
+findings,added_under_tr_4_4,,count,Hand,"the refactor and findings found on the way"
+findings,justifications_overturned,,count,App,
+checks,first_round_all_passed,,yes/no,Hand,from the app's first round after the merge
+checks,first_round_failed_checks,,,Hand,
+times,to_approved_triage,,seconds,App,
+times,to_first_passing_checks,,seconds,App,
+times,to_signoff,,seconds,App,
+checks,build_repair_rounds,,count,App,
+checks,failures_before_bench_by_check,,,App,"e.g. build=1; unit=2"
+logdiff,differences,,count,App,
+logdiff,unexplained,,count,App,
+logdiff,real_behaviour_changes,,count,Hand,"each with the finding it came from"
+bench,approved,,count,App,
+bench,refused,,count,App,a timeout counts as a refusal
+bench,reconciled,,count,App,
+servers,tool_calls_by_class,,,Servers,empty until the app uses the MCP servers
+servers,tool_calls_refused,,count,Servers,empty until the app uses the MCP servers
+checks,changed_on_independent_rerun,,,App,
+later,defects_found_later,,count,Hand,kept open after the day
+run,stops,,,Hand,"every stop, and why"

@@ -412,7 +412,8 @@ been dry-run once.
    Kiro Crew app (item 8) does not need this item's configurations.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
-   Record the time and credits it used.
+   Record the time and credits it used. *Draft (2026-11-16):* the [rehearsal guide](rehearsal/README.md) and the
+   [scorecard](rehearsal/scorecard.md) with its sheet; the dry run is open.
 8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its roles' templates, `setup.sh` and `cleanup.sh`. *Done:* steps
    1 to 12 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan), with one delivery end to end
    (2026-11-03).
