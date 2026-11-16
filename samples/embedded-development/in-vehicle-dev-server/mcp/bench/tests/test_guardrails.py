@@ -286,6 +286,21 @@ class Calls(Env):
         self.assertLess(len(line), 4000)
         self.assertEqual(len(self.audit()[-1]["args"]), 20)
 
+    def test_huge_integer_arguments_are_described_not_kept_in_the_audit(self):
+        """The SDK's parser takes integers of about 4,300 digits: twenty of them stay a short audit line, and one
+        too long to be written out at all (5,000 digits) is audited too, not an exception before the audit."""
+        big = 10 ** 4299  # 4,300 digits
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", **{f"a{i}": big for i in range(20)})
+        line = (self.st / "audit.jsonl").read_text().splitlines()[-1]
+        self.assertLess(len(line.encode()), 2000)
+        self.assertEqual(self.audit()[-1]["args"]["a0"], f"<int, {big.bit_length()} bits>")
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", n=10 ** 4999, small=42, flag=True, none=None, x=1.5)
+        args = self.audit()[-1]["args"]
+        self.assertEqual(args, {"n": f"<int, {(10 ** 4999).bit_length()} bits>", "small": 42, "flag": True,
+                                "none": None, "x": 1.5})
+
     def test_reads_do_not_wait_for_a_call_in_progress(self):
         """A read-only call takes no lock: another session sees the request waiting at the console."""
         import threading

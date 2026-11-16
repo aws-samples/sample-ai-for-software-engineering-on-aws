@@ -51,15 +51,27 @@ VERDICTS = {0: "PASS", 1: "FAIL", 2: "USAGE", 3: "BLOCKED"}
 TAIL_BYTES = 8192
 ACTIONS_SHOWN = 30
 AUDIT_ARG_MAX = 200  # characters of a malformed call's raw argument kept in its audit line
+_INT_BITS_MAX = 640  # an integer of more bits than this has more than AUDIT_ARG_MAX digits (640 bits < 193 digits)
+
+
+def capped_value(v):
+    """One argument as the audit keeps it: a string cut to AUDIT_ARG_MAX; a number whose digits would be longer
+    described by its size; bool and None as they are; anything else as its repr, cut. An integer's size is taken
+    from bit_length() before any repr, so a 5,000-digit integer (more than Python writes out) is audited too."""
+    if v is None or isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        if v.bit_length() > _INT_BITS_MAX or len(repr(v)) > AUDIT_ARG_MAX:
+            return f"<int, {v.bit_length()} bits>"
+        return v
+    if isinstance(v, float):
+        return v if len(repr(v)) <= AUDIT_ARG_MAX else "<float>"
+    return (v if isinstance(v, str) else repr(v))[:AUDIT_ARG_MAX]
 
 
 def capped(args):
-    """A call's arguments as the audit keeps them: at most 20, each name and value cut to AUDIT_ARG_MAX."""
-    out = {}
-    for k, v in list(args.items())[:20]:
-        v = v if isinstance(v, (str, int, float, bool, type(None))) else repr(v)
-        out[str(k)[:AUDIT_ARG_MAX]] = v[:AUDIT_ARG_MAX] if isinstance(v, str) else v
-    return out
+    """A call's arguments as the audit keeps them: at most 20, each name and value capped (capped_value)."""
+    return {str(k)[:AUDIT_ARG_MAX]: capped_value(v) for k, v in list(args.items())[:20]}
 DOCKER_CLIENT_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH",
                      "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
 RUN_NAME = re.compile(r"run-(\d{1,6})")
