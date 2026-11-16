@@ -1,13 +1,13 @@
 {
   "kiro": "kiro-cli 2.34.0",
-  "harness": "none",
+  "harness": "v3",
   "exit_status": 0,
-  "seconds": 50,
-  "hook_calls": 15,
+  "seconds": 40,
+  "hook_calls": 14,
   "hook_saw_bench_state": true,
   "tool_names": [
-    "shell",
-    "write"
+    "execute_bash",
+    "fs_write"
   ],
   "probes": [
     {

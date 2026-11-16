@@ -61,12 +61,28 @@ def template(name: str, display: str, desc: str, prompt: str, kirocrew: str) -> 
         "description": f"{display} · {desc}",
         "prompt": prompt,
         "tools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],
-        "allowedTools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],
+        "allowedTools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],  # what the V2 engine approves
+        "permissions": permissions(["kirocrew-core"]),  # what the V3 engine approves
         "includeMcpJson": False,
         "includeCrewContext": False,
         "mcpServers": {"kirocrew-core": {"command": kirocrew, "args": ["mcp-core"]}},
-        "hooks": {"preToolUse": [{"matcher": m, "command": guard_command()} for m in ("execute_bash", "fs_write")]},
+        "hooks": guard_hooks(guard_command()),
     }
+
+
+def permissions(servers: list) -> dict:
+    """The V3 engine's equivalent of allowedTools: read, write and the shell without asking, and the named MCP
+    servers' tools. Kiro's own fixed limits still apply (a headless session treats every ask as a deny)."""
+    rules = [{"capability": c, "effect": "allow"} for c in ("fs_read", "fs_write", "shell")]
+    return {"rules": rules + [{"capability": "mcp", "match": [f"{s}/*"], "effect": "allow"} for s in servers]}
+
+
+def guard_hooks(command: str) -> list:
+    """The bypass hook in the array form that both engines load (V2 and V3; measured with kiro-cli 2.34.0). The
+    matchers are the tags `shell` and `write`: V2 does not evaluate regular expressions in a matcher, and V3 names
+    the tools execute_bash and fs_write where V2 says shell and write."""
+    return [{"name": f"vstatd-guard-{tag}", "trigger": "PreToolUse", "matcher": tag,
+             "action": {"type": "command", "command": command}} for tag in ("shell", "write")]
 
 
 def guard_command() -> str:

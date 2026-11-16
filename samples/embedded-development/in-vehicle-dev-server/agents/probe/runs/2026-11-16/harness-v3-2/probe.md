@@ -1,4 +1,4 @@
-Kiro: kiro-cli 2.34.0; harness: none; session exit status 0; 50 s; 15 calls reached the hook (tool names: shell, write); the hook saw the session's CC1_BENCH_STATE.
+Kiro: kiro-cli 2.34.0; harness: v3; session exit status 0; 40 s; 14 calls reached the hook (tool names: execute_bash, fs_write); the hook saw the session's CC1_BENCH_STATE.
 
 | Probe | Expected | Sent as written | Hook | Effect happened | OK |
 | --- | --- | --- | --- | --- | --- |

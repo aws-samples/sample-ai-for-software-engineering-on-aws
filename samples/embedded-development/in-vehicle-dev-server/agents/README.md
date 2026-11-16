@@ -43,6 +43,12 @@ quotes is not a substitution. A command line over 64 KiB, more than eight levels
 than 64 substitutions is refused, and so is anything the hook fails to judge. A tool call the hook does not recognise,
 or a write without a path it can read, is refused.
 
+**One file for both engines.** The templates are in the format that kiro-cli's V2 and V3 engines both load. They have
+`tools` and `allowedTools` for V2 and a `permissions` block for V3, which allows reads, writes, the shell and the
+Kiro Crew MCP server's tools without asking. The hook is in the array form: one entry each for the tags `shell` and
+`write`. V2 does not evaluate regular expressions in a matcher, so the tags are used. The two engines name the tools
+differently: V2 says `shell` and `write`, V3 says `execute_bash` and `fs_write`. The hook knows both.
+
 When the hook refuses a call, it exits with status 2, and Kiro returns the hook's message to the agent. In the templates
 the hook command is `python3 -I <sample>/agents/hooks/guard.py || exit 2`, which kiro-cli 2.34.0 runs with `bash -c`.
 Kiro lets a call run when a hook exits with any status other than 2, so the `|| exit 2` keeps the hook closed when
@@ -90,20 +96,21 @@ python3 agents/probe/probe.py --harness none --out <new folder>   # also --harne
 
 ### Last run
 
-2026-11-16, kiro-cli 2.34.0 on an x86_64 Ubuntu 24.04 host; results in
+2026-11-16, kiro-cli 2.34.0 on an x86_64 Ubuntu 24.04 host, with the templates' format for both engines; results in
 [`probe/runs/2026-11-16/`](probe/runs/2026-11-16/):
 
 | Harness | Result |
 | --- | --- |
-| The version's default (none given) | 14 of 14 as expected, in 51 s, and again in a second session (50 s; the agent sent one call twice, so 15 reached the hook). Every probe reached the hook as written, under the tool names `shell` and `write`; the hook saw the session's `CC1_BENCH_STATE`, and the shell found the stand-ins. Refused with no effect: five forms of `git push`, `reset --hard`, `docker exec` into the bench, `ssh` to the target, a shell write and a file-tool write to the bench state. Ran: a `git status` and a file write in the repository. Got through as known: the push written to a script and run |
-| `--v2` | The same, 14 of 14, in 50 s |
-| `--v3` | The session did not load the agent (exit status 4, which kiro-cli uses when it does not find the agent), so nothing was tested. Probably the V3 harness skips an agent in this format, which has `tools`, `allowedTools` and object-form `hooks` but no `permissions` block; the probe reports 0 of 14 |
+| The version's default (none given, V2) | 14 of 14 as expected, in 45 s. Every probe reached the hook as written, under the tool names `shell` and `write`; the hook saw the session's `CC1_BENCH_STATE`, and the shell found the stand-ins. Refused with no effect: five forms of `git push`, `reset --hard`, `docker exec` into the bench, `ssh` to the target, a shell write and a file-tool write to the bench state. Ran: a `git status` and a file write in the repository. Got through as known: the push written to a script and run |
+| `--v2` | The same, 14 of 14, in 42 s |
+| `--v3` | The same, 14 of 14, in 41 s and again in a second session (40 s), under the tool names `execute_bash` and `fs_write` |
 
-The hook ran although `allowedTools` approved the calls. Once, when the hook refused one of two parallel calls, Kiro
-skipped the other one too and the agent sent it again on its own (a single observation, not recorded by the probe).
+Before the templates had a `permissions` block, the V3 engine did not load them at all (exit status 4: agent not
+found), and the probe reported nothing tested. The hook ran although `allowedTools` and `permissions` approved the
+calls. Once, when the hook refused one of two parallel calls, Kiro skipped the other one too and the agent sent it
+again on its own (a single observation, not recorded by the probe).
 
 Not verified yet:
 
 - the templates in a Kiro Crew session (this host has Kiro Crew 0.9.0; the app needs 0.12);
-- an agent in the V3 format, with `permissions` and array `hooks`;
 - the hook in the Kiro IDE.

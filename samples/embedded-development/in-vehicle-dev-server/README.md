@@ -412,7 +412,8 @@ been dry-run once.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
    Kiro Crew app (item 8) does not need this item's configurations. *Done in part (2026-11-16):* the bypass hook in
    the roles' templates, its tests and the permission probe, run with kiro-cli 2.34.0 ([agents/](agents/README.md)).
-   Open: the templates in a Kiro Crew session, an agent in the Kiro CLI V3 format, the Kiro IDE.
+   The templates load in both of kiro-cli's engines (V2 and V3). Open: the templates in a Kiro Crew session, the Kiro
+   IDE.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the operator console, followed by an independent rerun of the checks.
    Record the time and credits it used.
