@@ -6,35 +6,36 @@ run,kiro_crew_version,,,Hand,
 run,kiro_cli_version,,,Hand,
 run,bypass_hook_in_templates,,yes/no,Hand,
 run,credits,,credits,Hand,from Kiro Crew
-run,baseline,,,Hand,"team history or control group, and where its figures come from"
-hours,triage,,minutes,Hand,summed over the board's engineers
-hours,gates,,minutes,Hand,
-hours,review,,minutes,Hand,
-hours,bench,,minutes,Hand,
-hours,signoff,,minutes,Hand,
-hours,per_finding,,minutes,Hand,total minutes / findings the approved triage decided
-bench,console_minutes,,minutes,Hand,the bench owner's minutes at the operator console
-bench,bench_minutes,,minutes,Hand,"doctor, start, reset"
+run,comparison,,,Hand,"team history or control group, and where its figures come from"
+run,stops,,,Hand,"every stop, and why"
+minutes,triage,,minutes,Hand,summed over the board's engineers
+minutes,fix,,minutes,Hand,"gates, send-backs and decisions while the roles work"
+minutes,verification,,minutes,Hand,"review, bench, rerun"
+minutes,signoff,,minutes,Hand,
+minutes,per_finding,,minutes/finding,Hand,"(triage + fix + verification) / findings the approved triage decided"
+minutes,console,,minutes,Hand,the bench owner's minutes at the operator console
+minutes,bench,,minutes,Hand,"doctor, start, reset"
 findings,fixed,,count,App,
 findings,justified,,count,App,
 findings,deferred,,count,App,
 findings,added_under_tr_4_4,,count,Hand,"the refactor and findings found on the way"
 findings,justifications_overturned,,count,App,
+times,to_approved_triage,,as shown,App,wall clock from the run's start
+times,to_first_passing_checks,,as shown,App,
+times,to_signoff,,as shown,App,
 checks,first_round_all_passed,,yes/no,Hand,from the app's first round after the merge
-checks,first_round_failed_checks,,,Hand,
-times,to_approved_triage,,seconds,App,
-times,to_first_passing_checks,,seconds,App,
-times,to_signoff,,seconds,App,
+checks,first_round_failed_checks,,check names,Hand,
 checks,build_repair_rounds,,count,App,
-checks,failures_before_bench_by_check,,,App,"e.g. build=1; unit=2"
+checks,failures_before_bench_by_check,,check=count,App,"e.g. build=1; unit=2"
+checks,changed_on_independent_rerun,,check names,App,
+checks,dry_run_rerun_differs,,check names,Hand,dry run only: the second rerun by hand
 logdiff,differences,,count,App,
 logdiff,unexplained,,count,App,
-logdiff,real_behaviour_changes,,count,Hand,"each with the finding it came from"
+logdiff,real_behaviour_changes,,count,Hand,each with the finding it came from
 bench,approved,,count,App,
 bench,refused,,count,App,a timeout counts as a refusal
 bench,reconciled,,count,App,
-servers,tool_calls_by_class,,,Servers,empty until the app uses the MCP servers
+servers,tool_calls_by_class,,class=count,Servers,empty until the app uses the MCP servers
 servers,tool_calls_refused,,count,Servers,empty until the app uses the MCP servers
-checks,changed_on_independent_rerun,,,App,
+model,back_to_back_differences,,count,—,not applicable until build plan item 9
 later,defects_found_later,,count,Hand,kept open after the day
-run,stops,,,Hand,"every stop, and why"

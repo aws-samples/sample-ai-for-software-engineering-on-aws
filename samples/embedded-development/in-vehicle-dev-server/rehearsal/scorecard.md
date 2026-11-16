@@ -15,7 +15,7 @@ Each figure comes from one of three sources, and keeps the definition its source
 
 | Scorecard item | Source | How it is taken |
 | --- | --- | --- |
-| Engineer hours on the batch, by phase and per finding | Hand | Each engineer's minutes on the batch, by phase (triage, gates, review, bench, sign-off), summed over the board. Per finding: the total over the findings the approved triage decided |
+| Engineer hours on the batch, by phase and per finding | Hand | Each engineer's minutes on the batch, by phase (triage, fix, verification, sign-off; [README.md](README.md#the-day) says what each phase covers), summed over the board. Per finding: the triage, fix and verification minutes over the findings the approved triage decided, as the business measure counts them |
 | Engineer time at the operator console and the bench | Hand | The bench owner's minutes at the console, and anyone's minutes spent on the bench itself (doctor, start, reset) |
 | Findings fixed, justified and deferred | App | The decisions of the approved triage. The entries it added under TR §4.4 (the refactor, findings found on the way) are counted separately, by hand |
 | Justifications overturned | App | A justification the release owner answered other than A at the triage gate, or that a reviewer's 要改 verdict names on a `推翻说明：` line while the approved triage justifies it |
@@ -27,6 +27,7 @@ Each figure comes from one of three sources, and keeps the definition its source
 | Bench actions approved, refused and reconciled | App | The console's decisions on the run's requests (a timeout counts as a refusal), and the reconciles after the run's own latest request |
 | Tool calls by permission class, and how many were refused | Servers | Empty until the app uses the MCP servers. Do not fill it from the agents' sessions |
 | Checks whose result changed on the independent rerun | App | The checks whose verdict on the final commit differed in the app's independent rerun |
+| In the model-based profile, back-to-back differences and real defects | — | Not applicable until build plan item 9; leave empty |
 | Defects found later that a check should have caught | Hand, later | Kept open after the day: defects in the batch's change found after sign-off, with the check that should have caught them |
 
 Also write on the sheet:
@@ -36,7 +37,10 @@ Also write on the sheet:
 - whether the bypass hook was in the templates;
 - the baseline the board is compared with: the team's history, or the control group's figures for the same part of
   the backlog;
-- every stop, and why.
+- every stop, and why;
+- in the dry run, the checks whose verdict differed on the second rerun by hand.
+
+A control group fills in a sheet of its own, with the hand-kept figures for its part of the backlog.
 
 ## What the figures are not
 

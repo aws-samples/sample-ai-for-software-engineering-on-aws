@@ -342,7 +342,8 @@ Kiro Crew uses; the scenario's data is synthetic.
 The rehearsal scorecard records, for the batch:
 
 - engineer hours on the batch, by phase and per finding, and engineer time at the operator console and the bench;
-- findings fixed, justified and deferred, and how many justifications the reviewer overturned;
+- findings fixed, justified and deferred, and how many justifications a person at the triage gate or the reviewer
+  overturned;
 - changes that passed every pre-bench check on the first round;
 - time from the backlog to an approved triage, to the first passing check run, and to the release sign-off;
 - build repair rounds used;
@@ -411,7 +412,8 @@ been dry-run once.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
    Kiro Crew app (item 8) does not need this item's configurations.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
-   session and a person answers only at the operator console, followed by an independent rerun of the checks.
+   session and a person answers only at the board's gates and the operator console, followed by an independent rerun
+   of the checks.
    Record the time and credits it used. *Draft (2026-11-16):* the [rehearsal guide](rehearsal/README.md) and the
    [scorecard](rehearsal/scorecard.md) with its sheet; the dry run is open.
 8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its roles' templates, `setup.sh` and `cleanup.sh`. *Done:* steps
