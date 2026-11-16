@@ -380,7 +380,8 @@ may not read the same one).
 
 ### D17. App 通过 build / bench 服务器跑检查和台架
 
-Proposed on 2026-11-16; phase 1 (this design and a read-only trial) is done, the implementation is not.
+Decided on 2026-11-16 and implemented in `backend/team/servers.py`, without an end-to-end run yet (see the end of
+this section). Release stays `direct` until #42 is merged.
 
 **Two modes, one switch.** The team file's `"connectors"` picks one, `"direct"` by default:
 
@@ -388,15 +389,16 @@ Proposed on 2026-11-16; phase 1 (this design and a read-only trial) is done, the
 - `servers` makes the same steps tool calls of the [`build`](../mcp/build/README.md) and
   [`bench`](../mcp/bench/README.md) MCP servers, through the app's own stdio client (`backend/team/mcpclient.py`,
   no MCP SDK in Kiro Crew's Python). Both servers run as the current user, which `mcp/build/README.md` (Running)
-  says suits a trial only. The team file's `servers` gives the two command lines (with the server's `--config` and
-  `--role developer`), the work tree and the triage folder; the same command lines with `sudo -n -u buildsrv` and
-  `-u benchsrv` are the separate-user set-up.
+  says suits a trial only. The team file's `servers` gives the two command lines, each with the server's
+  `--config` and `--role developer`; the app reads the work tree, the triage file, the state folders and the bench
+  timeouts from those configuration files. The same command lines with `sudo -n -u buildsrv` and `-u benchsrv` are
+  the separate-user set-up. Set-up steps are in `app/README.md` (Servers mode).
 
 The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
 and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A
 server's refusal (`ToolRefused`), a call that times out (`McpTimeout`, the client then ends the server) and a server
-that exits (`McpExited`) hold the run for a person like BLOCKED, with the server's own message; 重试 carries on from
-that step.
+that exits (`McpExited`) hold the run for a person like BLOCKED, with the server's own message. Such a check takes no
+repair round and goes to no role; 重试 asks the server again (the round of checks, tests first, or the bench step).
 
 **Each step and its tool.**
 
@@ -404,7 +406,6 @@ that step.
 | --- | --- |
 | Before-bench checks (D7) | build `run_check` `build`, `static`, `unit`, `size`, `trace`, one call each |
 | Tests first (D6) | build `run_check unit` on a temporary commit (below) |
-| Bench readiness (D10) | bench `bench_status`, beside `bench/doctor.sh` |
 | Deploy | bench `lease_acquire`, then `request_deploy` |
 | Replay | bench `request_replay` |
 | After-bench checks | bench `run_check` `runtime-limits`, `logdiff`, then `lease_release` |
@@ -413,8 +414,8 @@ that step.
 
 - Each build `run_check` judges a clean clone of the work tree's committed HEAD with no cache, which is also what
   D9's rerun needs.
-- `bench/doctor.sh` stays as the board's readiness read.
-- `request_deploy` deploys the build that `build` published last; the app checks that its digest is the round's.
+- `bench/doctor.sh` stays as the bench step's readiness read (D10); `bench_status` is not called.
+- `request_deploy` deploys the build that `build` published last; the app checks that it is the round's commit.
 - `request_replay` writes into the bench server's `runs/run-<n>`, not the run's `bench/` folder; the after-bench
   checks judge that replay.
 
@@ -433,45 +434,49 @@ sequenceDiagram
         A->>B: run_check
         B-->>A: verdict and result
     end
-    A->>C: bench_status, lease_acquire
-    A->>C: request_deploy
+    A->>C: lease_acquire, request_deploy
     C->>P: request with the build's digest
     P-->>C: approve
     C-->>A: deployed, digest read back
-    A->>C: request_replay
+    A->>C: lease_release
+    A->>C: lease_acquire, request_replay
     C->>P: request
     P-->>C: approve
     C-->>A: run-n
-    A->>C: run_check runtime-limits, run_check logdiff
     A->>C: lease_release
+    A->>C: lease_acquire, run_check runtime-limits and logdiff, lease_release
     Note over A,C: independent rerun on the final commit
     A->>B: run_check for each before-bench check
     A->>C: lease_acquire, run_check runtime-limits and logdiff, lease_release
-    A->>B: run_check release (after #42)
-    A->>A: sign-off enabled when release passes
+    A->>A: release.sh (direct until #42), sign-off enabled when it passes
 ```
 
 **Fixed paths, and one run at a time.** The build server's `paths.workspace`, `paths.triage` and `paths.state` are
 fixed in its configuration (`mcp/build/buildserver/core.py`, from line 320), and before every call it checks that each
 mounted folder is still the one it saw at start, by device and inode (`check_mounts()`, line 396). So:
 
-- **Work tree:** `~/workplace/vstatd-team/server/worktree`, a clone of the run's repository with its own `.git`. A
-  `git worktree` does not work: its `.git` points outside the folder the server mounts. Before each round the app
-  fetches the round's commit from the run's repository into the clone, runs `git checkout --detach <commit>` and
-  `git clean -fdx` there, and requires `workspace_status` to name that commit with no changes. The folder is moved
+- **Work tree:** `~/workplace/vstatd-team/server/worktree`, a repository of its own (`git init` by the app the
+  first time). A `git worktree` does not work: its `.git` points outside the folder the server mounts. Before each
+  round the app fetches the run's branches into it, runs `git checkout --detach <commit>` and `git clean -fdx`
+  there, and requires `workspace_status` to name that commit with no changes. The folder is moved
   in place and never removed or recreated.
 - **Triage folder:** `~/workplace/vstatd-team/server/triage/`, the folder of `paths.triage` in both servers. When
   the triage gate is approved (D4), and each time D15 writes the triage again, the app writes `triage.json` and
   `triage.json.sha256` there as well as beside the run's repository. The files are replaced, the folder is kept.
 - **One run at a time:** the servers' state is one per installation: `build`'s published results, its repair count
   and its HEAD, and `bench`'s runs and published results. So a run takes the servers at its first server call and
-  gives them back at sign-off or when it is stopped (`server/holder.json` names the run). Another run in `servers`
-  mode is held before its first check, with the run that holds them on the board.
+  keeps them until it is done or a person stops it; a run held for a person keeps them (`server/holder.json`, beside
+  the work tree, names the run). Another run in `servers` mode is held before its first server call, with the run
+  that holds them in the reason.
 - **Bench state:** in the trial the bench server's `paths.bench_state` is the user's `~/.cc1-bench`, the same as
   `bench/cc1.sh` uses in `direct` mode.
 
-The app starts the `build` server for each check round and the `bench` server for each bench step, and ends each
-session afterwards; each start checks the folders again. A physical call waits for the person, so its client
+The app starts the `build` server for each check round and the `bench` server for each bench step (deploy, replay,
+the after-bench checks), and ends each session afterwards; each start checks the folders again. The bench steps are
+separate ticks of the run, and a session does not outlive an app restart, so the lease is held per step, not across
+the whole bench: acquired, used and released in each one. Between two steps nothing of the app holds the target;
+another session could take the lease then, and the replay would run on what that session left. The one-run rule
+keeps other runs out; the bench owner keeps other sessions out. A physical call waits for the person, so its client
 timeout is the server's approval timeout plus the action's (300 s plus 600 s for a deploy, plus 900 s for a replay,
 by default) and a minute more.
 
@@ -488,13 +493,14 @@ the round's commit. The commit is on no branch and never reaches the run's repos
 The unit result `build` publishes for the temporary commit is replaced by the next round's unit check; the rerun
 runs every check again before release.
 
-**Bench.** The lease belongs to the bench server's session, so one session lasts the whole bench step: acquire,
-deploy, replay, the after-bench checks, release. A session that ends gives the lease back. While `request_deploy` or
+**Bench.** The lease belongs to the bench server's session; a session that ends gives it back. While `request_deploy` or
 `request_replay` waits, the board shows the pending request read from the bench state (as today, D3): the action,
 the digest, the time left, and that it is approved at `bench/console.py`. The bench server names itself and its
 session as the requester (`bench MCP server (role developer, session …)`), not `vstatd-team <rid>`. So the app takes
-the session from the call's first line in the bench server's audit log, and records the request ID each call
-returns; the audit trail (D14) and the scorecard tie the run's bench records by those IDs. A refusal at the console,
+the session from the session's lines in the bench server's audit log and keeps it in `runs/<run>/servers.jsonl`
+before the physical call (the board ties the waiting request to the run by it), with the request ID each call
+returns in the bench step's actions. The audit trail (D14), the flow strip and the scorecard count a request as the
+run's when it names the app or one of those sessions. A refusal at the console,
 the physical gate, an approval timeout or a failed action reaches the app as a refusal. The run is held with the
 server's message and nothing is retried. After an interrupted action the bench marks the target `unknown` until a
 person reconciles it at the console.
@@ -505,10 +511,10 @@ as their own users the board could not approve anyway. It approves by writing th
 (`benchstate.decide()`, D3), and the bench server requires every folder down to that state to belong to root or its
 own user and to be writable by no other user (`check_trusted()`). If the app's user could write it, so could the
 agents, who run as the same user. In the trial the buttons would still work, so they are turned off by design and not
-by permissions.
+by permissions. `POST /bench/decide` answers 409 (`decide_off`) in this mode.
 
-**Scorecard.** "Tool calls by permission class" (D8) comes from both servers' `audit.jsonl`: the lines written
-while the run held the servers (the app keeps both files' sizes when it takes and gives back the servers). Each call
+**Scorecard.** "Tool calls by permission class" (D8) comes from both servers' `audit.jsonl`: the lines each of the
+run's sessions wrote (`servers.jsonl` keeps the file's size when the session started and ended). Each call
 writes a `started` line and a line with its outcome; a call refused before it starts writes only the second, so the
 count is of outcome lines. The figure counts the app's calls; the agents make none.
 
@@ -523,7 +529,9 @@ count is of outcome lines. The figure counts the app's calls; the agents make no
 3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
    Not decided: a triage tool of the server, or a person copying the approved file into place.
 4. **Release** waits for #42 (`run_check release` reads the bench server's published results). Until it is merged,
-   release in `servers` mode stays `direct`.
+   release in `servers` mode stays `direct`: `release.sh` runs in the app's build container on the rerun's results,
+   which the app keeps from the servers' answers, and is given read-only the input files those results recorded
+   (the build server's artifact, the bench server's run, the baseline). It re-checks each file's sha256.
 
 **Trust boundary.** `servers` mode connects the app to the servers' interface, and no more. With both servers
 running as the current user, an agent's shell can still write their state, audit logs, published results, the
@@ -597,7 +605,8 @@ bench images; step 12 needs them.
     `direct` unchanged. *Verify:* the client's tests (an answer, a server error, a timeout, a server that exits); a
     whole round with stand-in servers, a failing check going to its owner and a refusal going to a person; every
     existing test still passing; one delivery end to end with the bench actions approved at the console. *Done so
-    far:* the client and its tests, and the read-only trial in D17 (2026-11-16).
+    far* (2026-11-16): the client and its tests, the read-only trial in D17, and servers mode with its tests
+    (`tests/test_mcpclient.py`, `tests/test_servers.py`). Not yet: the end-to-end delivery.
 
 ## Seen in the first delivery
 
