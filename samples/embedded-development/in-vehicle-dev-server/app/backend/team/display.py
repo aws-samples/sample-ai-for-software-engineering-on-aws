@@ -9,8 +9,10 @@
 
 The names come from the records (``by``, ``requested_by``, ``set_by`` …) and from this Mac (``getpass.getuser()``,
 the account's full name), so a name inside a text is found without knowing the text's wording. A name of five
-characters or more is matched in any case; a login of four or fewer is often an English word too (``will``,
-``mark``), so it is matched only as written and not between two English words ("the tester will check" stays).
+characters or more is matched in any case; a login of four or fewer is matched only as written, and one of lowercase
+ASCII letters is often an English word too (``will``, ``mark``): between two English words it is left alone ("the
+tester will check" stays), unless it comes right after by, to, from or with ("approved by will today"). A Chinese
+name or a record name like ``Li`` is always the person.
 """
 
 from __future__ import annotations
@@ -110,11 +112,16 @@ class View:
 
     @staticmethod
     def _a_word(s: str, m: re.Match[str]) -> bool:
-        """A short login between two English words ("the tester will check") is the word, not the person."""
+        """A short login of lowercase ASCII letters (will, mark) between two English words ("the tester will check")
+        is the word, not the person; right after by, to, from or with ("approved by will today") it is the person.
+        A Chinese name or a record name like Li is never taken for a word."""
         name = re.match(r"[^@\s(]+", m.group(0))
-        if not name or len(name.group(0)) > _SHORT:
+        if not name or len(name.group(0)) > _SHORT or not re.fullmatch(r"[a-z]+", name.group(0)):
             return False
-        return bool(re.search(r"[A-Za-z] $", s[:m.start()]) and re.match(r" [A-Za-z]", s[m.end():]))
+        before = s[:m.start()]
+        if re.search(r"\b(?:by|to|from|with) $", before, re.I):
+            return False
+        return bool(re.search(r"[A-Za-z] $", before) and re.match(r" [A-Za-z]", s[m.end():]))
 
     def text(self, s: str) -> str:
         for h in self.homes:
