@@ -1,0 +1,148 @@
+08:52:53 $ bash <sample>/bench/cc1.sh stop
+08:52:53   stopped
+08:52:53 $ bash <sample>/bench/cc1.sh start --shift 3
+08:53:48   started cc1-bench, icount shift=3
+08:53:48 $ bash <sample>/bench/cc1.sh wait 900
+08:54:24   target up after 36s (wall clock)
+08:54:24 $ bash <sample>/bench/cc1.sh deploy <scratch>/runpy-1116-0839/artifacts/release
+08:54:29   deployed bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98, read back bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98
+08:54:29   deploy of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:54:29 $ bash <sample>/bench/cc1.sh replay --kind baseline --out <data>/baseline
+08:54:47   <data>/baseline
+08:54:47   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:54:47 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r01
+08:55:04   <data>/runs/release-r01
+08:55:04   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:55:12 release run 1: logdiff PASS, runtime-limits PASS, VmHWM 5768 KiB
+08:55:12 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r02
+08:55:30   <data>/runs/release-r02
+08:55:30   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:55:39 release run 2: logdiff PASS, runtime-limits PASS, VmHWM 5864 KiB
+08:55:39 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r03
+08:56:00   <data>/runs/release-r03
+08:56:00   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:56:03 release run 3: logdiff PASS, runtime-limits PASS, VmHWM 5844 KiB
+08:56:03 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r04
+08:56:20   <data>/runs/release-r04
+08:56:20   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:56:22 release run 4: logdiff PASS, runtime-limits PASS, VmHWM 5964 KiB
+08:56:22 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r05
+08:56:39   <data>/runs/release-r05
+08:56:39   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:56:44 release run 5: logdiff PASS, runtime-limits PASS, VmHWM 5892 KiB
+08:56:44 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r06
+08:57:03   <data>/runs/release-r06
+08:57:03   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:57:05 release run 6: logdiff PASS, runtime-limits PASS, VmHWM 5888 KiB
+08:57:05 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r07
+08:57:23   <data>/runs/release-r07
+08:57:23   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:57:25 release run 7: logdiff PASS, runtime-limits PASS, VmHWM 5908 KiB
+08:57:25 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r08
+08:57:44   <data>/runs/release-r08
+08:57:44   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:57:48 release run 8: logdiff PASS, runtime-limits PASS, VmHWM 5912 KiB
+08:57:48 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r09
+08:58:09   <data>/runs/release-r09
+08:58:09   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:58:14 release run 9: logdiff PASS, runtime-limits PASS, VmHWM 5824 KiB
+08:58:14 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/release-r10
+08:58:34   <data>/runs/release-r10
+08:58:34   replay of bc93723c0cb02e054acc5f25705b61a4443435c168351ec5914d0729bdce4d98: approve or refuse it at the operator console (bench/console.py)
+08:58:40 release run 10: logdiff PASS, runtime-limits PASS, VmHWM 5900 KiB
+08:58:40 $ bash <sample>/bench/cc1.sh deploy <scratch>/runpy-1116-0839/artifacts/f008
+08:58:46   deployed 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7, read back 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7
+08:58:46   deploy of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+08:58:46 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r01
+08:59:04   <data>/runs/f008-r01
+08:59:04   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+08:59:08 f008 run 1: logdiff FAIL, runtime-limits PASS, VmHWM 5816 KiB
+08:59:08 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r02
+08:59:25   <data>/runs/f008-r02
+08:59:25   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+08:59:29 f008 run 2: logdiff FAIL, runtime-limits PASS, VmHWM 5720 KiB
+08:59:29 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r03
+08:59:46   <data>/runs/f008-r03
+08:59:46   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+08:59:51 f008 run 3: logdiff FAIL, runtime-limits PASS, VmHWM 5944 KiB
+08:59:51 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r04
+09:00:10   <data>/runs/f008-r04
+09:00:10   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+09:00:15 f008 run 4: logdiff FAIL, runtime-limits PASS, VmHWM 5896 KiB
+09:00:15 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r05
+09:00:34   <data>/runs/f008-r05
+09:00:34   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+09:00:43 f008 run 5: logdiff FAIL, runtime-limits PASS, VmHWM 5940 KiB
+09:00:43 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r06
+09:01:02   <data>/runs/f008-r06
+09:01:02   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+09:01:04 f008 run 6: logdiff FAIL, runtime-limits PASS, VmHWM 5856 KiB
+09:01:04 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r07
+09:01:24   <data>/runs/f008-r07
+09:01:24   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+09:01:28 f008 run 7: logdiff FAIL, runtime-limits PASS, VmHWM 5876 KiB
+09:01:28 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r08
+09:01:48   <data>/runs/f008-r08
+09:01:48   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+09:01:52 f008 run 8: logdiff FAIL, runtime-limits PASS, VmHWM 5848 KiB
+09:01:52 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r09
+09:02:11   <data>/runs/f008-r09
+09:02:11   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+09:02:14 f008 run 9: logdiff FAIL, runtime-limits PASS, VmHWM 5676 KiB
+09:02:14 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f008-r10
+09:02:35   <data>/runs/f008-r10
+09:02:35   replay of 66ac3124d3255bb4a05889da28b59acbd4e11e91081978434803db37e43ce9e7: approve or refuse it at the operator console (bench/console.py)
+09:02:38 f008 run 10: logdiff FAIL, runtime-limits PASS, VmHWM 5900 KiB
+09:02:38 $ bash <sample>/bench/cc1.sh deploy <scratch>/runpy-1116-0839/artifacts/f021
+09:02:44   deployed 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9, read back 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9
+09:02:44   deploy of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:02:44 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r01
+09:03:04   <data>/runs/f021-r01
+09:03:04   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:03:07 f021 run 1: logdiff PASS, runtime-limits FAIL, VmHWM 6692 KiB
+09:03:07 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r02
+09:03:27   <data>/runs/f021-r02
+09:03:27   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:03:31 f021 run 2: logdiff PASS, runtime-limits FAIL, VmHWM 6792 KiB
+09:03:31 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r03
+09:03:52   <data>/runs/f021-r03
+09:03:52   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:03:56 f021 run 3: logdiff PASS, runtime-limits FAIL, VmHWM 6772 KiB
+09:03:56 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r04
+09:04:15   <data>/runs/f021-r04
+09:04:15   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:04:19 f021 run 4: logdiff PASS, runtime-limits FAIL, VmHWM 6752 KiB
+09:04:19 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r05
+09:04:41   <data>/runs/f021-r05
+09:04:41   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:04:47 f021 run 5: logdiff PASS, runtime-limits FAIL, VmHWM 6832 KiB
+09:04:47 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r06
+09:05:07   <data>/runs/f021-r06
+09:05:07   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:05:12 f021 run 6: logdiff PASS, runtime-limits FAIL, VmHWM 6764 KiB
+09:05:12 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r07
+09:05:31   <data>/runs/f021-r07
+09:05:31   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:05:39 f021 run 7: logdiff PASS, runtime-limits FAIL, VmHWM 6764 KiB
+09:05:39 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r08
+09:06:02   <data>/runs/f021-r08
+09:06:02   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:06:07 f021 run 8: logdiff PASS, runtime-limits FAIL, VmHWM 6684 KiB
+09:06:07 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r09
+09:06:28   <data>/runs/f021-r09
+09:06:28   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:06:36 f021 run 9: logdiff PASS, runtime-limits FAIL, VmHWM 6644 KiB
+09:06:36 $ bash <sample>/bench/cc1.sh replay --kind run --out <data>/runs/f021-r10
+09:06:55   <data>/runs/f021-r10
+09:06:55   replay of 490938351b27c8efe83c630a5dbcd24f0494837dc2a514b7d63e96f8782a47d9: approve or refuse it at the operator console (bench/console.py)
+09:06:58 f021 run 10: logdiff PASS, runtime-limits FAIL, VmHWM 6772 KiB
+09:06:58 $ bash <sample>/bench/cc1.sh stop
+09:07:00   stopped
+
+| Build | Runs | `logdiff` expected | `logdiff` | `runtime-limits` expected | `runtime-limits` | VmHWM KiB |
+| --- | --- | --- | --- | --- | --- | --- |
+| release (F-031 only) | 10 | PASS | PASS | PASS | PASS | 5,768 to 5,964 |
+| F-008 wrong fix | 10 | FAIL | FAIL | PASS | PASS | 5,676 to 5,944 |
+| F-021 wrong fix | 10 | PASS | PASS | FAIL | FAIL | 6,644 to 6,832 |
+
+30 of 30 runs as expected, in 14.1 min; data in <data>

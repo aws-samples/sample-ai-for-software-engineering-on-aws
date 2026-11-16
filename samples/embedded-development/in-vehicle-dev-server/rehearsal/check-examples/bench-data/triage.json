@@ -1,0 +1,176 @@
+{
+  "batch": "vstatd batch 1 (facilitator example)",
+  "base": "f47d09a18548941ffcf42abd4ca5d3e4050c777f",
+  "approved": {
+    "by": "release owner",
+    "at": "2026-11-02"
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-002",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-003",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-004",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-005",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-006",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-008",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-010",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-011",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-012",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-014",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-015",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-016",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-017",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-018",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-023",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-025",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-027",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "id": "F-028",
+      "decision": "defer",
+      "reason": "Not in this example.",
+      "pick_up_when": "A later batch."
+    },
+    {
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "build",
+      "added": {
+        "found_by": "checks/build.sh",
+        "tool": "cross build",
+        "location": "cmake/cc1-aarch64.cmake"
+      },
+      "id": "F-031"
+    },
+    {
+      "decision": "fix",
+      "behaviour": true,
+      "evidence": "unit-test",
+      "cites": [
+        "[VSTATD-IF p.11 \u00a78.4]"
+      ],
+      "facts": [
+        "RES-THREADS"
+      ],
+      "added": {
+        "found_by": "checks/unit.sh (ThreadSanitizer)",
+        "tool": "ThreadSanitizer",
+        "location": "src/signal_table.cpp \u203a SignalTable::get"
+      },
+      "id": "F-032"
+    },
+    {
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "id": "F-013"
+    },
+    {
+      "decision": "justify",
+      "cites": [
+        "[VSTATD-IF p.6 \u00a73.3]"
+      ],
+      "facts": [
+        "DEC-INTEGER-PRODUCT"
+      ],
+      "id": "F-007"
+    },
+    {
+      "decision": "fix",
+      "behaviour": false,
+      "evidence": "static-analysis",
+      "id": "F-021"
+    }
+  ],
+  "allowed_log_differences": [],
+  "requirements": []
+}

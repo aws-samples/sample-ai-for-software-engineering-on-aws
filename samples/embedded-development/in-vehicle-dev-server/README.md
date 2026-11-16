@@ -395,7 +395,8 @@ been dry-run once.
 4. Checks, each with a failing and a passing example; the release check and the evidence page generator.
    *Done:* [checks/](checks/README.md), with the triage format and the run directories the bench hands over (a
    proposed interface with item 3); the facilitators' runs on the reference project are in
-   [rehearsal/check-examples/](rehearsal/check-examples/).
+   [rehearsal/check-examples/](rehearsal/check-examples/), and since 2026-11-16 also the after-deploy checks on the
+   bench: the F-008 wrong fix fails `logdiff` and the F-021 wrong fix fails `runtime-limits` in 10 of 10 runs each.
 5. MCP servers `build` and `bench`, with their guardrails, the audit log, a test for each guardrail and a smoke test
    of both. *`build` done:* [mcp/build/](mcp/build/README.md), and one batch walked through it in
    [rehearsal/build-server-run/](rehearsal/build-server-run/README.md). *`bench` done (2026-11-04):*
