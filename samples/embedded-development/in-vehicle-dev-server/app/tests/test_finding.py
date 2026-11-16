@@ -233,6 +233,29 @@ def test_a_finding_the_triage_rules_refuse_comes_back_with_its_problems_and_chan
             handlers.finding_body(bad)
 
 
+def test_a_refused_finding_passes_on_only_what_came_from_the_request_as_detail(tmp_path, monkeypatch):
+    """invalid_finding: the check, the role or the finding the request named (from outside the app) is the detail
+    the English board shows; the app's own Chinese reason is not in it."""
+    import re
+    cjk = re.compile(r"[\u3400-\u9fff\uff00-\uffef]")
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+
+    async def refused(body):
+        with pytest.raises(httpkit.AppError) as e:
+            await svc.finding(run.rid, handlers.finding_body(body))
+        assert e.value.code == "invalid_finding"
+        return e.value.extra.get("detail")
+
+    async def go():
+        assert await refused({**F032, "check": "no-such-check"}) == "no-such-check"
+        assert await refused({**F032, "role": "reviewer"}) == "reviewer"
+        assert await refused({"extend": "F-099", "role": "dev", "paths": ["src/b.*"], "by": "王工"}) == "F-099"
+        for body in ({**F032, "check": "no-such-check"}, {**F032, "role": "reviewer"}):
+            assert not cjk.search(await refused(body))
+    asyncio.run(go())
+
+
 def test_a_run_not_held_after_the_checks_refuses_with_409(tmp_path, monkeypatch):
     bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev"})
     run.team["roles"][2]["triage"] = {"file": "docs/triage.json", "knowledge": str(KNOWLEDGE)}
@@ -248,5 +271,6 @@ def test_a_run_not_held_after_the_checks_refuses_with_409(tmp_path, monkeypatch)
         with pytest.raises(httpkit.AppError) as e:
             await svc_of(tmp_path, run, mgr).finding(run.rid, handlers.finding_body(F032))
         assert e.value.status == 409 and e.value.code == "not_held"
+        assert "detail" not in e.value.extra  # the app's own reason: said by its code in English, nothing passed on
 
     asyncio.run(go())

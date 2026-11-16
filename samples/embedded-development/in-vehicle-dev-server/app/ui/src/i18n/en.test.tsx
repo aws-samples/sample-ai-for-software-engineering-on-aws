@@ -102,6 +102,14 @@ describe('the board in English', () => {
     expect(refused).toContain('Not approved (digest mismatch)')
     expect(refused).not.toContain('没批成')
     expect(errorText(new Error('API 400: {"error": "要写明是谁补登的（by）", "code": "invalid_finding"}'))).toBe('The finding is not valid (400)') // the app's own words are not passed on
+    // the three that keep an outside reason in detail (#32 review): said in English, with no Chinese around it
+    const cjk = /[\u3400-\u9fff\uff00-\uffef]/
+    for (const body of [
+      '{"error": "独立重跑后 release.sh 没通过，不能签字放行：unit: FAIL", "code": "not_signable", "detail": "unit: FAIL"}',
+      '{"error": "团队没有叫 lint 的检查", "code": "invalid_finding", "detail": "lint"}',
+      '{"error": "这个运行没有在检查之后停下来等人决定", "code": "not_held"}',
+    ]) expect(errorText(new Error(`API 409: ${body}`))).not.toMatch(cjk)
+    expect(errorText(new Error('API 409: {"error": "x", "code": "not_signable", "detail": "unit: FAIL"}'))).toContain('(unit: FAIL)')
     expect(errorText(new Error('API 409: {"error": "x", "code": "no_such_code"}'))).toContain('x')
   })
 

@@ -357,7 +357,7 @@ class Service:
             except team_mod.FindingRefused as exc:
                 raise AppError(f"补登以后分诊过不了检查：{exc}", "triage_problems", 400, {"problems": exc.problems})
             except ValueError as exc:
-                raise AppError(str(exc), "invalid_finding")
+                raise AppError(str(exc), "invalid_finding", detail=getattr(exc, "detail", None))
 
     async def gate(self, rid: str, role: str, decision: str, note: str = "", delivery: Any = None,
                    answers: Any = None, risk: Any = None, by: str = "") -> dict[str, Any]:
@@ -388,7 +388,7 @@ class Service:
         if not run.ended:
             raise AppError("运行结束以后才能签字", "run_active", 409)
         if run.sign_block():
-            raise AppError(run.sign_block(), "not_signable", 409)
+            raise AppError(run.sign_block(), "not_signable", 409, detail=run.sign_block_detail() or None)
         if run.s.get("signoff"):
             raise AppError(f"已经由 {run.s['signoff']['by']} 签过了", "signed", 409)
         t = run.s["tests"]

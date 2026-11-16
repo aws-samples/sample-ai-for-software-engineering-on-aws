@@ -78,6 +78,15 @@ _ROLE_ALIASES = {"后端": "backend", "服务端": "backend", "前端": "fronten
                  "架构": "architect"}
 
 
+class FindingRequestError(ValueError):
+    """A finding the request cannot register; *detail*: what of the request it was about (a role, a check, a
+    finding's ID), passed on to the English board as the error's detail."""
+
+    def __init__(self, message: str, detail: str = "") -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
 class FindingRefused(ValueError):
     """The triage with a person's new finding would not pass the checks' rules: what is wrong."""
 
@@ -949,7 +958,7 @@ class TeamRun:
             spec = {c["name"]: c for c in self.team.get("checks") or []}
             role, ext = body["role"], body.get("extend")
             if role not in self.impl or not self.roles[role]["writable"]:
-                raise ValueError(f"{role} 不是做实现的角色（可以选：{'、'.join(self.impl)}）")
+                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{'、'.join(self.impl)}）", str(role))
             k, path = self._knowledge(), Path(self.s["repo"]).parent / TRIAGE_FILE
             data = self._approved_triage()
             if k is None or data is None:
@@ -958,16 +967,16 @@ class TeamRun:
                 entry = next((f for f in data.get("findings") or [] if isinstance(f, dict) and f.get("id") == ext
                               and isinstance(f.get("added"), dict)), None)
                 if entry is None:
-                    raise ValueError(f"批准的分诊里没有补登过的 {ext}")
+                    raise FindingRequestError(f"批准的分诊里没有补登过的 {ext}", str(ext))
                 m = re.fullmatch(r"checks/([\w-]+)\.sh", str(entry["added"].get("found_by") or ""))
                 if not m:
-                    raise ValueError(f"{ext} 不是检查发现的，没有检查可以再跑一轮")
+                    raise FindingRequestError(f"{ext} 不是检查发现的，没有检查可以再跑一轮", str(ext))
                 fid, check, location = ext, m.group(1), str(entry["added"].get("location") or "")
                 digest = str((self.s.get("triage") or {}).get("sha256") or "")
             else:
                 check, location = body["check"], body["location"]
             if check not in spec:
-                raise ValueError(f"团队没有叫 {check} 的检查")
+                raise FindingRequestError(f"团队没有叫 {check} 的检查", str(check))
             if not ext:
                 fid = self.next_finding_id()
                 entry = {"id": fid, "decision": body["decision"]}
@@ -2035,6 +2044,11 @@ class TeamRun:
         """The team as the test run sees it: the test files owned by a role that sits this run out are left out."""
         out = [k for k in self.order if self.lane(k)["status"] == "skipped"]
         return {**self.team, "skip_owners": out} if out else self.team
+
+    def sign_block_detail(self) -> str:
+        """Of why the run cannot be signed off, what came from outside the app: release.sh's reason ("" if none)."""
+        m = self.sign_block_msg()
+        return str((m.get("params") or {}).get("why") or "") if m and m["code"] == "sign.release" else ""
 
     def sign_block(self) -> str:
         """Why this run cannot be signed off ("" when it can), in Chinese; sign_block_msg() has it by code."""
