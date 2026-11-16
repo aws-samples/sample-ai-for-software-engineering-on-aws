@@ -104,7 +104,8 @@ class View:
             host = "|".join(re.escape(h) for h in self.hosts) or r"(?!)"
             # a name, with what may follow it (@host or @domain, a terminal); a name inside a word of Latin letters
             # (annotate for ann) is left alone, one between - . / is not (a folder or a file named after the user)
-            self._rx = re.compile(rf"(?<![A-Za-z0-9_])(?:{alt})(?:@(?:{host}|[\w.-]+))?(?:\s*\(/dev/[^)]*\))?(?![A-Za-z0-9_])")
+            self._rx = re.compile(rf"(?<![A-Za-z0-9_])(?:{alt})(?:@(?:{host}|[\w.-]+))?"
+                                  rf"(?:\s*\(/dev/[^)]*\))?(?![A-Za-z0-9_])")
         self._host = re.compile("|".join(rf"(?<![\w.-]){re.escape(h)}(?![\w-])" for h in self.hosts)) if self.hosts else None
 
     @staticmethod

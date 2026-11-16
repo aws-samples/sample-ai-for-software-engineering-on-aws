@@ -405,7 +405,8 @@ class BenchService:
         env_path = cfg.get("environment", {}).get("path", "/usr/local/bin:/usr/bin:/bin")
         label = hashlib.sha256(str(self.state).encode()).hexdigest()[:16]
         self.sandbox = Sandbox(cfg.get("sandbox", {}), env_path, label)
-        self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"  # this session's lease identity, inside the lease only
+        # this session's lease identity, used inside the lease only
+        self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"
         self.session = secrets.token_hex(8)  # who the requests and the audit name: no pid, nothing of the lease
         self.current = {}  # the calls in progress (reads run beside a write), for the audit if the session ends
         self.call_ids = itertools.count()
@@ -685,7 +686,8 @@ class BenchService:
             raise Refused(f"refused ({by}): {reason} (not retried)", rid, digest)
         gate = next((e for e in mine if e.get("event") == "gate" and not e.get("passed")), None)
         if gate:
-            raise Refused(f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)", rid, digest)
+            why = f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)"
+            raise Refused(why, rid, digest)
         began = any(e.get("event") in ("action", "target") for e in mine)
         if not began:  # refused before the request, or approved but not begun (the target busy): nothing ran
             text = (read_nofollow(r["log"]) or b"").decode(errors="replace")

@@ -247,7 +247,12 @@ def _plain(text: str) -> str:
 
 
 # a path in a send-back line: a word holding a / that starts at a folder of a project (or ~ or /) or ends in a file
-_PATH = re.compile(r"(?<!\S)(?:[~.]?/|(?:docs|src|tests?|cmake|checks|bench|app|scripts|include|lib)/|[\w.~-]+/[\w./-]*\.\w+)\S*")
+_PATH = re.compile(r"""
+    (?<!\S)
+    (?: [~.]?/                                                        # ~/…  ./…  /…
+      | (?:docs|src|tests?|cmake|checks|bench|app|scripts|include|lib)/  # a folder of a project
+      | [\w.~-]+/[\w./-]*\.\w+                                       # a file: a/b.md
+    ) \S*""", re.X)
 _ASIDE = re.compile(r"\([^)]*\)|（[^）]*）")  # what a send-back line says about the change, not whom it goes to
 
 
@@ -262,8 +267,8 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
     # English names name a target only where an item of the line starts with one ("the Developer · fix role" too);
-    # items are split on , ; 、 "and" and / ("Developer · fix/Tester"); a path is taken out of the line whole above, so
-    # that none of its segments is read as a role ("docs/Tester-notes.md", tests/tester/…)
+    # items are split on , ; 、 "and" and / ("Developer · fix/Tester"); a path is taken out of the line whole
+    # above, so that none of its segments is read as a role ("docs/Tester-notes.md", tests/tester/…)
     items = [_plain(i) for chunk in chunks
              for i in re.split(r"[,，;；、/]|\band\b", chunk, flags=re.I)]
     found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
@@ -958,7 +963,8 @@ class TeamRun:
             spec = {c["name"]: c for c in self.team.get("checks") or []}
             role, ext = body["role"], body.get("extend")
             if role not in self.impl or not self.roles[role]["writable"]:
-                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{'、'.join(self.impl)}）", str(role))
+                choices = "、".join(self.impl)
+                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}）", str(role))
             k, path = self._knowledge(), Path(self.s["repo"]).parent / TRIAGE_FILE
             data = self._approved_triage()
             if k is None or data is None:

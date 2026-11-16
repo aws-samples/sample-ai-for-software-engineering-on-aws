@@ -186,7 +186,8 @@ export function replayAt(run: RunDetail, events: TeamEvent[], t: number): RunDet
     // tests first: the tester's new tests, all failing on the requirement commit (the record names them only)
     cases = d.first.map((name) => {
       const f = /\bF(\d{3})_/.exec(name)  // F003_… names finding F-003
-      return { id: name, ac: f ? `F-${f[1]}` : null, name, file: '', status: 'fail' as const, owner: null, ms: null, message: null }
+      const ac = f ? `F-${f[1]}` : null
+      return { id: name, ac, name, file: '', status: 'fail' as const, owner: null, ms: null, message: null }
     })
   } else if (!d?.cases && d?.checks?.length) {
     // after the bench, the independent rerun: the checks that ran, each with what the rerun's result says of it
