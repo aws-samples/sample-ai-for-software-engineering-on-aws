@@ -484,7 +484,9 @@ class BuildService:
                         "duration_ms": int((time.monotonic() - started) * 1000),
                         **({"verdict": result["verdict"]} if "verdict" in result else {}),
                         **({"digest": result["digest"]} if result.get("digest") else {}),
-                        **{k: result[k] for k in ("evidence_page", "evidence_sha256") if k in result}})
+                        # the page's outcome and digest for run_check; never the page itself (read_result returns it)
+                        **({k: result[k] for k in ("evidence_page", "evidence_sha256") if k in result}
+                           if tool == "run_check" else {})})
             return result
 
     @staticmethod
@@ -766,9 +768,9 @@ class BuildService:
         approved triage, in the sandbox, and the server publishes it as results/evidence.md. The person signs off from
         this page. Returns (None, its SHA-256), or (why it was not published, None); the release result stands."""
         log = self.state / "logs" / "evidence-page.out"
-        timeout = int(self.timeouts.get("evidence", 120))
         cmd = [self.checks / "evidence-page.sh", "--results", results, "--triage", self.triage]
         try:
+            timeout = int(self.timeouts.get("evidence", 120))
             r = self.sandbox.run(cmd, log, timeout, ro=[self.sample, self.triage.parent], rw=[results], workdir=results)
             if r["outcome"] == "timeout":
                 return f"checks/evidence-page.sh timed out after {timeout} s", None
@@ -780,7 +782,7 @@ class BuildService:
             if len(page) > EVIDENCE_LIMIT:
                 return f"the page is over {EVIDENCE_LIMIT // 1024} KiB", None
             write_atomic(self.state / "results" / EVIDENCE, page)
-        except (OSError, RuntimeError) as e:
+        except (OSError, RuntimeError, ValueError, TypeError, subprocess.SubprocessError) as e:
             return f"{type(e).__name__}: {e}", None
         return None, hashlib.sha256(page).hexdigest()
 

@@ -908,7 +908,9 @@ class EvidencePage(Env):
         res = s.call("read_result", check="release")
         self.assertEqual(res["evidence_page"], "# Evidence page\n\nrelease: PASS\n")
         self.assertEqual(res["evidence_sha256"], out["evidence_sha256"])
-        last = self.audit()[-3]  # the run_check's outcome line, before the two read_result calls
+        lines = self.audit()
+        self.assertNotIn("evidence_page", lines[-1], "read_result's audit line does not carry the page")
+        last = lines[-3]  # the run_check's outcome line, before the read_result's started and outcome lines
         self.assertEqual((last["tool"], last["evidence_page"], last["evidence_sha256"]),
                          ("run_check", "published", out["evidence_sha256"]))
         self.assertIsNone(s.call("read_result", check="build").get("evidence_page"))
@@ -944,6 +946,25 @@ class EvidencePage(Env):
         out = s.call("run_check", check="release")
         self.assertEqual(out["verdict"], "ERROR")
         self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_a_slow_script_times_out_and_the_mounts_are_narrow(self):
+        s = self.service()
+        s.timeouts["evidence"] = 1
+        self.flag("verdict", "PASS")
+        (self.checks / "evidence-page.sh").write_text("#!/bin/sh\nsleep 5\n")
+        out = s.call("run_check", check="release")
+        self.assertEqual(out["verdict"], "PASS")
+        self.assertIn("timed out after 1 s", out["evidence_page"])
+        calls, real = [], s.sandbox.run
+
+        def run(cmd, log, timeout, ro=(), rw=(), workdir=None, extra=()):
+            if str(cmd[0]).endswith("evidence-page.sh"):
+                calls.append({"ro": list(ro), "rw": list(rw)})
+            return real(cmd, log, timeout, ro=ro, rw=rw, workdir=workdir, extra=extra)
+        s.sandbox.run = run
+        s.call("run_check", check="release")
+        self.assertEqual(calls[0]["ro"], [s.sample, s.triage.parent])
+        self.assertEqual(calls[0]["rw"], [s.state / "run" / "results"])
 
     def test_other_checks_make_no_page(self):
         self.flag("verdict", "PASS")
