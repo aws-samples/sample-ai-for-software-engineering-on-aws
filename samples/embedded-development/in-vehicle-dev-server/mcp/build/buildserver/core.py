@@ -622,11 +622,14 @@ class BuildService:
         anything else refuses the call. A result the bench has not published stays missing, and release.sh reports
         it."""
         try:
-            return self._bench_results_into(results)
-        except OSError as e:  # an unreadable lock, input or folder: refused, so the release result becomes ERROR
+            blobs, folders = self._bench_results_into()
+        except (OSError, ValueError) as e:  # an unreadable lock, input or folder: refused, so release becomes ERROR
             raise Refused(f"cannot read the bench's results: {e}") from None
+        for rel, blob in blobs.items():  # into the server's own run folder: a failure here is the server's error
+            write_atomic(results / rel, blob)
+        return folders
 
-    def _bench_results_into(self, results):
+    def _bench_results_into(self):
         runs, baseline = self.bench["bench_runs"], self.bench["bench_baseline"]
         folders = []
         # The bench server's publishing lock, next to its results folder: the json, log and diff of one check come
@@ -636,10 +639,12 @@ class BuildService:
             if any(os.path.lexists(self.bench["bench_results"] / f"{c}.json") for c in BENCH_CHECKS):
                 raise Refused(f"the bench's publishing lock {lock} is missing; is paths.bench_results the bench "
                               "server's <state>/results?")
-            return folders
+            return {}, folders
         with contextlib.ExitStack() as stack:
-            fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW)
+            fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)  # a FIFO there does not block
             stack.callback(os.close, fd)
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise Refused(f"the bench's publishing lock {lock} is not a regular file")
             fcntl.flock(fd, fcntl.LOCK_SH)
             blobs = {}
             for check in BENCH_CHECKS:
@@ -658,7 +663,8 @@ class BuildService:
                 raise Refused(f"the bench's published {check} result is malformed")
             for name, inp in data.get("inputs", {}).items():
                 path = inp.get("path") if isinstance(inp, dict) else None
-                if not isinstance(path, str) or not os.path.isabs(path) or os.path.normpath(path) != path:
+                if (not isinstance(path, str) or "\0" in path or not os.path.isabs(path)
+                        or os.path.normpath(path) != path):
                     raise Refused(f"the bench's {check} result records input {name} at {path!r}, not an absolute path")
                 p = pathlib.Path(path)
                 if p.parent == baseline or p.parent == self.triage.parent:
@@ -681,9 +687,7 @@ class BuildService:
                         raise Refused(str(e)) from None
                 if folder not in folders:
                     folders.append(folder)
-        for rel, blob in blobs.items():
-            write_atomic(results / rel, blob)
-        return folders
+        return blobs, folders
 
     def owned(self, check):
         """The files of the results folder that belong to a check: its result, log and diff, its work folder and,

@@ -664,8 +664,8 @@ class BenchResults(Env):
             (self.bres / f"{check}.json").write_text(json.dumps(data))
             (self.bres / f"{check}.log").write_text(f"{check}: PASS\n")
 
-    def record(self, **paths):
-        self.write_config(**{**self.bench_paths(), **paths})
+    def record(self, extra="", **paths):
+        self.write_config(extra=extra, **{**self.bench_paths(), **paths})
         s = self.service()
         calls, real = [], s.sandbox.run
 
@@ -801,6 +801,12 @@ class BenchResults(Env):
         lock.symlink_to(self.tmp / "elsewhere-lock")
         (self.tmp / "elsewhere-lock").write_text("")
         self.refused("cannot read the bench's results")
+        lock.unlink()
+        os.mkfifo(lock)
+        self.refused("lock .* is not a regular file")
+
+    def test_a_nul_in_an_input_path_refuses_the_call(self):
+        self.refused("not an absolute path", run_log=f"{self.bruns}/run-1\0/run.jsonl")
 
     def test_no_lock_and_nothing_published_is_two_missing_results(self):
         (self.bres.parent / "results.lock").unlink()
@@ -828,6 +834,18 @@ class BenchResults(Env):
                 self.service()
         finally:
             core.os.getuid = real
+        # The configured readers reach both checks: at start, and on the run folder in each release call.
+        s, calls = self.record(extra=f'[trust]\nreaders = ["{owner}"]\n')
+        self.assertEqual(s.readers, [real()])
+        seen = []
+        orig = core.check_trusted
+        core.check_trusted = lambda path, name, include_self=True, extra=(): (seen.append((name, tuple(extra))) or
+                                                                             orig(path, name, include_self, extra))
+        try:
+            s.call("run_check", check="release")
+        finally:
+            core.check_trusted = orig
+        self.assertIn(("bench_runs", (real(),)), seen)
 
     def test_bench_paths_that_contain_the_work_tree_are_rejected(self):
         self.write_config(**{**self.bench_paths(), "bench_baseline": self.tmp})

@@ -187,7 +187,7 @@ then found every input the published build result recorded. The probe's 16 check
 nor any path outside the build folder of its call, its background writers stopped with their containers, and no forged
 result was published. The checks' own runs are in [`rehearsal/check-examples/`](../../rehearsal/check-examples/).
 
-2026-11-16, on an x86_64 Ubuntu 24.04 host with Docker 29.8.2 and MCP Python SDK 2.3.0: 64 guardrail tests OK, 15 of
+2026-11-16, on an x86_64 Ubuntu 24.04 host with Docker 29.8.2 and MCP Python SDK 2.3.0: 65 guardrail tests OK, 16 of
 them for [the bench's results](#the-benchs-results). Then `run_check release` in its container, through the server's
 call path (its guardrails, audit and Docker sandbox, without MCP stdio), with the bench server's published results of a
 Linux bench host (2026-11-06): with the bench's results of a correct build and the build server's result of the same
