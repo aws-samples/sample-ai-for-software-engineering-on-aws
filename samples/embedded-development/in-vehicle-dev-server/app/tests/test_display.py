@@ -219,3 +219,16 @@ def test_the_replays_bench_starts_from_what_the_bench_was_before_the_run(tmp_pat
     got = mod("board").bench_history(run)
     assert [(r["event"], r.get("why") or r.get("id") or r.get("kl15")) for r in got] == [
         ("supply", "on"), ("target", "before the run"), ("request", "q1"), ("target", "deploy")]
+
+
+def test_a_short_login_that_is_a_word_is_matched_in_its_own_case_only(tmp_path, monkeypatch):
+    """A login of 4 characters or fewer (will, mark) is a common word too: it is replaced only as written and not
+    between two English words, so "will" in a sentence stays; where the records name the person (will补登, will@host,
+    a by of its own) it goes. A longer name (alice) is matched in any case."""
+    monkeypatch.setattr(display, "this_mac_names", lambda: set())
+    v = display.View("en", ["will", "alice"])
+    assert v.text("The tester will check it; Will said so") == "The tester will check it; Will said so"
+    assert v.text("will补登 F-032 · will@host (/dev/ttys003) · signed by will") == \
+        "Release owner补登 F-032 · Release owner · signed by Release owner"
+    assert v.text("will") == "Release owner"
+    assert v.text("ALICE and Alice, then alice") == "Release owner and Release owner, then Release owner"
