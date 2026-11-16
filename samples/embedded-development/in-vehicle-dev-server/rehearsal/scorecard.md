@@ -35,8 +35,8 @@ Also write on the sheet:
 - the Kiro Crew and kiro-cli versions;
 - the host;
 - whether the bypass hook was in the templates;
-- the baseline the board is compared with: the team's history, or the control group's figures for the same part of
-  the backlog;
+- what the board is compared with: the team's history, or the control group's figures for the same part of the
+  backlog;
 - every stop, and why;
 - in the dry run, the checks whose verdict differed on the second rerun by hand.
 
@@ -46,5 +46,5 @@ A control group fills in a sheet of its own, with the hand-kept figures for its 
 
 The first rehearsal's figures are the team's baseline, not a result. The business measures' targets (−50 % engineer
 hours per finding, bench attendance and cycle time) are hypotheses until the first rehearsal has produced figures with
-a baseline behind them ([Business measures](../README.md#business-measures)). Report quality figures (justifications
+a comparison behind them ([Business measures](../README.md#business-measures)). Report quality figures (justifications
 overturned, real behaviour changes, defects found later) together with the time figures.

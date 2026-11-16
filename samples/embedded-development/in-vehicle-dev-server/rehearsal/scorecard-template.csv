@@ -20,9 +20,9 @@ findings,justified,,count,App,
 findings,deferred,,count,App,
 findings,added_under_tr_4_4,,count,Hand,"the refactor and findings found on the way"
 findings,justifications_overturned,,count,App,
-times,to_approved_triage,,as shown,App,wall clock from the run's start
-times,to_first_passing_checks,,as shown,App,
-times,to_signoff,,as shown,App,
+times,to_approved_triage,,h:mm,App,"wall clock from the run's start, as 评分卡 shows it"
+times,to_first_passing_checks,,h:mm,App,
+times,to_signoff,,h:mm,App,
 checks,first_round_all_passed,,yes/no,Hand,from the app's first round after the merge
 checks,first_round_failed_checks,,check names,Hand,
 checks,build_repair_rounds,,count,App,
@@ -37,5 +37,6 @@ bench,refused,,count,App,a timeout counts as a refusal
 bench,reconciled,,count,App,
 servers,tool_calls_by_class,,class=count,Servers,empty until the app uses the MCP servers
 servers,tool_calls_refused,,count,Servers,empty until the app uses the MCP servers
-model,back_to_back_differences,,count,—,not applicable until build plan item 9
+model,back_to_back_differences,,count,n/a,not applicable until build plan item 9
+model,real_defects,,count,n/a,not applicable until build plan item 9
 later,defects_found_later,,count,Hand,kept open after the day

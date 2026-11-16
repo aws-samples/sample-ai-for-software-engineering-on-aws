@@ -41,9 +41,10 @@ engineers.
    Python 3.11 or later (the MCP servers need 3.11), and no production credentials or customer data on it
    ([Prerequisites](../README.md#prerequisites), [Guardrails](../README.md#guardrails)).
 2. **Install and build once**, following the scenario's [Quick start](../README.md#quick-start): `bash setup.sh`, the
-   build container, `bench/build-target.sh` (about 40 minutes on Apple Silicon, [bench/README.md](../bench/README.md);
-   68 minutes on an x86_64 bench host, [mcp/bench/README.md](../mcp/bench/README.md)), the bench's baseline replay,
-   then `bench/doctor.sh` until it passes.
+   build container, `bench/build-target.sh` (about 40 minutes on Apple Silicon,
+   [bench/README.md](../bench/README.md#quick-start); 68 minutes on an x86_64 bench host,
+   [mcp/bench/README.md](../mcp/bench/README.md)), the bench's baseline replay, then `bench/doctor.sh` until it
+   passes.
 3. **Check the memory limit on this host.** Replay the current release and the F-021 wrong fix 5 to 10 times each with
    [check-examples/bench.py](check-examples/README.md#after-deploy-on-the-bench). Calibrate the limit again from
    replays on that host if the release comes within about 300 KiB of it, or the wrong fix within about 200 KiB of it
@@ -52,9 +53,10 @@ engineers.
    ([check-examples/](check-examples/README.md#last-run-on-the-bench)).
 4. **Run the check examples** ([check-examples/](check-examples/README.md)): every verdict as expected, before and
    after the bench.
-5. **Once build plan item 6 is merged,** run its permission probe (`agents/probe/`) with the Kiro version of the day,
-   and read what the bypass hook refuses and what gets through. Until then the templates carry no bypass hook, which
-   leaves the paths around the bench that [Guardrails](../README.md#guardrails) lists.
+5. **Once build plan item 6 is merged,** run its permission probe test (to come in `agents/`) with the Kiro version of
+   the day, and read what the bypass hook refuses and what gets through. Until then the templates carry no bypass
+   hook, and the paths that [Guardrails](../README.md#guardrails) lists stay open; the probe shows which of them the
+   hook closes. The boundary is still a build server without Docker access, as Guardrails says.
 6. **Agree on the definition of done** with the release owner: by default, `release.sh` passes on the independent
    rerun and the release owner signs the evidence page. Write down anything the team adds.
 7. **Decide what the figures are compared with** (next section) and print the [scorecard](scorecard.md) sheet, one
@@ -73,9 +75,9 @@ and written on the sheet:
   without agents, keep the same hand-kept figures, and stop at the same time.
 
 The scenario's [business measures](../README.md#business-measures) state their targets as hypotheses (−50 % engineer
-hours per finding, bench attendance and cycle time). The first rehearsal's figures, set against the comparison, are
-the team's baseline: the team's leadership signs it off, and it corrects the targets. The baseline is not a
-productivity claim, and it is not compared across teams with different definitions of done.
+hours per finding, bench attendance and cycle time). The first rehearsal's figures, set against the comparison, are the
+team's baseline: the team's leadership signs it off, and it corrects the targets. The baseline is not a productivity
+claim, and it is not compared across teams with different definitions of done.
 
 ## The day
 
@@ -123,10 +125,12 @@ Before this guide is final, one dry run on one board, by the people who wrote th
 1. Prepare as above, on a machine with the Kiro Crew version of the day.
 2. After the triage is approved, nobody answers in an agent's session; a person answers only at the operator console
    and at the board's gates.
-3. After sign-off, run every check on the final commit once more, by hand, in a new results directory, with the
-   commands of [checks/README.md](../checks/README.md), and compare the verdicts with the app's independent rerun.
-   The app's rerun (D9) is the one build plan item 7 asks for; this second one shows that it did not depend on the
-   app's own state. Write the checks whose verdict differed on the sheet.
+3. After sign-off, run every check on the final commit once more, by hand, in the build container and a new results
+   directory, with the commands of [checks/README.md](../checks/README.md), the run's approved `triage.json` and the
+   run directory of the last replay on the bench. Compare the verdicts with the app's independent rerun. The app's
+   rerun ([D9](../docs/kiro-crew-app.md#d9-the-app-reruns-every-check-independently-before-sign-off)) is the one
+   build plan item 7 asks for; this second one shows that it did not depend on the app's own state. Write the checks
+   whose verdict differed on the sheet.
 4. Record the wall-clock times, the credits the run used, the engineer minutes, and the scorecard.
 5. Correct this guide and the scorecard from what the dry run showed, and record the run under
    `rehearsal/dry-run/` as `first-delivery/` does (redacted copies of the audit trail and the evidence page).
