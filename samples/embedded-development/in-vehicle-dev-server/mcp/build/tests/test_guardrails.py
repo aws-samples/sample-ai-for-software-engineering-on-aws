@@ -869,6 +869,110 @@ class BenchResults(Env):
         self.assertRegex(out["problem"], "logdiff result is malformed")
 
 
+FAKE_EVIDENCE = """#!/bin/sh
+printf '%s\\n' "$@" > "$FAKE_STATE/argv-evidence"
+while [ $# -gt 0 ]; do case "$1" in --results) r=$2; shift;; esac; shift; done
+mode=$(cat "$FAKE_STATE/evidence-mode" 2>/dev/null)
+[ "$mode" = fail ] && exit 2
+[ "$mode" = none ] && exit 0
+[ "$mode" = link ] && { ln -s "$FAKE_STATE/secret" "$r/evidence.md"; exit 0; }
+[ "$mode" = huge ] && { head -c 600000 /dev/zero | tr '\\0' x > "$r/evidence.md"; exit 0; }
+printf '# Evidence page\\n\\nrelease: PASS\\n' > "$r/evidence.md"
+"""
+
+
+class EvidencePage(Env):
+    """After a release that passed, the server publishes checks/evidence-page.sh's page as results/evidence.md."""
+
+    def setUp(self):
+        super().setUp()
+        p = self.checks / "evidence-page.sh"
+        p.write_text(FAKE_EVIDENCE.replace("$FAKE_STATE", str(self.fake)))
+        p.chmod(0o755)
+        (self.fake / "secret").write_text("not for the agents")
+
+    def release(self, verdict, mode=""):
+        self.flag("verdict", verdict)
+        self.flag("evidence-mode", mode)
+        s = self.service()
+        return s, s.call("run_check", check="release")
+
+    def test_a_passing_release_publishes_the_page_and_read_result_returns_it(self):
+        s, out = self.release("PASS")
+        self.assertEqual((out["verdict"], out["evidence_page"]), ("PASS", "published"))
+        self.assertEqual((self.st / "results" / "evidence.md").read_text(), "# Evidence page\n\nrelease: PASS\n")
+        argv = (self.fake / "argv-evidence").read_text().split("\n")
+        self.assertEqual(argv[argv.index("--results") + 1], str(self.st.resolve() / "run" / "results"))
+        self.assertEqual(argv[argv.index("--triage") + 1], str(s.triage))
+        self.assertNotIn("--agent-summary", argv, "the page shows the checks' verdicts, not an agent's word")
+        res = s.call("read_result", check="release")
+        self.assertEqual(res["evidence_page"], "# Evidence page\n\nrelease: PASS\n")
+        self.assertEqual(res["evidence_sha256"], out["evidence_sha256"])
+        lines = self.audit()
+        self.assertNotIn("evidence_page", lines[-1], "read_result's audit line does not carry the page")
+        last = lines[-3]  # the run_check's outcome line, before the read_result's started and outcome lines
+        self.assertEqual((last["tool"], last["evidence_page"], last["evidence_sha256"]),
+                         ("run_check", "published", out["evidence_sha256"]))
+        self.assertIsNone(s.call("read_result", check="build").get("evidence_page"))
+
+    def test_a_release_that_does_not_pass_leaves_no_page(self):
+        s, _ = self.release("PASS")
+        self.assertTrue((self.st / "results" / "evidence.md").exists())
+        (self.fake / "argv-evidence").unlink()
+        _, out = self.release("FAIL")
+        self.assertNotIn("evidence_page", out)
+        self.assertFalse((self.fake / "argv-evidence").exists(), "no page for a release that failed")
+        self.assertFalse((self.st / "results" / "evidence.md").exists(), "the page of the last pass is removed")
+        self.assertIsNone(s.call("read_result", check="release")["evidence_page"])
+
+    def test_a_page_the_script_did_not_write_is_not_published(self):
+        for mode, why in (("fail", "exited with 2"), ("none", "wrote no page"), ("link", "wrote no page"),
+                          ("huge", "over 512 KiB")):
+            with self.subTest(mode):
+                _, out = self.release("PASS", mode)
+                self.assertEqual(out["verdict"], "PASS", "the release result stands")
+                self.assertIn(why, out["evidence_page"])
+                self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_the_page_of_an_earlier_pass_is_never_published_again(self):
+        self.release("PASS")
+        _, out = self.release("PASS", "none")  # the script writes nothing this time
+        self.assertIn("wrote no page", out["evidence_page"])
+        self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_an_error_record_removes_the_page(self):
+        s, _ = self.release("PASS")
+        self.flag("mode", "stale")  # the release result is not this run's: the server publishes an ERROR record
+        out = s.call("run_check", check="release")
+        self.assertEqual(out["verdict"], "ERROR")
+        self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_a_slow_script_times_out_and_the_mounts_are_narrow(self):
+        s = self.service()
+        s.timeouts["evidence"] = 1
+        self.flag("verdict", "PASS")
+        (self.checks / "evidence-page.sh").write_text("#!/bin/sh\nsleep 5\n")
+        out = s.call("run_check", check="release")
+        self.assertEqual(out["verdict"], "PASS")
+        self.assertIn("timed out after 1 s", out["evidence_page"])
+        calls, real = [], s.sandbox.run
+
+        def run(cmd, log, timeout, ro=(), rw=(), workdir=None, extra=()):
+            if str(cmd[0]).endswith("evidence-page.sh"):
+                calls.append({"ro": list(ro), "rw": list(rw)})
+            return real(cmd, log, timeout, ro=ro, rw=rw, workdir=workdir, extra=extra)
+        s.sandbox.run = run
+        s.call("run_check", check="release")
+        self.assertEqual(calls[0]["ro"], [s.sample, s.triage.parent])
+        self.assertEqual(calls[0]["rw"], [s.state / "run" / "results"])
+
+    def test_other_checks_make_no_page(self):
+        self.flag("verdict", "PASS")
+        out = self.service().call("run_check", check="build")
+        self.assertNotIn("evidence_page", out)
+        self.assertFalse((self.fake / "argv-evidence").exists())
+
+
 class Screen(Env):
     """The MCP middleware on requests the SDK would reject on its own."""
 

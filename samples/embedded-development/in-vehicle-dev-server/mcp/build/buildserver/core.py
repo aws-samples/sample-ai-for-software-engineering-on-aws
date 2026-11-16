@@ -67,6 +67,7 @@ TOOLS = {
 OPTIONAL = {("build", "target")}
 VERDICTS = {0: "PASS", 1: "FAIL", 2: "USAGE", 3: "BLOCKED"}
 TAIL_BYTES = 8192
+EVIDENCE, EVIDENCE_LIMIT = "evidence.md", 512 * 1024  # the batch's evidence page, published after a passing release
 SAFE_GIT = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.attributesFile=/dev/null"]
 DOCKER_CLIENT_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH",
                      "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
@@ -392,7 +393,7 @@ class BuildService:
         if unknown:
             raise ConfigError(f"role {role}: unknown permission classes {unknown}")
         self.granted = set(granted)
-        self.timeouts = {"status": 60, "snapshot": 300, "configure": 600, "build": 1800, "check": 3600,
+        self.timeouts = {"status": 60, "snapshot": 300, "configure": 600, "build": 1800, "check": 3600, "evidence": 120,
                          **cfg.get("timeouts", {})}
         env_path = cfg.get("environment", {}).get("path", "/usr/local/bin:/usr/bin:/bin")
         label = hashlib.sha256(str(self.state).encode()).hexdigest()[:16]
@@ -482,7 +483,10 @@ class BuildService:
             self.audit({**entry, "outcome": result.get("outcome", "ok"), "exit_status": result.get("exit_status"),
                         "duration_ms": int((time.monotonic() - started) * 1000),
                         **({"verdict": result["verdict"]} if "verdict" in result else {}),
-                        **({"digest": result["digest"]} if result.get("digest") else {})})
+                        **({"digest": result["digest"]} if result.get("digest") else {}),
+                        # the page's outcome and digest for run_check; never the page itself (read_result returns it)
+                        **({k: result[k] for k in ("evidence_page", "evidence_sha256") if k in result}
+                           if tool == "run_check" else {})})
             return result
 
     @staticmethod
@@ -699,7 +703,8 @@ class BuildService:
                 (["artifacts"] if check == "build" else []))
 
     def drop(self, base, check):
-        for rel in self.owned(check):
+        """Removes what a check published in `base`; for release, also the evidence page, which belongs to it."""
+        for rel in self.owned(check) + ([EVIDENCE] if check == "release" else []):
             p = base / rel
             if real_dir(p):
                 clear(p)
@@ -742,6 +747,11 @@ class BuildService:
         else:
             self.publish(results, check, data)
         out = {**r, "check": check, "commit": head, "verdict": verdict, "summary": tail(log, 2048)}
+        if check == "release" and verdict == "PASS" and not problem:
+            why, digest = self.evidence_page(results)
+            out["evidence_page"] = "published" if why is None else f"not published: {why}"
+            if digest:
+                out["evidence_sha256"] = digest
         if problem:
             out["problem"] = problem
         else:
@@ -752,6 +762,29 @@ class BuildService:
         if charged:
             out["repair"] = self.settle_cross_attempt(charged, "passed" if verdict == "PASS" else "failed")
         return out
+
+    def evidence_page(self, results):
+        """After a release that passed: checks/evidence-page.sh writes the batch's page from this run's results and the
+        approved triage, in the sandbox, and the server publishes it as results/evidence.md. The person signs off from
+        this page. Returns (None, its SHA-256), or (why it was not published, None); the release result stands."""
+        log = self.state / "logs" / "evidence-page.out"
+        cmd = [self.checks / "evidence-page.sh", "--results", results, "--triage", self.triage]
+        try:
+            timeout = int(self.timeouts.get("evidence", 120))
+            r = self.sandbox.run(cmd, log, timeout, ro=[self.sample, self.triage.parent], rw=[results], workdir=results)
+            if r["outcome"] == "timeout":
+                return f"checks/evidence-page.sh timed out after {timeout} s", None
+            if r["exit_status"] != 0:
+                return f"checks/evidence-page.sh exited with {r['exit_status']}: {tail(log, 1024).strip()}", None
+            page = read_nofollow(results / EVIDENCE, limit=EVIDENCE_LIMIT + 1)
+            if not page:
+                return "checks/evidence-page.sh wrote no page", None
+            if len(page) > EVIDENCE_LIMIT:
+                return f"the page is over {EVIDENCE_LIMIT // 1024} KiB", None
+            write_atomic(self.state / "results" / EVIDENCE, page)
+        except (OSError, RuntimeError, ValueError, TypeError, subprocess.SubprocessError) as e:
+            return f"{type(e).__name__}: {e}", None
+        return None, hashlib.sha256(page).hexdigest()
 
     @staticmethod
     def judge(results, check, verdict, call_start, head):
@@ -815,7 +848,12 @@ class BuildService:
             data = json.loads(read_nofollow(self.state / "results" / f"{check}.json") or b"")
         except ValueError:
             data = None
-        return {"check": check, "result": data, "log_tail": tail(self.state / "results" / f"{check}.log")}
+        out = {"check": check, "result": data, "log_tail": tail(self.state / "results" / f"{check}.log")}
+        if check == "release":
+            page = read_nofollow(self.state / "results" / EVIDENCE, limit=EVIDENCE_LIMIT)
+            out["evidence_page"] = page.decode(errors="replace") if page else None
+            out["evidence_sha256"] = hashlib.sha256(page).hexdigest() if page else None
+        return out
 
     def _read_log(self, kind, profile):
         self.pick("kind", kind, LOG_KINDS)

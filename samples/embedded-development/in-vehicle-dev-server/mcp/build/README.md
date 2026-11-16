@@ -12,7 +12,7 @@ whatever the agent session allows. The `bench` server (build plan item 5, with t
 | `configure` | controlled-write | CMake configure of the work tree for a profile: `cross` (the project's toolchain file), `host`, `tsan` or `asan`, into the server's build directory for that profile |
 | `build` | controlled-write | Ninja build of a configured profile; target `vstatd`, `vstatd_tests` or `all` |
 | `run_check` | controlled-write | One of the [checks](../../checks/README.md) `build`, `static`, `unit`, `size`, `trace` or `release`, on a clean clone of the committed HEAD, with fixed arguments; returns the verdict from the exit status (0 PASS, 1 FAIL, 3 BLOCKED) |
-| `read_result` | read-only | A check's last published result and the tail of its log |
+| `read_result` | read-only | A check's last published result and the tail of its log; for `release`, also the evidence page published after it passed |
 | `read_log` | read-only | The tail of the last configure or build log of a profile |
 
 No tool takes a command, a path, a check option or a limit. No tool commits, pushes, merges, tags or publishes. The
@@ -81,7 +81,7 @@ Each has a test in [`tests/test_guardrails.py`](tests/test_guardrails.py); the i
 | Fixed check arguments | `run_check` passes `--project`, `--results` and, for the checks that read it, `--triage`, and never `--local`. A work tree with no commit is refused |
 | Results that are this run's | See [Isolation](#isolation). A check publishes its result, log and diff, and the inputs it recorded inside its own part of the results folder whose content still matches their recorded SHA-256 (for `build`, the artifact and the toolchain file, which `checks/release.sh` verifies later); whatever it published before is removed first. Files are read without following a symlink at the last step or waiting on a FIFO, and a results folder the check replaced by a link is an `ERROR` |
 | Bounded repair | `configure cross`, `build cross` and `run_check build` are cross attempts. Each is charged before it runs; a failure keeps the charge, a configure or build that succeeds takes it back, and only `run_check build` with a PASS clears the count. After the first attempt and the retries of `repair_rounds.cross_build` in [`checks/limits.json`](../../checks/limits.json) (TR §5.1: three) have all failed, cross attempts are refused until a person resets the count with `buildserver.admin reset-repair` (see [Running](#running)), which records who did. An unreadable count refuses. The count is published as `repair-rounds.json` with the results, which `checks/release.sh` reports |
-| Audit | Every call appends a `started` line and an outcome line (`ok`, `failed`, `timeout`, `refused` or `error`) to `audit.jsonl`: time, role, tool, class, arguments, exit status, duration and, for a check, the verdict and the digest it recorded. A refusal before the call starts has the outcome line only |
+| Audit | Every call appends a `started` line and an outcome line (`ok`, `failed`, `timeout`, `refused` or `error`) to `audit.jsonl`: time, role, tool, class, arguments, exit status, duration and, for a check, the verdict and the digest it recorded; for a release that passed, whether the evidence page was published and its SHA-256. A refusal before the call starts has the outcome line only |
 | One call at a time | Calls, and the admin reset, hold one lock, across threads and processes. Malformed calls are refused without waiting for it |
 | Timeouts | A call that runs past its timeout is killed with its container and reported; nothing is retried |
 | Clean environment | The container gets `PATH`, `HOME`, `LANG`, `PYTHONNOUSERSITE` and git's no-global-config settings only: no credentials or test and sanitizer settings leak in from the server's environment. The docker client alone gets what it needs to find its daemon (`DOCKER_HOST`, `DOCKER_CONTEXT`, `XDG_RUNTIME_DIR` and the like), rootless Docker included |
@@ -95,6 +95,17 @@ Output returned to the agent is cut to the last 8 KiB of a log. Refusals and err
 the roles and their classes, timeouts, the `PATH` inside the container and the tool commands. The sysroot is mounted
 where `checks/limits.json` says (`sysroot`). A person approves the triage by writing its approval record next to it
 (see the [checks](../../checks/README.md#the-approved-triage)).
+
+### The evidence page
+
+After `run_check release` passed, the server runs `checks/evidence-page.sh` on that call's results and the approved
+triage, in the sandbox with the release's own read-only mounts, and publishes the page as `results/evidence.md`;
+`read_result release` returns it. The person signs off from this page, so it comes from the server that judged the
+release, not from an agent. A release that does not pass publishes no page and removes the last one, so a page always
+belongs to the latest release result. If the script fails, times out (`timeouts.evidence`, 120 s) or writes no page,
+the release result stands and the call's `evidence_page` says why. The page's SHA-256 is in the call's result, its
+audit line and `read_result release`, so the page a person signs can be matched to the call that published it. The
+script runs with the sample and the triage folder read-only and only the call's results folder writable.
 
 ### The bench's results
 
@@ -196,6 +207,13 @@ build, `checks/release.sh` found both after-deploy results, every input they rec
 built, and the same run and baseline in both; it failed only on the four checks that build server had not run (`static`,
 `unit`, `size`, `trace`: no result). With the results of a bench whose `logdiff` had judged another triage, the call was
 refused before anything ran and the release result became an `ERROR` naming that input.
+
+Later the same day, with the evidence page: 72 guardrail tests OK, seven of them for the page. In the build container, the
+server's evidence step (`BuildService.evidence_page`, called directly, because that build server's release does not
+pass) wrote the page from the same bench host's results and the build server's result: the build's digest, the
+runtime-limits and logdiff results (PASS, emulation) and the four source checks that build server had not run, marked
+missing. The step after a passing `run_check release` is covered by the guardrail tests only; it has not run after a
+real passing release yet.
 
 ## Prerequisites, cost and cleanup
 
