@@ -57,6 +57,12 @@ def test_a_review_names_who_fixes_what():
         assert targets(line, en_t) == ["backend"], line
     assert targets("Send back: Developer · fix and Developer · refactor", en_t) == ["backend", "frontend"]
     assert targets("Send back: Developer · fix, see docs/aidlc/triage.md", en_t) == ["backend"]
+    # a bare / between two roles splits them (b1f24c7 did); a path stays whole, even one with a role's name in it
+    assert targets("Send back: Developer · fix/Tester", en_t) == ["tester", "backend"]
+    assert targets("Send back: Developer · fix/Developer · refactor", en_t) == ["backend", "frontend"]
+    assert targets("Send back: Developer · fix, see docs/Tester-notes.md", en_t) == ["backend"]
+    assert targets("Send back: Developer · fix (docs/aidlc/tester/plan.md)", en_t) == ["backend"]
+    assert targets("Send back: Developer · fix, tests/tester/case_1.cpp", en_t) == ["backend"]
     # a role named in parentheses is what the change is about, not whom it goes to
     assert targets("Send back: Developer · fix (the tester case stays)", en_t) == ["backend"]
     assert targets("打回：后端（测试的用例不用动）", roles) == ["backend"]
