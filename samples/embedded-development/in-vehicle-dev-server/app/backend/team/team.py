@@ -246,13 +246,15 @@ def _plain(text: str) -> str:
     return " ".join(re.sub(r"[·・\-–—_]", " ", text).split()).rstrip(" .:：。")
 
 
-# a path in a send-back line: a word holding a / that starts at a folder of a project (or ~ or /) or ends in a file
+# a path in a send-back line, taken out whole before the line is split into roles: a word holding a / that starts
+# at a folder of a project, at ~ or /, or ends in a file; it may begin after ` " ' ( [ or : and ends before them
 _PATH = re.compile(r"""
-    (?<!\S)
-    (?: [~.]?/                                                        # ~/…  ./…  /…
+    (?<![^\s`"'(\[:])
+    (?: [~.]?/(?=[\w.~-])                                              # ~/…  ./…  /… (not a bare " / ")
       | (?:docs|src|tests?|cmake|checks|bench|app|scripts|include|lib)/  # a folder of a project
       | [\w.~-]+/[\w./-]*\.\w+                                       # a file: a/b.md
-    ) \S*""", re.X)
+    ) [^\s`"')\],;]*""", re.X)
+_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S*", re.I)  # a link, left out whole
 _ASIDE = re.compile(r"\([^)]*\)|（[^）]*）")  # what a send-back line says about the change, not whom it goes to
 
 
@@ -263,16 +265,28 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
     # a role the note goes on to mention in parentheses is not sent back too, nor one a path's folder is named after
-    chunks = [_PATH.sub(" ", _ASIDE.sub("", c)) for c in lines] or _OWNER_RE.findall(text or "")
+    chunks = [_PATH.sub(" ", _URL.sub(" ", _ASIDE.sub("", c))) for c in lines] or _OWNER_RE.findall(text or "")
     found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
     # English names name a target only where an item of the line starts with one ("the Developer · fix role" too);
-    # items are split on , ; 、 "and" and / ("Developer · fix/Tester"); a path is taken out of the line whole
-    # above, so that none of its segments is read as a role ("docs/Tester-notes.md", tests/tester/…)
-    items = [_plain(i) for chunk in chunks
-             for i in re.split(r"[,，;；、/]|\band\b", chunk, flags=re.I)]
-    found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
-              and any(re.match(rf"(?:the\s+)?{re.escape(_plain(r['title_en']))}(?!\w)", i) for i in items)}
+    # items are split on , ; 、 and "and". An item with a / ("Developer · fix/Tester", " / ") names each of its parts
+    # only when every part is a role's name; else only its first part counts, so that what a path, a branch or a
+    # two-part name ("qa/Tester", "feature/Tester-cases") holds after a / is not read as a role
+    en = {r["key"]: _plain(r["title_en"]) for r in roles if r.get("writable") and r.get("title_en")}
+
+    def starts(part: str, key: str) -> bool:
+        return bool(re.match(rf"(?:the\s+)?{re.escape(en[key])}(?!\w)", part))
+
+    def whole(part: str) -> str | None:
+        return next((k for k in en if re.fullmatch(rf"(?:the\s+)?{re.escape(en[k])}(?:\s+role)?", part)), None)
+    for chunk in chunks:
+        for item in re.split(r"[,，;；、]|\band\b", chunk, flags=re.I):
+            parts = [_plain(p) for p in item.split("/")]
+            every = [whole(p) for p in parts]
+            if len(parts) > 1 and all(every):
+                found |= set(every)
+            else:
+                found |= {k for k in en if starts(parts[0], k)}
     return [k for k in writers if k in found]
 
 

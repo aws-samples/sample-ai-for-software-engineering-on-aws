@@ -66,6 +66,16 @@ def test_a_review_names_who_fixes_what():
     # a role named in parentheses is what the change is about, not whom it goes to
     assert targets("Send back: Developer · fix (the tester case stays)", en_t) == ["backend"]
     assert targets("打回：后端（测试的用例不用动）", roles) == ["backend"]
+    # second review of #41: " / " between roles splits them as "/" does (main did), with backticks and three roles
+    assert targets("Send back: Developer · fix / Tester", en_t) == ["tester", "backend"]
+    assert targets("Send back: `Developer · fix` / `Tester`", en_t) == ["tester", "backend"]
+    assert targets("Send back: Developer · fix / Developer · refactor / Tester", en_t) == ["tester", "backend", "frontend"]
+    # a path, a URL, a branch or a two-part name with a role's name inside is no role, however it is written
+    for path in ("`docs/Tester-notes.md`", "`tests/Tester/case_1.cpp:12`", '"src/Tester.cpp"', "'Tester/plan.md'",
+                 "fix:docs/Tester.md", "https://wiki.example.com/qa/Tester-guide", "feature/Tester-cases",
+                 "qa/Tester", "(docs/Tester)", "[tests/Tester]"):
+        assert targets(f"Send back: Developer · fix, see {path}", en_t) == ["backend"], path
+        assert "tester" not in targets(f"Send back: {path}", en_t), path
 
 
 def test_a_reviewers_verdict_in_either_language():
