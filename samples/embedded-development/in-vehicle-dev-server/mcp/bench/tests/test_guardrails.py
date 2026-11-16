@@ -330,6 +330,48 @@ class Calls(Env):
         self.assertTrue(fresh.exists() and other.exists() and outside.exists())
         self.assertTrue(link.is_symlink())  # only regular files are removed
 
+    def test_a_symlinked_logs_folder_is_not_swept(self):
+        """Second review of #41: the sweep removes only the read logs of the server's own logs folder, not those of a
+        folder state/logs links to."""
+        self.service()
+        outside = self.tmp / "elsewhere"
+        outside.mkdir()
+        old_log = outside / "read-target-111-aaaaaa.log"
+        old_log.write_text("x\n")
+        old = time.time() - 3600
+        os.utime(old_log, (old, old))
+        shutil.rmtree(self.st / "logs")
+        (self.st / "logs").symlink_to(outside)
+        self.service("reviewer")
+        self.assertTrue(old_log.exists())
+
+    def test_an_argument_whose_repr_fails_is_described_and_the_call_still_audited(self):
+        """Second review of #41: a list or dict holding an over-limit integer, or one nested very deep, cannot be
+        written out by repr; it is described by its type and the call is audited."""
+        deep = []
+        for _ in range(100_000):
+            deep = [deep]
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", a=[10 ** 5000], b={"k": 10 ** 5000}, c=deep)
+        self.assertEqual(self.audit()[-1]["args"], {"a": "<list>", "b": "<dict>", "c": "<list>"})
+
+    def test_a_float_that_is_not_finite_is_described_so_the_audit_stays_json(self):
+        """Second review of #41: the "<float>" branch could never run (a float's repr is short); a NaN or an infinity
+        is what the audit cannot keep, since json.dumps writes them as NaN and Infinity, which JSON does not have."""
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", x=float("nan"), y=float("inf"), z=-float("inf"), w=1.5)
+        line = (self.st / "audit.jsonl").read_text().splitlines()[-1]
+        strict = json.loads(line, parse_constant=lambda c: self.fail(f"{c} in the audit line"))
+        self.assertEqual(strict["args"], {"x": "<float nan>", "y": "<float inf>", "z": "<float -inf>", "w": 1.5})
+
+    def test_the_readme_gives_the_number_of_these_tests_and_no_failure_they_no_longer_have(self):
+        """Second review of #41: the README's Tests paragraph before *Not yet verified* is current."""
+        n = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__]).countTestCases()
+        readme = (pathlib.Path(__file__).resolve().parents[1] / "README.md").read_text()
+        part = readme[:readme.index("## Not yet verified")].rsplit("\n\n", 2)[-2]
+        self.assertIn(f"({n} OK)", part)
+        self.assertNotIn("fails or errors", part)
+
     def test_reads_do_not_wait_for_a_call_in_progress(self):
         """A read-only call takes no lock: another session sees the request waiting at the console."""
         import threading

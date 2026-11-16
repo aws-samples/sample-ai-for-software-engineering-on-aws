@@ -16,6 +16,7 @@ import grp
 import hashlib
 import itertools
 import json
+import math
 import os
 import pathlib
 import pwd
@@ -55,18 +56,24 @@ _INT_BITS_MAX = 640  # an integer of more bits than this has more than AUDIT_ARG
 
 
 def capped_value(v):
-    """One argument as the audit keeps it: a string cut to AUDIT_ARG_MAX; a number whose digits would be longer
-    described by its size; bool and None as they are; anything else as its repr, cut. An integer's size is taken
-    from bit_length() before any repr, so a 5,000-digit integer (more than Python writes out) is audited too."""
+    """One argument as the audit keeps it: a string cut to AUDIT_ARG_MAX; an integer whose digits would be longer
+    described by its size; a NaN or an infinity described (JSON has neither); bool and None as they are; anything
+    else as its repr, cut, or by its type when repr fails (a list holding a huge integer, a very deep one). An
+    integer's size is taken from bit_length() before any repr, so a 5,000-digit integer is audited too."""
     if v is None or isinstance(v, bool):
         return v
     if isinstance(v, int):
         if v.bit_length() > _INT_BITS_MAX or len(repr(v)) > AUDIT_ARG_MAX:
             return f"<int, {v.bit_length()} bits>"
         return v
-    if isinstance(v, float):
-        return v if len(repr(v)) <= AUDIT_ARG_MAX else "<float>"
-    return (v if isinstance(v, str) else repr(v))[:AUDIT_ARG_MAX]
+    if isinstance(v, float):  # NaN and infinities: json.dumps would write NaN and Infinity, which JSON lacks
+        return v if math.isfinite(v) else f"<float {v}>"
+    if isinstance(v, str):
+        return v[:AUDIT_ARG_MAX]
+    try:
+        return repr(v)[:AUDIT_ARG_MAX]
+    except (ValueError, RecursionError, MemoryError):  # a container with a huge int, or nested very deep
+        return f"<{type(v).__name__}>"
 
 
 def capped(args):
@@ -419,10 +426,14 @@ class BenchService:
         self.sweep_read_logs()
 
     def sweep_read_logs(self):
-        """Removes the logs of reads a killed session left in this server's logs folder (read-*.log, regular files
-        only): those older than a read may take, so that a read another session has in progress keeps its log."""
+        """Removes the logs of reads a killed session left in this server's logs folder (a real folder, not a link;
+        read-*.log, regular files only): those older than a read may take, so that a read another session has in
+        progress keeps its log."""
+        logs = self.state / "logs"
+        if not real_dir(logs):  # a link to some other folder: not this server's to sweep
+            return
         cutoff = time.time() - float(self.timeouts["read"]) - 60
-        for p in (self.state / "logs").glob("read-*.log"):
+        for p in logs.glob("read-*.log"):
             with contextlib.suppress(OSError):
                 st = os.lstat(p)
                 if stat.S_ISREG(st.st_mode) and st.st_mtime < cutoff:
