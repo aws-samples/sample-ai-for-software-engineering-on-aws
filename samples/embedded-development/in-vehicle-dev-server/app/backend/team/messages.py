@@ -162,6 +162,7 @@ ZH: dict[str, str] = {
     "held.blocked": "没法判定",
     "held.rounds": "修了 {n} 轮仍不过",
     "held.owner": "没过，负责的角色没法再改",
+    "held.unregistered": "已经修了，但{r_role}的提交引用了分诊里没有的 {ids}：要人按 TR §4.4 补登",
     # the triage gate's questions and options (triage.py)
     "triage.q.added": "{id} 是分诊新加的（{found_by}），定为 {decision}：{where}",
     "triage.q.justify": "{id} 分诊建议说明为误报或无害、不修[[label|（待办标的是 {label}）]]：{where}",
@@ -316,6 +317,7 @@ EN: dict[str, str] = {
     "held.blocked": "cannot be judged",
     "held.rounds": "still fails after {n} rounds",
     "held.owner": "failed, and the role that owns it can no longer change it",
+    "held.unregistered": "fixed, but {r_role} cites {ids}, not in the triage: a person registers it (TR \u00a74.4)",
     "triage.q.added": "{id} was added by triage ({found_by}), decided {decision}: {where}",
     "triage.q.justify": "{id}: triage proposes to explain it as a false positive or harmless, not fix it[[label| (the backlog says {label})]]: {where}",
     "triage.q.defer": "{id}: triage proposes to defer it[[label| (the backlog says {label})]]: {where}",

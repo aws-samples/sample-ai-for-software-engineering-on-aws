@@ -1315,6 +1315,7 @@
  "ev.held.blocked": "cannot be judged",
  "ev.held.rounds": "still fails after {n} rounds",
  "ev.held.owner": "failed, and the role that owns it can no longer change it",
+ "ev.held.unregistered": "fixed, but {r_role} cites {ids}, not in the triage: a person registers it (TR §4.4)",
  "ev.triage.q.added": "{id} was added by triage ({found_by}), decided {decision}: {where}",
  "ev.triage.q.justify": "{id}: triage proposes to explain it as a false positive or harmless, not fix it[[label| (the backlog says {label})]]: {where}",
  "ev.triage.q.defer": "{id}: triage proposes to defer it[[label| (the backlog says {label})]]: {where}",

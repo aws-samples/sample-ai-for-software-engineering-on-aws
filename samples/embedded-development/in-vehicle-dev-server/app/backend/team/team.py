@@ -50,7 +50,8 @@ HUMAN_MARK = "【负责人退回】"  # a review-kind fix task that a person, no
 TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?out|overloaded|rate.?limit|throttl", re.I)
 ERRORS_TO_FAIL = 30  # this many failing ticks in a row (about a minute) end the run
 REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 view
-_DONE_RE = re.compile(r"(?<![A-Za-z])DONE\s*[:：]\s*(.*)$", re.M)  # also mid-line: KiroCrew joins messages with no break
+# also mid-line (KiroCrew joins messages with no break), but not `DONE:` quoted in backticks in the reply's prose
+_DONE_RE = re.compile(r"(?<![A-Za-z`])DONE\s*[:：]\s*(.*)$", re.M)
 TRACE_RULE = ("每个提交说明都写它对应的发现编号（`F-003`）；修的发现在分诊里 behaviour 为 true 时，再写它的事实条目之一（如 "
               "`SUP-GRACE`）。只写分诊里定为修复或说明的发现。没提交的改动提交掉；要改已有提交的说明，"
               "`git reset --soft $(git merge-base HEAD {branch})` 以后按发现重新提交。")
@@ -744,6 +745,8 @@ class TeamRun:
         from here."""
         lane = self.lane(key)
         wt = Path(lane["worktree"])
+        if await self._unmerged_messages(key):  # work not merged yet (held for a person, D15): nothing to catch up
+            return False  # (``merge --ff-only`` would say "up to date" and the unmerged commits would count as merged)
         if not await gitwork.fast_forward(wt, self.s["branch"]):
             self.d.log.info("vstatd-team: %s/%s cannot fast-forward to the run branch", self.rid, key)
             return False
@@ -1166,6 +1169,8 @@ class TeamRun:
             messages = await self._unmerged_messages(key)
             bad = [f"{sha[:12]}「{msg.strip().splitlines()[0][:60] if msg.strip() else ''}」：{why}"
                    for sha, msg in messages for why in [triage_mod.commit_problem(msg, self._approved_triage() or {})] if why]
+            if bad and self._hold_unregistered(key, [m for _, m in messages]):
+                return
             if bad:
                 await self._trace_back(key, "这些提交的说明 checks/trace.sh 不会通过（TR §7.2）：\n" + "\n".join(f"- {b}" for b in bad[:12]))
                 return
@@ -1572,6 +1577,8 @@ class TeamRun:
         misconfigured one, or one out of its rounds stops the run for a person (D7). A check that could not judge
         because another failed (no build to measure) waits for that fix."""
         t = wall if wall is not None else self.s["tests"]
+        if wall is None and (t.get("held") or {}).get("unregistered"):
+            return  # held for a person to register findings (D15): another round of the same checks changes nothing
         spec = {c["name"]: c for c in self.team["checks"]}
         rows = t.get("checks") or []
         failing = [r for r in rows if r["verdict"] == "FAIL"]
@@ -1946,6 +1953,30 @@ class TeamRun:
         _, out, _ = await gitwork.git(Path(self.s["run_wt"]), "log", "--reverse", "--format=%H%x1f%B%x1e",
                                       f"HEAD..{self.lane(key)['branch']}", locks=False)
         return [tuple(rec.strip("\n").split("\x1f", 1)) for rec in out.split("\x1e") if "\x1f" in rec]
+
+    def _hold_unregistered(self, key: str, texts: list[str]) -> bool:
+        """A role sent back by the checks fixed what they found and cited finding IDs the triage does not have (a
+        defect the backlog lacks, TR §4.4): the run is held for a person to register them (D15), and the role spends
+        no round on rewriting its commit messages. True when held; False when the commits fail trace.sh otherwise."""
+        t, att = self.s["tests"], self.lane(key)["attempts"][-1] if self.lane(key)["attempts"] else {}
+        triage = self._approved_triage() or {}
+        known = set(triage_mod.decided(triage))
+        bad = [m for m in texts if triage_mod.commit_problem(m, triage)]
+        unknown = sorted({i for m in bad for i in triage_mod.FINDING_ID.findall(m) if i not in known})
+        failing = [c for c in t.get("cases") or [] if c.get("owner") == key and c["status"] == "fail"]
+        if att.get("kind") != "fix" or not failing or not unknown or not all(
+                set(triage_mod.FINDING_ID.findall(m)) - known for m in bad):
+            return False
+        rows = {r["name"]: r for r in t.get("checks") or []}
+        names = list(dict.fromkeys(c["ac"] for c in failing))
+        what = {"code": "held.unregistered", "params": {"r_role": key, "ids": unknown}}
+        first = {n: ((rows.get(n) or {}).get("reasons") or [""])[0] for n in names}
+        reason = messages.clean({"items": [{"check": n, "what": what, "reason": first[n]} for n in names]})
+        t["held"] = {"checks": names, "why": self.msg("checks.held", reason)[:300], "code": "checks.held",
+                     "params": reason, "unregistered": unknown}
+        self.lane(key).update(status="merged", stuck=False, done_at=self.d.now())
+        self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}}, data={"checks": names})
+        return True
 
     async def _trace_back(self, key: str, why: str) -> None:
         """A role's work that checks/trace.sh would refuse goes back before it is merged (its worktree as it is)."""

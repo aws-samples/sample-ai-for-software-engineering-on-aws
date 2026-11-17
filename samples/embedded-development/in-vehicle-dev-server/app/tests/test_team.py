@@ -713,3 +713,10 @@ def test_members_not_read_or_an_optional_post_never_holds_a_role(tmp_path):
     run = make_run(tmp_path / "b", FakeManager(), optional_tests(), team=team)
     run.d.members = lambda ws: {"aidlc-product-agent", "aidlc-developer-agent"}
     assert run._member_missing("motion") is None and run._member_missing("pm") is None
+
+
+def test_a_done_line_quoted_in_backticks_in_the_prose_is_not_the_summary():
+    reply = ("DONE: 要改：交叉构建缺 sysroot\n**Reviewer:** x\n\n正文……\n"
+             "规则冲突：任务要求第一行写 `DONE:`。我按任务把 DONE 放在第一行。")
+    assert team_mod.parse_done(reply) == "要改：交叉构建缺 sysroot"
+    assert team_mod.parse_done("做完了。DONE: 合在一行的总结") == "合在一行的总结"  # Kiro Crew joins messages: mid-line

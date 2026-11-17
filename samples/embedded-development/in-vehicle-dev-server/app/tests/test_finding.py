@@ -250,3 +250,52 @@ def test_a_run_not_held_after_the_checks_refuses_with_409(tmp_path, monkeypatch)
         assert e.value.status == 409 and e.value.code == "not_held"
 
     asyncio.run(go())
+
+
+def test_a_fix_that_cites_an_id_the_triage_lacks_is_held_for_a_person_not_sent_back(tmp_path, monkeypatch):
+    """The checks send dev back; it fixes the defect and cites F-032, which the triage does not have yet. The run is
+    held for a person to register it (D15) instead of spending dev's rounds on its commit messages; once it is
+    registered, the same commit passes trace.sh and is merged."""
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev", "rounds": 3})
+    run.team["roles"][2]["triage"] = {"file": "docs/triage.json", "knowledge": str(KNOWLEDGE)}
+    bench.set("build", 1, [BUILD_REASON])
+    svc = svc_of(tmp_path, run, mgr)
+
+    async def tick_until(cond, dev_works=True):
+        end = time.monotonic() + 30
+        while not cond() and time.monotonic() < end:
+            await run.tick()
+            for a in mgr.live():
+                if mgr.role_of(a) != "dev" or (dev_works and run.lane("dev")["attempts"][-1]["kind"] != "fix"):
+                    work(a, mgr.role_of(a))  # dev's fix rounds are the test's own
+            await asyncio.sleep(0.05)
+        assert cond(), run.events[-1]["text"]
+
+    async def go():
+        await tick_until(lambda: run.s["tests"].get("rounds") == {"build": 1})  # dev is sent back by the build check
+        approved_triage(run)
+        run.s["triage"]["base_set"] = True  # from here on every commit cites a finding (D13)
+        fix = run.lane("dev")["attempts"][-1]
+        assert fix["kind"] == "fix"
+        a = mgr.agents[fix["agent"]]
+        act(a, {"src/a.cpp": "// sysroot set\n"}, msg="[dev] F-032: set CMAKE_SYSROOT (new defect, TR §4.4)")
+        finish(a, "修好了，F-032 要补登")
+        await tick_until(lambda: run.ended, dev_works=False)
+        held = run.s["tests"]["held"]
+        assert run.s["status"] == "failed" and held["unregistered"] == ["F-032"] and held["checks"] == ["build"]
+        assert "要人按 TR §4.4 补登" in held["why"] and "F-032" in held["why"]
+        assert [x["kind"] for x in run.lane("dev")["attempts"]] == ["work", "fix"]  # no trace round spent
+        assert not any(e.get("code") == "bounce.trace" for e in run.events)
+
+        body = {**F032, "location": "src/a.cpp:12", "paths": ["src/a.*"], "continue": True}
+        reg = await svc.finding(run.rid, handlers.finding_body(body))
+        assert reg["id"] == "F-032" and reg["held"] is False
+        b = mgr.agents[run.lane("dev")["attempts"][-1]["agent"]]
+        bench.set("build", 0)
+        finish(b, "上一轮的提交已经修了，写的就是 F-032")  # nothing new: the commit it made cites F-032 now in the triage
+        await tick_until(lambda: run.ended)
+        assert run.s["status"] == "done", run.events[-1]["text"]
+        assert [x["kind"] for x in run.lane("dev")["attempts"]] == ["work", "fix", "fix"]
+        assert "sysroot set" in sh(Path(run.s["run_wt"]), "show", "HEAD:src/a.cpp")
+
+    asyncio.run(go())
