@@ -453,11 +453,18 @@ The optional model-based profile adds `model/` (the model, its generated code an
 
 ## Prerequisites
 
-To be completed with the build: a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro
-or Kiro Crew. Third-party tools and their licences will be listed here, among them QEMU (GPL-2.0) and the emulated
-target's Linux image built by `bench/build-target.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed
-to the repository. They are used as tools and not redistributed. The bench's own tools are listed in
-[bench/README.md](bench/README.md#third-party-tools).
+You need a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro or Kiro Crew. Kiro and
+Kiro Crew are AWS products under their own terms. Docker Engine is listed below; Podman (Apache-2.0) and Colima (MIT)
+work as well, and Docker Desktop has its own subscription terms. The third-party tools and their licences are listed in
+this section and in the READMEs it links to. They are used as tools and are not redistributed.
+
+Two kinds of third-party content are committed to the repository: the four AI-DLC expert definitions in
+[vendor/aidlc-workflows/](vendor/aidlc-workflows/SOURCE.md) (MIT-0), and the font subsets embedded in
+`knowledge/vstatd-interface.pdf` ([knowledge/README.md](knowledge/README.md#third-party-references)).
+
+The bench's tools are listed in [bench/README.md](bench/README.md#third-party-tools). Among them are QEMU (GPL-2.0) and
+Buildroot (GPL-2.0-or-later; Linux kernel GPL-2.0). `bench/build-target.sh` uses Buildroot to build the emulated
+target's Linux image, which is not committed.
 
 The [Kiro Crew app](#the-kiro-crew-app) needs, besides the bench: a Mac (`setup.sh` installs into the Kiro Crew desktop
 app), Kiro Crew running and signed in, Docker, git, Python 3 and Node.js 22 or newer to build the board. Its manifest
@@ -519,6 +526,29 @@ until the Buildroot sysroot in `cc1-sysroot` also carries the C++ standard heade
 The knowledge uses signal names from the COVESA Vehicle Signal Specification
 v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and PyYAML (MIT); see
 [knowledge/README.md](knowledge/README.md#third-party-references).
+
+The Kiro Crew app's backend runs in Kiro Crew's own Python and installs no Python packages. Besides the standard
+library it imports only `kiro_crew` and aiohttp (Apache-2.0), both provided by Kiro Crew. Its board is built on the
+user's machine from npm packages (`app/ui/package.json`, versions pinned in `app/ui/package-lock.json`). React and
+React DOM end up in the built board, which is not committed. The other packages only build and test it.
+
+| Tool | Version | Licence | Used for |
+| --- | --- | --- | --- |
+| Node.js | 22 or newer | MIT | Building the board |
+| React, React DOM | 18.3 | MIT | The board |
+| Vite | 8.3 | MIT | Building the board |
+| `@vitejs/plugin-react` | 5.2 | MIT | Building the board |
+| TypeScript | 5.9 | Apache-2.0 | Building the board |
+| Vitest | 5.0 | MIT | The board's tests |
+| jsdom | 26.1 | MIT | The board's tests |
+| `@testing-library/react` | 16.3 | MIT | The board's tests |
+| `@testing-library/jest-dom` | 7.0 | MIT | The board's tests |
+| `@testing-library/user-event` | 14.6 | MIT | The board's tests |
+| pytest | 9.1 | MIT | The app's and the scripts' tests |
+
+The app also uses the four AI-DLC expert definitions from
+[awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows) v2.10.0 (MIT-0), committed unmodified in
+`vendor/aidlc-workflows/`.
 
 The optional model-based profile also needs MATLAB, Simulink and Embedded Coder from MathWorks (commercial
 licences), and the MATLAB MCP Core Server and the Simulink Agentic Toolkit, whose terms are checked before the profile
