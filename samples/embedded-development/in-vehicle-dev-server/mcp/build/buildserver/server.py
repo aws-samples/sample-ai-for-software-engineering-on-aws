@@ -84,8 +84,8 @@ def make_server(service):
     def run_check(check: str) -> dict:
         return guarded("run_check", check=check)
 
-    @server.tool(description="Read a check's last published result and the tail of its log. Read-only. check: "
-                             + one_of(CHECKS))
+    @server.tool(description="Read a check's last published result and the tail of its log; for release, also the "
+                             "evidence page published after it passed. Read-only. check: " + one_of(CHECKS))
     def read_result(check: str) -> dict:
         return guarded("read_result", check=check)
 

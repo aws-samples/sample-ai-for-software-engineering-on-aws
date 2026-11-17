@@ -82,7 +82,8 @@ def git(repo, *args):
 
 class Env(unittest.TestCase):
     def setUp(self):
-        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="buildserver-test-"))
+        # resolved: on macOS /tmp and /var are links to /private/..., and the server resolves its paths
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="buildserver-test-")).resolve()
         self.ws = self.tmp / "work"
         (self.ws / "cmake").mkdir(parents=True)
         (self.ws / "src.cpp").write_text("int main() {}\n")
@@ -630,6 +631,346 @@ class Mounts(Env):
             self.assertFalse(any("DOCKER_HOST" in a for a in sandbox.argv(["true"], "n")))
         finally:
             os.environ.pop("DOCKER_HOST")
+
+
+class BenchResults(Env):
+    """`run_check release` with the bench server's published after-deploy results (paths.bench_*)."""
+
+    def setUp(self):
+        super().setUp()
+        b = self.tmp / "bench"
+        self.bres, self.bruns, self.bbase = b / "state" / "results", b / "state" / "runs", b / "baseline"
+        for d in (self.bres, self.bruns / "run-1", self.bbase):
+            d.mkdir(parents=True)
+        (self.bres.parent / "results.lock").write_text("")  # the bench server makes it before it first publishes
+        self.triage = self.tmp / "srv" / "triage" / "triage.json"
+        self.triage.write_text("{}\n")
+        for f in ("run-result.json", "run.jsonl"):
+            (self.bruns / "run-1" / f).write_text(f + "\n")
+        for f in ("baseline-result.json", "baseline.jsonl"):
+            (self.bbase / f).write_text(f + "\n")
+        self.publish_bench()
+
+    def bench_paths(self):
+        return {"bench_results": self.bres, "bench_runs": self.bruns, "bench_baseline": self.bbase}
+
+    def publish_bench(self, **override):
+        """Writes both after-deploy results as the bench server publishes them; `override` replaces input paths."""
+        inputs = {"run_result": self.bruns / "run-1" / "run-result.json", "run_log": self.bruns / "run-1" / "run.jsonl",
+                  "baseline_result": self.bbase / "baseline-result.json", "baseline_log": self.bbase / "baseline.jsonl"}
+        for check in core.BENCH_CHECKS:
+            ins = {**inputs, **({"triage": self.triage} if check == "logdiff" else {}), **override}
+            data = {"check": check, "verdict": "PASS", "commit": None, "inputs": {
+                k: {"path": str(v), "sha256": "0"} for k, v in ins.items()}}
+            (self.bres / f"{check}.json").write_text(json.dumps(data))
+            (self.bres / f"{check}.log").write_text(f"{check}: PASS\n")
+
+    def record(self, extra="", **paths):
+        self.write_config(extra=extra, **{**self.bench_paths(), **paths})
+        s = self.service()
+        calls, real = [], s.sandbox.run
+
+        def run(cmd, log, timeout, ro=(), rw=(), workdir=None, extra=()):
+            if not str(cmd[0]).startswith(str(self.checks)):  # taking HEAD: git runs as usual
+                return real(cmd, log, timeout, ro=ro, rw=rw, workdir=workdir, extra=extra)
+            calls.append({"cmd": [str(c) for c in cmd], "ro": list(ro), "rw": list(rw)})
+            return {"outcome": "failed", "exit_status": 1}
+        s.sandbox.run = run
+        return s, calls
+
+    def test_all_three_paths_or_none(self):
+        self.write_config(bench_results=self.bres)
+        with self.assertRaisesRegex(ConfigError, "give all of bench_results, bench_runs, bench_baseline or none"):
+            self.service()
+        self.write_config(**{**self.bench_paths(), "bench_runs": "relative/runs"})
+        with self.assertRaisesRegex(ConfigError, "must be absolute"):
+            self.service()
+        (self.tmp / "other-runs").mkdir()
+        self.write_config(**{**self.bench_paths(), "bench_runs": self.tmp / "other-runs"})
+        with self.assertRaisesRegex(ConfigError, "bench_runs must be the runs folder beside paths.bench_results"):
+            self.service()
+        self.write_config(**{**self.bench_paths(), "bench_baseline": self.tmp / "missing"})
+        with self.assertRaisesRegex(ConfigError, "bench_baseline: .* is not a folder"):
+            self.service()
+
+    def test_bench_paths_the_agents_or_others_could_change_are_rejected(self):
+        (self.ws / "runs").mkdir()
+        self.write_config(**{**self.bench_paths(), "bench_runs": self.ws / "runs"})
+        with self.assertRaisesRegex(ConfigError, "bench_runs lies inside the agents' work tree"):
+            self.service()
+        (self.st / "results").mkdir(parents=True)
+        self.write_config(**{**self.bench_paths(), "bench_results": self.st / "results"})
+        with self.assertRaisesRegex(ConfigError, "bench_results and paths.state must not contain each other"):
+            self.service()
+        self.bruns.chmod(0o777)
+        self.write_config(**self.bench_paths())
+        with self.assertRaisesRegex(ConfigError, "paths.bench_runs: .* is writable by other users"):
+            self.service()
+        self.bruns.chmod(0o755)
+        self.write_config(extra='[trust]\nreaders = ["no-such-user-of-this-test"]\n', **self.bench_paths())
+        with self.assertRaisesRegex(ConfigError, "trust.readers: no user"):
+            self.service()
+
+    def test_release_reads_the_bench_results_and_mounts_their_folders_read_only(self):
+        s, calls = self.record()
+        s.call("run_check", check="release")
+        ro = [str(p) for p in calls[0]["ro"]]
+        for folder in (self.bruns / "run-1", self.bbase, self.triage.parent):
+            self.assertIn(str(folder.resolve()), ro)
+        self.assertNotIn(str(self.bruns.resolve()), ro, "only the run the results name, not every run")
+        self.assertNotIn(str(self.bres.resolve()), ro, "the bench's results folder itself is copied, not mounted")
+        self.assertEqual(calls[0]["rw"], [self.st.resolve() / "run"])
+        copied = self.st / "run" / "results"
+        for check in core.BENCH_CHECKS:
+            self.assertEqual((copied / f"{check}.json").read_text(), (self.bres / f"{check}.json").read_text())
+            self.assertEqual((copied / f"{check}.log").read_text(), f"{check}: PASS\n")
+
+    def test_other_checks_and_a_server_without_the_bench_paths_mount_nothing_of_the_bench(self):
+        s, calls = self.record()
+        s.call("run_check", check="static")
+        self.assertFalse(any("bench" in str(p) for p in calls[0]["ro"]))
+        self.assertFalse((self.st / "run" / "results" / "logdiff.json").exists())
+        self.write_config()
+        s = self.service()
+        seen, real = [], s.sandbox.run
+        s.sandbox.run = lambda cmd, log, timeout, ro=(), **k: (
+            seen.append(list(ro)) or {"outcome": "failed", "exit_status": 1}
+            if str(cmd[0]).startswith(str(self.checks)) else real(cmd, log, timeout, ro=ro, **k))
+        s.call("run_check", check="release")
+        self.assertEqual(len(seen), 1)
+        self.assertFalse(any("bench" in str(p) for p in seen[0]))
+        self.assertFalse((self.st / "run" / "results" / "logdiff.json").exists())
+
+    def test_a_result_the_bench_has_not_published_stays_missing(self):
+        (self.bres / "runtime-limits.json").unlink()
+        s, calls = self.record()
+        s.call("run_check", check="release")
+        self.assertEqual(len(calls), 1)
+        self.assertFalse((self.st / "run" / "results" / "runtime-limits.json").exists())
+        self.assertTrue((self.st / "run" / "results" / "logdiff.json").exists())
+
+    def refused(self, why, **override):
+        self.publish_bench(**override)
+        s, calls = self.record()
+        out = s.call("run_check", check="release")
+        self.assertEqual(calls, [], "nothing runs")
+        self.assertEqual(out["verdict"], "ERROR")
+        self.assertRegex(out["problem"], why)
+        published = json.loads((self.st / "results" / "release.json").read_text())
+        self.assertEqual(published["verdict"], "ERROR")
+        self.assertRegex(published["reasons"][0], why)
+        self.assertIn(("run_check", "refused"), self.outcomes())
+
+    def test_inputs_outside_the_bench_folders_refuse_the_call(self):
+        (self.tmp / "elsewhere").mkdir()
+        (self.tmp / "elsewhere" / "x").write_text("x")
+        self.refused("outside the bench's runs and baseline", run_log=self.tmp / "elsewhere" / "x")
+        self.refused("outside the bench's runs and baseline", run_log=self.bruns / "run-1" / "deeper" / "x")
+        self.refused("outside the bench's runs and baseline", run_log=self.bres / "logdiff.log")
+
+    def test_relative_and_dotted_paths_refuse_the_call(self):
+        self.refused("not an absolute path", run_log="runs/run-1/run.jsonl")
+        self.refused("not an absolute path", run_log=f"{self.bruns}/run-1/../run-1/run.jsonl")
+
+    def test_symlinks_and_missing_inputs_refuse_the_call(self):
+        (self.tmp / "forged").mkdir()
+        (self.tmp / "forged" / "run.jsonl").write_text("forged\n")
+        (self.bruns / "run-2").symlink_to(self.tmp / "forged")
+        self.refused("which is a link or not a folder", run_log=self.bruns / "run-2" / "run.jsonl")
+        (self.bruns / "run-1" / "link.jsonl").symlink_to(self.bruns / "run-1" / "run.jsonl")
+        self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "link.jsonl")
+        self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "gone.jsonl")
+
+    def test_a_fifo_and_inputs_beside_or_below_the_allowed_folders_refuse_the_call(self):
+        os.mkfifo(self.bruns / "run-1" / "fifo.jsonl")
+        self.refused("missing or not a regular file", run_log=self.bruns / "run-1" / "fifo.jsonl")
+        (self.bruns / "loose.jsonl").write_text("x\n")
+        self.refused("outside the bench's runs and baseline", run_log=self.bruns / "loose.jsonl")
+        (self.bbase / "sub").mkdir()
+        (self.bbase / "sub" / "baseline.jsonl").write_text("x\n")
+        self.refused("outside the bench's runs and baseline", baseline_log=self.bbase / "sub" / "baseline.jsonl")
+
+    def test_a_missing_or_unreadable_publishing_lock_refuses_the_call(self):
+        lock = self.bres.parent / "results.lock"
+        lock.unlink()
+        self.refused("publishing lock .* is missing")
+        lock.write_text("")
+        lock.chmod(0)
+        try:
+            if os.access(lock, os.R_OK):
+                self.skipTest("runs as a user who can read any file")
+            self.refused("cannot read the bench's results")
+        finally:
+            lock.chmod(0o644)
+        lock.unlink()
+        lock.symlink_to(self.tmp / "elsewhere-lock")
+        (self.tmp / "elsewhere-lock").write_text("")
+        self.refused("cannot read the bench's results")
+        lock.unlink()
+        os.mkfifo(lock)
+        self.refused("lock .* is not a regular file")
+
+    def test_a_nul_in_an_input_path_refuses_the_call(self):
+        self.refused("not an absolute path", run_log=f"{self.bruns}/run-1\0/run.jsonl")
+
+    def test_no_lock_and_nothing_published_is_two_missing_results(self):
+        (self.bres.parent / "results.lock").unlink()
+        for f in self.bres.iterdir():
+            f.unlink()
+        s, calls = self.record()
+        s.call("run_check", check="release")
+        self.assertEqual(len(calls), 1)
+        self.assertFalse((self.st / "run" / "results" / "logdiff.json").exists())
+
+    def test_trusted_readers_own_the_bench_paths_only(self):
+        """Two uids: the server runs as another user (os.getuid patched) than the one who owns the test's folders,
+        who stands for benchsrv."""
+        import pwd
+        owner, real = pwd.getpwuid(os.getuid()).pw_name, os.getuid
+        try:
+            core.os.getuid = lambda: real() + 4242
+            for path, name in ((self.bres, "bench_results"), (self.bruns, "bench_runs"),
+                               (self.bbase, "bench_baseline")):
+                with self.assertRaisesRegex(ConfigError, f"paths.{name}: "):  # the owner, or /tmp's sticky child
+                    core.check_trusted(path, name)
+                core.check_trusted(path, name, extra=(real(),))
+            self.write_config(extra=f'[trust]\nreaders = ["{owner}"]\n', **self.bench_paths())
+            with self.assertRaisesRegex(ConfigError, r"paths\.(workspace|state)"):  # not the server's own paths
+                self.service()
+        finally:
+            core.os.getuid = real
+        # The configured readers reach both checks: at start, and on the run folder in each release call.
+        s, calls = self.record(extra=f'[trust]\nreaders = ["{owner}"]\n')
+        self.assertEqual(s.readers, [real()])
+        seen = []
+        orig = core.check_trusted
+        core.check_trusted = lambda path, name, include_self=True, extra=(): (seen.append((name, tuple(extra))) or
+                                                                             orig(path, name, include_self, extra))
+        try:
+            s.call("run_check", check="release")
+        finally:
+            core.check_trusted = orig
+        self.assertIn(("bench_runs", (real(),)), seen)
+
+    def test_bench_paths_that_contain_the_work_tree_are_rejected(self):
+        self.write_config(**{**self.bench_paths(), "bench_baseline": self.tmp})
+        with self.assertRaisesRegex(ConfigError, "bench_baseline contains the agents' work tree"):
+            self.service()
+
+    def test_a_run_folder_others_can_write_refuses_the_call(self):
+        (self.bruns / "run-1").chmod(0o777)
+        self.refused("writable by other users", run_log=self.bruns / "run-1" / "run.jsonl")
+
+    def test_a_malformed_bench_result_refuses_the_call(self):
+        (self.bres / "logdiff.json").write_text('{"check": "runtime-limits"}')
+        s, calls = self.record()
+        out = s.call("run_check", check="release")
+        self.assertEqual((calls, out["verdict"]), ([], "ERROR"))
+        self.assertRegex(out["problem"], "logdiff result is malformed")
+
+
+FAKE_EVIDENCE = """#!/bin/sh
+printf '%s\\n' "$@" > "$FAKE_STATE/argv-evidence"
+while [ $# -gt 0 ]; do case "$1" in --results) r=$2; shift;; esac; shift; done
+mode=$(cat "$FAKE_STATE/evidence-mode" 2>/dev/null)
+[ "$mode" = fail ] && exit 2
+[ "$mode" = none ] && exit 0
+[ "$mode" = link ] && { ln -s "$FAKE_STATE/secret" "$r/evidence.md"; exit 0; }
+[ "$mode" = huge ] && { head -c 600000 /dev/zero | tr '\\0' x > "$r/evidence.md"; exit 0; }
+printf '# Evidence page\\n\\nrelease: PASS\\n' > "$r/evidence.md"
+"""
+
+
+class EvidencePage(Env):
+    """After a release that passed, the server publishes checks/evidence-page.sh's page as results/evidence.md."""
+
+    def setUp(self):
+        super().setUp()
+        p = self.checks / "evidence-page.sh"
+        p.write_text(FAKE_EVIDENCE.replace("$FAKE_STATE", str(self.fake)))
+        p.chmod(0o755)
+        (self.fake / "secret").write_text("not for the agents")
+
+    def release(self, verdict, mode=""):
+        self.flag("verdict", verdict)
+        self.flag("evidence-mode", mode)
+        s = self.service()
+        return s, s.call("run_check", check="release")
+
+    def test_a_passing_release_publishes_the_page_and_read_result_returns_it(self):
+        s, out = self.release("PASS")
+        self.assertEqual((out["verdict"], out["evidence_page"]), ("PASS", "published"))
+        self.assertEqual((self.st / "results" / "evidence.md").read_text(), "# Evidence page\n\nrelease: PASS\n")
+        argv = (self.fake / "argv-evidence").read_text().split("\n")
+        self.assertEqual(argv[argv.index("--results") + 1], str(self.st.resolve() / "run" / "results"))
+        self.assertEqual(argv[argv.index("--triage") + 1], str(s.triage))
+        self.assertNotIn("--agent-summary", argv, "the page shows the checks' verdicts, not an agent's word")
+        res = s.call("read_result", check="release")
+        self.assertEqual(res["evidence_page"], "# Evidence page\n\nrelease: PASS\n")
+        self.assertEqual(res["evidence_sha256"], out["evidence_sha256"])
+        lines = self.audit()
+        self.assertNotIn("evidence_page", lines[-1], "read_result's audit line does not carry the page")
+        last = lines[-3]  # the run_check's outcome line, before the read_result's started and outcome lines
+        self.assertEqual((last["tool"], last["evidence_page"], last["evidence_sha256"]),
+                         ("run_check", "published", out["evidence_sha256"]))
+        self.assertIsNone(s.call("read_result", check="build").get("evidence_page"))
+
+    def test_a_release_that_does_not_pass_leaves_no_page(self):
+        s, _ = self.release("PASS")
+        self.assertTrue((self.st / "results" / "evidence.md").exists())
+        (self.fake / "argv-evidence").unlink()
+        _, out = self.release("FAIL")
+        self.assertNotIn("evidence_page", out)
+        self.assertFalse((self.fake / "argv-evidence").exists(), "no page for a release that failed")
+        self.assertFalse((self.st / "results" / "evidence.md").exists(), "the page of the last pass is removed")
+        self.assertIsNone(s.call("read_result", check="release")["evidence_page"])
+
+    def test_a_page_the_script_did_not_write_is_not_published(self):
+        for mode, why in (("fail", "exited with 2"), ("none", "wrote no page"), ("link", "wrote no page"),
+                          ("huge", "over 512 KiB")):
+            with self.subTest(mode):
+                _, out = self.release("PASS", mode)
+                self.assertEqual(out["verdict"], "PASS", "the release result stands")
+                self.assertIn(why, out["evidence_page"])
+                self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_the_page_of_an_earlier_pass_is_never_published_again(self):
+        self.release("PASS")
+        _, out = self.release("PASS", "none")  # the script writes nothing this time
+        self.assertIn("wrote no page", out["evidence_page"])
+        self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_an_error_record_removes_the_page(self):
+        s, _ = self.release("PASS")
+        self.flag("mode", "stale")  # the release result is not this run's: the server publishes an ERROR record
+        out = s.call("run_check", check="release")
+        self.assertEqual(out["verdict"], "ERROR")
+        self.assertFalse((self.st / "results" / "evidence.md").exists())
+
+    def test_a_slow_script_times_out_and_the_mounts_are_narrow(self):
+        s = self.service()
+        s.timeouts["evidence"] = 1
+        self.flag("verdict", "PASS")
+        (self.checks / "evidence-page.sh").write_text("#!/bin/sh\nsleep 5\n")
+        out = s.call("run_check", check="release")
+        self.assertEqual(out["verdict"], "PASS")
+        self.assertIn("timed out after 1 s", out["evidence_page"])
+        calls, real = [], s.sandbox.run
+
+        def run(cmd, log, timeout, ro=(), rw=(), workdir=None, extra=()):
+            if str(cmd[0]).endswith("evidence-page.sh"):
+                calls.append({"ro": list(ro), "rw": list(rw)})
+            return real(cmd, log, timeout, ro=ro, rw=rw, workdir=workdir, extra=extra)
+        s.sandbox.run = run
+        s.call("run_check", check="release")
+        self.assertEqual(calls[0]["ro"], [s.sample, s.triage.parent])
+        self.assertEqual(calls[0]["rw"], [s.state / "run" / "results"])
+
+    def test_other_checks_make_no_page(self):
+        self.flag("verdict", "PASS")
+        out = self.service().call("run_check", check="build")
+        self.assertNotIn("evidence_page", out)
+        self.assertFalse((self.fake / "argv-evidence").exists())
 
 
 class Screen(Env):

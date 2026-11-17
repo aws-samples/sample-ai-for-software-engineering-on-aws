@@ -12,12 +12,13 @@ whatever the agent session allows. The `bench` server (build plan item 5, with t
 | `configure` | controlled-write | CMake configure of the work tree for a profile: `cross` (the project's toolchain file), `host`, `tsan` or `asan`, into the server's build directory for that profile |
 | `build` | controlled-write | Ninja build of a configured profile; target `vstatd`, `vstatd_tests` or `all` |
 | `run_check` | controlled-write | One of the [checks](../../checks/README.md) `build`, `static`, `unit`, `size`, `trace` or `release`, on a clean clone of the committed HEAD, with fixed arguments; returns the verdict from the exit status (0 PASS, 1 FAIL, 3 BLOCKED) |
-| `read_result` | read-only | A check's last published result and the tail of its log |
+| `read_result` | read-only | A check's last published result and the tail of its log; for `release`, also the evidence page published after it passed |
 | `read_log` | read-only | The tail of the last configure or build log of a profile |
 
 No tool takes a command, a path, a check option or a limit. No tool commits, pushes, merges, tags or publishes. The
-after-deploy checks (`runtime-limits`, `logdiff`) need a run of the bench and belong to `bench`. Until `bench`
-publishes their results into the same results folder, `run_check release` reports them missing and cannot PASS.
+after-deploy checks (`runtime-limits`, `logdiff`) need a run of the bench and belong to `bench`. `run_check release`
+reads the results `bench` published when the configuration names the bench's folders
+([The bench's results](#the-benchs-results)); without them it reports the two checks missing and cannot PASS.
 
 ## Isolation
 
@@ -34,7 +35,7 @@ one that left its session; a container that a crashed server left behind is remo
 | `workspace_status` | the work tree | none |
 | `configure`, `build` | the work tree; the sysroot for `cross` only | `builds/<profile>` of the state |
 | `run_check`, taking HEAD | the work tree, then the bundle | a scratch folder that receives `git bundle` of HEAD, then `run/` for the clone |
-| `run_check` | the sample (`checks/` and its parent), the folder of the approved triage; the sysroot for `build` and `static` | `run/` of the state: the clean clone and a copy of the published results |
+| `run_check` | the sample (`checks/` and its parent), the folder of the approved triage; the sysroot for `build` and `static`; for `release`, the bench's run folder and baseline that its published results name | `run/` of the state: the clean clone and a copy of the published results, the bench's included for `release` |
 
 The server's state folder holds `builds/`, `logs/`, `results/` (what `read_result` returns), `run/`, `repair.json` and
 `audit.jsonl`; its logs, published results, repair count and audit log are never mounted. Git runs on the agents'
@@ -76,10 +77,11 @@ Each has a test in [`tests/test_guardrails.py`](tests/test_guardrails.py); the i
 | Deny by default | A call runs only when the server's role grants the tool's permission class. The role is the `--role` of the command line that the agent configuration sets, never part of a request; an unknown role is granted nothing |
 | Closed arguments | Profiles, targets, checks and log kinds come from fixed lists. A call to an unknown tool, with arguments that are not an object, an extra or missing argument or a value that is not a string is refused before the SDK would reject it, so it is audited too |
 | The server's paths are not the agents' | The server refuses to start when its configuration, state, triage, checks or sysroot path resolves (symlinks included) inside the agents' work tree, when the work tree or triage lies inside the state, or when someone else could write or replace one of them (see [Isolation](#isolation)) |
+| The bench's results, as published | `run_check release` copies the bench's published `runtime-limits` and `logdiff` results into its copy of the results and mounts read-only only the folders their inputs lie in, at their host paths, so that `checks/release.sh` checks every input's SHA-256 again. An input that is not an absolute regular file in one run folder directly under `bench_runs`, in `bench_baseline` or in the approved triage's folder, a run folder that is a link or that others can write, or a malformed result refuses the call and replaces the release result with an `ERROR` record. See [The bench's results](#the-benchs-results) |
 | Fixed check arguments | `run_check` passes `--project`, `--results` and, for the checks that read it, `--triage`, and never `--local`. A work tree with no commit is refused |
 | Results that are this run's | See [Isolation](#isolation). A check publishes its result, log and diff, and the inputs it recorded inside its own part of the results folder whose content still matches their recorded SHA-256 (for `build`, the artifact and the toolchain file, which `checks/release.sh` verifies later); whatever it published before is removed first. Files are read without following a symlink at the last step or waiting on a FIFO, and a results folder the check replaced by a link is an `ERROR` |
 | Bounded repair | `configure cross`, `build cross` and `run_check build` are cross attempts. Each is charged before it runs; a failure keeps the charge, a configure or build that succeeds takes it back, and only `run_check build` with a PASS clears the count. After the first attempt and the retries of `repair_rounds.cross_build` in [`checks/limits.json`](../../checks/limits.json) (TR §5.1: three) have all failed, cross attempts are refused until a person resets the count with `buildserver.admin reset-repair` (see [Running](#running)), which records who did. An unreadable count refuses. The count is published as `repair-rounds.json` with the results, which `checks/release.sh` reports |
-| Audit | Every call appends a `started` line and an outcome line (`ok`, `failed`, `timeout`, `refused` or `error`) to `audit.jsonl`: time, role, tool, class, arguments, exit status, duration and, for a check, the verdict and the digest it recorded. A refusal before the call starts has the outcome line only |
+| Audit | Every call appends a `started` line and an outcome line (`ok`, `failed`, `timeout`, `refused` or `error`) to `audit.jsonl`: time, role, tool, class, arguments, exit status, duration and, for a check, the verdict and the digest it recorded; for a release that passed, whether the evidence page was published and its SHA-256. A refusal before the call starts has the outcome line only |
 | One call at a time | Calls, and the admin reset, hold one lock, across threads and processes. Malformed calls are refused without waiting for it |
 | Timeouts | A call that runs past its timeout is killed with its container and reported; nothing is retried |
 | Clean environment | The container gets `PATH`, `HOME`, `LANG`, `PYTHONNOUSERSITE` and git's no-global-config settings only: no credentials or test and sanitizer settings leak in from the server's environment. The docker client alone gets what it needs to find its daemon (`DOCKER_HOST`, `DOCKER_CONTEXT`, `XDG_RUNTIME_DIR` and the like), rootless Docker included |
@@ -93,6 +95,36 @@ Output returned to the agent is cut to the last 8 KiB of a log. Refusals and err
 the roles and their classes, timeouts, the `PATH` inside the container and the tool commands. The sysroot is mounted
 where `checks/limits.json` says (`sysroot`). A person approves the triage by writing its approval record next to it
 (see the [checks](../../checks/README.md#the-approved-triage)).
+
+### The evidence page
+
+After `run_check release` passed, the server runs `checks/evidence-page.sh` on that call's results and the approved
+triage, in the sandbox with the release's own read-only mounts, and publishes the page as `results/evidence.md`;
+`read_result release` returns it. The person signs off from this page, so it comes from the server that judged the
+release, not from an agent. A release that does not pass publishes no page and removes the last one, so a page always
+belongs to the latest release result. If the script fails, times out (`timeouts.evidence`, 120 s) or writes no page,
+the release result stands and the call's `evidence_page` says why. The page's SHA-256 is in the call's result, its
+audit line and `read_result release`, so the page a person signs can be matched to the call that published it. The
+script runs with the sample and the triage folder read-only and only the call's results folder writable.
+
+### The bench's results
+
+For `run_check release` to see the after-deploy checks, set the three bench paths in `[paths]` to the folders of
+the [`bench` server](../bench/README.md)'s configuration: its published results (`<state>/results`), its run folders
+(`<state>/runs`) and the baseline it compares with. Give all three or none; the runs folder must be the one beside the
+results folder. The bench server runs as a user of its
+own (`benchsrv`), which owns these folders; name it in `trust.readers`, which trusts that user for these three paths
+only, as the bench server's own `trust.readers` trusts the build server's user for the build's results. The build
+server's user needs read access to them, for example through a group. Both servers keep the same approved triage,
+because `checks/release.sh` requires that `logdiff` judged it.
+
+The bench server records the inputs of its checks at their host paths, because its sandbox mounts every folder at its
+host path, so the build server finds them at the same paths. While it copies the results, the build server holds the
+bench's publishing lock (`<state>/results.lock`, next to `bench_results`) shared, so the json, log and diff come from
+one check; its user needs read access to the lock too. A missing or unreadable lock refuses the call. The paths of the
+bench folders are checked like the server's own at start, and their identity before every call; recording a new baseline
+into a new folder means changing `bench_baseline` and restarting the server, and replacing the folder under the same
+path is refused until a person restarts it.
 
 ## Running
 
@@ -166,6 +198,22 @@ over stdio, each in its container; `checks/build.sh` judged the current release 
 then found every input the published build result recorded. The probe's 16 checks held: it reached neither the network
 nor any path outside the build folder of its call, its background writers stopped with their containers, and no forged
 result was published. The checks' own runs are in [`rehearsal/check-examples/`](../../rehearsal/check-examples/).
+
+2026-11-16, on an x86_64 Ubuntu 24.04 host with Docker 29.8.2 and MCP Python SDK 2.3.0: 65 guardrail tests OK, 16 of
+them for [the bench's results](#the-benchs-results). Then `run_check release` in its container, through the server's
+call path (its guardrails, audit and Docker sandbox, without MCP stdio), with the bench server's published results of a
+Linux bench host (2026-11-06): with the bench's results of a correct build and the build server's result of the same
+build, `checks/release.sh` found both after-deploy results, every input they recorded, the same digest on the bench as
+built, and the same run and baseline in both; it failed only on the four checks that build server had not run (`static`,
+`unit`, `size`, `trace`: no result). With the results of a bench whose `logdiff` had judged another triage, the call was
+refused before anything ran and the release result became an `ERROR` naming that input.
+
+Later the same day, with the evidence page: 72 guardrail tests OK, seven of them for the page. In the build container, the
+server's evidence step (`BuildService.evidence_page`, called directly, because that build server's release does not
+pass) wrote the page from the same bench host's results and the build server's result: the build's digest, the
+runtime-limits and logdiff results (PASS, emulation) and the four source checks that build server had not run, marked
+missing. The step after a passing `run_check release` is covered by the guardrail tests only; it has not run after a
+real passing release yet.
 
 ## Prerequisites, cost and cleanup
 

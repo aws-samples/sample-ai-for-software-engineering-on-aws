@@ -13,6 +13,14 @@ triage = "/srv/build/triage/triage.json"
 checks = "/srv/sample/checks"
 # Mounted read-only, for the cross profile and the checks that configure it, where checks/limits.json says.
 sysroot = "/opt/cc1-sysroot"
+# Optional, all three or none: the bench server's published results, its run folders and its baseline, for
+# `run_check release` (README.md, The bench's results). They belong to the bench server's user, named below.
+# bench_results = "/srv/bench/state/results"
+# bench_runs = "/srv/bench/state/runs"
+# bench_baseline = "/srv/bench/baseline"
+
+# [trust]
+# readers = ["benchsrv"]          # trusted as the owner of the three bench paths only
 
 [sandbox]
 runner = "docker"                 # every build, check and git call on the agents' content runs in a container
@@ -36,6 +44,7 @@ snapshot = 300                                 # taking HEAD as a bundle and clo
 configure = 600
 build = 1800
 check = 3600
+evidence = 120                                 # checks/evidence-page.sh after a release that passed
 
 [environment]
 path = "/usr/local/bin:/usr/bin:/bin"          # PATH inside the sandbox
