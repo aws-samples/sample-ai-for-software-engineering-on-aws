@@ -69,11 +69,12 @@ describe('评分卡', () => {
 
   test('in servers mode the tool calls by permission class have a card of their own', async () => {
     const one = clone(ONE)
-    one.total.tool_calls = { 'read-only': 4, 'controlled-write': 31, physical: 2 }
+    one.total.tool_calls = { 'read-only': 4, 'controlled-write': 31, physical: 2, refused: 3 }
     setApiRoutes({ [`GET ${API}/scorecard`]: () => one })
     render(<ScorecardView pollMs={60_000} />)
     await waitFor(() => expect(screen.getAllByTestId('sc-card')).toHaveLength(7))
-    expect(cards()).toMatchObject({ '工具调用：只读 / 受控写 / 物理': '4 / 31 / 2' })
+    expect(cards()).toMatchObject({ 'app 的工具调用：只读 / 受控写 / 物理': '4 / 31 / 2' })
+    expect(screen.getByText('服务器拒绝 3')).toBeTruthy()
   })
 
   test('评分卡 is a tab next to 团队看板', async () => {

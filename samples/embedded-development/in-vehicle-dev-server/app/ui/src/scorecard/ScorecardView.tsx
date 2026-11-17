@@ -134,7 +134,7 @@ export function ScorecardView({ pollMs = SCORE_POLL_MS, onDetail }: { pollMs?: n
             {t.tool_calls && (
               <Card label={tr('scorecard.ScorecardView.46')}
                 value={[t.tool_calls['read-only'], t.tool_calls['controlled-write'], t.tool_calls.physical].join(' / ')}
-                empty={false} />
+                of={tr('scorecard.ScorecardView.47', { p0: t.tool_calls.refused })} empty={false} />
             )}
           </div>
           <section className="cto-card" data-testid="sc-caught">

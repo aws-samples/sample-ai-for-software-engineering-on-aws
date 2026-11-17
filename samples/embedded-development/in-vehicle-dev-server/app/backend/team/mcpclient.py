@@ -22,6 +22,7 @@ import contextlib
 import itertools
 import json
 import os
+import signal
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -125,9 +126,12 @@ class StdioClient:
             try:
                 await asyncio.wait_for(proc.wait(), 10)
             except asyncio.TimeoutError:
-                with contextlib.suppress(ProcessLookupError):
-                    proc.kill()
-                await proc.wait()
+                # SIGTERM went to the server alone, so it could end what it started; SIGKILL goes to its whole
+                # process group (start_new_session: the group is the server's), and the wait for it is bounded
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.killpg(proc.pid, signal.SIGKILL)
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(proc.wait(), 5)
         if self._err_task:
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(self._err_task, 1)

@@ -22,8 +22,8 @@ How each figure is taken:
   reconciles after the run's own latest request.
 - Checks whose verdict differed on the independent rerun (D9).
 
-- Tool calls by permission class: in servers mode (D17), the app's calls in the ``build`` and ``bench`` MCP
-  servers' audit logs (the agents use neither, D2, D3); none in direct mode.
+- Tool calls by permission class, and how many were refused: in servers mode (D17), the app's calls in the
+  ``build`` and ``bench`` MCP servers' audit logs (the agents use neither, D2, D3); none in direct mode.
 """
 
 from __future__ import annotations
@@ -171,7 +171,8 @@ def run_figures(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict
             "signed": bool(sign), "findings": findings, "overturned": overturned, "times": times,
             "build_rounds": build_rounds, "caught": caught, "logdiff": logdiff,
             "bench": bench_actions(s["id"], recs, s.get("repo")) if s.get("team", {}).get("bench") else None,
-            "tool_calls": servers_mod.tool_calls(root) if s.get("repo") else None,
+            # an imported run's sessions are another machine's: its audit logs are not here
+            "tool_calls": servers_mod.tool_calls(root) if s.get("repo") and not s.get("imported") else None,
             "rerun_differs": [str(x.get("name")) for x in rerun.get("differs") or []] if rerun else None}
 
 

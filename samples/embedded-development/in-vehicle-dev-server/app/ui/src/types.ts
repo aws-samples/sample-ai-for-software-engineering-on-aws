@@ -623,7 +623,7 @@ export type ScoreOverturned = { ids: string[]; by_person: string[]; by_reviewer:
 export type ScoreTimes = { triage_s: number | null; first_pass_s: number | null; signoff_s: number | null }
 export type ScoreLogdiff = { differences: number; unexplained: number }
 export type ScoreBench = { approved: number; refused: number; reconciled: number }
-export type ScoreToolCalls = { 'read-only': number; 'controlled-write': number; physical: number }
+export type ScoreToolCalls = { 'read-only': number; 'controlled-write': number; physical: number; refused: number }
 
 /** Sums over the runs (of the figures that exist); times are per run only. */
 export type ScoreTotal = {
