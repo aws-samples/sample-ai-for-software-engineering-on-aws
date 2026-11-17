@@ -33,6 +33,7 @@ BENCH_CHECKS = ("runtime-limits", "logdiff")  # after the bench, on the bench se
 CALLS = "servers.jsonl"  # runs/<run>/servers.jsonl
 HOLDER = "holder.json"  # beside the work tree: the run that uses the servers
 FREE = ("done", "stopped")  # a holder run in one of these has given the servers back
+MARK = "vstatd-team-server-worktree"  # in the work tree's .git: the app made this repository (move_tree)
 MARGIN_S = 60  # a call's time on top of the server's own timeout for it
 READ_S = 120
 REQUESTER = "bench MCP server (role {role}, session {session})"  # how mcp/bench names its requests at the console
@@ -153,17 +154,28 @@ def _replace(dest: Path, data: bytes) -> None:
 # --- one run at a time ------------------------------------------------------------------------------------------ #
 
 def take(st: Setup, rid: str, runs: Path) -> None:
-    """The servers for run *rid*: free, its own already, or held by a run that is done or was stopped (its
-    ``run.json`` under *runs*). Unavailable names the run that holds them."""
+    """The servers for run *rid*: free, its own already, or held by a run that has given them back (its ``run.json``
+    under *runs*): done, stopped, hidden, or failed and not waiting for a person. Unavailable names the run."""
     held = _json(st.holder)
     other = str(held.get("run")) if isinstance(held, dict) and held.get("run") else None
     if other and other != rid:
         state = _json(Path(runs) / other / "run.json")
-        if isinstance(state, dict) and state.get("status") not in FREE and not state.get("hidden"):
-            raise Unavailable(f"build / bench 服务器正被运行 {other} 用着（它做完或被人停下以后才能用）")
+        if isinstance(state, dict) and holds(state):
+            raise Unavailable(f"build / bench 服务器正被运行 {other} 用着（它做完、被人停下或隐藏以后才能用）")
     if other != rid:
         st.holder.parent.mkdir(parents=True, exist_ok=True)
         _replace(st.holder, (json.dumps({"run": rid, "at": time.time()}) + "\n").encode())
+
+
+def holds(state: dict[str, Any]) -> bool:
+    """Whether a run still holds the servers: it is going, or it failed and waits for a person (the servers, its
+    checks or its bench step held: 重试 or a registration carries it on with the servers it had)."""
+    if state.get("hidden") or state.get("status") in FREE:
+        return False
+    if state.get("status") != "failed":
+        return True
+    return bool(state.get("servers_held") or (state.get("tests") or {}).get("held")
+                or (state.get("bench") or {}).get("held"))
 
 
 # --- the work tree and the triage --------------------------------------------------------------------------------- #
@@ -187,6 +199,10 @@ async def move_tree(st: Setup, run_wt: Path, commit: str) -> None:
             raise Unavailable(f"build 服务器的工作树 {ws} 既不是空目录也不是 git 仓库")
         ws.mkdir(parents=True, exist_ok=True)
         await gitwork.git(ws, "init", "-q")
+        (ws / ".git" / MARK).write_text("made by vstatd-team for the build server (D17)\n", encoding="utf-8")
+    if not (ws / ".git" / MARK).is_file():  # checkout --force and clean -fdx below would lose its untracked files
+        raise Unavailable(f"build 服务器的工作树 {ws} 是一个不是 app 建的 git 仓库：检查 build 服务器配置的 "
+                          "paths.workspace（要是一个空目录，app 第一次用时把它建成仓库）")
     await gitwork.git(ws, "fetch", "-q", "--no-tags", "--force", str(run_wt), "+refs/heads/*:refs/remotes/run/*",
                       timeout=300)
     await gitwork.git(ws, "checkout", "-q", "--detach", "--force", commit)
@@ -296,16 +312,20 @@ def ours(rid: str, repo: Any) -> set[str]:
 
 
 def tool_calls(root: Path) -> dict[str, int] | None:
-    """The run's tool calls by permission class, from the servers' audit logs: one per outcome line (a call refused
-    before it began has no ``started`` line). None: the run used no server."""
+    """The app's tool calls of the run by permission class, from the servers' audit logs, and how many the servers
+    refused: one per outcome line (a call refused before it began has no ``started`` line). The ``lease_release``
+    a bench session writes for itself when it ends is not a call. None: the run used no server."""
     done = [s for s in sessions(root) if isinstance(s.get("to"), int)]
     if not done:
         return None
-    out = {c: 0 for c in CLASSES}
+    out = {**{c: 0 for c in CLASSES}, "refused": 0}
     for s in done:
         for r in _audit_lines(str(s["audit"]), int(s["from"]), int(s["to"])):
-            if r.get("outcome") != "started" and r.get("class") in out:
-                out[r["class"]] += 1
+            if (r.get("outcome") == "started" or r.get("class") not in CLASSES
+                    or str(r.get("detail") or "").startswith("released: ")):
+                continue
+            out[r["class"]] += 1
+            out["refused"] += r.get("outcome") == "refused"
     return out
 
 
@@ -367,7 +387,7 @@ def _inputs(results: Path, root: Path) -> tuple[Path, ...]:
 
 
 async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path, phase: str = "before_bench",
-                 triage: Path | None = None, **_: Any) -> dict[str, Any]:
+                 triage: Path | None = None, run: Path | None = None, **_: Any) -> dict[str, Any]:
     results = Path(results)
     results.mkdir(parents=True, exist_ok=True)
     root = run_wt.parents[1]
@@ -401,6 +421,10 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
                         out = await s.call("run_check", {"check": c["name"]},
                                            timeout_s=float(c["timeout_s"]) + MARGIN_S)
                         res, server = _result(out, c["name"], which, head if which == "build" else None, results)
+                        if which == "bench" and run is not None and out.get("run") != Path(run).name:
+                            # another session replayed between this run's steps (D17): not this step's replay
+                            res, server = _blocked(f"bench 服务器判的是回放 {out.get('run')}，不是这一步的 "
+                                                   f"{Path(run).name}：期间有别的会话回放过"), True
                     except mcpclient.ToolRefused as exc:
                         res, server = _blocked(f"{which} 服务器拒绝了：{exc}"), True
                     except mcpclient.McpError as exc:
@@ -449,6 +473,8 @@ async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: st
         await gitwork.git(st.workspace, "checkout", "-q", "--detach", "--force", head)
         await gitwork.git(st.workspace, "clean", "-q", "-fdx")
     data = got.get("result") if isinstance(got.get("result"), dict) else None
+    if data is not None and data.get("commit") != temp:
+        raise Unavailable(f"测试先行：build 服务器判的是 {str(data.get('commit'))[:12]}，不是测试先行的提交 {temp[:12]}")
     if data is not None:
         (results / "unit.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (results / "tests-first.log").write_text(str(got.get("summary") or ""), encoding="utf-8")

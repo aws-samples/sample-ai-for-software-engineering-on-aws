@@ -5,9 +5,11 @@ decision the test writes, as the person at the console would. No Docker, no QEMU
 
 import asyncio
 import json
+import logging
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -52,6 +54,10 @@ def build_tool(name, args):
     if name == "workspace_status":
         return {"outcome": "ok", "head": git("rev-parse", "HEAD"), "changes": git("status", "--porcelain").splitlines()}
     check, sp, head = args["check"], spec(), git("rev-parse", "HEAD")
+    if check == sp.get("exit_on"):
+        sys.exit(3)  # the server dies in the middle of the call
+    if check == sp.get("sleep_on"):
+        time.sleep(30)
     if check in sp.get("refuse", []):
         raise Refused("the repair count is over its limit; a person decides, then resets it")
     with open(state + "/judged.log", "a") as f:
@@ -59,7 +65,8 @@ def build_tool(name, args):
                             "triage": open(P["triage"]).read() if os.path.exists(P["triage"]) else None}) + "\n")
     v = sp.get(check, {})
     verdict = v.get("verdict", "PASS")
-    data = {"check": check, "verdict": verdict, "commit": head, "reasons": v.get("reasons", []), "tier": None,
+    data = {"check": check, "verdict": verdict, "commit": v.get("commit", head), "reasons": v.get("reasons", []),
+            "tier": None,
             "summary": f"{check}: {verdict}", "inputs": {}, "details": {}}
     if check == "build" and verdict == "PASS":
         digest = "bc93723c" + head[:56]
@@ -70,10 +77,23 @@ def build_tool(name, args):
     return {"outcome": "ok", "exit_status": 0, "check": check, "commit": head, "verdict": verdict,
             "summary": f"$ checks/{check}.sh\n{check}: {verdict}\n", "result": data}
 
+LEASE = state + "/lease.json"
+
 def bench_tool(name, args):
     sp = spec()
-    if name in ("lease_acquire", "lease_release"):
+    if name == "lease_acquire":
+        open(LEASE, "w").write(session)
         return {"outcome": "ok", "yours": True}
+    if name == "lease_release":
+        if os.path.exists(LEASE):
+            os.unlink(LEASE)
+        return {"outcome": "ok", "released": True}
+    if not (os.path.exists(LEASE) and open(LEASE).read() == session):
+        raise Refused("this session does not hold the lease; call lease_acquire first")
+    if name in sp.get("role_refused", []):
+        raise Refused("role 'developer' is not granted physical")
+    if name == "run_check" and args["check"] in sp.get("bench_refuse", []):
+        raise Refused("the bench has no baseline; the bench owner records one")
     if name == "run_check":
         check = args["check"]
         v = sp.get(check, {})
@@ -87,6 +107,8 @@ def bench_tool(name, args):
     action = name[len("request_"):]
     built = json.load(open(P["build_results"] + "/build.json"))
     how = sp.get(action, "ok")
+    if how == "crash":
+        sys.exit(4)  # the server dies while the action waits
     rid = None
     if how in ("wait", "refuse"):
         bs = P["bench_state"]
@@ -265,7 +287,7 @@ def test_a_whole_round_through_the_servers(tmp_path, monkeypatch):
                            "lease_release", "lease_acquire", "run_check", "run_check", "lease_release",
                            "lease_acquire", "run_check", "run_check", "lease_release"]
     calls = scorecard.build([run.s], tmp_path / "data" / "runs", rig.state)["runs"][0]["tool_calls"]
-    assert calls == {"read-only": 2, "controlled-write": 16, "physical": 2}
+    assert calls == {"read-only": 2, "controlled-write": 16, "physical": 2, "refused": 0}
     trail = audit.build(run.s, run.events, scorecard.records(rig.state))
     asked = [x for x in trail["entries"]
              if x["step"] == "bench" and x["actor"] == "app" and "20261116T" in x["evidence"]]
@@ -426,3 +448,165 @@ def test_the_board_decides_in_servers_mode_only_with_the_switch(tmp_path, monkey
     with pytest.raises(ValueError, match="board_decides 可选"):
         team_mod.check_team({**team, "servers": {**team["servers"], "board_decides": "yes"}})
     assert servers.board_decides({"connectors": "direct"}) is True
+
+
+# --- from the review of #46 -------------------------------------------------------------------------------------- #
+
+def test_the_work_tree_must_be_one_the_app_made(tmp_path, monkeypatch):
+    """move_tree checks out with --force and cleans: a repository the app did not make (paths.workspace pointing at
+    a project) is refused, and its untracked files stay."""
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    st = servers.setup(rig.run.team)
+    st.workspace.mkdir(parents=True)
+    sh(st.workspace, "init", "-q")
+    (st.workspace / "notes.txt").write_text("alice's notes\n")
+
+    async def go():
+        await rig.run.tick()
+        with pytest.raises(servers.Unavailable, match="不是 app 建的 git 仓库"):
+            await servers.move_tree(st, Path(rig.run.s["run_wt"]), await gitwork.head(Path(rig.run.s["run_wt"])))
+    asyncio.run(go())
+    assert (st.workspace / "notes.txt").read_text() == "alice's notes\n"
+
+
+def test_a_failed_run_frees_the_servers_unless_it_waits_for_a_person(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    st, runs = servers.setup(rig.run.team), tmp_path / "data" / "runs"
+    (runs / "r1116other").mkdir(parents=True)
+    state = {"id": "r1116other", "status": "failed", "tests": {"held": {"checks": ["build"]}}}
+    (runs / "r1116other" / "run.json").write_text(json.dumps(state))
+    servers.take(st, "r1116other", runs)
+    with pytest.raises(servers.Unavailable, match="正被运行 r1116other 用着"):
+        servers.take(st, "r1116mine", runs)  # held for a person: 重试 carries it on with the servers
+    state["tests"]["held"] = None  # failed for another reason (a role out of rounds): nothing to carry on
+    (runs / "r1116other" / "run.json").write_text(json.dumps(state))
+    servers.take(st, "r1116mine", runs)
+    assert json.loads(st.holder.read_text())["run"] == "r1116mine"
+
+
+def test_the_after_bench_round_must_judge_this_steps_replay(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    (srv.bench_state / "runs" / "run-2").mkdir(parents=True)  # another session's replay, after this step's run-1
+
+    async def go():
+        await rig.run.tick()
+        approve_triage(rig.run)
+        root = Path(rig.run.s["repo"]).parent
+        return await servers.run_tests(Path(rig.run.s["run_wt"]), rig.run.team, head="x", phase="after_bench",
+                                       results=root / "results" / "after-1", triage=root / "triage.json",
+                                       run=srv.bench_state / "runs" / "run-1", baseline=rig.baseline)
+    wall = asyncio.run(go())
+    assert [r["verdict"] for r in wall["checks"]] == ["BLOCKED", "BLOCKED"]
+    assert "不是这一步的 run-1" in wall["checks"][0]["reasons"][0] and wall["server_held"] == ["logdiff", "runtime-limits"]
+
+
+def test_a_refused_after_bench_check_still_gives_the_lease_back(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    (srv.bench_state / "runs" / "run-1").mkdir(parents=True)
+    srv.set(bench_refuse=["logdiff"])
+
+    async def go():
+        await rig.run.tick()
+        approve_triage(rig.run)
+        root = Path(rig.run.s["repo"]).parent
+        return await servers.run_tests(Path(rig.run.s["run_wt"]), rig.run.team, head="x", phase="after_bench",
+                                       results=root / "results" / "after-1", triage=root / "triage.json",
+                                       run=srv.bench_state / "runs" / "run-1", baseline=rig.baseline)
+    wall = asyncio.run(go())
+    assert {r["name"]: r["verdict"] for r in wall["checks"]} == {"logdiff": "BLOCKED", "runtime-limits": "PASS"}
+    assert not (srv.bench_state / "lease.json").exists()
+    assert [ln["tool"] for ln in srv.audit_lines("bench") if ln["outcome"] != "started"][-1] == "lease_release"
+
+
+@pytest.mark.parametrize("how", ["exit", "timeout"])
+def test_a_server_that_dies_or_hangs_mid_round_blocks_the_rest_for_a_person(tmp_path, monkeypatch, how):
+    rig, srv = servers_rig(tmp_path, monkeypatch)
+    run, mgr = rig.run, rig.mgr
+    if how == "timeout":
+        monkeypatch.setattr(servers, "MARGIN_S", 0)
+        for c in run.team["checks"]:
+            c["timeout_s"] = 1
+    srv.set(**({"exit_on": "build"} if how == "exit" else {"sleep_on": "build"}))
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended, timeout=40)
+    asyncio.run(go())
+    rows = {r["name"]: r for r in run.s["tests"]["checks"]}
+    assert [r["verdict"] for r in rows.values()] == ["BLOCKED", "BLOCKED"]
+    assert ("exited" if how == "exit" else "no answer within") in rows["build"]["reasons"][0]
+    assert run.s["servers_held"] == "checks" and run.s["tests"]["server_held"] == ["build", "static"]
+    assert not any(e.get("code") == "bounce.checks" for e in run.events)  # nothing went to a role
+
+
+@pytest.mark.parametrize("how, kind", [("crash", "failed"), ("role", "refused")])
+def test_a_deploy_the_server_crashes_on_or_refuses_for_the_role_holds_the_bench(tmp_path, monkeypatch, how, kind):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    run, mgr = rig.run, rig.mgr
+    srv.set(**({"deploy": "crash"} if how == "crash" else {"role_refused": ["request_deploy"]}))
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
+    asyncio.run(go())
+    held = run.s["bench"]["held"]
+    assert held["step"] == "deploy" and held["why"].startswith(f"部署没做成（{kind}）")
+    assert ("exited" if how == "crash" else "not granted physical") in held["why"]
+    assert run.s["bench"]["actions"][-1]["outcome"] == kind and rig.calls() == []
+
+
+def test_tests_first_with_ten_failed_tests_listed_goes_to_a_person(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    team = rig.run.team
+    listed = [f"plain: FAILED Other.T{i}" for i in range(servers.UNIT_LISTED)]
+
+    async def go():
+        wt, base, head, triage = await make_tests_first_repo(tmp_path)
+        srv.set(unit={"verdict": "FAIL", "reasons": listed})
+        with pytest.raises(servers.Unavailable, match="只列出前 10 个失败的测试"):
+            await servers.tests_first(wt, team, base=base, head=head, triage=triage, results=tmp_path / "tf")
+        srv.set(unit={"verdict": "FAIL", "reasons": ["plain: FAILED Fix.F001_signal"], "commit": "0" * 40})
+        with pytest.raises(servers.Unavailable, match="不是测试先行的提交"):
+            await servers.tests_first(wt, team, base=base, head=head, triage=triage, results=tmp_path / "tf")
+    asyncio.run(go())
+
+
+async def make_tests_first_repo(tmp_path):
+    src = tmp_path / "tf2-src"
+    (src / "src").mkdir(parents=True)
+    (src / "tests").mkdir()
+    (src / "src" / "a.cpp").write_text("int a;\n")
+    repo, wt = tmp_path / "runs" / "rtf2" / "repo", tmp_path / "runs" / "rtf2" / "wt" / "_run"
+    base = await gitwork.create_repo(src, repo, "", "x", existing=True)
+    await gitwork.add_worktree(repo, wt, "team/rtf2/run", base)
+    (wt / "tests").mkdir(exist_ok=True)
+    (wt / "tests" / "fix_test.cpp").write_text("TEST(Fix, F001_signal) { /* F-001 */ }\n")
+    sh(wt, "add", "-A")
+    sh(wt, "commit", "-q", "-m", "F-001 test")
+    approve_triage_at(wt.parents[1])
+    triage = {"base": base, "findings": [{"id": "F-001", "decision": "fix", "evidence": "unit-test"}]}
+    return wt, base, sh(wt, "rev-parse", "HEAD").strip(), triage
+
+
+def test_a_run_without_a_triage_leaves_none_on_the_servers(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    st = servers.setup(rig.run.team)
+    (srv.triage_dir / "triage.json").write_text('{"approved": {"by": "an earlier run"}}')
+    (srv.triage_dir / "triage.json.sha256").write_text("cd" * 32 + "\n")
+    servers.put_triage(st, tmp_path / "no-such-run" / "triage.json")
+    assert sorted(p.name for p in srv.triage_dir.iterdir()) == []  # no other run's triage is judged
+
+
+def test_the_board_cannot_decide_in_servers_mode_without_the_switch(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    service, httpkit = mod("service"), mod("httpkit")
+    team_file = tmp_path / "team-servers.json"
+    team_file.write_text(json.dumps({k: v for k, v in rig.run.team.items() if k != "skip_owners"}), encoding="utf-8")
+    data = tmp_path / "svc"
+    data.mkdir()
+    (data / "sample.json").write_text(json.dumps({"sample": str(Path(team_mod.__file__).parents[3])}))
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(data))
+    svc = service.Service(ctx, manager=rig.mgr, work_root=tmp_path / "work", tick_s=60, team_file=team_file)
+    with pytest.raises(httpkit.AppError) as off:
+        asyncio.run(svc.bench_decide("20261116T120000-deploy-ab12", "approve", "bc9372", ""))
+    assert off.value.code == "decide_off" and off.value.status == 409
