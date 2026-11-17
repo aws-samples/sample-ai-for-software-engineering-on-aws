@@ -182,9 +182,8 @@ log comparison catches the wrong fix on this host, as
 
 The guardrail tests pass with `umask 022`, with Ubuntu's default `umask 002` and with `TMPDIR=/tmp`: they make their
 folders with the permissions they mean, and where the path check meets the sticky `/tmp` before a folder of another
-user, either refusal is what the test expects. The server's path checks are the same. Counts: 49 OK on a Linux host
-(Python 3.12, MCP SDK 2.3.0, 2026-11-16, before four more tests were added) and 53 OK on an Apple Silicon Mac
-(Python 3.13, MCP SDK 2.3.0, 2026-11-16).
+user, either refusal is what the test expects. The server's path checks are the same. Counts: 53 OK on a Linux host
+(Python 3.12, MCP SDK 2.3.0, 2026-11-16) and 53 OK on an Apple Silicon Mac (Python 3.13, MCP SDK 2.3.0, 2026-11-16).
 
 ## Not yet verified
 

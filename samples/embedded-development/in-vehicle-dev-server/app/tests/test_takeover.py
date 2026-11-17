@@ -92,6 +92,12 @@ def test_a_review_names_who_fixes_what():
     assert targets("打回：`后端/测试`", roles) == ["tester", "backend"]
     assert targets("Send back: Developer · fix/Tester-notes", en_t) == ["backend"]
     assert targets("Send back: Developer · fix / Tester-cases branch", en_t) == ["backend"]
+    # second review of c1fb694: a path or a link right before " / " no longer drops the role after it (main gave both)
+    for after in ("`src/main.c`", "see src/a.c", "https://x.example/z", "tests/ folder"):
+        line = f"Send back: Developer · fix, {after} / Tester"
+        assert targets(line, en_t) == ["tester", "backend"], line
+    assert targets("Send back: `Developer · fix/qa`", en_t) == []  # backticked with a /: a path, as `Tester/plan` is
+    assert targets("Send back: Developer · fix / Tester-side cases", en_t) == ["backend"]  # joined by a hyphen: no role
     assert targets("Send back: developer-fix/Tester", en_t) == ["tester", "backend"]  # a hyphen inside a name is fine
     # a path, a URL, a branch or a two-part name with a role's name inside is no role, however it is written
     for path in ("`docs/Tester-notes.md`", "`tests/Tester/case_1.cpp:12`", '"src/Tester.cpp"', "'Tester/plan.md'",

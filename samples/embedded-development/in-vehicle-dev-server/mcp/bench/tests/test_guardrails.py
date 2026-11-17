@@ -372,7 +372,7 @@ class Calls(Env):
         self.assertNotIn("fails or errors", part)
         # each count names the machine it was taken on (third review of #41: the paragraph follows the Linux host's)
         self.assertIn(f"{n} OK on an Apple Silicon Mac", part)
-        self.assertIn("49 OK on a Linux host", part)
+        self.assertIn(f"{n} OK on a Linux host", part)
 
     def test_reads_do_not_wait_for_a_call_in_progress(self):
         """A read-only call takes no lock: another session sees the request waiting at the console."""

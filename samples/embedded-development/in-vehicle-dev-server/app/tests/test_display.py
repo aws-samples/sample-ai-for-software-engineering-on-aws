@@ -244,7 +244,7 @@ def test_only_a_lowercase_ascii_login_is_taken_for_a_word(monkeypatch):
     assert v.text("The tester will check it; Will said so") == "The tester will check it; Will said so"
 
 
-def test_a_short_login_right_after_by_to_from_or_with_is_the_person(monkeypatch):
+def test_a_short_login_right_after_by_from_or_with_is_the_person(monkeypatch):
     """Second review of #41 (optional): "Approved by will today" names the person; "The tester will check it" not.
     (Not after "to": see the next test.)"""
     monkeypatch.setattr(display, "this_mac_names", lambda: set())
