@@ -310,3 +310,42 @@ def test_a_failing_check_whose_owner_is_out_of_rounds_holds_the_run_it_never_end
     asyncio.run(go())
     assert run.s["status"] == "failed" and run.s["tests"]["held"]["checks"] == ["build"]
     assert run.s["tests"]["held"]["params"]["items"][0]["what"]["code"] == "held.owner"
+
+
+def test_with_no_reviewer_a_check_that_keeps_failing_holds_the_run_even_when_fix_rounds_end_in_errors(tmp_path,
+                                                                                                    monkeypatch):
+    """A team with checks and no reviewer; build always fails; dev's fix rounds end in a session error. However the
+    rounds go, the run never ends done while the last round fails: it is held for a person."""
+    bench = Bench(tmp_path, monkeypatch)
+    role = {"key": "dev", "title": "dev", "depends_on": [], "writable": ["src/a.*"], "brief": "dev的活"}
+    team = team_mod.check_team({"roles": [role], "defaults": {"max_fix_rounds": 2}, "check_runner": bench.runner,
+                                "checks": [bench.check("build", owner="dev", rounds=5)]})
+    mgr = FakeManager()
+    run = make_run(tmp_path, mgr, checks.run_checks, team=team)
+    bench.set("build", 1, ["src/a.cpp:1: error"])
+
+    async def go():
+        end = time.monotonic() + 30
+        while not run.ended and time.monotonic() < end:
+            await run.tick()
+            for a in mgr.live():
+                if " attempt=" not in a.task.splitlines()[0]:  # its first round: the work, merged
+                    work(a, "dev")
+                else:
+                    finish(a, None, error="session error")  # every fix round ends without a merge
+            await asyncio.sleep(0.05)
+    asyncio.run(go())
+    assert run.s["status"] == "failed" and (run.s["tests"].get("held") or {}).get("checks") == ["build"], \
+        [(e.get("code"), e["text"][:80]) for e in list(run.events)[-8:]]
+
+
+def test_with_a_reviewer_and_no_bench_a_review_over_failing_checks_does_not_end_done(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev", "rounds": 1})
+    run.team["defaults"]["max_fix_rounds"] = 1
+    bench.set("build", 1, ["src/a.cpp:1: error"])
+
+    async def go():
+        await until(run, mgr, lambda: run.ended)
+    asyncio.run(go())
+    assert run.s["status"] == "failed" and run.s["tests"]["held"]["checks"] == ["build"]
+    assert not any(e.get("code") in ("run.done_red", "run.done") for e in run.events)

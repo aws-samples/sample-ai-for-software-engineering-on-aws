@@ -1374,6 +1374,23 @@ class TeamRun:
         self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
 
+    def _hold_failing(self) -> bool:
+        """The team's checks: a last round that still fails, with nothing holding it, holds the run for a person
+        (each failing check as no longer the owner's to change, a BLOCKED one as not judged). True when held now."""
+        t = self.s["tests"]
+        rows = [r for r in t.get("checks") or [] if r["verdict"] != "PASS"]
+        if not (self.team.get("checks") and t.get("failed") and rows and not t.get("held")):
+            return False
+        what = {"FAIL": {"code": "held.owner"}, "USAGE": {"code": "held.usage"}}
+        items = [{"check": r["name"], "what": what.get(r["verdict"], {"code": "held.blocked"}),
+                  "reason": (r["reasons"] or [r["summary"]])[0]} for r in rows]
+        reason = messages.clean({"items": items}) or {}
+        t["held"] = {"checks": [r["name"] for r in rows], "why": self.msg("checks.held", reason)[:300],
+                     "code": "checks.held", "params": reason}
+        self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
+                 data={"checks": t["held"]["checks"]})
+        return True
+
     def servers_retry(self) -> str | None:
         """What 重试 asks the servers again for (D17): ``checks`` or ``tests_first``; None when 重试 is not that."""
         if not self.ended:
@@ -1385,10 +1402,14 @@ class TeamRun:
         could not judge (BLOCKED, as size is without a build): nothing for a role or a finding, 重试 runs the round."""
         t = self.s["tests"]
         h, mine = t.get("held") or {}, set(t.get("server_held") or [])
+        order = [r["name"] for r in t.get("checks") or []]
         rows = {r["name"]: r for r in t.get("checks") or []}
         names = h.get("checks") or []
+        first = min((order.index(n) for n in mine if n in order), default=len(order))
+        # a BLOCKED check after the first one a server refused could not judge for want of it (size without a build)
         return bool(servers_mod.on(self.team) and names and not h.get("unregistered") and mine & set(names)
-                    and all(n in mine or (rows.get(n) or {}).get("verdict") == "BLOCKED" for n in names))
+                    and all(n in mine or ((rows.get(n) or {}).get("verdict") == "BLOCKED" and n in order
+                                          and order.index(n) > first) for n in names))
 
     async def _servers_hold(self, what: str, why: str) -> None:
         """Servers mode (D17): the servers could not do *what* (the tests first, a round of checks); the run ends for a
@@ -1689,6 +1710,10 @@ class TeamRun:
             if self.team.get("bench"):
                 return  # the bench actions and the checks after them come next (_bench_step); _settle ends the run
             red = int(s["tests"].get("failed") or 0)
+            if red and self._hold_failing():  # the team's checks still fail: held for a person, not done
+                self._end("failed", "run.held", {"why": {"code": s["tests"]["held"]["code"],
+                                                         "params": s["tests"]["held"].get("params")}})
+                return
             if red:  # done, but not green: said as it is, the person decides
                 self._end("done", "run.done_red", {"summary": summary[:20], "red": red})
             else:
@@ -2274,6 +2299,7 @@ class TeamRun:
             self.s["needs_test"] = True
             busy = True
         if not busy and not gating and not any(self.lane(k)["status"] == "waiting" and self._ready(k) for k in self.order):
+            self._hold_failing()  # never done with failing checks: the person decides
             held = self.s["tests"].get("held") or bench.get("held")
             if held:
                 self._end("failed", "run.held", {"why": {"code": held["code"], "params": held.get("params")} if held.get("code") else held["why"]})
