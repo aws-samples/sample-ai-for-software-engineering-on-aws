@@ -418,7 +418,8 @@ repair round and goes to no role; 重试 asks the server again (the round of che
 - `bench/doctor.sh` stays as the bench step's readiness read (D10); `bench_status` is not called.
 - `request_deploy` deploys the build that `build` published last; the app checks that it is the round's commit.
 - `request_replay` writes into the bench server's `runs/run-<n>`, not the run's `bench/` folder; the after-bench
-  checks judge that replay.
+  checks judge that replay, and a `run_check` answer naming another run (another session replayed between the
+  steps) is BLOCKED for a person. In tests first, a result for another commit than the temporary one is too.
 
 The app keeps each call's `result` (the check's own result file) as `results/<round>/<check>.json` beside the run's
 repository, so attribution, the board, the audit trail and the scorecard read the same files as in `direct` mode.
@@ -457,7 +458,9 @@ fixed in its configuration (`mcp/build/buildserver/core.py`), and before every c
 folder is still the one it saw at start, by device and inode (`check_mounts()`). So:
 
 - **Work tree:** `~/workplace/vstatd-team/server/worktree`, a repository of its own (`git init` by the app the
-  first time). A `git worktree` does not work: its `.git` points outside the folder the server mounts. Before each
+  first time, marked by a file in its `.git`). A repository without the mark is refused: `checkout --force` and
+  `clean -fdx` would lose its untracked files, so a `paths.workspace` pointing at a project is caught. A `git worktree`
+  does not work: its `.git` points outside the folder the server mounts. Before each
   round the app fetches the run's branches into it, runs `git checkout --detach <commit>` and `git clean -fdx`
   there, and requires `workspace_status` to name that commit with no changes. The folder is moved
   in place and never removed or recreated.
@@ -467,8 +470,9 @@ folder is still the one it saw at start, by device and inode (`check_mounts()`).
   the next check judges. The files are replaced, the folder is kept.
 - **One run at a time:** the servers' state is one per installation: `build`'s published results, its repair count
   and its HEAD, and `bench`'s runs and published results. So a run takes the servers at its first server call and
-  keeps them until it is done or a person stops it; a run held for a person keeps them (`server/holder.json`, beside
-  the work tree, names the run). Another run in `servers` mode is held before its first server call, with the run
+  keeps them until it is done, stopped or hidden, or until it fails for a reason that does not wait for a person; a
+  run held for a person (the servers, its checks or its bench step) keeps them (`server/holder.json`, beside the
+  work tree, names the run). Another run in `servers` mode is held before its first server call, with the run
   that holds them in the reason.
 - **Bench state:** in the trial the bench server's `paths.bench_state` is the user's `~/.cc1-bench`, the same as
   `bench/cc1.sh` uses in `direct` mode.
@@ -521,7 +525,8 @@ users (the board cannot write the bench state then). Added on 2026-11-17 at the 
 **Scorecard.** "Tool calls by permission class" (D8) comes from both servers' `audit.jsonl`: the lines each of the
 run's sessions wrote (`servers.jsonl` keeps the file's size when the session started and ended). Each call
 writes a `started` line and a line with its outcome; a call refused before it starts writes only the second, so the
-count is of outcome lines. The figure counts the app's calls; the agents make none.
+count is of outcome lines, with those the servers refused. The `lease_release` a bench session writes for itself
+when it ends is not counted. The figure counts the app's calls; the agents make none.
 
 **Open questions.**
 

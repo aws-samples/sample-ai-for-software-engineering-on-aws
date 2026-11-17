@@ -123,7 +123,8 @@ Set-up, once (the paths the shipped team file names):
 2. Copy each server's `config.example.toml` to `~/workplace/vstatd-team/server/build.toml` and `bench.toml`. In
    both, `triage` is `~/workplace/vstatd-team/server/triage/triage.json` (create the folder). In `build.toml`,
    `workspace` is `~/workplace/vstatd-team/server/worktree` (an empty folder or none: the app makes it a repository
-   of its own), `sysroot` a folder with the CC-1 sysroot and `image` this machine's build image. In `bench.toml`,
+   of its own and marks it; it refuses a repository it did not make), `sysroot` a folder with the CC-1 sysroot and
+   `image` this machine's build image. In `bench.toml`,
    `bench_state` is `~/.cc1-bench`, `build_results` the build server's `<state>/results`, `baseline` the team file's.
    Leave out `[trust]`, and in `bench.toml` give the `developer` role the `physical` class.
 3. Set `"connectors": "servers"` in `team/team-vstatd.json` and reinstall the app.
