@@ -92,6 +92,14 @@ def test_the_templates_are_the_four_experts_with_the_vstatd_note(tmp_path):
         assert t["prompt"].startswith(body) and "{{HARNESS_DIR}}" not in t["prompt"]
         assert "来源「vstatd」" in t["prompt"] and "local_knowledge_search" in t["prompt"]
         assert "--trust-all-tools" not in json.dumps(t)
+        # the bypass hook, in the array form both engines load, and V3's permissions next to V2's allowedTools
+        assert [h["matcher"] for h in t["hooks"]] == ["shell", "write"]
+        assert all(h["trigger"] == "PreToolUse" and h["action"]["type"] == "command"
+                   and h["action"]["command"].startswith("python3 -I ") and h["action"]["command"].endswith("|| exit 2")
+                   and h["action"]["command"].split()[2].endswith("agents/hooks/guard.py") for h in t["hooks"])
+        assert {(r["capability"], r["effect"]) for r in t["permissions"]["rules"]} == {
+            ("fs_read", "allow"), ("fs_write", "allow"), ("shell", "allow"), ("skill", "allow"), ("mcp", "allow")}
+        assert [r.get("match") for r in t["permissions"]["rules"] if r["capability"] == "mcp"] == [["kirocrew-core/*"]]
     assert run_py(SAMPLE / "agents" / "kiro-crew" / "make_templates.py", out).returncode == 2
 
 

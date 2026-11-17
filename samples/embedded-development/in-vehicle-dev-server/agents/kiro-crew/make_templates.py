@@ -9,10 +9,15 @@ are those of the agent-team templates: file reads and writes, shell commands, an
 docs/kiro-crew-app.md says what this allows.
 """
 import json
+import shlex
 import sys
 from pathlib import Path
 
 KNOWLEDGE = "vstatd"
+# The bypass hook (item 6): refuses shell calls and writes that reach the bench, the run's check results, or push and
+# rewrite history (../hooks/guard.py, defence in depth). `|| exit 2` keeps it closed when python3 or the file is
+# missing, because Kiro lets a call run when a hook exits with any status other than 2.
+GUARD = Path(__file__).resolve().parent.parent / "hooks" / "guard.py"
 
 # member name → the AI-DLC expert it runs as, display name, one line in Chinese (what Kiro Crew's Teammates page
 # shows). Names and display names are this team's own: Kiro Crew keeps both unique, and the agent-team sample's
@@ -56,11 +61,33 @@ def template(name: str, display: str, desc: str, prompt: str, kirocrew: str) -> 
         "description": f"{display} · {desc}",
         "prompt": prompt,
         "tools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],
-        "allowedTools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],
+        "allowedTools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],  # what the V2 engine approves
+        "permissions": permissions(["kirocrew-core"]),  # what the V3 engine approves
         "includeMcpJson": False,
         "includeCrewContext": False,
         "mcpServers": {"kirocrew-core": {"command": kirocrew, "args": ["mcp-core"]}},
+        "hooks": guard_hooks(guard_command()),
     }
+
+
+def permissions(servers: list) -> dict:
+    """The V3 engine's equivalent of allowedTools: read, write, the shell and skills without asking (V3 always offers
+    its skill tools, as `kiro-cli agent upgrade` allows them), and the named MCP servers' tools. Kiro's own fixed
+    limits still apply: writes to .git/** and .kiro/agents ask, which a headless session treats as a deny."""
+    rules = [{"capability": c, "effect": "allow"} for c in ("fs_read", "fs_write", "shell", "skill")]
+    return {"rules": rules + [{"capability": "mcp", "match": [f"{s}/*"], "effect": "allow"} for s in servers]}
+
+
+def guard_hooks(command: str) -> list:
+    """The bypass hook in the array form that both engines load (V2 and V3; measured with kiro-cli 2.34.0). The
+    matchers are the tags `shell` and `write`: V2 does not evaluate regular expressions in a matcher, and V3 names
+    the tools execute_bash and fs_write where V2 says shell and write."""
+    return [{"name": f"vstatd-guard-{tag}", "trigger": "PreToolUse", "matcher": tag,
+             "action": {"type": "command", "command": command}} for tag in ("shell", "write")]
+
+
+def guard_command() -> str:
+    return f"python3 -I {shlex.quote(str(GUARD))} || exit 2"
 
 
 def template_name(member: str) -> str:
