@@ -148,13 +148,17 @@ class Service:
             return
         self.data_dir.mkdir(parents=True, exist_ok=True)
         try:  # a run made before the image was per architecture or the sysroot a setting takes the team file's
-            runner = (await asyncio.to_thread(load_team, self.team_file)).get("check_runner")
+            current = await asyncio.to_thread(load_team, self.team_file)
         except (OSError, ValueError):
-            runner = None
+            current = {}
+        runner = current.get("check_runner")
+        decides = (current.get("servers") or {}).get("board_decides") is True
         for state, events in await asyncio.to_thread(self._deps.store.load_all):
             try:
                 if isinstance(state.get("team"), dict) and state["team"].get("check_runner") is not None:
                     state["team"]["check_runner"] = checks.adopt_runner(state["team"]["check_runner"], runner)
+                if isinstance((state.get("team") or {}).get("servers"), dict):  # who approves follows the team file,
+                    state["team"]["servers"]["board_decides"] = decides  # as POST /bench/decide does (D17)
                 self.runs[state["id"]] = TeamRun(state, self._deps, events)
             except Exception:  # noqa: BLE001
                 self.log.exception("vstatd-team: run %s cannot be loaded", state.get("id"))
