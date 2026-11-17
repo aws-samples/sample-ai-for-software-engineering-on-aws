@@ -257,9 +257,10 @@ _PATH = re.compile(r"""
 _TICKED = re.compile(r"`([^`\n]*)`")  # a backticked span: one with a / in it is a path (`Tester/plan`), left out
 _URL = re.compile(r"(?<![a-z0-9+.-])[a-z][a-z0-9+.-]*://\S*", re.I)  # a link, left out whole (one scan per start)
 _ASIDE = re.compile(r"\([^)]*\)|（[^）]*）")  # what a send-back line says about the change, not whom it goes to
-# an aside standing alone between two " / " ("fix / (note) / Tester"): it leaves a mark, not nothing, so that the
-# two " / " around it stay two (taken out, it would leave "fix /  / Tester", and the role after it would be lost)
-_ASIDE_BETWEEN = re.compile(r"(?<=\s/)(\s+)(?:\([^)]*\)|（[^）]*）)(?=\s+/\s)")
+# asides standing alone between two " / " ("fix / (note) / Tester", one or more in a row: "fix / (a) (b) / Tester")
+# leave a mark, not nothing, so that the two " / " around them stay two (taken out, they would leave
+# "fix /  / Tester", and the role after them would be lost)
+_ASIDE_BETWEEN = re.compile(r"(?<=\s/)(\s+)(?:\([^)]*\)|（[^）]*）)(?:\s*(?:\([^)]*\)|（[^）]*）))*(?=\s+/\s)")
 _MARK = "\x00"
 
 

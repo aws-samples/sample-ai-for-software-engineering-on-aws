@@ -99,10 +99,12 @@ def test_a_review_names_who_fixes_what():
     assert targets("Send back: `Developer · fix/qa`", en_t) == []  # backticked with a /: a path, as `Tester/plan` is
     assert targets("Send back: Developer · fix / Tester-side cases", en_t) == ["backend"]  # joined by a hyphen: no role
     # an aside between two " / " no longer drops the role after it (main gave both)
-    for aside in ("(see src/a.c)", "(note)", "（见 src/a.c）", "(a) / (b)"):
+    for aside in ("(see src/a.c)", "(note)", "（见 src/a.c）", "(a) / (b)", "(a) (b)", "(a)(b)"):
         line = f"Send back: Developer · fix / {aside} / Tester"
         assert targets(line, en_t) == ["tester", "backend"], line
     assert targets("打回：后端 / （补用例） / 测试", roles) == ["tester", "backend"]
+    three = "Send back: Developer · fix / (a) (b) / Developer · refactor / Tester"
+    assert targets(three, en_t) == ["tester", "backend", "frontend"]
     assert targets("Send back: developer-fix/Tester", en_t) == ["tester", "backend"]  # a hyphen inside a name is fine
     # a path, a URL, a branch or a two-part name with a role's name inside is no role, however it is written
     for path in ("`docs/Tester-notes.md`", "`tests/Tester/case_1.cpp:12`", '"src/Tester.cpp"', "'Tester/plan.md'",
