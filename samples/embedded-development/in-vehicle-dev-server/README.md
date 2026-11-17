@@ -529,13 +529,14 @@ v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and
 
 The Kiro Crew app's backend runs in Kiro Crew's own Python and installs no Python packages. Besides the standard
 library it imports only `kiro_crew` and aiohttp (Apache-2.0), both provided by Kiro Crew. Its board is built on the
-user's machine from npm packages (`app/ui/package.json`, versions pinned in `app/ui/package-lock.json`). React and
-React DOM end up in the built board, which is not committed. The other packages only build and test it.
+user's machine from npm packages (`app/ui/package.json`, versions pinned in `app/ui/package-lock.json`), which only
+build and test it. The built board is not committed and holds none of them: React, React DOM and Kiro Crew's app SDK
+come from Kiro Crew at run time (`app/ui/vite.config.ts` keeps them external).
 
 | Tool | Version | Licence | Used for |
 | --- | --- | --- | --- |
 | Node.js | 22 or newer | MIT | Building the board |
-| React, React DOM | 18.3 | MIT | The board |
+| React, React DOM | 18.3 | MIT | The board's types and tests |
 | Vite | 8.3 | MIT | Building the board |
 | `@vitejs/plugin-react` | 5.2 | MIT | Building the board |
 | TypeScript | 5.9 | Apache-2.0 | Building the board |
