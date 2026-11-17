@@ -381,7 +381,8 @@ may not read the same one).
 ### D17. App 通过 build / bench 服务器跑检查和台架
 
 Decided on 2026-11-16 and implemented in `backend/team/servers.py`; one delivery ran end to end in `servers` mode
-on 2026-11-17 (run `r11170658`, at the end of this section). Release stays `direct` until #42 is merged.
+on 2026-11-17 (run `r11170658`, at the end of this section). Release and the evidence page still run `direct`;
+through the build server they are a follow-up (#42 and #45, merged on main).
 
 **Two modes, one switch.** The team file's `"connectors"` picks one, `"direct"` by default:
 
@@ -406,11 +407,11 @@ repair round and goes to no role; 重试 asks the server again (the round of che
 | --- | --- |
 | Before-bench checks (D7) | build `run_check` `build`, `static`, `unit`, `size`, `trace`, one call each |
 | Tests first (D6) | build `run_check unit` on a temporary commit (below) |
-| Deploy | bench `lease_acquire`, then `request_deploy` |
-| Replay | bench `request_replay` |
-| After-bench checks | bench `run_check` `runtime-limits`, `logdiff`, then `lease_release` |
+| Deploy | bench `lease_acquire`, `request_deploy`, `lease_release` |
+| Replay | bench `lease_acquire`, `request_replay`, `lease_release` |
+| After-bench checks | bench `lease_acquire`, `run_check` `runtime-limits` and `logdiff`, `lease_release` |
 | Independent rerun (D9) | build `run_check` for each before-bench check, bench `run_check` for each after-bench one |
-| Release (D9) | build `run_check release` once #42 is merged; until then `direct` |
+| Release (D9) | `direct` for now; build `run_check release` (#42) in a follow-up |
 
 - Each build `run_check` judges a clean clone of the work tree's committed HEAD with no cache, which is also what
   D9's rerun needs.
@@ -448,12 +449,12 @@ sequenceDiagram
     Note over A,C: independent rerun on the final commit
     A->>B: run_check for each before-bench check
     A->>C: lease_acquire, run_check runtime-limits and logdiff, lease_release
-    A->>A: release.sh (direct until #42), sign-off enabled when it passes
+    A->>A: release.sh (direct for now), sign-off enabled when it passes
 ```
 
 **Fixed paths, and one run at a time.** The build server's `paths.workspace`, `paths.triage` and `paths.state` are
-fixed in its configuration (`mcp/build/buildserver/core.py`, from line 320), and before every call it checks that each
-mounted folder is still the one it saw at start, by device and inode (`check_mounts()`, line 396). So:
+fixed in its configuration (`mcp/build/buildserver/core.py`), and before every call it checks that each mounted
+folder is still the one it saw at start, by device and inode (`check_mounts()`). So:
 
 - **Work tree:** `~/workplace/vstatd-team/server/worktree`, a repository of its own (`git init` by the app the
   first time). A `git worktree` does not work: its `.git` points outside the folder the server mounts. Before each
@@ -536,8 +537,9 @@ count is of outcome lines. The figure counts the app's calls; the agents make no
    person first.
 3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
    Not decided: a triage tool of the server, or a person copying the approved file into place.
-4. **Release** waits for #42 (`run_check release` reads the bench server's published results). Until it is merged,
-   release in `servers` mode stays `direct`: `release.sh` runs in the app's build container on the rerun's results,
+4. **Release.** #42 (merged) lets `run_check release` read the bench server's published results; using it, and the
+   evidence page of #45, is a follow-up. Until then release in `servers` mode stays `direct`: `release.sh` runs
+   in the app's build container on the rerun's results,
    which the app keeps from the servers' answers, and is given read-only the input files those results recorded
    (the build server's artifact, the bench server's run, the baseline). It re-checks each file's sha256.
 
@@ -573,7 +575,7 @@ approved on the board (`servers.board_decides`, added during the run).
 
 | What | Figure |
 | --- | --- |
-| Tool calls by permission class | read-only 9, controlled-write 52, physical 3 (a deploy that timed out, a deploy, a replay) |
+| Tool calls by permission class | read-only 9, controlled-write 52, physical 3 (deploy timed out, deploy, replay) |
 | Server sessions | 17 (build 10, bench 7); 48 build and 17 bench outcome lines in the audit logs |
 | Tests first | one `run_check unit`, 50.2 s (plain, ThreadSanitizer and AddressSanitizer builds) |
 | A round of the before-bench checks | 61 to 91 s when all five ran; seven rounds |
