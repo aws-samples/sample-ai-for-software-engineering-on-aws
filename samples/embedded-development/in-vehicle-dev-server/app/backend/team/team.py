@@ -869,7 +869,7 @@ class TeamRun:
         async with self._lock:
             failed = [k for k in self.order if self.lane(k)["status"] == "failed"]
             bench = self.s.get("bench") or {}
-            held = self.s.get("servers_held")
+            held = self.s.get("servers_held") or ("checks" if self.ended and self._servers_round_held() else None)
             if not keys and not failed and self.ended and held:  # the servers could not do it (D17): again
                 self._resume()
                 self.s["servers_held"] = None
@@ -1374,6 +1374,16 @@ class TeamRun:
         self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
 
+    def _servers_round_held(self) -> bool:
+        """Servers mode (D17): the checks are held because a server refused or failed a check, and the others held
+        could not judge (BLOCKED, as size is without a build): nothing for a role or a finding, 重试 runs the round."""
+        t = self.s["tests"]
+        h, mine = t.get("held") or {}, set(t.get("server_held") or [])
+        rows = {r["name"]: r for r in t.get("checks") or []}
+        names = h.get("checks") or []
+        return bool(servers_mod.on(self.team) and names and not h.get("unregistered") and mine & set(names)
+                    and all(n in mine or (rows.get(n) or {}).get("verdict") == "BLOCKED" for n in names))
+
     async def _servers_hold(self, what: str, why: str) -> None:
         """Servers mode (D17): the servers could not do *what* (the tests first, a round of checks); the run ends for a
         person, and 重试 tries it again."""
@@ -1598,7 +1608,7 @@ class TeamRun:
                                                for r, what in held]}) or {}
             why = self.msg("checks.held", reason)[:300]
             t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason}
-            server = wall is None and all(r["name"] in (t.get("server_held") or []) for r, _ in held)
+            server = wall is None and self._servers_round_held()
             self.s["servers_held"] = "checks" if server else None  # the servers' problem: 重试 runs the round again
             self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
                      data={"checks": t["held"]["checks"]})

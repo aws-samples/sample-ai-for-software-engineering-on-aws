@@ -298,6 +298,24 @@ def test_a_check_failure_goes_to_its_owner_and_a_refusal_to_a_person(tmp_path, m
     asyncio.run(go())
 
 
+def test_a_refused_build_and_the_checks_it_blocked_are_run_again_on_retry(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch)
+    run, mgr = rig.run, rig.mgr
+    srv.set(refuse=["build"], static={"verdict": "BLOCKED", "reasons": ["no build to judge"]})
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["tests"]["held"]["checks"] == ["build", "static"] and run.s["servers_held"] == "checks"
+        run.s["servers_held"] = None  # as a run held before this was recognised: 重试 still sees it
+        srv.set()  # a person reset the build server's repair count
+        assert await run.retry(by="alice") == ["servers"]
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["status"] == "done", [e["text"] for e in run.events][-4:]
+
+    asyncio.run(go())
+
+
 def test_a_refusal_at_the_console_holds_the_bench(tmp_path, monkeypatch):
     rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
     run, mgr = rig.run, rig.mgr
