@@ -63,6 +63,10 @@ case $1 in
       busy)   printf '{"event": "decision", "id": "%s", "verdict": "approved", "by": "alice"}\n' "$rid" \
                 >> "$S/actions.jsonl"
               echo "refused: the target is busy: replay in progress (one action at a time)" >&2; exit 1 ;;
+      gate-fail)  # the physical gate refuses after the request (the supply off, KL15 off …)
+              printf '{"event": "gate", "id": "%s", "action": "%s", "stage": "%s", "passed": false, "why": "%s"}\n' \
+                "$rid" "$1" "$1" "KL15 is off" >> "$S/actions.jsonl"
+              echo "refused: the physical gate: KL15 is off" >&2; exit 1 ;;
       hang)   sleep 30 ;;
     esac
     if [[ $1 == deploy ]]; then cp "$2" "$F/deployed-file"; echo "$2" > "$F/deployed-from"; fi
@@ -114,6 +118,9 @@ sys.exit({"PASS": 0, "FAIL": 1, "BLOCKED": 3}[v])
 
 class Env(unittest.TestCase):
     def setUp(self):
+        # the folders the tests make have the permissions the tests mean, whatever the caller's umask (002 makes
+        # them group-writable, which the server rightly refuses)
+        self.umask = os.umask(0o022)
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="benchserver-test-")).resolve()  # macOS: /var is /private/var
         os.chmod(self.tmp, 0o700)
         self.fake = self.tmp / "fake"
@@ -143,6 +150,7 @@ class Env(unittest.TestCase):
     def tearDown(self):
         os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
         shutil.rmtree(self.tmp, ignore_errors=True)
+        os.umask(self.umask)
 
     def write_config(self, extra="", **paths):
         p = {"bench": self.bench, "checks": self.checks, "state": self.st, "bench_state": self.bstate,
@@ -286,6 +294,86 @@ class Calls(Env):
         self.assertLess(len(line), 4000)
         self.assertEqual(len(self.audit()[-1]["args"]), 20)
 
+    def test_huge_integer_arguments_are_described_not_kept_in_the_audit(self):
+        """The SDK's parser takes integers of about 4,300 digits: twenty of them stay a short audit line, and one
+        too long to be written out at all (5,000 digits) is audited too, not an exception before the audit."""
+        big = 10 ** 4299  # 4,300 digits
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", **{f"a{i}": big for i in range(20)})
+        line = (self.st / "audit.jsonl").read_text().splitlines()[-1]
+        self.assertLess(len(line.encode()), 2000)
+        self.assertEqual(self.audit()[-1]["args"]["a0"], f"<int, {big.bit_length()} bits>")
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", n=10 ** 4999, small=42, flag=True, none=None, x=1.5)
+        args = self.audit()[-1]["args"]
+        self.assertEqual(args, {"n": f"<int, {(10 ** 4999).bit_length()} bits>", "small": 42, "flag": True,
+                                "none": None, "x": 1.5})
+
+    def test_the_logs_of_reads_a_killed_session_left_are_swept_at_start(self):
+        """A session killed mid-read leaves logs/read-*.log behind: the next server removes those older than a read
+        can take, in its own logs folder only; a read another session has in progress, other logs and what a link
+        points to stay."""
+        self.service()  # makes the state folders
+        logs = self.st / "logs"
+        stale, fresh = logs / "read-target-111-aaaaaa.log", logs / "read-supply-222-bbbbbb.log"
+        other, outside = logs / "check-logdiff.out", self.tmp / "keep.txt"
+        for f in (stale, fresh, other, outside):
+            f.write_text("x\n")
+        link = logs / "read-probe-333-cccccc.log"
+        link.symlink_to(outside)
+        old = time.time() - 3600
+        for f in (stale, other):
+            os.utime(f, (old, old))
+        os.utime(link, (old, old), follow_symlinks=False)
+        self.service("reviewer")
+        self.assertFalse(stale.exists())
+        self.assertTrue(fresh.exists() and other.exists() and outside.exists())
+        self.assertTrue(link.is_symlink())  # only regular files are removed
+
+    def test_a_symlinked_logs_folder_is_not_swept(self):
+        """Second review of #41: the sweep removes only the read logs of the server's own logs folder, not those of a
+        folder state/logs links to."""
+        self.service()
+        outside = self.tmp / "elsewhere"
+        outside.mkdir()
+        old_log = outside / "read-target-111-aaaaaa.log"
+        old_log.write_text("x\n")
+        old = time.time() - 3600
+        os.utime(old_log, (old, old))
+        shutil.rmtree(self.st / "logs")
+        (self.st / "logs").symlink_to(outside)
+        self.service("reviewer")
+        self.assertTrue(old_log.exists())
+
+    def test_an_argument_whose_repr_fails_is_described_and_the_call_still_audited(self):
+        """Second review of #41: a list or dict holding an over-limit integer, or one nested very deep, cannot be
+        written out by repr; it is described by its type and the call is audited."""
+        deep = []
+        for _ in range(100_000):
+            deep = [deep]
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", a=[10 ** 5000], b={"k": 10 ** 5000}, c=deep)
+        self.assertEqual(self.audit()[-1]["args"], {"a": "<list>", "b": "<dict>", "c": "<list>"})
+
+    def test_a_float_that_is_not_finite_is_described_so_the_audit_stays_json(self):
+        """Second review of #41: the "<float>" branch could never run (a float's repr is short); a NaN or an infinity
+        is what the audit cannot keep, since json.dumps writes them as NaN and Infinity, which JSON does not have."""
+        with self.assertRaises(Refused):
+            self.service().call("bench_status", x=float("nan"), y=float("inf"), z=-float("inf"), w=1.5)
+        line = (self.st / "audit.jsonl").read_text().splitlines()[-1]
+        strict = json.loads(line, parse_constant=lambda c: self.fail(f"{c} in the audit line"))
+        self.assertEqual(strict["args"], {"x": "<float nan>", "y": "<float inf>", "z": "<float -inf>", "w": 1.5})
+
+    def test_the_readme_gives_the_number_of_these_tests_and_no_failure_they_no_longer_have(self):
+        """Second review of #41: the README's Tests paragraph before *Not yet verified* is current."""
+        n = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__]).countTestCases()
+        readme = (pathlib.Path(__file__).resolve().parents[1] / "README.md").read_text()
+        part = readme[:readme.index("## Not yet verified")].rsplit("\n\n", 2)[-2]
+        self.assertNotIn("fails or errors", part)
+        # each count names the machine it was taken on (third review of #41: the paragraph follows the Linux host's)
+        self.assertIn(f"{n} OK on an Apple Silicon Mac", part)
+        self.assertIn(f"{n} OK on a Linux host", part)
+
     def test_reads_do_not_wait_for_a_call_in_progress(self):
         """A read-only call takes no lock: another session sees the request waiting at the console."""
         import threading
@@ -338,7 +426,10 @@ class Paths(Env):
 
     def test_trusted_readers_own_the_build_results_and_the_triage_only(self):
         """Two uids: the server runs as another user (os.getuid patched) than the one who owns the test's folders,
-        who stands for buildsrv."""
+        who stands for buildsrv. To that user, a folder of the test's is someone else's; when the test's folder lies
+        in a sticky folder others can write (TMPDIR=/tmp), the check first finds that folder writable by others:
+        either reason is a refusal."""
+        refused = "not root, the server's user|is writable by other users"
         import pwd
         owner = pwd.getpwuid(os.getuid()).pw_name
         real = os.getuid
@@ -348,7 +439,7 @@ class Paths(Env):
             core.os.getuid = lambda: real() + 4242
             for path, name in ((self.results, "build_results"), (self.triage.parent, "triage"),
                                (self.triage, "triage")):
-                with self.assertRaisesRegex(ConfigError, "not root, the server's user"):
+                with self.assertRaisesRegex(ConfigError, refused):
                     core.check_trusted(path, name)
                 core.check_trusted(path, name, (real(),))  # a trusted reader's
             self.config = self.write_config(f'[trust]\nreaders = ["{owner}"]\n')
@@ -466,12 +557,26 @@ class Deploy(Env):
         src = (self.fake / "deployed-from").read_text().strip()
         self.assertEqual(pathlib.Path(src), self.st / "builds" / digest)  # not the build server's file
         env = (self.fake / "env-cc1").read_text()
-        self.assertIn(f"CC1_REQUESTER=bench MCP server (role developer, session {s.holder})", env)
+        self.assertIn(f"CC1_REQUESTER=bench MCP server (role developer, session {s.session})", env)
         self.assertIn(f"CC1_BENCH_STATE={self.bstate}", env)
         self.assertIn("CC1_APPROVAL_TIMEOUT_S=2", env)
         self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
         last = self.audit()[-1]
         self.assertEqual((last["outcome"], last["digest"], last["request"]), ("ok", digest, out["request"]))
+
+    def test_the_session_is_named_by_an_id_of_its_own_not_by_the_lease_holder(self):
+        """The requester in the action record and the audit name a random session ID; the holder (role:pid:token)
+        stays inside the lease, which no read shows."""
+        s = self.with_lease()
+        self.publish_build()
+        s.call("request_deploy")
+        self.assertRegex(s.session, r"^[0-9a-f]{16}$")
+        self.assertNotIn(s.session, s.holder)
+        shown = json.dumps([s.call("bench_status"), s.call("read_actions")])
+        self.assertIn(f"session {s.session}", shown)  # the request names it
+        self.assertNotIn(s.holder, shown)
+        self.assertNotIn(s.holder.split(":")[2], (self.st / "audit.jsonl").read_text())
+        self.assertEqual({e["session"] for e in self.audit()}, {s.session})
 
     def test_a_result_of_another_check_is_not_a_build(self):
         s = self.with_lease()
@@ -506,6 +611,38 @@ class Deploy(Env):
         self.assertEqual(out["outcome"], "failed")
         self.assertTrue(out["request"].startswith("req-deploy-"))
         self.assertEqual(self.audit()[-1]["request"], out["request"])
+
+    def test_a_refused_action_is_audited_with_its_request_and_digest(self):
+        """At the console and with the target busy (approved, not begun): the audit line of the refusal names the
+        request and the build's digest, as the README's audit row says."""
+        for mode in ("refuse", "busy"):
+            s = self.with_lease()
+            digest = self.publish_build()
+            (self.fake / "mode").write_text(mode)
+            with self.assertRaises(Refused, msg=mode):
+                s.call("request_deploy")
+            last = self.audit()[-1]
+            self.assertEqual(last["outcome"], "refused", mode)
+            self.assertTrue(str(last.get("request")).startswith("req-deploy-"), (mode, last))
+            self.assertEqual(last.get("digest"), digest, mode)
+            s.call("lease_release")
+
+    def test_a_refused_restart_or_replay_is_audited_with_the_digest_of_its_request(self):
+        """restart and replay name no build of their own: the digest in their audit line is the one the bench wrote
+        in this call's request record (at the console, at the physical gate)."""
+        for tool, mode in (("request_restart", "refuse"), ("request_replay", "gate-fail")):
+            s = self.with_lease()
+            self.publish_build()
+            (self.fake / "mode").write_text(mode)
+            with self.assertRaises(Refused, msg=tool):
+                s.call(tool)
+            last = self.audit()[-1]
+            req = [json.loads(ln) for ln in (self.bstate / "actions.jsonl").read_text().splitlines()]
+            req = next(r for r in req if r.get("event") == "request" and r.get("id") == last.get("request"))
+            self.assertEqual(last["outcome"], "refused", tool)
+            self.assertEqual(last.get("digest"), req["digest"], (tool, last))
+            self.assertRegex(last["digest"], r"^[0-9a-f]{64}$")
+            s.call("lease_release")
 
     def test_an_approved_action_the_busy_target_did_not_begin_is_refused_not_failed(self):
         s = self.with_lease()

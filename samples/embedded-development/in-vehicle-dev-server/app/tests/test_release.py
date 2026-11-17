@@ -88,6 +88,8 @@ def test_a_check_that_differs_on_the_rerun_is_recorded_and_a_failing_release_ref
         with pytest.raises(httpkit.AppError, match="release.sh 没通过") as e:
             await signer(tmp_path, rig).signoff(run.rid, "王经理")
         assert e.value.code == "not_signable" and not run.s.get("signoff")
+        # the English board says it by its code; release.sh's reason is passed on as detail, the app's words are not
+        assert e.value.extra.get("detail") == "unit: FAIL - see reasons"
 
         rig.bench.set("unit", 0)  # a person dealt with it; 重试 reruns everything
         rig.bench.set("release", 0)

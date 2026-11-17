@@ -57,9 +57,61 @@ def test_a_review_names_who_fixes_what():
         assert targets(line, en_t) == ["backend"], line
     assert targets("Send back: Developer · fix and Developer · refactor", en_t) == ["backend", "frontend"]
     assert targets("Send back: Developer · fix, see docs/aidlc/triage.md", en_t) == ["backend"]
+    # a bare / between two roles splits them (b1f24c7 did); a path stays whole, even one with a role's name in it
+    assert targets("Send back: Developer · fix/Tester", en_t) == ["tester", "backend"]
+    assert targets("Send back: Developer · fix/Developer · refactor", en_t) == ["backend", "frontend"]
+    assert targets("Send back: Developer · fix, see docs/Tester-notes.md", en_t) == ["backend"]
+    assert targets("Send back: Developer · fix (docs/aidlc/tester/plan.md)", en_t) == ["backend"]
+    assert targets("Send back: Developer · fix, tests/tester/case_1.cpp", en_t) == ["backend"]
     # a role named in parentheses is what the change is about, not whom it goes to
     assert targets("Send back: Developer · fix (the tester case stays)", en_t) == ["backend"]
     assert targets("打回：后端（测试的用例不用动）", roles) == ["backend"]
+    # second review of #41: " / " between roles splits them as "/" does (main did), with backticks and three roles
+    assert targets("Send back: Developer · fix / Tester", en_t) == ["tester", "backend"]
+    assert targets("Send back: `Developer · fix` / `Tester`", en_t) == ["tester", "backend"]
+    three = "Send back: Developer · fix / Developer · refactor / Tester"
+    assert targets(three, en_t) == ["tester", "backend", "frontend"]
+    # third review of #41: a note after " / Tester" keeps the second role (main gave both)
+    for line in ("Send back: Developer · fix / Tester: add a test",
+                 "Send back: Developer · fix / Tester -- tests missing",
+                 "Send back: Developer · fix / Tester to add a test",
+                 "Send back: Developer · fix/Tester: add a test"):
+        assert targets(line, en_t) == ["tester", "backend"], line
+    # a / inside backticks is a path, not two roles; backticks around each role's name are not
+    for path in ("`Tester/plan`", "`Tester/README`"):
+        assert targets(f"Send back: Developer · fix, {path}", en_t) == ["backend"], path
+    assert targets("Send back: `Developer · fix` / `Tester`", en_t) == ["tester", "backend"]
+    # a role key in a path's segment is no role either
+    assert targets("Send back: Developer · fix, see qa/tester", en_t) == ["backend"]
+    assert targets("Send back: backend, see feature/tester-cases", en_t) == ["backend"]
+    assert targets("打回：后端/测试", roles) == ["tester", "backend"]  # two role names around a / are both
+    # review of f58ecc5: backticks around two roles with a / name both (main gave at least one); a word joined to a
+    # role's name by a hyphen after a / is not that role (fix/Tester-notes; main gave the fix role only)
+    assert targets("Send back: `Developer · fix/Tester`", en_t) == ["tester", "backend"]
+    assert targets("Send back: `Developer · fix / Tester`", en_t) == ["tester", "backend"]
+    assert targets("打回：`后端/测试`", roles) == ["tester", "backend"]
+    assert targets("Send back: Developer · fix/Tester-notes", en_t) == ["backend"]
+    assert targets("Send back: Developer · fix / Tester-cases branch", en_t) == ["backend"]
+    # second review of c1fb694: a path or a link right before " / " no longer drops the role after it (main gave both)
+    for after in ("`src/main.c`", "see src/a.c", "https://x.example/z", "tests/ folder"):
+        line = f"Send back: Developer · fix, {after} / Tester"
+        assert targets(line, en_t) == ["tester", "backend"], line
+    assert targets("Send back: `Developer · fix/qa`", en_t) == []  # backticked with a /: a path, as `Tester/plan` is
+    assert targets("Send back: Developer · fix / Tester-side cases", en_t) == ["backend"]  # joined by a hyphen: no role
+    # an aside between two " / " no longer drops the role after it (main gave both)
+    for aside in ("(see src/a.c)", "(note)", "（见 src/a.c）", "(a) / (b)", "(a) (b)", "(a)(b)"):
+        line = f"Send back: Developer · fix / {aside} / Tester"
+        assert targets(line, en_t) == ["tester", "backend"], line
+    assert targets("打回：后端 / （补用例） / 测试", roles) == ["tester", "backend"]
+    three = "Send back: Developer · fix / (a) (b) / Developer · refactor / Tester"
+    assert targets(three, en_t) == ["tester", "backend", "frontend"]
+    assert targets("Send back: developer-fix/Tester", en_t) == ["tester", "backend"]  # a hyphen inside a name is fine
+    # a path, a URL, a branch or a two-part name with a role's name inside is no role, however it is written
+    for path in ("`docs/Tester-notes.md`", "`tests/Tester/case_1.cpp:12`", '"src/Tester.cpp"', "'Tester/plan.md'",
+                 "fix:docs/Tester.md", "https://wiki.example.com/qa/Tester-guide", "feature/Tester-cases",
+                 "qa/Tester", "(docs/Tester)", "[tests/Tester]"):
+        assert targets(f"Send back: Developer · fix, see {path}", en_t) == ["backend"], path
+        assert "tester" not in targets(f"Send back: {path}", en_t), path
 
 
 def test_a_reviewers_verdict_in_either_language():

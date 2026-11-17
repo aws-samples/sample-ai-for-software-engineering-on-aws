@@ -78,6 +78,15 @@ _ROLE_ALIASES = {"后端": "backend", "服务端": "backend", "前端": "fronten
                  "架构": "architect"}
 
 
+class FindingRequestError(ValueError):
+    """A finding the request cannot register; *detail*: what of the request it was about (a role, a check, a
+    finding's ID), passed on to the English board as the error's detail."""
+
+    def __init__(self, message: str, detail: str = "") -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
 class FindingRefused(ValueError):
     """The triage with a person's new finding would not pass the checks' rules: what is wrong."""
 
@@ -237,7 +246,22 @@ def _plain(text: str) -> str:
     return " ".join(re.sub(r"[·・\-–—_]", " ", text).split()).rstrip(" .:：。")
 
 
+# a path in a send-back line, taken out whole before the line is split into roles: a word holding a / that starts
+# at a folder of a project, at ~ or /, or ends in a file; it may begin after ` " ' ( [ or : and ends before them
+_PATH = re.compile(r"""
+    (?<![^\s`"'(\[:])
+    (?: [~.]?/(?=[\w.~-])                                              # ~/…  ./…  /… (not a bare " / ")
+      | (?:docs|src|tests?|cmake|checks|bench|app|scripts|include|lib)/  # a folder of a project
+      | [\w.~-]+/[\w./-]*\.\w+                                       # a file: a/b.md
+    ) [^\s`"')\],;]*""", re.X)
+_TICKED = re.compile(r"`([^`\n]*)`")  # a backticked span: one with a / in it is a path (`Tester/plan`), left out
+_URL = re.compile(r"(?<![a-z0-9+.-])[a-z][a-z0-9+.-]*://\S*", re.I)  # a link, left out whole (one scan per start)
 _ASIDE = re.compile(r"\([^)]*\)|（[^）]*）")  # what a send-back line says about the change, not whom it goes to
+# asides standing alone between two " / " ("fix / (note) / Tester", one or more in a row: "fix / (a) (b) / Tester")
+# leave a mark, not nothing, so that the two " / " around them stay two (taken out, they would leave
+# "fix /  / Tester", and the role after them would be lost)
+_ASIDE_BETWEEN = re.compile(r"(?<=\s/)(\s+)(?:\([^)]*\)|（[^）]*）)(?:\s*(?:\([^)]*\)|（[^）]*）))*(?=\s+/\s)")
+_MARK = "\x00"
 
 
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
@@ -246,14 +270,55 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     writers = [r["key"] for r in roles if r.get("writable")]
     names = {**_ROLE_ALIASES, **{r["title"]: r["key"] for r in roles}, **{k: k for k in writers}}
     lines = _BOUNCE_LINE_RE.findall(text or "")
-    # a role the note goes on to mention in parentheses is not sent back too
-    chunks = [_ASIDE.sub("", c) for c in lines] or _OWNER_RE.findall(text or "")
-    found = {names.get(tok.strip(" `*_（）()")) for chunk in chunks for tok in re.split(r"[、,，/和及与\s]+", chunk)}
+    en = {r["key"]: _plain(r["title_en"]) for r in roles if r.get("writable") and r.get("title_en")}
+
+    def starts(part: str, key: str) -> bool:
+        return bool(re.match(rf"(?:the\s+)?{re.escape(en[key])}(?!\w)", part))
+
+    def starts_word(raw: str, key: str) -> bool:
+        """As starts(), on the part as written: a word joined to the name by a hyphen (Tester-notes) is not it."""
+        sep = r"[\s·・\-_–—]+"
+        name = sep.join(map(re.escape, en[key].split()))
+        return bool(re.match(rf"(?:the\s+)?{name}(?![\w-])", re.sub(r"[*`]", "", raw).strip().lower()))
+
+    def a_role(part: str) -> bool:
+        return bool(names.get(part.strip(" `*_（）()"))) or any(starts_word(part, k) for k in en)
+
+    def ticked(m: re.Match[str]) -> str:
+        """A backticked span with a / is a path (`Tester/plan`, also `Developer · fix/qa`: a role's name before the /
+        does not make it one), unless each of its parts is a role's name. A path becomes an item separator."""
+        return m.group(0) if "/" not in m.group(1) or all(map(a_role, m.group(1).split("/"))) else ","
+
+    # a role the note goes on to mention in parentheses is not sent back too, nor one a path's folder is named after;
+    # a path or a link taken out leaves a "," so that what comes after it (" / Tester") is an item of its own
+    def plain_line(c: str) -> str:
+        return _PATH.sub(",", _URL.sub(",", _TICKED.sub(ticked, _ASIDE.sub("", _ASIDE_BETWEEN.sub(r"\1" + _MARK, c)))))
+    marked = [plain_line(c) for c in lines] or _OWNER_RE.findall(text or "")
+    chunks = [c.replace(_MARK, "") for c in marked]  # the mark only splits English items below
+    # a word with a / (后端/测试, qa/tester) names each part only when every part is a role's name,
+    # else its first part only
+    found: set[str | None] = set()
+    for chunk in chunks:
+        for word in re.split(r"[、,，和及与\s]+", chunk):
+            parts = [names.get(p.strip(" `*_（）()")) for p in word.split("/")]
+            found |= set(parts) if all(parts) else {parts[0]}
     found |= {r["key"] for r in roles if r.get("writable") and any(r["title"] in chunk for chunk in chunks)}
-    # English names name a target only where an item of the line starts with one ("the Developer · fix role" too)
-    items = [_plain(i) for chunk in chunks for i in re.split(r"[,，;；、]|\s/\s|\band\b", chunk, flags=re.I)]
-    found |= {r["key"] for r in roles if r.get("writable") and r.get("title_en")
-              and any(re.match(rf"(?:the\s+)?{re.escape(_plain(r['title_en']))}(?!\w)", i) for i in items)}
+    # English names name a target only where an item of the line starts with one ("the Developer · fix role" too);
+    # items are split on , ; 、 and "and", and a spaced " / " splits an item too (a path left a "," before it:
+    # "see src/a.c / Tester"). Every part after a spaced " / " starts with the role's name as written, not joined to a
+    # word by a hyphen: "Developer · fix / Tester-side cases" names the fix role only, as "Tester-cases" is no role.
+    # A part with a bare / ("Developer · fix/Tester") names each of its pieces only when every piece starts with a
+    # role's name (after the /, as written); else only its first piece counts, so that what a path, a branch or a
+    # two-part name ("qa/Tester", "feature/Tester-cases") holds after a / is no role
+    for chunk in marked:
+        for item in re.split(r"[,，;；、]|\band\b", chunk, flags=re.I):
+            for i, part in enumerate(p.replace(_MARK, "") for p in re.split(r"\s+/\s+", item)):
+                raw = part.split("/")
+                if not raw[0].strip():
+                    continue  # a blank lead (what a path left)
+                lead = (starts(_plain(raw[0]), k) if i == 0 else starts_word(raw[0], k) for k in en)
+                named = [{k for k, ok in zip(en, lead) if ok}, *({k for k in en if starts_word(p, k)} for p in raw[1:])]
+                found |= set().union(*named) if all(named) else named[0]
     return [k for k in writers if k in found]
 
 
@@ -944,7 +1009,8 @@ class TeamRun:
             spec = {c["name"]: c for c in self.team.get("checks") or []}
             role, ext = body["role"], body.get("extend")
             if role not in self.impl or not self.roles[role]["writable"]:
-                raise ValueError(f"{role} 不是做实现的角色（可以选：{'、'.join(self.impl)}）")
+                choices = "、".join(self.impl)
+                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}）", str(role))
             k, path = self._knowledge(), Path(self.s["repo"]).parent / TRIAGE_FILE
             data = self._approved_triage()
             if k is None or data is None:
@@ -953,16 +1019,16 @@ class TeamRun:
                 entry = next((f for f in data.get("findings") or [] if isinstance(f, dict) and f.get("id") == ext
                               and isinstance(f.get("added"), dict)), None)
                 if entry is None:
-                    raise ValueError(f"批准的分诊里没有补登过的 {ext}")
+                    raise FindingRequestError(f"批准的分诊里没有补登过的 {ext}", str(ext))
                 m = re.fullmatch(r"checks/([\w-]+)\.sh", str(entry["added"].get("found_by") or ""))
                 if not m:
-                    raise ValueError(f"{ext} 不是检查发现的，没有检查可以再跑一轮")
+                    raise FindingRequestError(f"{ext} 不是检查发现的，没有检查可以再跑一轮", str(ext))
                 fid, check, location = ext, m.group(1), str(entry["added"].get("location") or "")
                 digest = str((self.s.get("triage") or {}).get("sha256") or "")
             else:
                 check, location = body["check"], body["location"]
             if check not in spec:
-                raise ValueError(f"团队没有叫 {check} 的检查")
+                raise FindingRequestError(f"团队没有叫 {check} 的检查", str(check))
             if not ext:
                 fid = self.next_finding_id()
                 entry = {"id": fid, "decision": body["decision"]}
@@ -2030,6 +2096,11 @@ class TeamRun:
         """The team as the test run sees it: the test files owned by a role that sits this run out are left out."""
         out = [k for k in self.order if self.lane(k)["status"] == "skipped"]
         return {**self.team, "skip_owners": out} if out else self.team
+
+    def sign_block_detail(self) -> str:
+        """Of why the run cannot be signed off, what came from outside the app: release.sh's reason ("" if none)."""
+        m = self.sign_block_msg()
+        return str((m.get("params") or {}).get("why") or "") if m and m["code"] == "sign.release" else ""
 
     def sign_block(self) -> str:
         """Why this run cannot be signed off ("" when it can), in Chinese; sign_block_msg() has it by code."""

@@ -180,19 +180,15 @@ five messages after the start (from 93 ms) and again after the reconnection (fro
 log comparison catches the wrong fix on this host, as
 [rehearsal/check-examples/](../../rehearsal/check-examples/README.md) says it should.
 
-On that host the guardrail tests pass (44 OK) with `umask 022` and a temporary folder of the user's own with mode
-755. With Ubuntu's default `umask 002`, or with `TMPDIR=/tmp`,
-`test_trusted_readers_own_the_build_results_and_the_triage_only` fails or errors: when it pretends to be another
-user, the path check refuses a group-writable folder on the path, or the sticky `/tmp` holding another user's
-folder, as "writable by other users" before it reaches the owner check the test expects. The server refuses those
-paths as it should; the test's expected message is narrower than the check.
+The guardrail tests pass with `umask 022`, with Ubuntu's default `umask 002` and with `TMPDIR=/tmp`: they make their
+folders with the permissions they mean, and where the path check meets the sticky `/tmp` before a folder of another
+user, either refusal is what the test expects. The server's path checks are the same. Counts: 53 OK on a Linux host
+(Python 3.12, MCP SDK 2.3.0, 2026-11-16) and 53 OK on an Apple Silicon Mac (Python 3.13, MCP SDK 2.3.0, 2026-11-16).
 
 ## Not yet verified
 
 - The server as a user of its own (`benchsrv`), started by the agents' user through sudo; the runs above were as the
   bench owner's own user, so the path checks only met that user's folders.
-- `test_trusted_readers_own_the_build_results_and_the_triage_only` under `umask 002` or `TMPDIR=/tmp`: the test
-  expects the owner message where the check first finds a writable folder.
 
 ## Open questions
 

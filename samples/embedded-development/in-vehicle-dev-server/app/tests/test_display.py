@@ -219,3 +219,45 @@ def test_the_replays_bench_starts_from_what_the_bench_was_before_the_run(tmp_pat
     got = mod("board").bench_history(run)
     assert [(r["event"], r.get("why") or r.get("id") or r.get("kl15")) for r in got] == [
         ("supply", "on"), ("target", "before the run"), ("request", "q1"), ("target", "deploy")]
+
+
+def test_a_short_login_that_is_a_word_is_matched_in_its_own_case_only(tmp_path, monkeypatch):
+    """A login of 4 characters or fewer (will, mark) is a common word too: it is replaced only as written and not
+    between two English words, so "will" in a sentence stays; where the records name the person (will补登, will@host,
+    a by of its own) it goes. A longer name (alice) is matched in any case."""
+    monkeypatch.setattr(display, "this_mac_names", lambda: set())
+    v = display.View("en", ["will", "alice"])
+    assert v.text("The tester will check it; Will said so") == "The tester will check it; Will said so"
+    assert v.text("will补登 F-032 · will@host (/dev/ttys003) · signed by will") == \
+        "Release owner补登 F-032 · Release owner · signed by Release owner"
+    assert v.text("will") == "Release owner"
+    assert v.text("ALICE and Alice, then alice") == "Release owner and Release owner, then Release owner"
+
+
+def test_only_a_lowercase_ascii_login_is_taken_for_a_word(monkeypatch):
+    """Second review of #41: the exemption is for a login of lowercase ASCII letters (will, mark), the word it may
+    be; a Chinese name or a record name like Li between two words is the person."""
+    monkeypatch.setattr(display, "this_mac_names", lambda: set())
+    v = display.View("en", ["王工", "Li", "will"])
+    assert v.text("Signed off by 王工 after the rerun") == "Signed off by Release owner after the rerun"
+    assert v.text("Signed off by Li after the rerun") == "Signed off by Release owner after the rerun"
+    assert v.text("The tester will check it; Will said so") == "The tester will check it; Will said so"
+
+
+def test_a_short_login_right_after_by_from_or_with_is_the_person(monkeypatch):
+    """Second review of #41 (optional): "Approved by will today" names the person; "The tester will check it" not.
+    (Not after "to": see the next test.)"""
+    monkeypatch.setattr(display, "this_mac_names", lambda: set())
+    v = display.View("en", ["will"])
+    assert v.text("Approved by will today; from will, with will") == (
+        "Approved by Release owner today; from Release owner, with Release owner")
+    assert v.text("The tester will check it") == "The tester will check it"
+
+
+def test_a_short_login_after_to_is_the_word(monkeypatch):
+    """Third review of #41: "to" is no sign of a person ("We need to mark the finding"); by, from and with are."""
+    monkeypatch.setattr(display, "this_mac_names", lambda: set())
+    v = display.View("en", ["mark"])
+    assert v.text("We need to mark the finding") == "We need to mark the finding"
+    assert v.text("sent by mark, with mark, from mark today") == (
+        "sent by Release owner, with Release owner, from Release owner today")

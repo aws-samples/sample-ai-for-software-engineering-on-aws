@@ -16,6 +16,7 @@ import grp
 import hashlib
 import itertools
 import json
+import math
 import os
 import pathlib
 import pwd
@@ -51,22 +52,45 @@ VERDICTS = {0: "PASS", 1: "FAIL", 2: "USAGE", 3: "BLOCKED"}
 TAIL_BYTES = 8192
 ACTIONS_SHOWN = 30
 AUDIT_ARG_MAX = 200  # characters of a malformed call's raw argument kept in its audit line
+_INT_BITS_MAX = 640  # an integer of more bits than this has more than AUDIT_ARG_MAX digits (640 bits < 193 digits)
+
+
+def capped_value(v):
+    """One argument as the audit keeps it: a string cut to AUDIT_ARG_MAX; an integer whose digits would be longer
+    described by its size; a NaN or an infinity described (JSON has neither); bool and None as they are; anything
+    else as its repr, cut, or by its type when repr fails (a list holding a huge integer, a very deep one). An
+    integer's size is taken from bit_length() before any repr, so a 5,000-digit integer is audited too."""
+    if v is None or isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        if v.bit_length() > _INT_BITS_MAX or len(repr(v)) > AUDIT_ARG_MAX:
+            return f"<int, {v.bit_length()} bits>"
+        return v
+    if isinstance(v, float):  # NaN and infinities: json.dumps would write NaN and Infinity, which JSON lacks
+        return v if math.isfinite(v) else f"<float {v}>"
+    if isinstance(v, str):
+        return v[:AUDIT_ARG_MAX]
+    try:
+        return repr(v)[:AUDIT_ARG_MAX]
+    except (ValueError, RecursionError, MemoryError):  # a container with a huge int, or nested very deep
+        return f"<{type(v).__name__}>"
 
 
 def capped(args):
-    """A call's arguments as the audit keeps them: at most 20, each name and value cut to AUDIT_ARG_MAX."""
-    out = {}
-    for k, v in list(args.items())[:20]:
-        v = v if isinstance(v, (str, int, float, bool, type(None))) else repr(v)
-        out[str(k)[:AUDIT_ARG_MAX]] = v[:AUDIT_ARG_MAX] if isinstance(v, str) else v
-    return out
+    """A call's arguments as the audit keeps them: at most 20, each name and value capped (capped_value)."""
+    return {str(k)[:AUDIT_ARG_MAX]: capped_value(v) for k, v in list(args.items())[:20]}
 DOCKER_CLIENT_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH",
                      "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
 RUN_NAME = re.compile(r"run-(\d{1,6})")
 
 
 class Refused(Exception):
-    """The call is not allowed, or the bench refused it; nothing more was done."""
+    """The call is not allowed, or the bench refused it; nothing more was done. *request* and *digest*: the bench
+    request the refused action made and its build's digest, for the audit line, when there was one."""
+
+    def __init__(self, message, request=None, digest=None):
+        super().__init__(message)
+        self.request, self.digest = request, digest
 
 
 class ConfigError(Exception):
@@ -388,15 +412,32 @@ class BenchService:
         env_path = cfg.get("environment", {}).get("path", "/usr/local/bin:/usr/bin:/bin")
         label = hashlib.sha256(str(self.state).encode()).hexdigest()[:16]
         self.sandbox = Sandbox(cfg.get("sandbox", {}), env_path, label)
-        self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"  # this session's lease identity
+        # this session's lease identity, used inside the lease only
+        self.holder = f"{role}:{os.getpid()}:{secrets.token_hex(8)}"
+        self.session = secrets.token_hex(8)  # who the requests and the audit name: no pid, nothing of the lease
         self.current = {}  # the calls in progress (reads run beside a write), for the audit if the session ends
         self.call_ids = itertools.count()
         # who the bench's requests name: unique to this session, so that this call's request is told from another's
         # (the app's own, another session's) in the action record
-        self.requester = f"bench MCP server (role {role}, session {self.holder})"
+        self.requester = f"bench MCP server (role {role}, session {self.session})"
         self.lock = threading.Lock()
         self.publish_lock = threading.Lock()
         self.lock_path = self.state / "lock"
+        self.sweep_read_logs()
+
+    def sweep_read_logs(self):
+        """Removes the logs of reads a killed session left in this server's logs folder (a real folder, not a link;
+        read-*.log, regular files only): those older than a read may take, so that a read another session has in
+        progress keeps its log."""
+        logs = self.state / "logs"
+        if not real_dir(logs):  # a link to some other folder: not this server's to sweep
+            return
+        cutoff = time.time() - float(self.timeouts["read"]) - 60
+        for p in logs.glob("read-*.log"):
+            with contextlib.suppress(OSError):
+                st = os.lstat(p)
+                if stat.S_ISREG(st.st_mode) and st.st_mtime < cutoff:
+                    os.unlink(p)
 
     @contextlib.contextmanager
     def exclusive(self):
@@ -411,7 +452,7 @@ class BenchService:
     # ------------------------------------------------------------------------------------------ audit and calls
 
     def audit(self, entry):
-        line = json.dumps({"t": now(), "role": self.role, "session": self.holder, **entry}, ensure_ascii=False,
+        line = json.dumps({"t": now(), "role": self.role, "session": self.session, **entry}, ensure_ascii=False,
                           sort_keys=True, default=repr)
         fd = os.open(self.audit_log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o640)
         try:
@@ -458,7 +499,8 @@ class BenchService:
                     self.sandbox.reap()
                 result = getattr(self, "_" + tool)(**args)
             except Refused as e:
-                self.audit({**entry, "outcome": "refused", "detail": str(e)})
+                self.audit({**entry, "outcome": "refused", "detail": str(e),
+                            **{k: getattr(e, k) for k in ("request", "digest") if getattr(e, k, None)}})
                 raise
             except Exception as e:  # noqa: BLE001 - audited, then reported without internals
                 self.audit({**entry, "outcome": "error", "detail": f"{type(e).__name__}: {e}"})
@@ -638,31 +680,35 @@ class BenchService:
         offset = os.path.getsize(record) if os.path.isfile(record) else 0
         r = self.cc1(args, timeout + self.timeouts["approval"], action)
         new = self.records_from(offset)
-        rid = next((e.get("id") for e in new if e.get("event") == "request" and e.get("action") == action
+        req = next((e for e in new if e.get("event") == "request" and e.get("action") == action
                     and e.get("requested_by") == self.requester and (digest is None or e.get("digest") == digest)),
-                   None)
+                   {})
+        rid = req.get("id")
+        if digest is None and isinstance(req.get("digest"), str):  # restart, replay: the build the bench requested
+            digest = req["digest"] or None
         out = {**{k: v for k, v in r.items() if k != "log"}, "action": action, "request": rid,
-               "log_tail": tail(r["log"], 2048)}
+               "log_tail": tail(r["log"], 2048), **({"digest": digest} if digest else {})}
         if r["outcome"] == "ok":
             return out
         mine = [e for e in new if rid is not None and rid in (e.get("id"), e.get("request"))]
         decision = next((e for e in mine if e.get("event") == "decision"), None)
         if decision and decision.get("verdict") != "approved":
             by, reason = decision.get("by") or "the console", decision.get("reason") or "no reason given"
-            raise Refused(f"refused ({by}): {reason} (not retried)")
+            raise Refused(f"refused ({by}): {reason} (not retried)", rid, digest)
         gate = next((e for e in mine if e.get("event") == "gate" and not e.get("passed")), None)
         if gate:
-            raise Refused(f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)")
+            why = f"refused: the physical gate ({gate.get('stage')}): {gate.get('why')} (not retried)"
+            raise Refused(why, rid, digest)
         began = any(e.get("event") in ("action", "target") for e in mine)
         if not began:  # refused before the request, or approved but not begun (the target busy): nothing ran
             text = (read_nofollow(r["log"]) or b"").decode(errors="replace")
             lines = [ln for ln in text.splitlines() if ln.strip()]
             if lines and lines[-1].startswith("refused"):
                 ran = " after the approval; nothing ran on the target" if decision else ""
-                raise Refused(f"{lines[-1]}{ran} (not retried)")
+                raise Refused(f"{lines[-1]}{ran} (not retried)", rid, digest)
         if r["outcome"] == "timeout":
             raise Refused(f"{action} did not finish within its timeout; the bench marks the target unknown until a "
-                          "person reconciles it at the operator console (not retried)")
+                          "person reconciles it at the operator console (not retried)", rid, digest)
         return {**out, "outcome": "failed"}
 
     def judged_build(self):
@@ -698,7 +744,7 @@ class BenchService:
         run = self.state / "runs" / f"run-{max(runs, default=0) + 1}"
         out = self.physical("replay", ["replay", "--kind", "run", "--out", run], self.timeouts["replay"])
         res = read_json(run / "run-result.json")
-        return {**out, "run": run.name, "digest": (res or {}).get("approved_digest"),
+        return {**out, "run": run.name, "digest": (res or {}).get("approved_digest") or out.get("digest"),
                 "result": {k: v for k, v in (res or {}).items() if k in ("replay_id", "replay_finished",
                                                                           "figures_after_replay_end", "vm_hwm_kib",
                                                                           "threads_at_end", "vstatd_restarts")}}

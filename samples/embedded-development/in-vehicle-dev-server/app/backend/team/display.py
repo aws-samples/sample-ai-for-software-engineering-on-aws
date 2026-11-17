@@ -8,7 +8,11 @@
   host name go too.
 
 The names come from the records (``by``, ``requested_by``, ``set_by`` …) and from this Mac (``getpass.getuser()``,
-the account's full name), so a name inside a text is found without knowing the text's wording.
+the account's full name), so a name inside a text is found without knowing the text's wording. A name of five
+characters or more is matched in any case; a login of four or fewer is matched only as written, and one of lowercase
+ASCII letters is often an English word too (``will``, ``mark``): between two English words it is left alone ("the
+tester will check" stays), unless it comes right after by, from or with ("approved by will today"). A Chinese
+name or a record name like ``Li`` is always the person.
 """
 
 from __future__ import annotations
@@ -65,6 +69,7 @@ def host_names() -> set[str]:
     return {h for h in out if len(h) >= 3 and h.lower() not in ("localhost",)}
 
 
+_SHORT = 4  # a login of this many characters or fewer is matched case-sensitively, and not inside a sentence
 _SPLIT = re.compile(r"[@（(，,\s]")
 _IN_BOARD = re.compile(r"看板（([^，,）)]+)")
 
@@ -95,12 +100,28 @@ class View:
         self.hosts = sorted(host_names(), key=len, reverse=True) if self.present else []
         self._rx: re.Pattern[str] | None = None
         if self.names:
-            alt = "|".join(re.escape(n) for n in self.names)
+            # a name of 5 characters or more is matched in any case; a shorter login (will, mark, ann) is often an
+            # English word too, so it is matched only as written (see _SHORT and text())
+            alt = "|".join(f"(?i:{re.escape(n)})" if len(n) > _SHORT else re.escape(n) for n in self.names)
             host = "|".join(re.escape(h) for h in self.hosts) or r"(?!)"
             # a name, with what may follow it (@host or @domain, a terminal); a name inside a word of Latin letters
             # (annotate for ann) is left alone, one between - . / is not (a folder or a file named after the user)
-            self._rx = re.compile(rf"(?<![A-Za-z0-9_])(?:{alt})(?:@(?:{host}|[\w.-]+))?(?:\s*\(/dev/[^)]*\))?(?![A-Za-z0-9_])", re.I)
+            self._rx = re.compile(rf"(?<![A-Za-z0-9_])(?:{alt})(?:@(?:{host}|[\w.-]+))?"
+                                  rf"(?:\s*\(/dev/[^)]*\))?(?![A-Za-z0-9_])")
         self._host = re.compile("|".join(rf"(?<![\w.-]){re.escape(h)}(?![\w-])" for h in self.hosts)) if self.hosts else None
+
+    @staticmethod
+    def _a_word(s: str, m: re.Match[str]) -> bool:
+        """A short login of lowercase ASCII letters (will, mark) between two English words ("the tester will check")
+        is the word, not the person; right after by, from or with ("approved by will today") it is the person.
+        A Chinese name or a record name like Li is never taken for a word."""
+        name = re.match(r"[^@\s(]+", m.group(0))
+        if not name or len(name.group(0)) > _SHORT or not re.fullmatch(r"[a-z]+", name.group(0)):
+            return False
+        before = s[:m.start()]
+        if re.search(r"\b(?:by|from|with) $", before, re.I):  # not "to": "we need to mark the finding"
+            return False
+        return bool(re.search(r"[A-Za-z] $", before) and re.match(r" [A-Za-z]", s[m.end():]))
 
     def text(self, s: str) -> str:
         for h in self.homes:
@@ -109,7 +130,7 @@ class View:
                 s = re.sub(rf"'{re.escape(h)}/", "~/'", s)
                 s = re.sub(rf"{re.escape(h)}(?=/|$|[^\w.-])", "~", s)
         if self._rx is not None:
-            s = self._rx.sub(self.owner, s)
+            s = self._rx.sub(lambda m: m.group(0) if self._a_word(s, m) else self.owner, s)
         if self._host is not None:
             s = self._host.sub("this-mac", s)
         return s
