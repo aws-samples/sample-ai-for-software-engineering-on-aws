@@ -414,7 +414,8 @@ been dry-run once.
    Kiro Crew app (item 8) does not need this item's configurations. *Done in part (2026-11-16):* the bypass hook in
    the roles' templates, its tests and the permission probe, run with kiro-cli 2.34.0 ([agents/](agents/README.md)).
    The templates load in both of kiro-cli's engines (V2 and V3), and the developer role's template ran as expected in
-   a Kiro Crew 0.12.2 chat session (2026-11-17). Open: the whole app on a Mac with Kiro Crew 0.12, the Kiro IDE.
+   a Kiro Crew 0.12.2 chat session (2026-11-17); the app's roles booted from them on a Mac (Kiro Crew 0.13.0-rc.1).
+   Open: a first install without a gateway restart, the whole app on Kiro Crew 0.12, the Kiro IDE.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the board's gates and the operator console, followed by an independent rerun
    of the checks.
