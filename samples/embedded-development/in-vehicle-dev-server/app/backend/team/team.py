@@ -257,6 +257,10 @@ _PATH = re.compile(r"""
 _TICKED = re.compile(r"`([^`\n]*)`")  # a backticked span: one with a / in it is a path (`Tester/plan`), left out
 _URL = re.compile(r"(?<![a-z0-9+.-])[a-z][a-z0-9+.-]*://\S*", re.I)  # a link, left out whole (one scan per start)
 _ASIDE = re.compile(r"\([^)]*\)|（[^）]*）")  # what a send-back line says about the change, not whom it goes to
+# an aside standing alone between two " / " ("fix / (note) / Tester"): it leaves a mark, not nothing, so that the
+# two " / " around it stay two (taken out, it would leave "fix /  / Tester", and the role after it would be lost)
+_ASIDE_BETWEEN = re.compile(r"(?<=\s/)(\s+)(?:\([^)]*\)|（[^）]*）)(?=\s+/\s)")
+_MARK = "\x00"
 
 
 def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
@@ -287,8 +291,9 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     # a role the note goes on to mention in parentheses is not sent back too, nor one a path's folder is named after;
     # a path or a link taken out leaves a "," so that what comes after it (" / Tester") is an item of its own
     def plain_line(c: str) -> str:
-        return _PATH.sub(",", _URL.sub(",", _TICKED.sub(ticked, _ASIDE.sub("", c))))
-    chunks = [plain_line(c) for c in lines] or _OWNER_RE.findall(text or "")
+        return _PATH.sub(",", _URL.sub(",", _TICKED.sub(ticked, _ASIDE.sub("", _ASIDE_BETWEEN.sub(r"\1" + _MARK, c)))))
+    marked = [plain_line(c) for c in lines] or _OWNER_RE.findall(text or "")
+    chunks = [c.replace(_MARK, "") for c in marked]  # the mark only splits English items below
     # a word with a / (后端/测试, qa/tester) names each part only when every part is a role's name,
     # else its first part only
     found: set[str | None] = set()
@@ -304,9 +309,9 @@ def review_targets(text: str, roles: list[dict[str, Any]]) -> list[str]:
     # A part with a bare / ("Developer · fix/Tester") names each of its pieces only when every piece starts with a
     # role's name (after the /, as written); else only its first piece counts, so that what a path, a branch or a
     # two-part name ("qa/Tester", "feature/Tester-cases") holds after a / is no role
-    for chunk in chunks:
+    for chunk in marked:
         for item in re.split(r"[,，;；、]|\band\b", chunk, flags=re.I):
-            for i, part in enumerate(re.split(r"\s+/\s+", item)):
+            for i, part in enumerate(p.replace(_MARK, "") for p in re.split(r"\s+/\s+", item)):
                 raw = part.split("/")
                 if not raw[0].strip():
                     continue  # a blank lead (what a path left)
