@@ -380,8 +380,8 @@ may not read the same one).
 
 ### D17. App 通过 build / bench 服务器跑检查和台架
 
-Decided on 2026-11-16 and implemented in `backend/team/servers.py`, without an end-to-end run yet (see the end of
-this section). Release stays `direct` until #42 is merged.
+Decided on 2026-11-16 and implemented in `backend/team/servers.py`; one delivery ran end to end in `servers` mode
+on 2026-11-17 (run `r11170658`, at the end of this section). Release stays `direct` until #42 is merged.
 
 **Two modes, one switch.** The team file's `"connectors"` picks one, `"direct"` by default:
 
@@ -460,9 +460,10 @@ mounted folder is still the one it saw at start, by device and inode (`check_mou
   round the app fetches the run's branches into it, runs `git checkout --detach <commit>` and `git clean -fdx`
   there, and requires `workspace_status` to name that commit with no changes. The folder is moved
   in place and never removed or recreated.
-- **Triage folder:** `~/workplace/vstatd-team/server/triage/`, the folder of `paths.triage` in both servers. When
-  the triage gate is approved (D4), and each time D15 writes the triage again, the app writes `triage.json` and
-  `triage.json.sha256` there as well as beside the run's repository. The files are replaced, the folder is kept.
+- **Triage folder:** `~/workplace/vstatd-team/server/triage/`, the folder of `paths.triage` in both servers.
+  Before each server session the app copies the run's approved `triage.json` and `triage.json.sha256` (the ones
+  beside the run's repository, which D4 and D15 write) there when they differ, so a triage D15 changed is the one
+  the next check judges. The files are replaced, the folder is kept.
 - **One run at a time:** the servers' state is one per installation: `build`'s published results, its repair count
   and its HEAD, and `bench`'s runs and published results. So a run takes the servers at its first server call and
   keeps them until it is done or a person stops it; a run held for a person keeps them (`server/holder.json`, beside
@@ -528,7 +529,11 @@ count is of outcome lines. The figure counts the app's calls; the agents make no
 2. **The log comparison's repair rounds.** `build` counts the cross build's (its `repair.json`, reset by a person
    with `buildserver.admin reset-repair`) and writes `repair-rounds.json` with that count only. Who counts
    `logdiff`'s two rounds for `release.sh` is asked on #42 too; until then the app counts both, as now, and a
-   refusal of `build`'s own bound goes to a person.
+   refusal of `build`'s own bound goes to a person. Seen in `r11170658`: the seeded toolchain defect was fixed only
+   after the fourth failing build, once a person had registered it (D15), so the server refused the next build
+   (`cross attempts failed 4 times in a row`) while the app still allowed rounds. A person reset the count with
+   `buildserver.admin reset-repair` and 重试 ran the round again. The two counts disagree whenever a fix needs a
+   person first.
 3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
    Not decided: a triage tool of the server, or a person copying the approved file into place.
 4. **Release** waits for #42 (`run_check release` reads the bench server's published results). Until it is merged,
@@ -560,6 +565,45 @@ triage, `bench` with role `reviewer` (read-only only):
 Each audit line held `t`, `role`, `tool`, `class`, `args` and `outcome`, and on the outcome line `duration_ms`,
 `exit_status`, and where there is one, `verdict`, `digest` or the refusal's `detail`; `bench`'s lines also name the
 session.
+
+**Seen in the servers-mode delivery.** Run `r11170658` (2026-11-17, Apple Silicon Mac, both servers as the
+current user, the same work item as `r11032637`). It reached sign-off: `release.sh` PASS on the rerun (`every check
+passed on 8d790aa6e812; vstatd 8bf5b6b7df95`), no check differed on the rerun, 141.2 credits. Bench actions were
+approved on the board (`servers.board_decides`, added during the run).
+
+| What | Figure |
+| --- | --- |
+| Tool calls by permission class | read-only 9, controlled-write 52, physical 3 (a deploy that timed out, a deploy, a replay) |
+| Server sessions | 17 (build 10, bench 7); 48 build and 17 bench outcome lines in the audit logs |
+| Tests first | one `run_check unit`, 50.2 s (plain, ThreadSanitizer and AddressSanitizer builds) |
+| A round of the before-bench checks | 61 to 91 s when all five ran; seven rounds |
+| One check, over the rounds | build 4.2–7.4 s, static 19.4–35.4 s, unit 26.0–43.0 s, size 1.2–2.5 s, trace 1.5–2.7 s |
+| Deploy, replay | 26.5 s and 26.6 s each, from the request to the result, approval included |
+| After-bench checks | 1.2 s (runtime-limits 0.8 s, logdiff 0.4 s) |
+| Independent rerun | 72.9 s on the servers, then `release.sh` direct |
+
+The times are the servers' `duration_ms` and leave out the app's tick. The run's wall clock, 09:54 to 16:31, holds
+four and a half hours of waiting for a person and is not a measure of the work.
+
+The run found these in the app, each fixed with a test and installed during the run; none was in the servers:
+
+- **The servers did not find `docker`.** Kiro Crew's gateway runs the app with PATH `/usr/bin:/bin:/usr/sbin:/sbin`;
+  the app now starts the servers with docker's folder first on PATH.
+- **No role session opened.** An app update removed the folder's `.app_secret`; the app asks the gateway's
+  `AppContext.app_token()` when there is none.
+- **A 要改 review read as no verdict** (an earlier run, `r1116064b`): the reviewer's reply quoted `` `DONE:` `` in its
+  prose and that line was taken as the summary, so the run ended done with failing checks. A `DONE:` right after a
+  backtick is no longer one, and a run whose last round still fails is looked at again before it can end.
+- **A new defect used up a role's rounds.** A developer fixed what the checks found and cited an ID the triage did
+  not have (F-032); `trace.sh` sent it back until its rounds ran out and the fix was never merged. The run is held
+  for a person to register it (D15) instead; the same commit is then merged.
+- **重试 did nothing after the build server refused.** The refused build left size BLOCKED and the hold was not taken
+  as the servers'; and with no failed role the board showed no 重试. Such a hold is the servers' now, with a 重试
+  button of its own (`servers_held` on the board).
+- **The board offered no way to approve.** At the user's request, `servers.board_decides` (above).
+
+Not fixed: when a person's decision at a review gate ran `git reset --hard` in a role's work tree, the app recorded
+three files of the run branch as written outside the role's scope; the merge was not affected.
 
 Alternatives considered: the agents calling the servers themselves (the open trust-boundary question of
 `mcp/bench/README.md`, for after this); keeping tests first in `direct` mode (no temporary commit, but one check
@@ -609,7 +653,8 @@ bench images; step 12 needs them.
     whole round with stand-in servers, a failing check going to its owner and a refusal going to a person; every
     existing test still passing; one delivery end to end with the bench actions approved at the console. *Done so
     far* (2026-11-16): the client and its tests, the read-only trial in D17, and servers mode with its tests
-    (`tests/test_mcpclient.py`, `tests/test_servers.py`). Not yet: the end-to-end delivery.
+    (`tests/test_mcpclient.py`, `tests/test_servers.py`). *Done* 2026-11-17: run `r11170658` signed off, bench
+    actions approved on the board (`servers.board_decides`); figures in D17.
 
 ## Seen in the first delivery
 
