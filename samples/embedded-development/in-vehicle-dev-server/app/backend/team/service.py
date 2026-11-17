@@ -570,7 +570,7 @@ class Service:
             team, sample = await asyncio.to_thread(self._default_team)
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
-        if servers_mod.on(team):  # D17: the requests are the bench server's; a person decides at the console
+        if not servers_mod.board_decides(team):  # D17: in servers mode a person decides at the console by default
             raise AppError("servers 模式下台架请求只在操作台 bench/console.py 上批", "decide_off", 409)
         return await bench_mod.decide(sample / "bench" / "lib", rid, verdict, digest, reason)
 
@@ -589,7 +589,7 @@ class Service:
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
         return {"at": now, "team": str(team.get("name") or ""), "error": "",
                 "items": readiness.items(team, self.probes, kb, state, sample, now),
-                "pending": readiness.pending(team, state, now), "board_decides": not servers_mod.on(team)}
+                "pending": readiness.pending(team, state, now), "board_decides": servers_mod.board_decides(team)}
 
     async def knowledge(self) -> dict[str, Any]:
         """知识库 (home page): the scenario's knowledge documents with figures counted now, and Crew's source state."""

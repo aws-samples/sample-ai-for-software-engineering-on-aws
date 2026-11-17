@@ -49,6 +49,13 @@ def on(team: dict[str, Any]) -> bool:
     return team.get("connectors") == "servers"
 
 
+def board_decides(team: dict[str, Any]) -> bool:
+    """Whether the board offers 批准 / 拒绝 for bench requests: always in direct mode (D3); in servers mode only with
+    ``servers.board_decides`` (the trial, both servers as the current user, D17). With the servers as their own users
+    the board cannot write the bench state, so the switch is off there."""
+    return not on(team) or (team.get("servers") or {}).get("board_decides") is True
+
+
 def _words(x: Any) -> bool:
     return isinstance(x, list) and bool(x) and all(isinstance(w, str) and w for w in x)
 
@@ -60,9 +67,12 @@ def check(team: dict[str, Any]) -> None:
     if mode not in MODES:
         raise ValueError("team.json：connectors 只能是 direct 或 servers")
     sv = team.get("servers")
-    if sv is not None and not (isinstance(sv, dict) and set(sv) == {"build", "bench"}
-                               and all(_words(v) and "--config" in v[:-1] for v in sv.values())):
-        raise ValueError("team.json：servers 要写成 {build: [命令和参数], bench: [命令和参数]}，每条都带 --config 配置文件")
+    keys = {"build", "bench"}
+    if sv is not None and not (isinstance(sv, dict) and keys <= set(sv) <= keys | {"board_decides"}
+                               and all(_words(sv[k]) and "--config" in sv[k][:-1] for k in ("build", "bench"))
+                               and isinstance(sv.get("board_decides", False), bool)):
+        raise ValueError("team.json：servers 要写成 {build: [命令和参数], bench: [命令和参数]}，每条都带 --config 配置文件"
+                         "（board_decides 可选，true 或 false）")
     if mode != "servers":
         return
     if sv is None or not team.get("checks") or not team.get("bench"):

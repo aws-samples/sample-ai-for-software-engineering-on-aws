@@ -88,6 +88,7 @@ Team level:
 | `bench` | `deploy`, `replay` (and `restart`) with `{artifact}` and `{run}`, run by the app; `doctor`, run by the app; `build` and `start`, the bench owner's commands shown on the board; `baseline`, the baseline directory |
 | `connectors` | `direct` (default): checks in the build container, `bench/cc1.sh`; `servers`: the MCP servers (below) |
 | `servers` `{build, bench}` | The command line that starts each server, each with its `--config` |
+| `servers.board_decides` | `false` by default; `true`: 批准 / 拒绝 on the board too in servers mode (trial only) |
 | `test_owners`, `test_command` | For a team without `checks`: who owns failing tests (globs), and the command the test wall shows |
 | `delivery_defaults` | Default delivery labels |
 | `defaults` | `model`, `max_fix_rounds` (2), `max_review_rounds` (0), `gate_discuss` (off), `max_discuss_rounds` (5) |
@@ -128,7 +129,8 @@ Set-up, once (the paths the shipped team file names):
 3. Set `"connectors": "servers"` in `team/team-vstatd.json` and reinstall the app.
 
 One run uses the servers at a time. Approve each bench request at `bench/console.py`: the board shows it and does
-not approve it in this mode. What a server refuses holds the run for a person; 重试 asks the server again.
+not approve it in this mode, unless `servers.board_decides` is true (the trial only, as in direct mode, D3).
+What a server refuses holds the run for a person; 重试 asks the server again.
 
 ## Test
 

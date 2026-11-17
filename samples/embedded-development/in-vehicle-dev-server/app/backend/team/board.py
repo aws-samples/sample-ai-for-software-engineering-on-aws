@@ -247,7 +247,7 @@ def bench_view(run: TeamRun, scrub: Callable[[str], str] = str) -> dict[str, Any
             "artifact": b.get("artifact"), "run_dir": b.get("run_dir"), "baseline": str(spec["baseline"]),
             "actions": list(b.get("actions") or []), "state": bench_mod.read_state(), "history": bench_history(run),
             "console": shlex.join(["python3", str(console)]) if console.is_file() else None,
-            "board_decides": not servers_mod.on(run.team)}
+            "board_decides": servers_mod.board_decides(run.team)}
 
 
 def crew_members(run: TeamRun, crew: Any) -> list[str] | None:

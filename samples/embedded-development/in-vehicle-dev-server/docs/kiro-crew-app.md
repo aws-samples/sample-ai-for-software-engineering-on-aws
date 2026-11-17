@@ -511,7 +511,10 @@ as their own users the board could not approve anyway. It approves by writing th
 (`benchstate.decide()`, D3), and the bench server requires every folder down to that state to belong to root or its
 own user and to be writable by no other user (`check_trusted()`). If the app's user could write it, so could the
 agents, who run as the same user. In the trial the buttons would still work, so they are turned off by design and not
-by permissions. `POST /bench/decide` answers 409 (`decide_off`) in this mode.
+by permissions. `POST /bench/decide` answers 409 (`decide_off`) in this mode. For a trial where a person presents
+from the board, `servers.board_decides: true` in the team file turns the buttons on again, as in direct mode: it
+takes no protection away while the servers run as the current user, and does nothing once they run as their own
+users (the board cannot write the bench state then). Added on 2026-11-17 at the user's request.
 
 **Scorecard.** "Tool calls by permission class" (D8) comes from both servers' `audit.jsonl`: the lines each of the
 run's sessions wrote (`servers.jsonl` keeps the file's size when the session started and ended). Each call

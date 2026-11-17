@@ -112,7 +112,7 @@ export type BenchView = {
   replay?: { target: boolean; supply: boolean }
   history?: Record<string, unknown>[] // the action record as it concerns this run (its requests and what names them, the target and supply while it ran): the bench of its replay
   console: string | null // the command that opens the operator console (python3 …/bench/console.py), null when there is none
-  board_decides?: boolean // false in servers mode (D17): no 批准 / 拒绝 here, a person decides at the console
+  board_decides?: boolean // false in servers mode (D17) unless servers.board_decides: a person decides at the console
 }
 
 /** A request waiting at the operator console: the action and the digest the person approves. */
@@ -123,7 +123,7 @@ export type Readiness = {
   team: string
   items: ReadinessItem[]
   pending?: PendingRequest[] // bench requests waiting at the operator console now, from a run or from setting up the baseline
-  board_decides?: boolean // false in servers mode (D17): the requests are approved at the console only
+  board_decides?: boolean // false in servers mode (D17) unless servers.board_decides: approved at the console only
   error: string // the scenario folder is not known (setup.sh has not run): no items
 }
 

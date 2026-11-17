@@ -413,3 +413,16 @@ def test_the_board_offers_retry_for_a_server_hold(tmp_path, monkeypatch):
     asyncio.run(go())
     assert run.servers_retry() == "checks"
     assert not [k for k in run.order if run.lane(k)["status"] == "failed"]  # no role to retry: the board needs this
+
+
+def test_the_board_decides_in_servers_mode_only_with_the_switch(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    team = rig.run.team
+    assert servers.board_decides(team) is False
+    on = team_mod.check_team({**team, "servers": {**team["servers"], "board_decides": True}})
+    assert servers.board_decides(on) is True
+    rig.run.team = on
+    assert rig.view()["board_decides"] is True
+    with pytest.raises(ValueError, match="board_decides 可选"):
+        team_mod.check_team({**team, "servers": {**team["servers"], "board_decides": "yes"}})
+    assert servers.board_decides({"connectors": "direct"}) is True
