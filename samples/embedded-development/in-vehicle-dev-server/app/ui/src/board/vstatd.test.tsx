@@ -79,6 +79,20 @@ describe('the vstatd board', () => {
     expect(within(pending).getAllByTestId('kt-cli').length).toBe(3)  // the console commands stay
   })
 
+  test('a request past its timeout is not one waiting: no 批准 / 拒绝, no console command, one line that says so', async () => {
+    const b = vstatdBoard('bench')
+    const st = b.run!.bench!.state
+    st.pending = [{ ...st.pending[0], id: '20261103T094046-deploy-2570', requested_by: 'bench tools', expired: true }]
+    serve(b)
+    render(<TeamPage pollMs={60_000} />)
+    const pending = within(await screen.findByTestId('kt-bench')).getByTestId('kt-bench-pending')
+    expect(pending).toHaveTextContent('等操作台批准的请求没有')
+    expect(within(pending).queryByTestId('kt-decide')).toBeNull()
+    expect(within(pending).queryByTestId('kt-cli')).toBeNull()
+    expect(within(pending).getByTestId('kt-bench-expired'))
+      .toHaveTextContent('已超时、没人能再批的旧请求 1 条，不用处理：20261103T094046-deploy-2570')
+  })
+
   test('the merge conveyor shows only once there is a merge', async () => {
     const b = vstatdBoard('bench')
     expect(b.run!.merges).toEqual([])

@@ -118,6 +118,7 @@
  "board.Bench.54": "Approve or refuse from the command line",
  "board.Bench.55": "Open the operator console in another terminal (a approve, r refuse, c reconcile). Both use the bench's own approval rules; supply, ignition and timeouts still apply.",
  "board.Bench.56": "{p0} refuse {p1} --reason <reason>",
+ "board.Bench.expired": "{n} old request(s) past their timeout, which nobody can decide now; nothing to do: {ids}",
  "board.Bench.consoleOnly": "Servers mode: approve at the operator console (bench/console.py), not on the board",
  "board.Conveyor.1": "Merge conveyor",
  "board.Conveyor.2": "merges",

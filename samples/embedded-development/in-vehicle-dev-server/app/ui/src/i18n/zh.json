@@ -118,6 +118,7 @@
  "board.Bench.54": "用命令批准或拒绝",
  "board.Bench.55": "在另一个终端里开操作台（a 批准、r 拒绝、c 核对）。两边都走台架自己的审批逻辑，电源、点火、超时照样拦。",
  "board.Bench.56": "{p0} refuse {p1} --reason <原因>",
+ "board.Bench.expired": "已超时、没人能再批的旧请求 {n} 条，不用处理：{ids}",
  "board.Bench.consoleOnly": "servers 模式：在操作台 bench/console.py 上批，看板这里不批",
  "board.Conveyor.1": "合并传送带",
  "board.Conveyor.2": "次合入",
