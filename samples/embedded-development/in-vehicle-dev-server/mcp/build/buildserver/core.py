@@ -52,6 +52,9 @@ TARGETS = ("vstatd", "vstatd_tests", "all")
 # Checks the agents may run, and whether each reads the approved triage. The after-deploy checks belong to `bench`.
 CHECKS = {"build": False, "static": True, "unit": True, "size": False, "trace": True, "release": True}
 SYSROOT_CHECKS = ("build", "static")  # the checks that configure the cross profile
+# The after-deploy checks the bench server publishes; `run_check release` reads them when paths.bench_results is set.
+BENCH_CHECKS = ("runtime-limits", "logdiff")
+BENCH_PATHS = ("bench_results", "bench_runs", "bench_baseline")
 LOG_KINDS = ("configure", "build")
 TOOLS = {
     "workspace_status": (READ_ONLY, ()),
@@ -64,6 +67,7 @@ TOOLS = {
 OPTIONAL = {("build", "target")}
 VERDICTS = {0: "PASS", 1: "FAIL", 2: "USAGE", 3: "BLOCKED"}
 TAIL_BYTES = 8192
+EVIDENCE, EVIDENCE_LIMIT = "evidence.md", 512 * 1024  # the batch's evidence page, published after a passing release
 SAFE_GIT = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.attributesFile=/dev/null"]
 DOCKER_CLIENT_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH",
                      "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
@@ -154,17 +158,19 @@ def private_group(gid):
     return members <= {me}
 
 
-def check_trusted(path, name, include_self=True):
+def check_trusted(path, name, include_self=True, extra=()):
     """Refuses a path that someone other than root or the server's user could replace or redirect: every folder from
-    the root down must be theirs and not writable by others (a sticky folder may hold one of theirs)."""
+    the root down must be theirs and not writable by others (a sticky folder may hold one of theirs). `extra` names
+    further users trusted for this path only (trust.readers: the bench server's user for the bench's results)."""
     path = pathlib.Path(path).resolve()
     chain = [*reversed(path.parents), path] if include_self else list(reversed(path.parents))
     chain = [d for d in chain if os.path.lexists(d)]  # a path still to be made is as safe as its parent
+    trusted = (0, os.getuid(), *extra)
     for i, d in enumerate(chain):
         st = os.lstat(d)
-        trusted = (0, os.getuid())
         if st.st_uid not in trusted:
-            raise ConfigError(f"paths.{name}: {d} belongs to uid {st.st_uid}, not root or the server's user")
+            raise ConfigError(f"paths.{name}: {d} belongs to uid {st.st_uid}, not root, the server's user or a "
+                              "trusted reader")
         other = st.st_mode & stat.S_IWOTH or (st.st_mode & stat.S_IWGRP and not private_group(st.st_gid))
         if other:
             nxt = chain[i + 1] if i + 1 < len(chain) else None
@@ -313,7 +319,7 @@ class BuildService:
         cfg = tomllib.loads(config_path.read_text())
         try:
             p = cfg["paths"]
-            relative = [k for k in ("workspace", "state", "triage", "checks", "sysroot")
+            relative = [k for k in ("workspace", "state", "triage", "checks", "sysroot", *BENCH_PATHS)
                         if k in p and not pathlib.Path(str(p[k])).is_absolute()]
             if relative:  # they would resolve against the caller's working directory
                 raise ConfigError(f"paths {relative} must be absolute")
@@ -322,13 +328,29 @@ class BuildService:
             self.triage = pathlib.Path(p["triage"]).resolve()
             self.checks = pathlib.Path(p["checks"]).resolve()
             self.sysroot = pathlib.Path(p.get("sysroot", "/opt/cc1-sysroot")).resolve()
+            # The bench server's published results, its run folders and its baseline: all three, or none.
+            given = [k for k in BENCH_PATHS if k in p]
+            if given and len(given) != len(BENCH_PATHS):
+                raise ConfigError(f"paths: give all of {', '.join(BENCH_PATHS)} or none of them")
+            self.bench = {k: pathlib.Path(p[k]).resolve() for k in given}
         except KeyError as e:
             raise ConfigError(f"missing paths.{e.args[0]} in {config_path}") from None
         if not (self.workspace / ".git").exists():
             raise ConfigError(f"workspace {self.workspace} is not a git work tree")
-        for name in ("state", "triage", "checks", "sysroot"):
-            if inside(getattr(self, name), self.workspace):
+        for name, path in (*((n, getattr(self, n)) for n in ("state", "triage", "checks", "sysroot")),
+                           *self.bench.items()):
+            if inside(path, self.workspace):
                 raise ConfigError(f"paths.{name} lies inside the agents' work tree; the agents could change it")
+        for name, path in self.bench.items():
+            if inside(self.workspace, path):
+                raise ConfigError(f"paths.{name} contains the agents' work tree")
+            if inside(path, self.state) or inside(self.state, path):
+                raise ConfigError(f"paths.{name} and paths.state must not contain each other")
+            if not real_dir(path):
+                raise ConfigError(f"paths.{name}: {path} is not a folder")
+        if self.bench and self.bench["bench_runs"] != self.bench["bench_results"].parent / "runs":
+            raise ConfigError("paths.bench_runs must be the runs folder beside paths.bench_results (the bench server's "
+                              "<state>/runs and <state>/results)")
         if inside(config_path, self.workspace):
             raise ConfigError("the configuration lies inside the agents' work tree; the agents could change it")
         if inside(self.workspace, self.state) or inside(self.triage, self.state):
@@ -347,10 +369,20 @@ class BuildService:
                            ("sysroot", self.sysroot), ("config", config_path)):
             check_trusted(path, name)
         check_trusted(pathlib.Path(__file__).resolve().parent, "the server's own code")
+        # The bench server's user (benchsrv) owns its results, runs and baseline: trust.readers names the users
+        # trusted for these paths only, as the bench server's own trust.readers does for the build's results.
+        self.readers = []
+        for user in cfg.get("trust", {}).get("readers", []):
+            try:
+                self.readers.append(pwd.getpwnam(str(user)).pw_uid)
+            except KeyError:
+                raise ConfigError(f"trust.readers: no user {user!r}") from None
+        for name, path in self.bench.items():
+            check_trusted(path, name, extra=self.readers)
         check_tree(self.sample, "checks")
         check_tree(self.triage.parent, "triage")
         self.mounted = {p: os.stat(p)[1:3] for p in (self.workspace, self.state, self.triage.parent, self.sample,
-                                                      self.sysroot) if p.exists()}
+                                                      self.sysroot, *self.bench.values()) if p.exists()}
         for d in ("builds", "logs", "results"):
             (self.state / d).mkdir(exist_ok=True)
         self.audit_log = self.state / "audit.jsonl"
@@ -361,7 +393,7 @@ class BuildService:
         if unknown:
             raise ConfigError(f"role {role}: unknown permission classes {unknown}")
         self.granted = set(granted)
-        self.timeouts = {"status": 60, "snapshot": 300, "configure": 600, "build": 1800, "check": 3600,
+        self.timeouts = {"status": 60, "snapshot": 300, "configure": 600, "build": 1800, "check": 3600, "evidence": 120,
                          **cfg.get("timeouts", {})}
         env_path = cfg.get("environment", {}).get("path", "/usr/local/bin:/usr/bin:/bin")
         label = hashlib.sha256(str(self.state).encode()).hexdigest()[:16]
@@ -451,7 +483,10 @@ class BuildService:
             self.audit({**entry, "outcome": result.get("outcome", "ok"), "exit_status": result.get("exit_status"),
                         "duration_ms": int((time.monotonic() - started) * 1000),
                         **({"verdict": result["verdict"]} if "verdict" in result else {}),
-                        **({"digest": result["digest"]} if result.get("digest") else {})})
+                        **({"digest": result["digest"]} if result.get("digest") else {}),
+                        # the page's outcome and digest for run_check; never the page itself (read_result returns it)
+                        **({k: result[k] for k in ("evidence_page", "evidence_sha256") if k in result}
+                           if tool == "run_check" else {})})
             return result
 
     @staticmethod
@@ -586,6 +621,81 @@ class BuildService:
             raise RuntimeError(f"cloning the committed HEAD failed: {tail(self.state / 'logs' / 'clone.log', 1024)}")
         return project, head
 
+    def bench_results_into(self, results):
+        """For `run_check release`: copies the bench server's published after-deploy results into this run's copy of
+        the results, and returns the folders their recorded inputs lie in, to be mounted read-only at their host
+        paths so that checks/release.sh can check every input's sha256 again. An input must be a regular file in one
+        run folder directly under paths.bench_runs, in paths.bench_baseline or in the approved triage's folder;
+        anything else refuses the call. A result the bench has not published stays missing, and release.sh reports
+        it."""
+        try:
+            blobs, folders = self._bench_results_into()
+        except (OSError, ValueError) as e:  # an unreadable lock, input or folder: refused, so release becomes ERROR
+            raise Refused(f"cannot read the bench's results: {e}") from None
+        for rel, blob in blobs.items():  # into the server's own run folder: a failure here is the server's error
+            write_atomic(results / rel, blob)
+        return folders
+
+    def _bench_results_into(self):
+        runs, baseline = self.bench["bench_runs"], self.bench["bench_baseline"]
+        folders = []
+        # The bench server's publishing lock, next to its results folder: the json, log and diff of one check come
+        # from one call. The bench server makes it before it first publishes; without it, nothing is read.
+        lock = self.bench["bench_results"].parent / "results.lock"
+        if not os.path.lexists(lock):
+            if any(os.path.lexists(self.bench["bench_results"] / f"{c}.json") for c in BENCH_CHECKS):
+                raise Refused(f"the bench's publishing lock {lock} is missing; is paths.bench_results the bench "
+                              "server's <state>/results?")
+            return {}, folders
+        with contextlib.ExitStack() as stack:
+            fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)  # a FIFO there does not block
+            stack.callback(os.close, fd)
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise Refused(f"the bench's publishing lock {lock} is not a regular file")
+            fcntl.flock(fd, fcntl.LOCK_SH)
+            blobs = {}
+            for check in BENCH_CHECKS:
+                for suffix in ("json", "log", "diff"):
+                    blob = read_nofollow(self.bench["bench_results"] / f"{check}.{suffix}")
+                    if blob is not None:
+                        blobs[f"{check}.{suffix}"] = blob
+        for check in BENCH_CHECKS:
+            if f"{check}.json" not in blobs:
+                continue
+            try:
+                data = json.loads(blobs[f"{check}.json"])
+            except ValueError:
+                data = None
+            if not isinstance(data, dict) or data.get("check") != check or not isinstance(data.get("inputs", {}), dict):
+                raise Refused(f"the bench's published {check} result is malformed")
+            for name, inp in data.get("inputs", {}).items():
+                path = inp.get("path") if isinstance(inp, dict) else None
+                if (not isinstance(path, str) or "\0" in path or not os.path.isabs(path)
+                        or os.path.normpath(path) != path):
+                    raise Refused(f"the bench's {check} result records input {name} at {path!r}, not an absolute path")
+                p = pathlib.Path(path)
+                if p.parent == baseline or p.parent == self.triage.parent:
+                    folder = p.parent
+                elif p.parent.parent == runs:
+                    folder = p.parent
+                else:
+                    raise Refused(f"the bench's {check} result records input {name} at {path}, outside the bench's "
+                                  "runs and baseline and the approved triage's folder")
+                if not real_dir(folder):
+                    raise Refused(f"the bench's {check} input {name} ({path}) lies in {folder}, which is a link or "
+                                  "not a folder")
+                st = os.lstat(p) if os.path.lexists(p) else None
+                if st is None or not stat.S_ISREG(st.st_mode):
+                    raise Refused(f"the bench's {check} input {name} ({path}) is missing or not a regular file")
+                if folder.parent == runs:
+                    try:
+                        check_trusted(folder, "bench_runs", extra=self.readers)
+                    except ConfigError as e:
+                        raise Refused(str(e)) from None
+                if folder not in folders:
+                    folders.append(folder)
+        return blobs, folders
+
     def owned(self, check):
         """The files of the results folder that belong to a check: its result, log and diff, its work folder and,
         for build, the artifacts. Paths relative to the results folder."""
@@ -593,7 +703,8 @@ class BuildService:
                 (["artifacts"] if check == "build" else []))
 
     def drop(self, base, check):
-        for rel in self.owned(check):
+        """Removes what a check published in `base`; for release, also the evidence page, which belongs to it."""
+        for rel in self.owned(check) + ([EVIDENCE] if check == "release" else []):
             p = base / rel
             if real_dir(p):
                 clear(p)
@@ -616,6 +727,14 @@ class BuildService:
         log = self.state / "logs" / f"check-{check}.out"
         call_start = now()
         ro = [self.sample, self.triage.parent, *([self.sysroot_mount] if check in SYSROOT_CHECKS else [])]
+        if check == "release" and self.bench:
+            try:
+                ro += [d for d in self.bench_results_into(results) if d not in ro]
+            except Refused as e:  # nothing ran: the release result becomes an ERROR record, not a stale PASS
+                write_atomic(log, f"not run: {e}\n")
+                self.record_error(check, head, str(e), call_start, log)
+                return {"outcome": "refused", "exit_status": None, "check": check, "commit": head,
+                        "verdict": "ERROR", "summary": "", "problem": str(e)}
         r = self.sandbox.run(cmd, log, self.timeouts["check"], ro=ro, rw=[run], workdir=run,
                              extra=self.sandbox.check_args.get(check, ()))
         verdict = VERDICTS.get(r["exit_status"], "ERROR")
@@ -628,6 +747,11 @@ class BuildService:
         else:
             self.publish(results, check, data)
         out = {**r, "check": check, "commit": head, "verdict": verdict, "summary": tail(log, 2048)}
+        if check == "release" and verdict == "PASS" and not problem:
+            why, digest = self.evidence_page(results)
+            out["evidence_page"] = "published" if why is None else f"not published: {why}"
+            if digest:
+                out["evidence_sha256"] = digest
         if problem:
             out["problem"] = problem
         else:
@@ -638,6 +762,29 @@ class BuildService:
         if charged:
             out["repair"] = self.settle_cross_attempt(charged, "passed" if verdict == "PASS" else "failed")
         return out
+
+    def evidence_page(self, results):
+        """After a release that passed: checks/evidence-page.sh writes the batch's page from this run's results and the
+        approved triage, in the sandbox, and the server publishes it as results/evidence.md. The person signs off from
+        this page. Returns (None, its SHA-256), or (why it was not published, None); the release result stands."""
+        log = self.state / "logs" / "evidence-page.out"
+        cmd = [self.checks / "evidence-page.sh", "--results", results, "--triage", self.triage]
+        try:
+            timeout = int(self.timeouts.get("evidence", 120))
+            r = self.sandbox.run(cmd, log, timeout, ro=[self.sample, self.triage.parent], rw=[results], workdir=results)
+            if r["outcome"] == "timeout":
+                return f"checks/evidence-page.sh timed out after {timeout} s", None
+            if r["exit_status"] != 0:
+                return f"checks/evidence-page.sh exited with {r['exit_status']}: {tail(log, 1024).strip()}", None
+            page = read_nofollow(results / EVIDENCE, limit=EVIDENCE_LIMIT + 1)
+            if not page:
+                return "checks/evidence-page.sh wrote no page", None
+            if len(page) > EVIDENCE_LIMIT:
+                return f"the page is over {EVIDENCE_LIMIT // 1024} KiB", None
+            write_atomic(self.state / "results" / EVIDENCE, page)
+        except (OSError, RuntimeError, ValueError, TypeError, subprocess.SubprocessError) as e:
+            return f"{type(e).__name__}: {e}", None
+        return None, hashlib.sha256(page).hexdigest()
 
     @staticmethod
     def judge(results, check, verdict, call_start, head):
@@ -701,7 +848,12 @@ class BuildService:
             data = json.loads(read_nofollow(self.state / "results" / f"{check}.json") or b"")
         except ValueError:
             data = None
-        return {"check": check, "result": data, "log_tail": tail(self.state / "results" / f"{check}.log")}
+        out = {"check": check, "result": data, "log_tail": tail(self.state / "results" / f"{check}.log")}
+        if check == "release":
+            page = read_nofollow(self.state / "results" / EVIDENCE, limit=EVIDENCE_LIMIT)
+            out["evidence_page"] = page.decode(errors="replace") if page else None
+            out["evidence_sha256"] = hashlib.sha256(page).hexdigest() if page else None
+        return out
 
     def _read_log(self, kind, profile):
         self.pick("kind", kind, LOG_KINDS)
