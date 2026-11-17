@@ -75,6 +75,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "sign_block": scrub(run.sign_block()),  # its why comes from release.sh
         "sign_block_msg": messages.scrubbed(run.sign_block_msg(), scrub),
         "review_redo": run.review_redo(),
+        "servers_held": run.servers_retry(),
         "tests": {"at": t["at"], "command": t.get("command", ""), "cases": [_case(c) for c in t["cases"]],
                   "passed": t["passed"], "failed": t["failed"], "total": t["total"],
                   "history": [{"at": h["at"], "passed": h["passed"], "failed": h["failed"]} for h in t["history"]],

@@ -400,3 +400,16 @@ def test_the_board_does_not_decide_in_servers_mode(tmp_path, monkeypatch):
     assert rig.view()["board_decides"] is False
     direct = Rig(tmp_path / "d", monkeypatch) if (tmp_path / "d").mkdir() is None else None
     assert direct.view()["board_decides"] is True
+
+
+def test_the_board_offers_retry_for_a_server_hold(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    run, mgr = rig.run, rig.mgr
+    srv.set(refuse=["build"])
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
+    asyncio.run(go())
+    assert run.servers_retry() == "checks"
+    assert not [k for k in run.order if run.lane(k)["status"] == "failed"]  # no role to retry: the board needs this

@@ -298,3 +298,15 @@ def test_stopping_the_run_cancels_its_checks(tmp_path, monkeypatch):
         assert task.cancelled() and run._tests is None
 
     asyncio.run(go())
+
+
+def test_a_failing_check_whose_owner_is_out_of_rounds_holds_the_run_it_never_ends_done(tmp_path, monkeypatch):
+    bench, mgr, run = make(tmp_path, monkeypatch, {"name": "build", "owner": "dev", "rounds": 9})
+    run.team["defaults"]["max_fix_rounds"] = 1
+    bench.set("build", 1, ["src/a.cpp:1: error"])
+
+    async def go():
+        await until(run, mgr, lambda: run.ended)
+    asyncio.run(go())
+    assert run.s["status"] == "failed" and run.s["tests"]["held"]["checks"] == ["build"]
+    assert run.s["tests"]["held"]["params"]["items"][0]["what"]["code"] == "held.owner"

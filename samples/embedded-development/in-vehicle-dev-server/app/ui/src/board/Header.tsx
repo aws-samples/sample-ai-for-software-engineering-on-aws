@@ -140,6 +140,12 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
             {tr('board.Header.22')}
           </button>
         )}
+        {!projection && !replaying && !run?.imported && onRetry && failed.length === 0 && run?.servers_held && (
+          <button type="button" className="kt-btn is-danger is-solid" onClick={onRetry} data-testid="kt-servers-retry"
+            title={tr('board.Header.serversRetryTip')}>
+            {tr('board.Header.serversRetry')}
+          </button>
+        )}
         {!projection && !replaying && !run?.imported && onRetry && failed.length > 0 && (
           <button type="button" className="kt-btn is-danger is-solid" onClick={onRetry} title={tr('board.Header.23', { p0: failed.map((l) => l.title).join(tr('common.sep')) })}>
             {tr('board.Header.24')} {failed.length} {tr('board.Header.25')}

@@ -285,6 +285,8 @@
  "board.Header.23": "Give the failed roles one more round: {p0}",
  "board.Header.24": "↻ Retry the failed",
  "board.Header.25": "roles",
+ "board.Header.serversRetry": "Retry: run it on the servers again",
+ "board.Header.serversRetryTip": "A build or bench server refused or failed; once dealt with, it runs again",
  "board.Header.26": "Where the project is on this Mac: open it in Finder or Kiro",
  "board.Header.27": "📁 Folder",
  "board.Header.28": "Step by step, what each role delivered: documents, code, replies, actions",

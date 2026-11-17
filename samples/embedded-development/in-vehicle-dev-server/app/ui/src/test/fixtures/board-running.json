@@ -1599,6 +1599,7 @@
     "sign_block": "运行结束以后才能签字",
     "sign_block_msg": null,
     "review_redo": null,
+    "servers_held": null,
     "delivery": {
       "name": "活动报名小站",
       "kind": "新应用",

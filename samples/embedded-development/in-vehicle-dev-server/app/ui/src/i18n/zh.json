@@ -285,6 +285,8 @@
  "board.Header.23": "再给失败的角色一轮：{p0}",
  "board.Header.24": "↻ 重试失败的",
  "board.Header.25": "个角色",
+ "board.Header.serversRetry": "重试：让服务器再跑一遍",
+ "board.Header.serversRetryTip": "build / bench 服务器拒绝或没做成；处理好以后让它再做一次",
  "board.Header.26": "项目在这台 Mac 上的哪个文件夹：在 Finder 或 Kiro 里打开",
  "board.Header.27": "📁 文件夹",
  "board.Header.28": "一步一步看每个角色交了什么：文档、代码、回复、做了什么",

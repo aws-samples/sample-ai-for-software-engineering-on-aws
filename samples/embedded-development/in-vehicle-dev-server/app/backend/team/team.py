@@ -869,7 +869,7 @@ class TeamRun:
         async with self._lock:
             failed = [k for k in self.order if self.lane(k)["status"] == "failed"]
             bench = self.s.get("bench") or {}
-            held = self.s.get("servers_held") or ("checks" if self.ended and self._servers_round_held() else None)
+            held = self.servers_retry()
             if not keys and not failed and self.ended and held:  # the servers could not do it (D17): again
                 self._resume()
                 self.s["servers_held"] = None
@@ -1374,6 +1374,12 @@ class TeamRun:
         self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
 
+    def servers_retry(self) -> str | None:
+        """What 重试 asks the servers again for (D17): ``checks`` or ``tests_first``; None when 重试 is not that."""
+        if not self.ended:
+            return None
+        return self.s.get("servers_held") or ("checks" if self._servers_round_held() else None)
+
     def _servers_round_held(self) -> bool:
         """Servers mode (D17): the checks are held because a server refused or failed a check, and the others held
         could not judge (BLOCKED, as size is without a build): nothing for a role or a finding, 重试 runs the round."""
@@ -1600,7 +1606,8 @@ class TeamRun:
         for r in failing:
             if rounds.get(r["name"], 0) >= spec[r["name"]]["max_rounds"] + int(granted.get(r["name"]) or 0):
                 held.append((r, {"code": "held.rounds", "params": {"n": rounds.get(r["name"], 0)}}))
-            elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck") for o in r["owners"]):
+            elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck")
+                     or self.lane(o)["attempt"] >= self.max_attempts(o) for o in r["owners"]):  # out of its rounds
                 held.append((r, {"code": "held.owner"}))
         owners = {o for r in failing for o in r["owners"]}
         if held:
@@ -2258,6 +2265,14 @@ class TeamRun:
                 or any((lane.get("first") or {}).get("status") == "pending" for lane in lanes)
                 or (self._finale_due() and bench.get("step") != "done" and not bench.get("held")))
         gating = any(lane.get("gate") == "pending" for lane in lanes)
+        t = self.s["tests"]
+        if (not busy and not gating and self.team.get("checks") and t.get("failed") and not t.get("held")
+                and not bench.get("held") and t.get("rechecked") != t.get("head")):
+            # the last round still fails and nothing holds it (a role's round ended without a merge): the checks are
+            # looked at again, so that a failure goes back to a role or to a person; the run never ends done with it
+            t["rechecked"] = t.get("head")
+            self.s["needs_test"] = True
+            busy = True
         if not busy and not gating and not any(self.lane(k)["status"] == "waiting" and self._ready(k) for k in self.order):
             held = self.s["tests"].get("held") or bench.get("held")
             if held:

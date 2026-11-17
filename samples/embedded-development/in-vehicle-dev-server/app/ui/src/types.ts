@@ -70,6 +70,7 @@ export type RunDetail = {
   overruled: { role: string; note: string; review: string } | null // a person approved a gate over a review that still said 要改, and why
   sign_block: string // why this run cannot be signed off ('' when it can: it finished and what it deploys went out)
   sign_block_msg: Msg | null // …by code, for the board's language (null when it can be signed)
+  servers_held?: 'checks' | 'tests_first' | null // servers mode (D17): 重试 asks the build and bench servers again
   review_redo?: ReviewRedo | null // the run ended on a 要改 review a person can send back once more (按评审意见再改一轮)
   delivery: Delivery // 交付标签: what the CTO view counts this run as, once a person signs it off
   issue: Issue // the requirement as the organisation tracks it
