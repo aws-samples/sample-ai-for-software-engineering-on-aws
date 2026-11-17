@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from . import messages, scorecard
-from .constants import APP_NAME
+from . import servers as servers_mod
 
 
 def _iso(text: Any) -> float | None:
@@ -128,9 +128,9 @@ def build(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict[str, 
     if rerun_at is not None:
         seg("rerun", rerun_at, None, say("flow.rerun"))
 
-    me, mine = f"{APP_NAME} {s.get('id')}", {}
+    me, mine = servers_mod.ours(str(s.get("id")), s.get("repo")), {}
     for r in recs:
-        if r.get("event") == "request" and r.get("requested_by") == me and _iso(r.get("at")) is not None:
+        if r.get("event") == "request" and r.get("requested_by") in me and _iso(r.get("at")) is not None:
             mine[str(r.get("id"))] = r
         elif r.get("event") == "decision" and str(r.get("id")) in mine:
             q = mine.pop(str(r.get("id")))

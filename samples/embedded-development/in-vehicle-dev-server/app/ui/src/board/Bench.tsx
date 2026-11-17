@@ -139,6 +139,8 @@ export function actionLine(a: Record<string, unknown>): string {
 
 export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () => Promise<void> }) {
   const st = bench.state
+  const waiting = st.pending.filter((r) => !r.expired)
+  const timedOut = st.pending.filter((r) => r.expired)
   const target = str(st.target.state)
   const supply = st.supply
   const recent = st.actions.slice(-ACTION_SHOWN).reverse()
@@ -202,26 +204,35 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
       </dl>
       <div className="kt-bench-pending" data-testid="kt-bench-pending">
         <b>{tr('board.Bench.50')}</b>
-        {st.pending.length === 0 ? (
+        {waiting.length === 0 ? (
           <p className="kt-dim">{tr('board.Bench.51')}</p>
         ) : (
           <ul>
-            {st.pending.map((r) => (
+            {waiting.map((r) => (
               <li key={r.id}>
-                <span><b>{r.action}</b> · {person(String(r.requested_by ?? ''))}{r.expired ? <span className="kt-bad"> {tr('board.Bench.52')}</span> : null}</span>
+                <span><b>{r.action}</b> · {person(String(r.requested_by ?? ''))}</span>
                 <span>{tr('board.Bench.53')} <Digest digest={r.digest} /></span>
                 {r.detail && <span className="kt-dim">{r.detail}</span>}
-                {!r.expired && <DecideRequest id={r.id} digest={r.digest} />}
+                {bench.board_decides !== false && <DecideRequest id={r.id} digest={r.digest} />}
+                {bench.board_decides === false && (
+                  <span className="kt-dim" data-testid="kt-console-only">{tr('board.Bench.consoleOnly')}</span>
+                )}
               </li>
             ))}
           </ul>
         )}
-        {bench.console && (
+        {timedOut.length > 0 && (
+          // a request past the console's timeout can be decided by nobody (bench/README.md): not one that waits
+          <p className="kt-dim" data-testid="kt-bench-expired">
+            {tr('board.Bench.expired', { n: timedOut.length, ids: timedOut.map((r) => r.id).join(tr('common.sep')) })}
+          </p>
+        )}
+        {bench.console && waiting.length > 0 && (
           <details className="kt-ready-cli">
             <summary>{tr('board.Bench.54')}</summary>
             <span className="kt-dim">{tr('board.Bench.55')}</span>
             <Cmd cmd={bench.console} />
-            {st.pending.filter((r) => !r.expired).map((r) => (
+            {waiting.map((r) => (
               <div key={r.id}>
                 <Cmd cmd={`${bench.console} approve ${r.id} --digest ${r.digest.slice(0, 12)}`} />
                 <Cmd cmd={tr('board.Bench.56', { p0: bench.console, p1: r.id })} />

@@ -38,7 +38,8 @@ async def git(cwd: Path | str, *args: str, ok: tuple[int, ...] | None = (0,), ti
     """Run git in *cwd*; raise GitError unless the exit code is in *ok* (None: any). ``locks=False`` is for reads
     in a worktree an agent may be committing in at the same moment (no opportunistic index refresh)."""
     env = dict(_ENV, **({} if locks else {"GIT_OPTIONAL_LOCKS": "0"}))
-    cmd = [GIT_BIN, "-C", str(cwd), "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false",
+    cmd = [GIT_BIN, "-C", str(cwd), "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+           "-c", "commit.gpgsign=false",
            "-c", "core.quotepath=false", "-c", "gc.auto=0", *args]
     proc = await asyncio.create_subprocess_exec(*cmd, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                                                 stderr=asyncio.subprocess.PIPE, env=env)

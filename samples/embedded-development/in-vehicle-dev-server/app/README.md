@@ -63,6 +63,7 @@ steps and what comes next (`ui/src/board/flow.ts`), and the 人机分工 grid un
 | --- | --- |
 | `app.json` | Kiro Crew app manifest |
 | `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
+| `backend/team/servers.py`, `mcpclient.py` | Servers mode (D17): the steps as tool calls, and the stdio MCP client |
 | `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, audit trail (`Audit.tsx`), 人机分工 (`DivisionGrid.tsx`, `division.ts`), graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `item/` (交付详情), `types.ts` (the contract with the backend) |
 | `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd` (the default), `vstatd-triage`, `vstatd-release`, `empty`, `?view=score`, `?view=item&run=<id>`) |
 | `team/` | `team-vstatd.json` and its task template |
@@ -85,6 +86,9 @@ Team level:
 | `checks` | Each `{name, command, args, when, owner, max_rounds, timeout_s}`. `args` of `project`, `triage`, `run`, `baseline` (besides `--results`); `when` is `before_bench`, `after_bench` or `release`; `owner` gets a failure that names no file (none for a release check); `max_rounds` defaults to 2. A check keeps the protocol of [checks/README.md](../checks/README.md): exit 0 PASS, 1 FAIL, 2 usage error, 3 BLOCKED, and `<results>/<name>.json` |
 | `evidence_page` | The command that writes `evidence.md` into the rerun's results |
 | `bench` | `deploy`, `replay` (and `restart`) with `{artifact}` and `{run}`, run by the app; `doctor`, run by the app; `build` and `start`, the bench owner's commands shown on the board; `baseline`, the baseline directory |
+| `connectors` | `direct` (default): checks in the build container, `bench/cc1.sh`; `servers`: the MCP servers (below) |
+| `servers` `{build, bench}` | The command line that starts each server, each with its `--config` |
+| `servers.board_decides` | `false` by default; `true`: 批准 / 拒绝 on the board too in servers mode (trial only) |
 | `test_owners`, `test_command` | For a team without `checks`: who owns failing tests (globs), and the command the test wall shows |
 | `delivery_defaults` | Default delivery labels |
 | `defaults` | `model`, `max_fix_rounds` (2), `max_review_rounds` (0), `gate_discuss` (off), `max_discuss_rounds` (5) |
@@ -103,6 +107,31 @@ Role level:
 | `gate_preset`, `gate_revise_preset`, `gate_revise_risk` | Notes the gate dialog can fill in |
 | `optional` | Sits the run out when its member does not exist or the approved plan leaves it out |
 | `model` | The role's own model |
+
+## Servers mode (trial)
+
+With `"connectors": "servers"` the app runs the checks before the bench and the bench actions as tool calls of the
+[`build`](../mcp/build/README.md) and [`bench`](../mcp/bench/README.md) MCP servers
+([D17](../docs/kiro-crew-app.md#d17-app-通过-build--bench-服务器跑检查和台架)). Both run as the current user, which
+their READMEs say suits a trial only: the agents' shell can still write the servers' state, so this connects the
+interface and does not close the paths around the guardrails. The release check and the evidence page stay direct.
+
+Set-up, once (the paths the shipped team file names):
+
+1. Install both servers into one virtual environment with Python 3.11 or later:
+   `~/workplace/vstatd-team/server/venv/bin/pip install ../mcp/build ../mcp/bench`.
+2. Copy each server's `config.example.toml` to `~/workplace/vstatd-team/server/build.toml` and `bench.toml`. In
+   both, `triage` is `~/workplace/vstatd-team/server/triage/triage.json` (create the folder). In `build.toml`,
+   `workspace` is `~/workplace/vstatd-team/server/worktree` (an empty folder or none: the app makes it a repository
+   of its own and marks it; it refuses a repository it did not make), `sysroot` a folder with the CC-1 sysroot and
+   `image` this machine's build image. In `bench.toml`,
+   `bench_state` is `~/.cc1-bench`, `build_results` the build server's `<state>/results`, `baseline` the team file's.
+   Leave out `[trust]`, and in `bench.toml` give the `developer` role the `physical` class.
+3. Set `"connectors": "servers"` in `team/team-vstatd.json` and reinstall the app.
+
+One run uses the servers at a time. Approve each bench request at `bench/console.py`: the board shows it and does
+not approve it in this mode, unless `servers.board_decides` is true (the trial only, as in direct mode, D3).
+What a server refuses holds the run for a person; 重试 asks the server again.
 
 ## Test
 

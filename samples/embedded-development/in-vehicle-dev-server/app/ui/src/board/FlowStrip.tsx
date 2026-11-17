@@ -126,7 +126,9 @@ export function ReadinessPanel({ state }: { state: ReadinessState }) {
       {r?.pending && r.pending.length > 0 && (
         <div className="kt-ready-pending" role="status" data-testid="kt-ready-pending">
           <b>{tr('board.FlowStrip.33')} {r.pending.length} {tr('board.FlowStrip.34')}</b>
-          <span className="kt-dim">{tr('board.FlowStrip.35')}</span>
+          <span className="kt-dim">
+            {tr(r.board_decides === false ? 'board.FlowStrip.consoleOnly' : 'board.FlowStrip.35')}
+          </span>
           <ul>
             {r.pending.map((p) => (
               <li key={p.id} data-testid="kt-ready-request" data-id={p.id}>
@@ -137,7 +139,7 @@ export function ReadinessPanel({ state }: { state: ReadinessState }) {
                     {p.left_s !== null && tr('board.FlowStrip.36', { p0: Math.max(0, p.left_s) })}
                   </small>
                 </span>
-                <DecideRequest id={p.id} digest={p.digest} onDone={() => void load()} />
+                {r.board_decides !== false && <DecideRequest id={p.id} digest={p.digest} onDone={() => void load()} />}
                 <details className="kt-ready-cli">
                   <summary>{tr('board.FlowStrip.37')}</summary>
                   <Cmd cmd={p.approve} />

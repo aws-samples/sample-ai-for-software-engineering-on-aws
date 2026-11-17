@@ -22,8 +22,8 @@ How each figure is taken:
   reconciles after the run's own latest request.
 - Checks whose verdict differed on the independent rerun (D9).
 
-The scenario's "tool calls by permission class" comes from the ``build`` and ``bench`` MCP servers' audit log; the
-agents here use neither (D2, D3), so it is not a figure here at all.
+- Tool calls by permission class, and how many were refused: in servers mode (D17), the app's calls in the
+  ``build`` and ``bench`` MCP servers' audit logs (the agents use neither, D2, D3); none in direct mode.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from . import bench as bench_mod
-from .constants import APP_NAME
+from . import servers as servers_mod
 from .store import all_events
 from .team import review_verdict
 from .team import TRIAGE_FILE
@@ -82,9 +82,10 @@ def records(d: Path | None = None) -> list[dict[str, Any]]:
     return out
 
 
-def bench_actions(rid: str, recs: list[dict[str, Any]]) -> dict[str, int] | None:
-    """Decisions on the run's requests and the reconciles after its latest one (None: the run asked for nothing)."""
-    me = f"{APP_NAME} {rid}"
+def bench_actions(rid: str, recs: list[dict[str, Any]], repo: Any = None) -> dict[str, int] | None:
+    """Decisions on the run's requests and the reconciles after its latest one (None: the run asked for nothing). The
+    run's requests name the app, or in servers mode a bench server session the run started (D17)."""
+    me = servers_mod.ours(rid, repo)
     mine: set[str] = set()
     last = None
     out = {"approved": 0, "refused": 0, "reconciled": 0}
@@ -92,11 +93,11 @@ def bench_actions(rid: str, recs: list[dict[str, Any]]) -> dict[str, int] | None
         ev = r.get("event")
         if ev == "request":
             last = r.get("requested_by")
-            if last == me:
+            if last in me:
                 mine.add(str(r.get("id")))
         elif ev == "decision" and str(r.get("id")) in mine and r.get("verdict") in ("approved", "refused"):
             out[r["verdict"]] += 1
-        elif ev == "reconcile" and last == me:
+        elif ev == "reconcile" and last in me:
             out["reconciled"] += 1
     return out if mine else None
 
@@ -169,7 +170,9 @@ def run_figures(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict
     return {"id": s["id"], "title": s.get("title") or "", "status": s.get("status") or "", "started_at": started,
             "signed": bool(sign), "findings": findings, "overturned": overturned, "times": times,
             "build_rounds": build_rounds, "caught": caught, "logdiff": logdiff,
-            "bench": bench_actions(s["id"], recs) if s.get("team", {}).get("bench") else None,
+            "bench": bench_actions(s["id"], recs, s.get("repo")) if s.get("team", {}).get("bench") else None,
+            # an imported run's sessions are another machine's: its audit logs are not here
+            "tool_calls": servers_mod.tool_calls(root) if s.get("repo") and not s.get("imported") else None,
             "rerun_differs": [str(x.get("name")) for x in rerun.get("differs") or []] if rerun else None}
 
 
@@ -193,6 +196,7 @@ def total(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "caught": _sum([r["caught"] for r in rows]),
             "logdiff": _sum([r["logdiff"] for r in rows]),
             "bench": _sum([r["bench"] for r in rows]),
+            "tool_calls": _sum([r["tool_calls"] for r in rows]),
             "rerun_differs": _sum([len(r["rerun_differs"]) if r["rerun_differs"] is not None else None for r in rows])}
 
 

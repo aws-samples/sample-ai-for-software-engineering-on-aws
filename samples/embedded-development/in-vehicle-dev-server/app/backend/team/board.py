@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 from . import bench as bench_mod
 from . import gitwork, library, messages, roster
+from . import servers as servers_mod
 from .constants import APP_NAME
 from .sessions import agent_fields, find_agent
 from .team import ACTIVE, TeamRun, clean_risk, live_status
@@ -74,6 +75,7 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "sign_block": scrub(run.sign_block()),  # its why comes from release.sh
         "sign_block_msg": messages.scrubbed(run.sign_block_msg(), scrub),
         "review_redo": run.review_redo(),
+        "servers_held": run.servers_retry(),
         "tests": {"at": t["at"], "command": t.get("command", ""), "cases": [_case(c) for c in t["cases"]],
                   "passed": t["passed"], "failed": t["failed"], "total": t["total"],
                   "history": [{"at": h["at"], "passed": h["passed"], "failed": h["failed"]} for h in t["history"]],
@@ -208,10 +210,10 @@ def bench_history(run: TeamRun) -> list[dict[str, Any]]:
     that names one of them, and the target and supply records while it ran, with the last of each from before it
     started (the state the bench was in then; at most 200, oldest first)."""
     from .scorecard import records  # the whole record, read only
-    me = f"{APP_NAME} {run.rid}"
+    me = servers_mod.ours(run.rid, run.s.get("repo"))
     t0, t1 = float(run.s.get("started_at") or 0), float(run.s.get("ended_at") or time.time())
     recs = records()
-    mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") == me}
+    mine = {str(r.get("id")) for r in recs if r.get("event") == "request" and r.get("requested_by") in me}
     out: list[dict[str, Any]] = []
     before: dict[str, dict[str, Any]] = {}  # the last target and supply record before the run started
     for r in recs:
@@ -244,7 +246,8 @@ def bench_view(run: TeamRun, scrub: Callable[[str], str] = str) -> dict[str, Any
     return {"step": b.get("step"), "running": b.get("running"), "held": held, "doctor": b.get("doctor"),
             "artifact": b.get("artifact"), "run_dir": b.get("run_dir"), "baseline": str(spec["baseline"]),
             "actions": list(b.get("actions") or []), "state": bench_mod.read_state(), "history": bench_history(run),
-            "console": shlex.join(["python3", str(console)]) if console.is_file() else None}
+            "console": shlex.join(["python3", str(console)]) if console.is_file() else None,
+            "board_decides": servers_mod.board_decides(run.team)}
 
 
 def crew_members(run: TeamRun, crew: Any) -> list[str] | None:

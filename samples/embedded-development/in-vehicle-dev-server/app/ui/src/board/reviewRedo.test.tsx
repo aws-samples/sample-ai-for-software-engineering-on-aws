@@ -58,4 +58,19 @@ describe('按评审意见再改一轮', () => {
       [`${API}/runs/r1006a/retry`, { by: '王工' }],
     ]))
   })
+
+  test('a run a build or bench server held has a 重试 in the top bar that asks the servers again (D17)', async () => {
+    const user = userEvent.setup()
+    const b = vstatdBoard('bench')
+    b.run!.status = 'failed'
+    b.run!.servers_held = 'checks'
+    setApiRoutes({
+      [`GET ${API}/board*`]: () => clone(b),
+      [`POST ${API}/runs/r1006a/retry`]: () => ({ ok: true, run: 'r1006a', roles: ['servers'], status: 'running' }),
+    })
+    render(<TeamPage pollMs={60_000} />)
+    await user.click(await screen.findByTestId('kt-servers-retry'))
+    await waitFor(() => expect(apiCalls.filter((c) => c.method === 'POST').map((c) => c.path))
+      .toEqual([`${API}/runs/r1006a/retry`]))
+  })
 })

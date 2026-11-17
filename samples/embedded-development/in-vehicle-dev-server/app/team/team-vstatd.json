@@ -48,6 +48,13 @@
     "start": ["${sample}/bench/cc1.sh", "start"],
     "baseline": "~/workplace/vstatd-team/baseline"
   },
+  "connectors": "direct",
+  "servers": {
+    "build": ["~/workplace/vstatd-team/server/venv/bin/python", "-I", "-m", "buildserver",
+              "--config", "~/workplace/vstatd-team/server/build.toml", "--role", "developer"],
+    "bench": ["~/workplace/vstatd-team/server/venv/bin/python", "-I", "-m", "benchserver",
+              "--config", "~/workplace/vstatd-team/server/bench.toml", "--role", "developer"]
+  },
   "defaults": {
     "model": "claude-sonnet-5.5",
     "max_fix_rounds": 2,

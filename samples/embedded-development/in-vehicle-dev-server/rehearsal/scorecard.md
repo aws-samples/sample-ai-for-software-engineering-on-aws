@@ -10,8 +10,9 @@ Each figure comes from one of three sources, and keeps the definition its source
   [D8](../docs/kiro-crew-app.md#d8-a-scorecard-view-with-measured-figures-only-in-place-of-the-cto-view), and the
   source is `app/backend/team/scorecard.py`. A figure with no run behind it stays empty, never 0.
 - **Hand:** kept by the facilitator and the engineers on the day, on the sheet.
-- **Servers:** the audit log of the `build` and `bench` MCP servers. The app does not use the servers yet (build plan
-  item 5), so these figures stay empty and the sheet says so.
+- **Servers:** the audit log of the `build` and `bench` MCP servers. The app uses them in `servers` mode only
+  ([D17](../docs/kiro-crew-app.md#d17-app-通过-build--bench-服务器跑检查和台架)); in `direct` mode these figures stay
+  empty and the sheet says so.
 
 | Scorecard item | Source | How it is taken |
 | --- | --- | --- |
@@ -25,10 +26,14 @@ Each figure comes from one of three sources, and keeps the definition its source
 | Check failures caught before the bench, by check | App | Per check, the rounds before the bench whose result was FAIL |
 | Log differences, and how many were real behaviour changes | App, then Hand | `logdiff`'s differences over the runs on the bench, and how many no approved difference explained (App). Whether each was a real change of behaviour is a person's judgement, written on the sheet with the finding it came from (Hand) |
 | Bench actions approved, refused and reconciled | App | The console's decisions on the run's requests (a timeout counts as a refusal), and the reconciles after the run's own latest request |
-| Tool calls by permission class, and how many were refused | Servers | Empty until the app uses the MCP servers. Do not fill it from the agents' sessions |
+| Tool calls by permission class, and how many were refused | Servers | The app's calls, in `servers` mode (below) |
 | Checks whose result changed on the independent rerun | App | The checks whose verdict on the final commit differed in the app's independent rerun |
 | In the model-based profile, back-to-back differences and real defects | — | Not applicable until build plan item 9; leave empty |
 | Defects found later that a check should have caught | Hand, later | Kept open after the day: defects in the batch's change found after sign-off, with the check that should have caught them |
+
+Tool calls by permission class, in `servers` mode: the app's calls in the two servers' audit logs, as the app's
+评分卡 shows them. Each outcome line is one call, counted by its class, with those the servers refused. The figure
+stays empty in `direct` mode. Do not fill it from the agents' sessions: they do not use the servers.
 
 Also write on the sheet:
 - the credits the run used, from Kiro Crew;

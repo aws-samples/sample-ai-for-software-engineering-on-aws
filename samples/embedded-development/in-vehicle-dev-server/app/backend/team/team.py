@@ -16,6 +16,7 @@ handed over (未入职), or the planner's 分工提案 leaves it out and the per
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -30,6 +31,7 @@ from typing import Any, Awaitable, Callable
 from . import bench as bench_mod
 from . import checks, gitwork, messages
 from . import delivery as delivery_mod
+from . import servers as servers_mod
 from . import triage as triage_mod
 from .constants import APP_NAME, APP_ROOT, EVENTS_KEPT, TAG_PREFIX
 from .store import Store
@@ -48,7 +50,8 @@ HUMAN_MARK = "【负责人退回】"  # a review-kind fix task that a person, no
 TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?out|overloaded|rate.?limit|throttl", re.I)
 ERRORS_TO_FAIL = 30  # this many failing ticks in a row (about a minute) end the run
 REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 view
-_DONE_RE = re.compile(r"(?<![A-Za-z])DONE\s*[:：]\s*(.*)$", re.M)  # also mid-line: KiroCrew joins messages with no break
+# also mid-line (KiroCrew joins messages with no break), but not `DONE:` quoted in backticks in the reply's prose
+_DONE_RE = re.compile(r"(?<![A-Za-z`])DONE\s*[:：]\s*(.*)$", re.M)
 TRACE_RULE = ("每个提交说明都写它对应的发现编号（`F-003`）；修的发现在分诊里 behaviour 为 true 时，再写它的事实条目之一（如 "
               "`SUP-GRACE`）。只写分诊里定为修复或说明的发现。没提交的改动提交掉；要改已有提交的说明，"
               "`git reset --soft $(git merge-base HEAD {branch})` 以后按发现重新提交。")
@@ -162,6 +165,7 @@ def check_team(team: Any) -> dict[str, Any]:
     if team.get("source") is not None and not (isinstance(team["source"], str) and team["source"].strip()):
         raise ValueError("team.json：source 要写成要改的项目目录（可以用 ${sample}/…）")
     checks.check_config(team, keys)
+    servers_mod.check(team)
     delivery_mod.check(team)
     return team
 
@@ -806,6 +810,8 @@ class TeamRun:
         from here."""
         lane = self.lane(key)
         wt = Path(lane["worktree"])
+        if await self._unmerged_messages(key):  # work not merged yet (held for a person, D15): nothing to catch up
+            return False  # (``merge --ff-only`` would say "up to date" and the unmerged commits would count as merged)
         if not await gitwork.fast_forward(wt, self.s["branch"]):
             self.d.log.info("vstatd-team: %s/%s cannot fast-forward to the run branch", self.rid, key)
             return False
@@ -928,6 +934,19 @@ class TeamRun:
         async with self._lock:
             failed = [k for k in self.order if self.lane(k)["status"] == "failed"]
             bench = self.s.get("bench") or {}
+            held = self.servers_retry()
+            if not keys and not failed and self.ended and held:  # the servers could not do it (D17): again
+                self._resume()
+                self.s["servers_held"] = None
+                if held == "checks":
+                    t = self.s["tests"]
+                    t.update(held=None, head=None)
+                    self.s["needs_test"] = True
+                self.say("run", "retry.servers", {"by": by, "note": note},
+                         data={"by": by, "note": note} if by else None)
+                self._settle()
+                await self.save()
+                return ["servers"]
             if not keys and not failed and self.ended and bench.get("held"):  # a person dealt with the bench: carry on
                 self._resume()
                 bench["held"] = None
@@ -1216,6 +1235,8 @@ class TeamRun:
             messages = await self._unmerged_messages(key)
             bad = [f"{sha[:12]}「{msg.strip().splitlines()[0][:60] if msg.strip() else ''}」：{why}"
                    for sha, msg in messages for why in [triage_mod.commit_problem(msg, self._approved_triage() or {})] if why]
+            if bad and self._hold_unregistered(key, [m for _, m in messages]):
+                return
             if bad:
                 await self._trace_back(key, "这些提交的说明 checks/trace.sh 不会通过（TR §7.2）：\n" + "\n".join(f"- {b}" for b in bad[:12]))
                 return
@@ -1294,7 +1315,7 @@ class TeamRun:
             t.update({k: wall[k] for k in ("at", "cases", "passed", "failed", "total")}, head=head,
                      command=wall.get("command") or t.get("command", ""))
             if checked:
-                t.update(checks=wall["checks"], results=wall["results"])
+                t.update(checks=wall["checks"], results=wall["results"], server_held=wall.get("server_held") or [])
             t["history"] = (t.get("history", []) + [{"at": wall["at"], "passed": wall["passed"], "failed": wall["failed"]}])[-60:]
             green = bool(t["total"] and not t["failed"])
             red = bool(not green and t["total"] and not t["passed"] and not any(self.lane(k)["status"] == "merged" for k in self.impl))
@@ -1329,8 +1350,25 @@ class TeamRun:
             return self.d.run_tests(run_wt, self._tested_team())
         t, root = self.s["tests"], Path(self.s["repo"]).parent
         t["round"] = int(t.get("round") or 0) + 1
-        return self.d.run_tests(run_wt, self._tested_team(), head=head, results=root / "results" / str(t["round"]),
-                                triage=root / TRIAGE_FILE)
+        return self._round(head=head, results=root / "results" / str(t["round"]), triage=root / TRIAGE_FILE)
+
+    def _round(self, **kw: Any) -> Awaitable[dict[str, Any]]:
+        """A round of the team file's checks (kw as checks.run_checks); in servers mode (D17) one the servers held by
+        another run cannot run is BLOCKED with that reason, for a person."""
+        why = self._servers_busy()
+        if why:
+            return servers_mod.held_round(self._tested_team(), why, **kw)
+        return self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), **kw)
+
+    def _servers_busy(self) -> str:
+        """Servers mode: "" when this run may use the build and bench servers now (it takes them), else why not."""
+        if not servers_mod.on(self.team):
+            return ""
+        try:
+            servers_mod.take(servers_mod.setup(self.team), self.rid, self.d.store.root)
+        except (servers_mod.Unavailable, OSError) as exc:
+            return str(exc)
+        return ""
 
     def cancel_tests(self) -> None:
         """Stop the test run in the background (its checks remove their containers)."""
@@ -1366,7 +1404,12 @@ class TeamRun:
         if self._first is None:
             root = Path(self.s["repo"]).parent
             n = sum(a["kind"] in ("work", "revise", "fix") for a in lane["attempts"])
-            self._first = (head, asyncio.create_task(checks.tests_first(
+            busy = self._servers_busy()
+            if busy:
+                await self._servers_hold("tests_first", busy)
+                return
+            first = servers_mod.tests_first if servers_mod.on(self.team) else checks.tests_first
+            self._first = (head, asyncio.create_task(first(
                 Path(self.s["run_wt"]), self.team, base=str(triage.get("base") or ""), head=head, triage=triage,
                 results=root / "results" / "tests-first" / str(n))))
             await asyncio.sleep(0)
@@ -1375,7 +1418,12 @@ class TeamRun:
         task, self._first = self._first[1], None
         try:
             res = task.result()
-        except (checks.TestsUnavailable, gitwork.GitError) as exc:
+        except (checks.TestsUnavailable, gitwork.GitError, servers_mod.Unavailable, OSError) as exc:
+            if servers_mod.on(self.team) and not isinstance(exc, checks.TestsUnavailable):
+                await self._servers_hold("tests_first", str(exc))  # the servers' problem: 重试 tries again (D17)
+                return
+            if isinstance(exc, OSError):
+                raise
             await self.stop(status="failed", code="run.tests_first_failed", params={"error": str(exc)})
             return
         lane["first"] = {"status": "passed" if res["ok"] else "failed", "head": head, "base": res["base"],
@@ -1391,6 +1439,49 @@ class TeamRun:
         lane["first"]["status"] = "sent_back"
         self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
+
+    def _hold_failing(self) -> bool:
+        """The team's checks: a last round that still fails, with nothing holding it, holds the run for a person
+        (each failing check as no longer the owner's to change, a BLOCKED one as not judged). True when held now."""
+        t = self.s["tests"]
+        rows = [r for r in t.get("checks") or [] if r["verdict"] != "PASS"]
+        if not (self.team.get("checks") and t.get("failed") and rows and not t.get("held")):
+            return False
+        what = {"FAIL": {"code": "held.owner"}, "USAGE": {"code": "held.usage"}}
+        items = [{"check": r["name"], "what": what.get(r["verdict"], {"code": "held.blocked"}),
+                  "reason": (r["reasons"] or [r["summary"]])[0]} for r in rows]
+        reason = messages.clean({"items": items}) or {}
+        t["held"] = {"checks": [r["name"] for r in rows], "why": self.msg("checks.held", reason)[:300],
+                     "code": "checks.held", "params": reason}
+        self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
+                 data={"checks": t["held"]["checks"]})
+        return True
+
+    def servers_retry(self) -> str | None:
+        """What 重试 asks the servers again for (D17): ``checks`` or ``tests_first``; None when 重试 is not that."""
+        if not self.ended:
+            return None
+        return self.s.get("servers_held") or ("checks" if self._servers_round_held() else None)
+
+    def _servers_round_held(self) -> bool:
+        """Servers mode (D17): the checks are held because a server refused or failed a check, and the others held
+        could not judge (BLOCKED, as size is without a build): nothing for a role or a finding, 重试 runs the round."""
+        t = self.s["tests"]
+        h, mine = t.get("held") or {}, set(t.get("server_held") or [])
+        order = [r["name"] for r in t.get("checks") or []]
+        rows = {r["name"]: r for r in t.get("checks") or []}
+        names = h.get("checks") or []
+        first = min((order.index(n) for n in mine if n in order), default=len(order))
+        # a BLOCKED check after the first one a server refused could not judge for want of it (size without a build)
+        return bool(servers_mod.on(self.team) and names and not h.get("unregistered") and mine & set(names)
+                    and all(n in mine or ((rows.get(n) or {}).get("verdict") == "BLOCKED" and n in order
+                                          and order.index(n) > first) for n in names))
+
+    async def _servers_hold(self, what: str, why: str) -> None:
+        """Servers mode (D17): the servers could not do *what* (the tests first, a round of checks); the run ends for a
+        person, and 重试 tries it again."""
+        self.s["servers_held"] = what
+        await self.stop(status="failed", code="run.servers_held", params={"error": why[:300]})
 
     def _finale_due(self) -> bool:
         """Every role is in, the reviewer let it through, and the latest round of the checks before the bench passed
@@ -1411,10 +1502,17 @@ class TeamRun:
         b = self.s.get("bench")
         if b is None or b["head"] != t["head"]:  # a new build: the bench starts over with it
             n = int((b or {}).get("n") or 0) + 1
+            artifact = Path(t["results"]) / bench_mod.ARTIFACT
+            run_dir: str | None = str(root / "bench" / f"run-{n}")
+            if servers_mod.on(self.team):  # the bench server deploys what the build server published (D17)
+                try:
+                    artifact = servers_mod.setup(self.team).build_state / "results" / bench_mod.ARTIFACT
+                except servers_mod.Unavailable:
+                    pass
+                run_dir = None  # the bench server's runs/run-<n>, known once the replay is done
             b = self.s["bench"] = {"head": t["head"], "n": n, "step": "doctor", "running": None, "held": None,
                                    "doctor": (b or {}).get("doctor"), "actions": list((b or {}).get("actions") or []),
-                                   "artifact": str(Path(t["results"]) / bench_mod.ARTIFACT),
-                                   "run_dir": str(root / "bench" / f"run-{n}"), "after": None}
+                                   "artifact": str(artifact), "run_dir": run_dir, "after": None}
             self.say("bench", "bench.go", {"n": n})
         if b["held"] or b["step"] == "done":
             return
@@ -1423,7 +1521,11 @@ class TeamRun:
                 b["running"] = None
                 self._bench_hold("hold.restart", {"step": b["step"]})
                 return
-            if b["step"] == "deploy" and not Path(b["artifact"]).is_file():
+            busy = self._servers_busy() if b["step"] != "doctor" else ""
+            if busy:
+                self._bench_hold("hold.servers", {"why": busy})
+                return
+            if b["step"] == "deploy" and not servers_mod.on(self.team) and not Path(b["artifact"]).is_file():
                 self._bench_hold("hold.no_artifact", {"artifact": b["artifact"]})
                 return
             b["running"] = b["step"]
@@ -1449,10 +1551,11 @@ class TeamRun:
         if step == "rerun":
             return self._rerun(b)
         if step == "after":
-            return self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), head=b["head"],
-                                    results=root / "results" / f"after-{b['n']}", phase="after_bench",
-                                    triage=root / TRIAGE_FILE, run=Path(b["run_dir"]),
-                                    baseline=Path(spec["baseline"]).expanduser())
+            return self._round(head=b["head"], results=root / "results" / f"after-{b['n']}", phase="after_bench",
+                               triage=root / TRIAGE_FILE, run=Path(b["run_dir"]) if b["run_dir"] else None,
+                               baseline=Path(spec["baseline"]).expanduser())
+        if servers_mod.on(self.team):  # deploy and replay through the bench server (D17)
+            return servers_mod.physical(self.team, root, step, f"{step} {b['n']}")
         cmd = bench_mod.argv(spec[step], {"artifact": b["artifact"], "run": b["run_dir"]})
         return bench_mod.run(cmd, log, bench_mod.ACTION_TIMEOUT_S, env={"CC1_REQUESTER": f"{APP_NAME} {self.rid}"})
 
@@ -1466,6 +1569,24 @@ class TeamRun:
                 return
             b["step"] = "deploy"
             self.say("bench", "bench.deploy", {"artifact": Path(b["artifact"]).name})
+        elif step in ("deploy", "replay") and servers_mod.on(self.team):
+            kind, why, out = res["kind"], res["why"], res["out"]
+            if kind == "ok" and step == "deploy" and out.get("commit") != b["head"]:
+                kind, why = "failed", f"bench 服务器部署的是 {str(out.get('commit'))[:12]} 的构建，不是这一轮的 {b['head'][:12]}"
+            if kind == "ok" and step == "replay":
+                if not out.get("result") or not out.get("run"):
+                    kind, why = "failed", "回放结束了，但 bench 服务器的运行目录里没有 run-result.json"
+                else:
+                    with contextlib.suppress(servers_mod.Unavailable):
+                        b["run_dir"] = str(servers_mod.setup(self.team).bench_state / "runs" / str(out["run"]))
+            b["actions"].append({"action": step, "at": self.d.now(), "outcome": kind, "why": why, "rc": None,
+                                 **{k: out[k] for k in ("request", "digest") if out.get(k)}})
+            if kind != "ok":
+                self._bench_hold("hold.deploy" if step == "deploy" else "hold.replay", {"kind": kind, "why": why})
+                return
+            b["step"] = "replay" if step == "deploy" else "after"
+            self.say("bench", "bench.replay" if step == "deploy" else "bench.replayed",
+                     {"run_dir": b["run_dir"]} if step != "deploy" else None)
         elif step in ("deploy", "replay"):
             rc, tail = res
             kind, why = bench_mod.outcome(rc, tail, bench_mod.read_state()["target"])
@@ -1559,6 +1680,8 @@ class TeamRun:
         misconfigured one, or one out of its rounds stops the run for a person (D7). A check that could not judge
         because another failed (no build to measure) waits for that fix."""
         t = wall if wall is not None else self.s["tests"]
+        if wall is None and (t.get("held") or {}).get("unregistered"):
+            return  # held for a person to register findings (D15): another round of the same checks changes nothing
         spec = {c["name"]: c for c in self.team["checks"]}
         rows = t.get("checks") or []
         failing = [r for r in rows if r["verdict"] == "FAIL"]
@@ -1570,7 +1693,8 @@ class TeamRun:
         for r in failing:
             if rounds.get(r["name"], 0) >= spec[r["name"]]["max_rounds"] + int(granted.get(r["name"]) or 0):
                 held.append((r, {"code": "held.rounds", "params": {"n": rounds.get(r["name"], 0)}}))
-            elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck") for o in r["owners"]):
+            elif any(o not in self.roles or self.lane(o)["status"] != "merged" or self.lane(o).get("stuck")
+                     or self.lane(o)["attempt"] >= self.max_attempts(o) for o in r["owners"]):  # out of its rounds
                 held.append((r, {"code": "held.owner"}))
         owners = {o for r in failing for o in r["owners"]}
         if held:
@@ -1578,10 +1702,14 @@ class TeamRun:
                                                for r, what in held]}) or {}
             why = self.msg("checks.held", reason)[:300]
             t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason}
+            server = wall is None and self._servers_round_held()
+            self.s["servers_held"] = "checks" if server else None  # the servers' problem: 重试 runs the round again
             self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
                      data={"checks": t["held"]["checks"]})
             return
         t["held"] = None
+        if self.s.get("servers_held") == "checks":
+            self.s["servers_held"] = None
         for r in failing:
             rounds[r["name"]] = rounds.get(r["name"], 0) + 1
         for key in [k for k in self.order if k in owners]:
@@ -1648,6 +1776,10 @@ class TeamRun:
             if self.team.get("bench"):
                 return  # the bench actions and the checks after them come next (_bench_step); _settle ends the run
             red = int(s["tests"].get("failed") or 0)
+            if red and self._hold_failing():  # the team's checks still fail: held for a person, not done
+                self._end("failed", "run.held", {"why": {"code": s["tests"]["held"]["code"],
+                                                         "params": s["tests"]["held"].get("params")}})
+                return
             if red:  # done, but not green: said as it is, the person decides
                 self._end("done", "run.done_red", {"summary": summary[:20], "red": red})
             else:
@@ -1930,6 +2062,30 @@ class TeamRun:
                                       f"HEAD..{self.lane(key)['branch']}", locks=False)
         return [tuple(rec.strip("\n").split("\x1f", 1)) for rec in out.split("\x1e") if "\x1f" in rec]
 
+    def _hold_unregistered(self, key: str, texts: list[str]) -> bool:
+        """A role sent back by the checks fixed what they found and cited finding IDs the triage does not have (a
+        defect the backlog lacks, TR §4.4): the run is held for a person to register them (D15), and the role spends
+        no round on rewriting its commit messages. True when held; False when the commits fail trace.sh otherwise."""
+        t, att = self.s["tests"], self.lane(key)["attempts"][-1] if self.lane(key)["attempts"] else {}
+        triage = self._approved_triage() or {}
+        known = set(triage_mod.decided(triage))
+        bad = [m for m in texts if triage_mod.commit_problem(m, triage)]
+        unknown = sorted({i for m in bad for i in triage_mod.FINDING_ID.findall(m) if i not in known})
+        failing = [c for c in t.get("cases") or [] if c.get("owner") == key and c["status"] == "fail"]
+        if att.get("kind") != "fix" or not failing or not unknown or not all(
+                set(triage_mod.FINDING_ID.findall(m)) - known for m in bad):
+            return False
+        rows = {r["name"]: r for r in t.get("checks") or []}
+        names = list(dict.fromkeys(c["ac"] for c in failing))
+        what = {"code": "held.unregistered", "params": {"r_role": key, "ids": unknown}}
+        first = {n: ((rows.get(n) or {}).get("reasons") or [""])[0] for n in names}
+        reason = messages.clean({"items": [{"check": n, "what": what, "reason": first[n]} for n in names]})
+        t["held"] = {"checks": names, "why": self.msg("checks.held", reason)[:300], "code": "checks.held",
+                     "params": reason, "unregistered": unknown}
+        self.lane(key).update(status="merged", stuck=False, done_at=self.d.now())
+        self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}}, data={"checks": names})
+        return True
+
     async def _trace_back(self, key: str, why: str) -> None:
         """A role's work that checks/trace.sh would refuse goes back before it is merged (its worktree as it is)."""
         lane = self.lane(key)
@@ -2205,7 +2361,16 @@ class TeamRun:
                 or any((lane.get("first") or {}).get("status") == "pending" for lane in lanes)
                 or (self._finale_due() and bench.get("step") != "done" and not bench.get("held")))
         gating = any(lane.get("gate") == "pending" for lane in lanes)
+        t = self.s["tests"]
+        if (not busy and not gating and self.team.get("checks") and t.get("failed") and not t.get("held")
+                and not bench.get("held") and t.get("rechecked") != t.get("head")):
+            # the last round still fails and nothing holds it (a role's round ended without a merge): the checks are
+            # looked at again, so that a failure goes back to a role or to a person; the run never ends done with it
+            t["rechecked"] = t.get("head")
+            self.s["needs_test"] = True
+            busy = True
         if not busy and not gating and not any(self.lane(k)["status"] == "waiting" and self._ready(k) for k in self.order):
+            self._hold_failing()  # never done with failing checks: the person decides
             held = self.s["tests"].get("held") or bench.get("held")
             if held:
                 self._end("failed", "run.held", {"why": {"code": held["code"], "params": held.get("params")} if held.get("code") else held["why"]})

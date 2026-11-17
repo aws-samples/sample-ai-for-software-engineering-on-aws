@@ -131,6 +131,11 @@ export function ScorecardView({ pollMs = SCORE_POLL_MS, onDetail }: { pollMs?: n
             <Card label={tr('scorecard.ScorecardView.19')} value={n(t.logdiff?.differences)} of={t.logdiff ? tr('scorecard.ScorecardView.20', { p0: t.logdiff.unexplained }) : undefined} empty={isEmpty(t.logdiff)} />
             <Card label={tr('scorecard.ScorecardView.21')} value={t.bench ? `${t.bench.approved} / ${t.bench.refused} / ${t.bench.reconciled}` : EMPTY} empty={isEmpty(t.bench)} />
             <Card label={tr('scorecard.ScorecardView.22')} value={n(t.rerun_differs)} empty={isEmpty(t.rerun_differs)} />
+            {t.tool_calls && (
+              <Card label={tr('scorecard.ScorecardView.46')}
+                value={[t.tool_calls['read-only'], t.tool_calls['controlled-write'], t.tool_calls.physical].join(' / ')}
+                of={tr('scorecard.ScorecardView.47', { p0: t.tool_calls.refused })} empty={false} />
+            )}
           </div>
           <section className="cto-card" data-testid="sc-caught">
             <h3>{tr('scorecard.ScorecardView.23')}</h3>

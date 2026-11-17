@@ -80,7 +80,8 @@ def test_the_figures_of_a_recorded_run(tmp_path):
     assert out["total"] == {"runs": 1, "findings": {"fixed": 2, "justified": 2, "deferred": 1}, "overturned": 2,
                             "build_rounds": 1, "caught": {"build": 1, "static": 1, "unit": 1},
                             "logdiff": {"differences": 4, "unexplained": 2},
-                            "bench": {"approved": 1, "refused": 2, "reconciled": 1}, "rerun_differs": 1}
+                            "bench": {"approved": 1, "refused": 2, "reconciled": 1}, "rerun_differs": 1,
+                            "tool_calls": None}
     assert "times" not in out["total"]
     types, _ = ts_types()  # exactly the Scorecard of ui/src/types.ts
     for name, obj in (("Scorecard", out), ("ScoreRun", r), ("ScoreTotal", out["total"]), ("ScoreTimes", r["times"]),
@@ -115,6 +116,6 @@ def test_no_runs_every_figure_is_empty_through_the_route(tmp_path):
         r = await call(routes, "GET", "/scorecard")
         assert r.status == 200 and r.body["runs"] == []
         assert r.body["total"] == {"runs": 0, "findings": None, "overturned": None, "build_rounds": None, "caught": None,
-                                   "logdiff": None, "bench": None, "rerun_differs": None}
+                                   "logdiff": None, "bench": None, "rerun_differs": None, "tool_calls": None}
 
     asyncio.run(go())
