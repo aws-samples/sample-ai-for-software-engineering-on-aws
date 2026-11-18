@@ -31,7 +31,9 @@ answers = json.load(open(os.environ["FAKE_KC"]))
 if "up" in answers and path not in answers["up"]:  # the owner API refuses this shell: no token
     print("kcapi: could not mint a token", file=sys.stderr)
     sys.exit(1)
-if path in answers.get("fail", []):  # Kiro Crew answers with an error
+gets = sum(json.loads(ln) == ["GET", path] for ln in open(os.environ["FAKE_KC_LOG"]))  # this one included
+# Kiro Crew answers with an error: every time (fail), or the Nth GET of that path (fail_get)
+if path in answers.get("fail", []) or gets in answers.get("fail_get", {}).get(path, []):
     print("500" if status else json.dumps({"error": "the stand-in fails this"}))
 elif status:
     print("404" if answers.get(path, {"error": "not found"}) == {"error": "not found"} else "200")
@@ -471,6 +473,37 @@ def test_cleanup_exits_1_and_keeps_the_record_when_kiro_crew_is_not_running(home
     assert home["state"].read_text() == before and changes(home) == []
 
 
+def sign_in_gateway(rig):
+    """Kiro Crew LTS signed out: its sign-in gateway answers /api/health and a 404 to every other path, and kcapi.sh,
+    with an old cookie in its jar, prints that 404 body and exits 0"""
+    rig["kc"].write_text(json.dumps({"/api/health": {"ok": True}}), encoding="utf-8")
+
+
+def test_cleanup_removes_nothing_while_kiro_crew_answers_a_404_to_every_path_but_its_health(home, root):
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    before = home["state"].read_text()
+    sign_in_gateway(home)
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "refused this shell as the dashboard owner" in r.stdout
+    assert home["state"].read_text() == before and (data / "runs.json").exists()
+    assert changes(home) == []
+
+
+def test_cleanup_keeps_the_apps_data_and_record_when_kiro_crew_does_not_answer_after_the_uninstall(home, root):
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    crew(home, apps={"name": "vstatd-team"}, fail_get={"/api/apps/vstatd-team": [2]},  # the check after the DELETE
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "did not say whether the app vstatd-team is installed: its data" in r.stdout
+    assert [c[1] for c in changes(home)][-1] == "/api/apps/vstatd-team"  # the DELETE went out
+    assert json.loads(home["state"].read_text())["created"] == ["app", "sample_record", "consent"]
+    assert (data / "runs.json").exists()
+
+
 @pytest.mark.parametrize("answer", [{"error": "502 Bad Gateway"}, "<html>502 Bad Gateway</html>"])
 def test_cleanup_keeps_the_app_when_its_sessions_cleanup_answers_an_error(home, root, answer):
     data = app_data(home)
@@ -570,4 +603,13 @@ def test_setup_stops_before_it_records_anything_when_kiro_crew_does_not_say_what
     r = sh(home, root, "setup.sh", "--consent-session-approval", answer="")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "Kiro Crew did not" in r.stdout and "run setup.sh again" in r.stdout
+    assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and changes(home) == []
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
+def test_setup_stops_while_kiro_crew_answers_a_404_to_every_path_but_its_health(home, root):
+    sign_in_gateway(home)
+    r = sh(home, root, "setup.sh", "--consent-session-approval", answer="")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "refused this shell as the dashboard owner" in r.stdout
     assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and changes(home) == []

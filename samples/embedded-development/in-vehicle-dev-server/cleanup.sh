@@ -115,9 +115,9 @@ crew_up || {
   warn "Kiro Crew is not running: open it and run cleanup.sh again to remove the app, members, knowledge source and workspace"
   exit 1
 }
-"$KC" GET /api/version >/dev/null 2>&1 || {
+[ "$("$KC" --status GET /api/version 2>/dev/null)" = 200 ] || {  # a 200: signed out, Kiro Crew answers a 404 here
   bad "Kiro Crew answers, but its API refused this shell as the dashboard owner: nothing removed."
-  echo "    Run cleanup.sh in your own terminal, not from an agent's shell."
+  echo "    Run cleanup.sh in your own terminal, not from an agent's shell (or Kiro Crew is signed out: sign in first)."
   exit 1
 }
 APP_GONE=0
