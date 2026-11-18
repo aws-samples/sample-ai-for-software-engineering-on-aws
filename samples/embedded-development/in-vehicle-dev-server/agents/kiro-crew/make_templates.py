@@ -4,9 +4,11 @@ as the prompt, plus how to work in Kiro Crew on vstatd (adapted from the agent-t
     python3 make_templates.py <vendor/aidlc-workflows/agents> <out dir> <kirocrew binary>
 
 Writes <out>/<name>.json, one per expert. Nothing else is touched; setup.sh copies them to ~/.kiro/agents/. The tools
-are those of the agent-team templates: file reads and writes, shell commands, and Kiro Crew's own MCP server
-(``@kirocrew-core``, whose ``local_knowledge_search`` answers from the knowledge source ``vstatd``). D2 in
-docs/kiro-crew-app.md says what this allows.
+are file reads and writes, shell commands, and one tool of Kiro Crew's own MCP server, ``local_knowledge_search``,
+which answers from the knowledge source ``vstatd``. The agent-team templates offer the whole server
+(``@kirocrew-core``); its other tools (deploying an artifact to a public URL, running workflows and tasks, the browser,
+messages to the user, writes to the knowledge library) are not offered to these roles. D2 in docs/kiro-crew-app.md says
+what this allows.
 """
 import json
 import shlex
@@ -14,6 +16,8 @@ import sys
 from pathlib import Path
 
 KNOWLEDGE = "vstatd"
+CORE = "kirocrew-core"  # Kiro Crew's own MCP server (`kirocrew mcp-core`)
+CORE_TOOLS = ("local_knowledge_search",)  # the only tools of it the roles get, and get without asking
 # The bypass hook (item 6): refuses shell calls and writes that reach the bench, the run's check results, or push and
 # rewrite history (../hooks/guard.py, defence in depth). `|| exit 2` keeps it closed when python3 or the file is
 # missing, because Kiro lets a call run when a hook exits with any status other than 2.
@@ -60,22 +64,28 @@ def template(name: str, display: str, desc: str, prompt: str, kirocrew: str) -> 
         "name": name,
         "description": f"{display} · {desc}",
         "prompt": prompt,
-        "tools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],
-        "allowedTools": ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"],  # what the V2 engine approves
-        "permissions": permissions(["kirocrew-core"]),  # what the V3 engine approves
+        "tools": tools(),
+        "allowedTools": tools(),  # what the V2 engine approves
+        "permissions": permissions(),  # what the V3 engine approves
         "includeMcpJson": False,
         "includeCrewContext": False,
-        "mcpServers": {"kirocrew-core": {"command": kirocrew, "args": ["mcp-core"]}},
+        "mcpServers": {CORE: {"command": kirocrew, "args": ["mcp-core"]}},
         "hooks": guard_hooks(guard_command()),
     }
 
 
-def permissions(servers: list) -> dict:
+def tools() -> list:
+    """The roles' tools, in V2's names: read, write, the shell, and CORE_TOOLS of Kiro Crew's server only."""
+    return ["fs_read", "fs_write", "execute_bash", *(f"@{CORE}/{name}" for name in CORE_TOOLS)]
+
+
+def permissions() -> dict:
     """The V3 engine's equivalent of allowedTools: read, write, the shell and skills without asking (V3 always offers
-    its skill tools, as `kiro-cli agent upgrade` allows them), and the named MCP servers' tools. Kiro's own fixed
+    its skill tools, as `kiro-cli agent upgrade` allows them), and CORE_TOOLS of Kiro Crew's server. Kiro's own fixed
     limits still apply: writes to .git/** and .kiro/agents ask, which a headless session treats as a deny."""
     rules = [{"capability": c, "effect": "allow"} for c in ("fs_read", "fs_write", "shell", "skill")]
-    return {"rules": rules + [{"capability": "mcp", "match": [f"{s}/*"], "effect": "allow"} for s in servers]}
+    core = {"capability": "mcp", "match": [f"{CORE}/{name}" for name in CORE_TOOLS], "effect": "allow"}
+    return {"rules": [*rules, core]}
 
 
 def guard_hooks(command: str) -> list:

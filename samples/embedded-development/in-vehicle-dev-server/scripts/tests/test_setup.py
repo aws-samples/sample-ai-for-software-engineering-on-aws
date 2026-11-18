@@ -85,7 +85,9 @@ def test_the_templates_are_the_four_experts_with_the_vstatd_note(tmp_path):
     for name in MEMBERS:
         t = json.loads((out / f"{name}-agent.json").read_text(encoding="utf-8"))
         assert t["name"] == f"{name}-agent" and t["description"].startswith("Embedded ") and " · AI-DLC " in t["description"]
-        assert t["tools"] == t["allowedTools"] == ["fs_read", "fs_write", "execute_bash", "@kirocrew-core"]
+        # of Kiro Crew's own server only its knowledge search, not the whole server (deploys, workflows, messages)
+        assert t["tools"] == t["allowedTools"] == ["fs_read", "fs_write", "execute_bash",
+                                                   "@kirocrew-core/local_knowledge_search"]
         assert t["mcpServers"] == {"kirocrew-core": {"command": "/opt/kirocrew", "args": ["mcp-core"]}}
         official = (SAMPLE / "vendor" / "aidlc-workflows" / "agents" / f"{EXPERTS[name]}.md").read_text(encoding="utf-8")
         body = official.split("---", 2)[2].replace("{{HARNESS_DIR}}", "aidlc/official").strip()
@@ -99,7 +101,8 @@ def test_the_templates_are_the_four_experts_with_the_vstatd_note(tmp_path):
                    and h["action"]["command"].split()[2].endswith("agents/hooks/guard.py") for h in t["hooks"])
         assert {(r["capability"], r["effect"]) for r in t["permissions"]["rules"]} == {
             ("fs_read", "allow"), ("fs_write", "allow"), ("shell", "allow"), ("skill", "allow"), ("mcp", "allow")}
-        assert [r.get("match") for r in t["permissions"]["rules"] if r["capability"] == "mcp"] == [["kirocrew-core/*"]]
+        assert [r.get("match") for r in t["permissions"]["rules"] if r["capability"] == "mcp"] == [
+            ["kirocrew-core/local_knowledge_search"]]
     assert run_py(SAMPLE / "agents" / "kiro-crew" / "make_templates.py", out).returncode == 2
 
 

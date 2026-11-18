@@ -68,9 +68,24 @@ python3 is missing or the hook fails. The path is absolute, so run `setup.sh` ag
 - a variable or ANSI-C quoting that holds the command (`$G push`, `$'\x67it' push`);
 - a relative path from inside a protected folder, a URL to the target's port, a global git alias, and `gh`.
 
-The hook is only on the shell and on file writes. The templates also auto-approve the tools of Kiro Crew's own MCP
-server (`@kirocrew-core`), which do not pass through it. The boundary is a build server whose agents have no target key,
-no Docker access and no push credentials
+The hook is only on the shell and on file writes. The templates also auto-approve one tool of Kiro Crew's own MCP
+server, `@kirocrew-core/local_knowledge_search`, which does not pass through the hook. The roles do not get the
+server's other tools, which include previewing a deploy of a web artifact to a public URL on the user's AWS account,
+workflows and tasks, the browser, messages to the user and writes to the knowledge library.
+
+Measured on 2026-11-18 with Kiro Crew 0.12.2 and kiro-cli 2.34.0:
+
+- In a Kiro Crew chat session bound to the developer template, the session had that server's
+  `local_knowledge_search` and none of its other tools; asked to call `send_notification`, it found no such tool.
+  Kiro Crew also adds its own cron server to the session (`kirocrew-cron`: list, add, update, remove and remove all,
+  pause, resume and trigger jobs, and `cron_secret_request`). The templates do not list it; Kiro Crew adds it.
+- With kiro-cli's V2 engine, the session listed `local_knowledge_search` as its only tool of the server and called it
+  without asking.
+- With `--v3`, the session listed no MCP tool (only `execute_bash`, `fs_write` and `disclose_context`), whether the
+  template named the whole server or the one tool. The V3 rule in `permissions` is therefore untested, and the
+  knowledge search needs the V2 engine or Kiro Crew.
+
+The boundary is a build server whose agents have no target key, no Docker access and no push credentials
 ([D2](../docs/kiro-crew-app.md#d2-kiro-crew-runs-on-the-users-own-machine-agents-have-a-shell-sessions-auto-approve)).
 
 ```bash
