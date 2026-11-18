@@ -680,6 +680,12 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   unchanged, the paths added to the role and one more round of that check. When the role said in its reply that the
   cause is in a file outside its scope, or a unit-test finding has no test naming it (TR §4.1), the board proposes
   the paths (`tests.held.suggest`) and the person agrees with one click; each is recorded as the person's action.
+  Seen again in `r1117e6af`: the developer named the toolchain file under a heading with F-032, in other sentences,
+  as "不在我能改的文件里" and "加进我的可改范围", so nothing was proposed and the role went round with `src/main.cpp`
+  only. The app now reads a reply by paragraph (the paragraph names the finding; a sentence of it says where the
+  cause is or that the file is not the role's), quotes that sentence as the note, and fills in 再加路径 and the note
+  of a new finding the same way (`tests.held.prefill`, by the paragraph naming the check). A path is filled in only
+  when it is a file of the project outside the role's scope; the person checks it and sends it.
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
   justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the
   board now offers 按评审意见再改一轮 (`review_redo`) with a decision prefilled for a justification the review names

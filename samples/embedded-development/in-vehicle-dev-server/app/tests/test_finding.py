@@ -178,11 +178,63 @@ def test_the_app_proposes_the_files_the_role_said_it_cannot_change_and_the_test_
     unit["reasons"] = ["F-034: triaged as fix with evidence unit-test, but no test that is new or changed in the batch and runs names it (TR §4.1)"]
     assert run.path_suggestions() == [
         {"extend": "F-032", "check": "build", "role": "dev", "paths": ["cmake/tc.cmake"],
-         "note": "dev说根因在 cmake/tc.cmake，这些它改不了。F-033 和 F-032 是同一个失败，提交说明一并写上 F-032、F-033"},
+         "note": "dev说：F-032~F-033 的根因在 cmake/tc.cmake,这个文件不归我改。F-033 和 F-032 是同一个失败，"
+                 "提交说明一并写上 F-032、F-033"},
         {"extend": "F-034", "check": "unit", "role": "dev", "paths": ["tests/test_a.cpp"],
          "note": "F-034 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 tests/test_a.cpp 里加"}]
     held = svc.board(run.rid)["run"]["tests"]["held"]
     assert [s["extend"] for s in held["suggest"]] == ["F-032", "F-034"]
+
+
+# As a role wrote it in r1117e6af: the finding in the paragraph's heading, the file in other sentences of it, and
+# "不在我能改的文件里" / "加进我的可改范围" rather than 不归我.
+SAID_1117 = ("我修了 `SignalTable::get()` 的数据竞争，build 仍然没有修好。\n\n"
+             "**未修：build，F-032**\n"
+             "- 真正的原因是 `cmake/tc.cmake` 没有设 `CMAKE_SYSROOT`。\n"
+             "- 样例里 `docs/fix.md:126` 的修法是加一行。\n"
+             "- 需要有人把 `cmake/tc.cmake` 加进我的可改范围，提交说明里写 F-032。\n\n"
+             "**另外**\n- `unit` 里还有两条原因：`tests/test_a.cpp:32` 不归我，`src/a.cpp` 我能改，"
+             "`cmake/gone.cmake` 不存在，`../out/x.cmake` 不在仓库里。`cmake/link.cmake` 也不归我。")
+
+
+def test_the_proposal_finds_the_file_in_the_findings_paragraph_and_quotes_the_role(tmp_path, monkeypatch):
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+    wt = Path(run.s["run_wt"])
+    for p in ("cmake/tc.cmake", "tests/test_a.cpp", "docs/fix.md"):
+        (wt / p).parent.mkdir(parents=True, exist_ok=True)
+        (wt / p).write_text("x\n")
+
+    async def go():
+        await svc.finding(run.rid, handlers.finding_body({**F032, "location": "src/a.cpp:12", "paths": ["src/a.cpp"],
+                                                          "continue": False}))
+    asyncio.run(go())
+    run.lane("dev")["attempts"].append({**run.lane("dev")["attempts"][-1], "reply": SAID_1117})
+    assert run.path_suggestions() == [
+        {"extend": "F-032", "check": "build", "role": "dev", "paths": ["cmake/tc.cmake"],
+         "note": "dev说：真正的原因是 cmake/tc.cmake 没有设 CMAKE_SYSROOT"}]
+
+
+def test_a_new_finding_is_filled_in_with_the_files_the_role_said_for_its_check(tmp_path, monkeypatch):
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+    wt = Path(run.s["run_wt"])
+    for p in ("cmake/tc.cmake", "tests/test_a.cpp", "docs/fix.md"):
+        (wt / p).parent.mkdir(parents=True, exist_ok=True)
+        (wt / p).write_text("x\n")
+    (wt.parent / "out").mkdir(exist_ok=True)
+    (wt.parent / "out" / "x.cmake").write_text("x\n")
+    (wt / "cmake" / "link.cmake").symlink_to(wt.parent / "out" / "x.cmake")  # a file, but out of the project
+    assert run.finding_prefill() == []  # the role said nothing yet: the dialog is as before
+    run.lane("dev")["attempts"].append({**run.lane("dev")["attempts"][-1], "reply": SAID_1117})
+    # in the project, outside dev's src/a.*, said in a sentence about the cause; per check, by its paragraph
+    assert run.finding_prefill() == [
+        {"check": "build", "role": "dev", "paths": ["cmake/tc.cmake"],
+         "note": "dev说：真正的原因是 cmake/tc.cmake 没有设 CMAKE_SYSROOT"},
+        {"check": "unit", "role": "dev", "paths": ["tests/test_a.cpp"],
+         "note": "dev说：unit 里还有两条原因：tests/test_a.cpp:32 不归我，src/a.cpp 我能改，cmake/gone.cmake 不存在，"
+                 "../out/x.cmake 不在仓库里"}]
+    assert svc.board(run.rid)["run"]["tests"]["held"]["prefill"][0]["paths"] == ["cmake/tc.cmake"]
 
 
 def test_extending_refuses_an_id_not_added_by_a_check(tmp_path, monkeypatch):

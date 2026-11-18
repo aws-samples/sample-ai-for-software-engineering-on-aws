@@ -60,7 +60,23 @@ TALK_KEEP = 2_000  # characters of a role's answer in a 讨论 at its gate, kept
 DECISIONS_FILE = "docs/aidlc/decisions.md"  # what people decided at the gates, written into the run branch by the app
 TRIAGE_FILE = "triage.json"  # the approved triage, beside the run's repository (runs/<run>/), out of the agents' worktrees
 PATH_SAID = re.compile(r"(?<![\w/.-])((?:[\w-]+/)+[\w.-]+\.[A-Za-z]\w*|CMakeLists\.txt)(?![\w/])")  # a project path in a reply
-OUT_OF_SCOPE = re.compile(r"不归我|改不了|可写范围|没有权限|分给")  # a role saying a file is not its to change
+# a role saying where the cause is, or that a file is not its to change
+CAUSE_SAID = re.compile(r"根因|真正的原因|原因是|不归我|改不了|可写范围|可改范围|能改的|不在我|没有权限|分给")
+
+
+def cause_paths(replies: list[str], about: Any, usable: Any) -> tuple[list[str], str]:
+    """The files a role said the cause is in, or are not its to change: in a paragraph of its replies that *about*
+    accepts (it names the finding or the check), each path of a sentence saying so that *usable* accepts (a file of
+    the project outside the role's scope). And the first of those sentences, in the role's words ('' for none)."""
+    paths: list[str] = []
+    said = ""
+    for block in (b for r in replies for b in re.split(r"\n\s*\n", r) if about(b)):
+        for s in re.split(r"[。\n；;]", block):
+            got = ([p for p in dict.fromkeys(PATH_SAID.findall(s)) if p not in paths and usable(p)]
+                   if CAUSE_SAID.search(s) else [])
+            paths += got
+            said = said or (re.sub(r"\*\*|`", "", s).strip(" -*") if got else "")
+    return paths, said[:300]
 
 
 def _ids_in(text: str) -> set[str]:
@@ -1106,11 +1122,9 @@ class TeamRun:
             first, globs, ids = mine[0], self.roles[role]["writable"], {f["id"] for f in mine}
             loc = str(first["added"].get("location") or "")
             same = [f["id"] for f in mine[1:] if f["added"].get("location") == loc]
-            free = lambda p: (root / p).is_file() and not gitwork.matches(p, globs)  # noqa: E731
-            said = [s for a in self.lane(role)["attempts"] for s in re.split(r"[。\n；;]", str(a.get("reply") or ""))
-                    if OUT_OF_SCOPE.search(s) and ids & _ids_in(s)]  # "F-032 的根因在 `x`，这个文件不归我改"
-            paths = [p for p in dict.fromkeys(m for s in said for m in PATH_SAID.findall(s)) if free(p)]
-            why = [f"{self.title(role)}说根因在 {'、'.join(paths)}，这些它改不了"] if paths else []
+            free = self._free(root, globs)
+            paths, said = cause_paths(self._replies(role), lambda b: bool(ids & _ids_in(b)), free)
+            why = [f"{self.title(role)}说：{said}"] if paths else []
             reasons = " ".join(str(x) for x in (rows.get(c) or {}).get("reasons") or [])
             for f in mine:
                 stem = Path(str(f["added"].get("location") or "").split(":")[0]).stem
@@ -1122,6 +1136,39 @@ class TeamRun:
             if paths:
                 note = "；".join(why) + (f"。{'、'.join(same)} 和 {first['id']} 是同一个失败，提交说明一并写上 {first['id']}、{'、'.join(same)}" if same else "")
                 out.append({"extend": first["id"], "check": c, "role": role, "paths": paths, "note": note[:1000]})
+        return out
+
+    @staticmethod
+    def _free(root: Path, globs: list[str]) -> Any:
+        """Whether a path a role named can be given to it: a file of the project, outside its scope."""
+        def free(p: str) -> bool:
+            f = root / p
+            return f.is_file() and f.resolve().is_relative_to(root.resolve()) and not gitwork.matches(p, globs)
+        return free
+
+    def _replies(self, role: str) -> list[str]:
+        return [str(a.get("reply") or "") for a in self.lane(role)["attempts"]]
+
+    def finding_prefill(self) -> list[dict[str, Any]]:
+        """补登发现 (a new finding), filled in for a person to check: for each held check, the files its role said the
+        cause is in and it cannot change, in a paragraph of its replies that names the check, and why in its words.
+        [] when it named none; nothing changes here."""
+        t, wt = self.s["tests"], self.s.get("run_wt")
+        held = t.get("held")
+        if not held or not wt:
+            return []
+        rows = {r["name"]: r for r in t.get("checks") or []}
+        out: list[dict[str, Any]] = []
+        for c in held.get("checks") or []:
+            owners = [o for o in (rows.get(c) or {}).get("owners") or [] if o in self.impl]
+            role = owners[0] if owners else next(iter(self.impl), None)
+            if role is None:
+                continue
+            word = re.compile(rf"(?<![\w/.-]){re.escape(c)}(?![\w/.-])")
+            free = self._free(Path(wt), self.roles[role]["writable"])
+            paths, said = cause_paths(self._replies(role), word.search, free)
+            if paths:
+                out.append({"check": c, "role": role, "paths": paths, "note": f"{self.title(role)}说：{said}"})
         return out
 
     async def _go_on_with_findings(self, registered: list[dict[str, Any]]) -> None:
