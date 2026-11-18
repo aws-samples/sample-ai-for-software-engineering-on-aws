@@ -14,6 +14,7 @@ from teamkit import FakeManager, mod, sh
 
 team_mod, paths, constants, httpkit = mod("team"), mod("paths"), mod("constants"), mod("httpkit")
 checks_mod = mod("checks")
+bench_mod = mod("bench")
 service, handlers = mod("service"), mod("handlers")
 SAMPLE = constants.APP_ROOT.parent  # the dev checkout: this scenario's folder
 
@@ -54,7 +55,8 @@ def test_the_vstatd_team_file_has_the_six_roles_two_gates_and_the_checks():
     assert checks["logdiff"]["args"] == ["run", "baseline", "triage"]
     assert set(t["bench"]) == {"deploy", "restart", "replay", "doctor", "build", "start", "baseline"}
     assert t["bench"]["deploy"] == ["${sample}/bench/cc1.sh", "deploy", "{artifact}"]
-    assert t["bench"]["doctor"] == ["${sample}/bench/doctor.sh"] and t["bench"]["baseline"] == "~/workplace/vstatd-team/baseline"
+    assert t["bench"]["doctor"] == ["${sample}/bench/doctor.sh"]
+    assert t["bench"]["baseline"] == "${sample}/bench/baseline"
     assert t["check_runner"]["image"] == {"arm64": "vstatd-build:arm64", "amd64": "vstatd-build:amd64"}
     assert t["check_runner"]["platform"] == {"arm64": "linux/arm64", "amd64": "linux/amd64"}
     assert "--platform" not in t["check_runner"]["docker"]  # chosen for the machine each check runs on
@@ -148,8 +150,24 @@ def test_sample_is_replaced_in_every_string_of_the_team():
     assert t["source"] == "/x/scenario/reference-project"
     assert t["checks"][0]["command"] == ["/x/scenario/checks/build.sh"]
     assert t["bench"]["replay"][:2] == ["/x/scenario/bench/cc1.sh", "replay"]
+    assert t["bench"]["baseline"] == "/x/scenario/bench/baseline"  # the committed baseline (bench/baseline/README.md)
     assert "${sample}" not in json.dumps(t, ensure_ascii=False)
     assert paths.expand({"n": 3, "b": None, "l": [True]}, "/x") == {"n": 3, "b": None, "l": [True]}
+
+
+def test_the_committed_baseline_is_in_the_scenario_and_the_command_to_record_one_writes_outside_it():
+    t = paths.expand(raw_team(), SAMPLE)
+    assert bench_mod.has_baseline(t["bench"])  # bench/baseline/baseline-result.json is in the repository
+    own = str(Path(bench_mod.OWN_BASELINE).expanduser())
+    assert bench_mod.baseline_command(t["bench"]) == (
+        f"部署当前版本以后运行 {SAMPLE}/bench/cc1.sh replay --kind baseline --out {own}"
+        f"，再把团队文件的 bench.baseline 改成 ~/workplace/vstatd-team/baseline")
+    t["bench"]["baseline"] = f"{SAMPLE}/bench/../docs/b"  # anywhere in the scenario folder: not recorded over either
+    assert bench_mod.baseline_command(t["bench"]).endswith(f"--out {own}，再把团队文件的 bench.baseline 改成 "
+                                                          "~/workplace/vstatd-team/baseline")
+    t["bench"]["baseline"] = "/elsewhere/baseline"  # a baseline of the bench owner's own: recorded where it is
+    assert bench_mod.baseline_command(t["bench"]) == (
+        f"部署当前版本以后运行 {SAMPLE}/bench/cc1.sh replay --kind baseline --out /elsewhere/baseline")
 
 
 @pytest.mark.parametrize("machine, arch", [("arm64", "arm64"), ("aarch64", "arm64"), ("x86_64", "amd64"), ("AMD64", "amd64")])

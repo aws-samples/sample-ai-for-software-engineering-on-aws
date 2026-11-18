@@ -282,10 +282,13 @@ On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
    ```
 
 3. Before the first run: open the operator console in a terminal of its own (`python3 bench/console.py`), set the
-   supply there (`v 13.5`, `k on`), start the target (`bench/cc1.sh start && bench/cc1.sh wait`), deploy the current
-   release and write the baseline once with `bench/cc1.sh replay --kind baseline --out ~/workplace/vstatd-team/baseline`
-   (see [bench/README.md](bench/README.md)). Until the bench is ready, a run stops before its first bench action and the
-   board says what is missing and the command for it.
+   supply there (`v 13.5`, `k on`) and start the target (`bench/cc1.sh start && bench/cc1.sh wait`). The team file
+   uses the committed baseline [bench/baseline/](bench/baseline/README.md) by default. Record one of your own only when
+   the correct release does not pass `logdiff` against it on your machine: deploy the current release, run
+   `bench/cc1.sh replay --kind baseline --out ~/workplace/vstatd-team/baseline` (approved on the board or at the
+   operator console) and set the team file's `bench.baseline` to that folder (see [bench/README.md](bench/README.md)).
+   Until the bench is ready, a run stops before its first bench action and the board says what is missing and the
+   command for it.
 4. Open Kiro Crew → Apps → AIDLC-Embedded团队 → 团队看板, choose 新需求 (it is filled in with the work item) and
    hand it to the team.
 5. At the triage gate, answer each question (its citations are shown); then approve build start.
@@ -393,7 +396,8 @@ been dry-run once.
    [rehearsal/seed-checks/](rehearsal/seed-checks/).
 3. Bench emulation: a script that builds the emulated CC-1 image, the gateway socket and drive replay, the baseline
    log, the simulated supply, the operator console and a reset script. Also a `doctor` script that checks the host
-   before a session. *Done* except the final baseline: [bench/](bench/README.md).
+   before a session. *Done:* [bench/](bench/README.md), with the final baseline in
+   [bench/baseline/](bench/baseline/README.md) (2026-11-18).
 4. Checks, each with a failing and a passing example; the release check and the evidence page generator.
    *Done:* [checks/](checks/README.md), with the triage format and the run directories the bench hands over (a
    proposed interface with item 3); the facilitators' runs on the reference project are in

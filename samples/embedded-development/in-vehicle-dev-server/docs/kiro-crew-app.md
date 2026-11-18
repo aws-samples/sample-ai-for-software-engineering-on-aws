@@ -218,8 +218,11 @@ the target's Linux image is used as a tool and not redistributed.
 
 How (step 6): the team file's `bench` has, besides deploy, restart and replay, `doctor` (run by the app),
 `build` and `start` (the bench owner's commands, shown on the board, never run by the app) and `baseline`, the
-baseline directory; for `vstatd` it is `~/workplace/vstatd-team/baseline`, written once by the bench owner with
-`cc1.sh replay --kind baseline`, since the bench ships no baseline yet. When the before-bench checks pass on what is
+baseline directory; for `vstatd` it is `${sample}/bench/baseline`, the baseline committed with the bench (2026-11-18,
+[bench/baseline/](../bench/baseline/README.md)). A bench owner whose correct release does not pass `logdiff` against it
+records one of their own with `cc1.sh replay --kind baseline` and points `baseline` at it; the command the board shows
+for that never records into the scenario folder, it records into `~/workplace/vstatd-team/baseline`. When the
+before-bench checks pass on what is
 merged and the reviewer has let it through, the app runs `doctor.sh`; it holds the run for a person when doctor
 fails, the target is off or not known, or the baseline is missing, with the command for each. Then deploy (the
 artifact of `build.sh` from that round's results), replay into `runs/<run>/bench/run-<n>/`, and the after-bench

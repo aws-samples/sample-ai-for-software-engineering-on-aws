@@ -15,6 +15,7 @@ checks = "/srv/sample/checks"
 sysroot = "/opt/cc1-sysroot"
 # Optional, all three or none: the bench server's published results, its run folders and its baseline, for
 # `run_check release` (README.md, The bench's results). They belong to the bench server's user, named below.
+# bench_baseline is the bench server's `baseline`: one the bench owner recorded, or the sample's bench/baseline.
 # bench_results = "/srv/bench/state/results"
 # bench_runs = "/srv/bench/state/runs"
 # bench_baseline = "/srv/bench/baseline"
