@@ -229,10 +229,12 @@ def test_cleanup_dry_run_lists_exactly_what_setup_recorded(home):
                       f"- the Kiro Crew workspace vstatd, if it still points to {home_}/workplace/vstatd",
                       f"- 1 agent templates in {home_}/.kiro/agents/: embedded-architect",
                       "- and puts back 1 agent templates it replaced: embedded-developer",
-                      f"- the knowledge copy in {home_}/workplace/vstatd/knowledge (files you added or changed stay)"]
+                      f"- the knowledge copy in {home_}/workplace/vstatd/knowledge: every file at a path knowledge/"
+                      " has, whatever it holds now"]  # team_home recorded with no file list: an earlier setup's copy
     assert "the app vstatd-team" not in out and "(dry run: nothing removed)" in out
     for missing in ("vstatd-build:arm64", "vstatd-standin-sysroot", "「AI-DLC 团队」", "~/.npm"):  # left, and said so
         assert missing in out, missing
+    assert "whatever it holds now" in out  # an earlier setup's copy: no record of the files
     assert calls(home) == []  # a dry run asks Kiro Crew nothing
 
     home["state"].unlink()
@@ -343,26 +345,31 @@ def test_cleanup_removes_only_what_is_still_setups_and_keeps_the_record_when_a_s
                  {"name": "embedded-developer", "kiro_agent": "embedded-developer", "workspace": "alice"}],
          sources=[{"id": "k2", "name": "vstatd", "uri": str(knowledge)}],  # re-created by alice: not setup's
          workspaces=[{"name": "vstatd", "path": "/Users/alice/elsewhere"}],
+         refuse=["/api/agents/embedded-quality"],  # Kiro Crew answers the DELETE, but the member is still listed
          **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "sessions": 3, "folders": 1, "failed": 1}})
 
     first = run_cleanup(home)
     assert first.returncode == 1, first.stdout + first.stderr
     assert "the app's sessions were not all removed" in first.stdout and "Not everything was removed" in first.stdout
+    assert "member embedded-quality not removed" in first.stdout
     log = calls(home)
     assert ["POST", "/api/apps/vstatd-team/sessions/cleanup", '{"all": true}'] in log
     deleted = [c[1] for c in log if c[0] == "DELETE"]
     assert deleted == ["/api/agents/embedded-quality"]  # not the app (its sessions are still there), nor alice's
     state = json.loads(home["state"].read_text())
-    assert state == {"created": ["app", "sample_record", "trust"]}  # what is left, for the next run
+    assert state == {"created": ["app", "sample_record", "trust"], "members": ["embedded-quality"]}  # what is left
     assert (app_data / "runs.json").exists() and not knowledge.exists()
 
     answers = json.loads(home["kc"].read_text())
     answers["POST /api/apps/vstatd-team/sessions/cleanup"]["failed"] = 0
+    answers["refuse"] = []
     home["kc"].write_text(json.dumps(answers), encoding="utf-8")
     second = run_cleanup(home)
     assert second.returncode == 0, second.stdout + second.stderr
-    assert "app removed" in second.stdout and "trust removed" in second.stdout
+    for line in ("app removed", "trust removed", "member embedded-quality removed"):
+        assert line in second.stdout, line
     deleted = [c[1] for c in calls(home)[len(log):] if c[0] == "DELETE"]
-    assert deleted == ["/api/apps/vstatd-team", "/api/security/trusted-apps/vstatd-team"]
+    assert deleted == ["/api/apps/vstatd-team", "/api/security/trusted-apps/vstatd-team",
+                       "/api/agents/embedded-quality"]
     assert json.loads(home["kc"].read_text())["/api/security/trusted-apps"]["apps"] == ["other-app"]
     assert not home["state"].exists() and not app_data.parent.exists()

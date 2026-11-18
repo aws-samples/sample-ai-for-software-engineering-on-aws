@@ -9,7 +9,8 @@ file it did not write:
   says what it kept.
 
 A copy an earlier setup made, before this record (created team_home but no knowledge_files), is taken as setup's
-where the scenario has a file of the same path: that setup overwrote those paths on every run.
+where the scenario has a file of the same path, whatever the file holds now: that setup overwrote those paths on every
+run, so a change there is most likely the scenario's own update, and the old cleanup removed the whole folder.
 
     python3 scripts/knowledge.py plan <knowledge/> <copy>      # what install would do; changes nothing
     python3 scripts/knowledge.py install <knowledge/> <copy>

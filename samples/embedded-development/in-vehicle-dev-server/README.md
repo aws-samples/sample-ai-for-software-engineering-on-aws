@@ -552,7 +552,8 @@ repositories, its trust entry, any members and workspace an earlier setup create
 of its copy, the agent templates it added, and the board's `app/ui/node_modules` and `app/ui/dist` when setup built
 them; it puts back the templates it replaced, and `--dry-run` lists all of it. It checks that each one is still the
 one setup created, so one you made with the same name stays, as do files you added to `~/workplace/vstatd` or changed
-there. An app installed before setup stays installed. When a step fails it keeps `.install-state.json` and exits 1:
+there (a file you add to that folder is indexed with the rest, so the team reads it as knowledge). An app installed
+before setup stays installed. When a step fails it keeps `.install-state.json` and exits 1:
 fix the cause and run it again. It leaves the build container, the bench's images and volumes, the bench state
 (`~/.cc1-bench`) and the baseline, and prints the commands of [bench/README.md](bench/README.md#cleanup) that remove
 them. Two things are left for you: the chat folder 「AI-DLC 团队」 in the Kiro Crew sidebar (only a person can delete

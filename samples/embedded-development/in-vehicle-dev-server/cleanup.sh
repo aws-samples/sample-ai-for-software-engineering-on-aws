@@ -21,29 +21,32 @@ FAILED=0
 fail() { warn "$*"; FAILED=1; }
 members=($(state list members)); templates=($(state list templates)); backed_up=($(state list backed_up))
 
-# GET <path>: its list holds an item with every <field>=<value> given. Exit 1 when not, 3 when Kiro Crew did not answer.
+# GET <path>: the list under <key> (or the reply itself, when it is a list) holds an item with every <field>=<value>
+# given. Exit 1 when not, 3 when Kiro Crew did not answer that way.
 match() {
-  local path="$1" rc=0; shift
+  local path="$1" key="$2" rc=0; shift 2
   "$KC" GET "$path" 2>/dev/null | "$PY" -c 'import json,sys
 try:
     d = json.load(sys.stdin)
 except ValueError:
     sys.exit(3)
-rows = next((v for v in d.values() if isinstance(v, list)), None) if isinstance(d, dict) else d
+rows = d if isinstance(d, list) else d.get(sys.argv[1]) if isinstance(d, dict) else None
 if not isinstance(rows, list):
     sys.exit(3)
-want = dict(a.split("=", 1) for a in sys.argv[1:])
-sys.exit(0 if any(all(str(r.get(k)) == v for k, v in want.items()) for r in rows) else 1)' "$@" || rc=$?
+want = dict(a.split("=", 1) for a in sys.argv[2:])
+sys.exit(0 if any(isinstance(r, dict) and all(str(r.get(k)) == v for k, v in want.items()) for r in rows) else 1)' \
+    "$key" "$@" || rc=$?
   return "$rc"
 }
 
-# remove <what> <GET path> <DELETE path> <identity: field=value ...>: delete it if it is still the one setup made
+# remove <what> <GET path> <list key> <DELETE path> <identity: field=value ...>: delete it if it is still the one
+# setup made
 remove_if_ours() {
-  local what="$1" list="$2" del="$3" rc=0; shift 3
-  match "$list" "$@" || rc=$?
+  local what="$1" list="$2" key="$3" del="$4" rc=0; shift 4
+  match "$list" "$key" "$@" || rc=$?
   case "$rc" in
     0) "$KC" DELETE "$del" >/dev/null 2>&1 || true
-       rc=0; match "$list" "$@" || rc=$?
+       rc=0; match "$list" "$key" "$@" || rc=$?
        [ "$rc" = 1 ] && { ok "$what removed"; return 0; }
        fail "$what not removed: remove it in Kiro Crew and run cleanup.sh again"; return 1 ;;
     1) ok "$what: not there any more, or not the one setup.sh created (kept)"; return 0 ;;
@@ -90,7 +93,14 @@ created knowledge && echo "  - the Kiro Crew knowledge source $KNOWLEDGE that se
 [ ${#templates[@]} -gt 0 ] && echo "  - ${#templates[@]} agent templates in $AGENTS/: ${templates[*]:-}"
 [ ${#backed_up[@]} -gt 0 ] && echo "  - and puts back ${#backed_up[@]} agent templates it replaced: ${backed_up[*]:-}"
 if created team_home || created knowledge_dir; then
-  echo "  - the knowledge copy in $TEAM_HOME/knowledge (files you added or changed stay)"
+  if "$PY" -c 'import json,sys
+sys.exit(0 if isinstance(json.load(open(sys.argv[1])).get("knowledge_files"), dict) else 1)' \
+       "${VSTATD_INSTALL_STATE:-$ROOT/.install-state.json}" 2>/dev/null; then
+    echo "  - the knowledge copy in $TEAM_HOME/knowledge (files you added or changed stay)"
+  else  # an earlier setup's copy, with no record of the files: it overwrote these paths on every run
+    echo "  - the knowledge copy in $TEAM_HOME/knowledge: every file at a path knowledge/ has, whatever it holds now"
+    echo "    (an earlier setup.sh wrote it and kept no record of the files); files you added at other paths stay"
+  fi
 fi
 for d in node_modules dist; do
   created "ui_$d" && echo "  - app/ui/$d (setup.sh built the board), once the app is gone"
@@ -133,10 +143,9 @@ if created trust && ! created app; then  # an uninstall drops the trust; an app 
   else ok "trust removed"; forget created trust; fi
 fi
 state has found app && forget found app && forget created consent
-n=0
 for m in ${members[@]+"${members[@]}"}; do
-  remove_if_ours "member $m" /api/agents "/api/agents/$m" name="$m" kiro_agent="$m" workspace="$WORKSPACE" \
-    && forget members "$m" && n=$((n + 1))
+  remove_if_ours "member $m" /api/agents agents "/api/agents/$m" name="$m" kiro_agent="$m" workspace="$WORKSPACE" \
+    && forget members "$m"
 done
 if created knowledge; then
   sid="$(state list knowledge_id | head -1)"
@@ -150,12 +159,12 @@ print(next((r["id"] for r in rows if ours(r)), ""))' \
   elif [ -z "$ids" ]; then ok "knowledge source $KNOWLEDGE: not there any more, or not the one setup.sh created (kept)"
     forget created knowledge; forget knowledge_id
   else
-    remove_if_ours "knowledge source $KNOWLEDGE" /api/knowledge/sources "/api/knowledge/sources/$ids" id="$ids" \
-      && forget created knowledge && forget knowledge_id
+    remove_if_ours "knowledge source $KNOWLEDGE" /api/knowledge/sources sources "/api/knowledge/sources/$ids" \
+      id="$ids" && forget created knowledge && forget knowledge_id
   fi
 fi
 if created workspace; then
-  remove_if_ours "workspace $WORKSPACE" /api/workspaces "/api/workspaces/$WORKSPACE" \
+  remove_if_ours "workspace $WORKSPACE" /api/workspaces workspaces "/api/workspaces/$WORKSPACE" \
     name="$WORKSPACE" path="$TEAM_HOME" && forget created workspace
 fi
 
@@ -177,7 +186,10 @@ for d in node_modules dist; do
   created "ui_$d" || continue
   if created app; then continue; fi        # the app is still installed: it runs from this folder
   if [ "$APP_GONE" = 1 ] || ! installed; then rm -rf "$ROOT/app/ui/$d"; ok "app/ui/$d removed"
-  else warn "kept app/ui/$d: the app $APP stays installed and runs from this folder"; fi
+  else
+    warn "kept app/ui/$d: the app $APP stays installed and runs from this folder. Once you uninstall the app in"
+    echo "    Kiro Crew -> Apps, delete app/ui/$d yourself (cleanup.sh will not know about it any more)"
+  fi
   forget created "ui_$d"
 done
 rm -rf "$ROOT/scripts/__pycache__"   # an earlier setup's
