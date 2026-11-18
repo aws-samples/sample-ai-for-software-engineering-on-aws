@@ -40,6 +40,34 @@ REQUESTER = "bench MCP server (role {role}, session {session})"  # how mcp/bench
 CLASSES = ("read-only", "controlled-write", "physical")
 UNIT_LISTED = 10  # checks/lib/check_unit.py lists at most this many failed tests per build
 _FAILED = re.compile(r"plain: FAILED (\S+)")
+# mcp/build's refusal at its bound (core.py charge_cross_attempt)
+_AT_BOUND = re.compile(r"cross attempts failed (\d+) times in a row: the first attempt and the (\d+) retries")
+
+
+def repair_count(out: Any) -> dict[str, int] | None:
+    """``{failures_in_a_row, limit_retries}`` of a ``run_check build`` answer (mcp/build adds it to every cross
+    attempt), or None."""
+    r = out.get("repair") if isinstance(out, dict) else None
+    keys = ("failures_in_a_row", "limit_retries")
+    if isinstance(r, dict) and all(isinstance(r.get(k), int) and not isinstance(r.get(k), bool) for k in keys):
+        return {k: r[k] for k in keys}
+    return None
+
+
+def at_bound(n: int, m: int) -> str:
+    """Why a round is held at the build server's own bound (TR §5.1), for a person."""
+    return f"build 服务器的交叉构建已连续失败 {n} 次、上限 {m}（TR §5.1 的重试次数），再试一次前需要你决定"
+
+
+def reset_command(team: dict[str, Any], n: int) -> str:
+    """The command a person runs to reset the build server's repair count: the server's own Python and config file
+    from the team file, the home folder written as ``~``."""
+    words = team["servers"]["build"]
+    conf = words[words.index("--config") + 1]
+    home = os.path.expanduser("~")
+    tilde = (lambda w: "~" + w[len(home):] if w == home or w.startswith(home + "/") else w)  # noqa: E731
+    return (f"{tilde(words[0])} -I -m buildserver.admin reset-repair --config {tilde(conf)} "
+            f"--reason \"a person decided after {n} failed cross builds\"")
 
 
 class Unavailable(RuntimeError):
@@ -403,6 +431,7 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
     rows: list[dict[str, Any]] = []
     cases: list[dict[str, Any]] = []
     held: list[str] = []
+    repair: dict[str, int] | None = None  # the build server's repair count, as its last cross attempt left it
     gone = ""  # the session ended: the rest of the round cannot run
     try:
         async with Session(st, which, root / CALLS, f"{phase} {results.name}") as s:
@@ -421,12 +450,19 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
                         out = await s.call("run_check", {"check": c["name"]},
                                            timeout_s=float(c["timeout_s"]) + MARGIN_S)
                         res, server = _result(out, c["name"], which, head if which == "build" else None, results)
+                        repair = repair_count(out) if which == "build" and c["name"] == "build" else repair
                         if which == "bench" and run is not None and out.get("run") != Path(run).name:
                             # another session replayed between this run's steps (D17): not this step's replay
                             res, server = _blocked(f"bench 服务器判的是回放 {out.get('run')}，不是这一步的 "
                                                    f"{Path(run).name}：期间有别的会话回放过"), True
                     except mcpclient.ToolRefused as exc:
-                        res, server = _blocked(f"{which} 服务器拒绝了：{exc}"), True
+                        bound = _AT_BOUND.search(str(exc)) if which == "build" else None
+                        if bound:  # at its own bound: worded as the hold before it (Run._repair_stop)
+                            n, m = int(bound.group(1)), int(bound.group(2))
+                            repair = {"failures_in_a_row": n, "limit_retries": m}
+                            res, server = _blocked(at_bound(n, m)), True
+                        else:
+                            res, server = _blocked(f"{which} 服务器拒绝了：{exc}"), True
                     except mcpclient.McpError as exc:
                         gone = f"{which} 服务器：{exc}"
                         res, server = _blocked(gone), True
@@ -438,7 +474,8 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
     except (Unavailable, mcpclient.McpError) as exc:
         if not rows:
             return await held_round(team, f"{which} 服务器：{exc}", head=head, results=results, phase=phase)
-    return {**checks.wall([c["name"] for c in items], rows, cases, head, results), "server_held": held}
+    return {**checks.wall([c["name"] for c in items], rows, cases, head, results), "server_held": held,
+            **({"repair": repair} if repair else {})}
 
 
 async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: str, triage: dict[str, Any],

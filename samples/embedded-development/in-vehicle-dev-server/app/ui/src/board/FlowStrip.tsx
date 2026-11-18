@@ -38,6 +38,12 @@ export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail;
           <ul>
             {run.tests.held.why.split('；').filter(Boolean).map((w) => <li key={w}>{w}</li>) /* i18n-keep: the app joins the reasons with ； */}
           </ul>
+          {!!run.tests.held.commands?.length && (
+            <div data-testid="kt-flow-held-commands">
+              <span className="kt-dim">{tr('board.FlowStrip.42')}</span>
+              <ul>{run.tests.held.commands.map((c) => <li key={c}><code>{c}</code></li>)}</ul>
+            </div>
+          )}
           {onAgree && <SuggestAgree run={run} onConfirm={onAgree} />}
           <span className="kt-dim">{tr('board.FlowStrip.9')}</span>
           <span className="kt-start-actions">

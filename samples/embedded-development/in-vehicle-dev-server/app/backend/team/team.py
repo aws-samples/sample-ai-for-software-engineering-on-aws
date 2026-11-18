@@ -957,6 +957,8 @@ class TeamRun:
                 if held == "checks":
                     t = self.s["tests"]
                     t.update(held=None, head=None)
+                    if self._reset_command():  # the person decided at the build server's bound: this round runs
+                        t["repair_go"] = True
                     self.s["needs_test"] = True
                 self.say("run", "retry.servers", {"by": by, "note": note},
                          data={"by": by, "note": note} if by else None)
@@ -1363,6 +1365,8 @@ class TeamRun:
                      command=wall.get("command") or t.get("command", ""))
             if checked:
                 t.update(checks=wall["checks"], results=wall["results"], server_held=wall.get("server_held") or [])
+                if wall.get("repair"):  # servers mode: the build server's repair count after this round
+                    t["repair"] = wall["repair"]
             t["history"] = (t.get("history", []) + [{"at": wall["at"], "passed": wall["passed"], "failed": wall["failed"]}])[-60:]
             green = bool(t["total"] and not t["failed"])
             red = bool(not green and t["total"] and not t["passed"] and not any(self.lane(k)["status"] == "merged" for k in self.impl))
@@ -1405,7 +1409,32 @@ class TeamRun:
         why = self._servers_busy()
         if why:
             return servers_mod.held_round(self._tested_team(), why, **kw)
+        if kw.get("phase", "before_bench") == "before_bench":
+            stop = self._repair_stop()
+            if stop:  # not one call to the server: a person decides first (D17, TR §5.1)
+                return servers_mod.held_round(self._tested_team(), servers_mod.at_bound(*stop), **kw)
+            self.s["tests"].pop("repair_go", None)
         return self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), **kw)
+
+    def _repair_stop(self) -> tuple[int, int] | None:
+        """Servers mode: (failures in a row, retries allowed) when the build server's last cross attempt left its
+        repair count where one more failure reaches its bound (TR §5.1), so the round waits for a person; None when
+        the round may run, or the person's 重试 said it may once."""
+        t = self.s["tests"]
+        r = t.get("repair") or {}
+        n, m = r.get("failures_in_a_row"), r.get("limit_retries")
+        if (not servers_mod.on(self.team) or t.get("repair_go") or not isinstance(n, int) or not isinstance(m, int)
+                or n < m or not any(c["name"] == "build" and c["when"] == "before_bench" for c in self.team["checks"])):
+            return None
+        return n, m
+
+    def _reset_command(self) -> str | None:
+        """The build server's reset-repair command for a person, when its repair count is at the bound."""
+        r = self.s["tests"].get("repair") or {}
+        n, m = r.get("failures_in_a_row"), r.get("limit_retries")
+        if servers_mod.on(self.team) and isinstance(n, int) and isinstance(m, int) and n >= m:
+            return servers_mod.reset_command(self.team, n)
+        return None
 
     def _servers_busy(self) -> str:
         """Servers mode: "" when this run may use the build and bench servers now (it takes them), else why not."""
@@ -1751,6 +1780,9 @@ class TeamRun:
             t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason}
             server = wall is None and self._servers_round_held()
             self.s["servers_held"] = "checks" if server else None  # the servers' problem: 重试 runs the round again
+            reset = self._reset_command() if server else None
+            if reset:  # at the build server's bound: what the person runs before 重试
+                t["held"]["commands"] = [reset]
             self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
                      data={"checks": t["held"]["checks"]})
             return

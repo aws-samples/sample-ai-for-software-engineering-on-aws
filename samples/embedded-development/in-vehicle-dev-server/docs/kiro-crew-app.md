@@ -539,7 +539,15 @@ when it ends is not counted. The figure counts the app's calls; the agents make 
    after the fourth failing build, once a person had registered it (D15), so the server refused the next build
    (`cross attempts failed 4 times in a row`) while the app still allowed rounds. A person reset the count with
    `buildserver.admin reset-repair` and 重试 ran the round again. The two counts disagree whenever a fix needs a
-   person first.
+   person first. What the app does about it (2026-11-18, after `r1117e6af` stopped on the bare refusal): mcp/build
+   has no read-only tool for the count, but every `run_check build` answer carries `repair` (`failures_in_a_row`,
+   `limit_retries`), and the app keeps the last one with the run. Before a round of the checks before the bench,
+   when one more failure reaches the bound (`failures_in_a_row >= limit_retries`), it calls nothing and holds the
+   round for a person: the board says how many cross attempts failed in a row and the bound, and gives the
+   `buildserver.admin reset-repair` command with the build server's config file from the team file. The app never
+   resets the count. A person's 重试 there lets that one round run. A refusal at the bound (a new run that finds the
+   count at it) is worded the same, with the same command. The app does not read the server's state folder, and a
+   reset by hand is seen only in the next answer.
 3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
    Not decided: a triage tool of the server, or a person copying the approved file into place.
 4. **Release.** #42 (merged) lets `run_check release` read the bench server's published results; using it, and the

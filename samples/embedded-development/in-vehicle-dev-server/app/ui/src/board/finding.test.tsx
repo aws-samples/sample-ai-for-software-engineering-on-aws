@@ -84,6 +84,18 @@ describe('补登发现并交给角色', () => {
     await waitFor(() => expect(screen.queryByTestId('kt-finding-dialog')).toBeNull())
   })
 
+  test('held at the build server\'s bound: the hold shows the reset command the person runs before 重试', async () => {
+    const b = heldBoard()
+    const cmd = '~/workplace/vstatd-team/server/venv/bin/python -I -m buildserver.admin reset-repair --config '
+      + '~/workplace/vstatd-team/server/build.toml --reason "a person decided after 3 failed cross builds"'
+    b.run!.tests.held = { checks: ['build'], why: 'build 没法判定：build 服务器的交叉构建已连续失败 3 次、上限 3', commands: [cmd] }
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    render(<TeamPage pollMs={60_000} />)
+    const box = within(await screen.findByTestId('kt-flow-held-commands'))
+    expect(box.getByText(cmd)).toBeInTheDocument()
+    expect(box.getByText(/build 服务器到了修复上限/)).toBeInTheDocument()
+  })
+
   test('the role named the root-cause file it cannot write: 再加路径 and 备注 are filled in, sent only on 补登', async () => {
     const user = userEvent.setup()
     localStorage.setItem('vstatd-team:signer', '王工')
