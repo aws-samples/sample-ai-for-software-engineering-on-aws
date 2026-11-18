@@ -265,7 +265,7 @@ were real changes of behaviour and the defects found later (the app records neit
 
 ### Quick start
 
-On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
+On a Mac or a Linux host with Kiro Crew running, Docker, Node.js 22, git and Python 3:
 
 1. Install the app, its knowledge source `vstatd` and the team's agent templates: `bash setup.sh` in this folder. It asks once
    whether the sessions the app opens may approve their own tool calls; read [Guardrails](#guardrails) first.
@@ -459,8 +459,12 @@ target's Linux image built by `bench/build-target.sh` with Buildroot (GPL-2.0; L
 to the repository. They are used as tools and not redistributed. The bench's own tools are listed in
 [bench/README.md](bench/README.md#third-party-tools).
 
-The [Kiro Crew app](#the-kiro-crew-app) needs, besides the bench: a Mac (`setup.sh` installs into the Kiro Crew desktop
-app), Kiro Crew running and signed in, Docker, git, Python 3 and Node.js 22 or newer to build the board. Its manifest
+The [Kiro Crew app](#the-kiro-crew-app) needs, besides the bench: a Mac or a Linux host with Kiro Crew running and
+signed in, as the desktop app or, on Linux, the CLI's gateway (`kirocrew gateway` or `kirocrew service install`; the
+Linux desktop app needs glibc 2.34 or newer, the CLI is for older hosts: see
+[Kiro Crew's installation page](https://kiro.dev/docs/crew/installation)),
+Docker, git, Python 3 and Node.js 22 or newer to build the board. `setup.sh` finds the `kirocrew` program in the macOS
+desktop app, else on `PATH`; set `VSTATD_KIROCREW_BIN` to it when it is elsewhere. Its manifest
 asks for Kiro Crew 0.8.0 or newer. It ran one delivery end to end on Kiro Crew 0.12.0-rc.4 (run `r11032637`,
 2026-11-03); that is the only version tested.
 
