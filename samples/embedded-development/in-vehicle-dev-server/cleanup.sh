@@ -133,8 +133,11 @@ read -r -p "  Type remove and press Return to go on (anything else stops): " a
 [ "$a" = remove ] || { echo "  Nothing removed."; exit 0; }
 
 step 1/2 "Kiro Crew"
+# kcapi.sh's token, where it finds no desktop app (Linux)
+KC_KIROCREW="${KC_KIROCREW:-$(kirocrew_bin 2>/dev/null || true)}"; export KC_KIROCREW
 crew_up || {
-  warn "Kiro Crew is not running: open it and run cleanup.sh again to remove the app, members, knowledge source and workspace"
+  warn "Kiro Crew is not running: $CREW_START and run cleanup.sh again to remove the app, members, knowledge" \
+    "source and workspace"
   exit 1
 }
 [ "$("$KC" --status GET /api/version 2>/dev/null)" = 200 ] || {  # a 200: signed out, Kiro Crew answers a 404 here

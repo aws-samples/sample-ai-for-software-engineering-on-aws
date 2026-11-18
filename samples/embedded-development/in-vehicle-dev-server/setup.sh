@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the Kiro Crew app of this scenario into the Kiro Crew running on this Mac: bash setup.sh
+# Install the Kiro Crew app of this scenario into the Kiro Crew running on this Mac or Linux host: bash setup.sh
 #
 #   bash setup.sh                               # asks once whether the app may auto-approve the sessions it opens
 #   bash setup.sh --consent-session-approval    # the same, answering yes without asking
@@ -25,13 +25,22 @@ for a in "$@"; do
 done
 
 step 1/5 "Prerequisites"
-[ "$(uname -s)" = Darwin ] && ok "macOS $(sw_vers -productVersion) ($(uname -m))" || { bad "setup.sh runs on macOS (Kiro Crew's desktop app)"; exit 1; }
-command -v git >/dev/null && [ -x "$PY" ] && ok "git and python3" || { bad "git and python3 are missing: run xcode-select --install"; exit 1; }
+case "$(uname -s)" in
+  Darwin) ok "macOS $(sw_vers -productVersion) ($(uname -m))" ;;
+  Linux) ok "$( . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-Linux}") ($(uname -m))" ;;
+  *) bad "setup.sh runs on macOS or Linux (Kiro Crew's desktop app, or its CLI gateway on Linux)"; exit 1 ;;
+esac
+HINT="install them with the package manager"; [ "$(uname -s)" = Darwin ] && HINT="run xcode-select --install"
+command -v git >/dev/null && [ -x "$PY" ] && ok "git and python3" || { bad "git and python3 are missing: $HINT"
+  exit 1; }
 command -v docker >/dev/null || { bad "docker is missing: install Docker Desktop (or another container runtime with the docker command)"; exit 1; }
 docker info >/dev/null 2>&1 && ok "docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '?')" || { bad "docker is installed but its daemon does not answer: start Docker and run setup.sh again"; exit 1; }
 node_ok && ok "Node $("$NODE_DIR/node" -v) (builds the board)" || { bad "Node 22 or newer is missing: install it from https://nodejs.org"; exit 1; }
 export PATH="$NODE_DIR:$PATH"
-crew_up || { bad "Kiro Crew is not running: open it, sign in, and run setup.sh again"; exit 1; }
+KIROCREW="$(kirocrew_bin)" || exit 1   # the templates name it (step 3)
+export VSTATD_KIROCREW_BIN="$KIROCREW" KC_KIROCREW="${KC_KIROCREW:-$KIROCREW}"  # kcapi.sh's token, with no desktop app
+ok "kirocrew $KIROCREW"
+crew_up || { bad "Kiro Crew is not running: $CREW_START, sign in, and run setup.sh again"; exit 1; }
 [ "$("$KC" --status GET /api/version 2>/dev/null)" = 200 ] && ver="$("$KC" GET /api/version 2>/dev/null)" || {
   bad "Kiro Crew answers, but its API refused this shell as the dashboard owner: run setup.sh in your own terminal, not from an agent's shell"
   echo "    (or Kiro Crew is signed out: sign in to it first)"
@@ -122,5 +131,9 @@ echo "  Until the bench is ready a run stops before its first bench action, and 
 
 echo
 if [ "$DRY" = 1 ]; then echo "${B}Dry run: nothing was changed.${N}"; else
-  echo "${B}Done.${N} Open Kiro Crew -> Apps -> $APP_LABEL -> 团队看板, and start a run with 新需求 (see README.md)."
+  # a template name new to Kiro Crew may need a restart before a session runs it (agents/README.md)
+  if [ "$(uname -s)" = Linux ]; then RESTART="kirocrew restart (or quit the desktop app and open it again)"
+  else RESTART="quit Kiro Crew and open it again"; fi
+  echo "${B}Done.${N} Restart Kiro Crew once so that it loads the team's agent templates: $RESTART."
+  echo "Then open Kiro Crew -> Apps -> $APP_LABEL -> 团队看板, and start a run with 新需求 (see README.md)."
 fi

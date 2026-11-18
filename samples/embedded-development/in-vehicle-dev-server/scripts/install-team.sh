@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Install the vstatd team into this Mac and into Kiro Crew (the agent-team sample's install-example.sh, for this
-# scenario). Safe to re-run: what exists already is kept.
+# Install the vstatd team into this Mac or Linux host and into Kiro Crew (the agent-team sample's install-example.sh,
+# for this scenario). Safe to re-run: what exists already is kept.
 #
 #   bash scripts/install-team.sh             # setup.sh runs it
 #   bash scripts/install-team.sh --dry-run   # says what it would do; changes nothing
@@ -18,9 +18,7 @@ would() { echo "   (dry run) would $*"; }
 
 # The member templates name the kirocrew program by its full path (its MCP server answers the knowledge searches).
 # After a Kiro Crew update the path can change: run setup.sh again.
-ARCH="$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x64)"
-KIROCREW_BIN="${VSTATD_KIROCREW_BIN:-$(crew_app_dir)/Contents/Resources/backend-dist/kirocrew-backend-$ARCH/bin/kirocrew}"
-[ -x "$KIROCREW_BIN" ] || { echo "Cannot find the kirocrew program at $KIROCREW_BIN: open Kiro Crew first" >&2; exit 1; }
+KIROCREW_BIN="$(kirocrew_bin)" || exit 1
 
 echo "1/3 Knowledge -> $TEAM_HOME/knowledge"
 # file by file: a file there that setup did not copy is never replaced or deleted (scripts/knowledge.py)
