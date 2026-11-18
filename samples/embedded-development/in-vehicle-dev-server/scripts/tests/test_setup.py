@@ -82,6 +82,7 @@ def crew(rig, apps=None, agents=(), workspaces=(), sources=(), trusted=(), **mor
     rig["kc"].write_text(json.dumps({
         "/api/health": {"ok": True}, "/api/version": {"version": "0.12.0-test"},
         "/api/apps/vstatd-team": apps or {"error": "not found"},
+        "/api/apps/vstatd-team/runs": {"runs": []},  # the app's runs (the board's list): none
         "/api/agents": {"agents": list(agents)}, "/api/workspaces": {"workspaces": list(workspaces)},
         "/api/knowledge/sources": {"sources": list(sources)},
         "/api/security/trusted-apps": {"apps": list(trusted)}, **more}), encoding="utf-8")
@@ -233,6 +234,8 @@ def test_cleanup_dry_run_lists_exactly_what_setup_recorded(home):
     first = subprocess.run(sh, capture_output=True, text=True, env=env)
     assert first.returncode == 0 and "nothing: setup.sh has recorded nothing in this folder" in first.stdout
     assert "docker volume rm cc1-images" in first.stdout and "rm -rf ~/.cc1-bench" in first.stdout
+    assert (f"rm -rf {env['HOME']}/workplace/vstatd-team/server   # servers mode (app/README): its venv, configs, work"
+            " tree and the servers' state") in first.stdout  # setup.sh does not make it, so cleanup.sh leaves it
     for key, value in (("created", "workspace"), ("created", "team_home"), ("members", "embedded-quality"),
                        ("templates", "embedded-architect"), ("backed_up", "embedded-developer")):
         run_py(SCRIPTS / "state.py", "add", key, value, env=env)
@@ -515,6 +518,45 @@ def test_cleanup_keeps_the_app_when_its_sessions_cleanup_answers_an_error(home, 
     assert [c[1] for c in changes(home)] == ["/api/apps/vstatd-team/sessions/cleanup"]  # no disable, no uninstall
     assert json.loads(home["state"].read_text())["created"] == ["app", "sample_record"]
     assert (data / "runs.json").exists()
+
+
+@pytest.mark.parametrize("runs", ["going", "unlisted"])
+def test_cleanup_removes_nothing_while_a_run_is_still_going_or_the_app_does_not_list_its_runs(home, root, runs):
+    data = app_data(home)
+    knowledge = home["home"] / "workplace" / "vstatd" / "knowledge"
+    assert run_py(SCRIPTS / "knowledge.py", "install", SAMPLE / "knowledge", knowledge, env=home["env"]).returncode == 0
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"),
+           ("members", "embedded-quality"))
+    before = home["state"].read_text()
+    listed = {"runs": [{"id": "r2", "status": "reviewing"}, {"id": "r1", "status": "done"}]}  # r1 signed off
+    crew(home, apps={"name": "vstatd-team"},
+         agents=[{"name": "embedded-quality", "kiro_agent": "embedded-quality", "workspace": "vstatd"}],
+         **({"/api/apps/vstatd-team/runs": listed} if runs == "going" else {"fail": ["/api/apps/vstatd-team/runs"]}),
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    said = ("run r2 is still going: stop it on the board, then run cleanup.sh again" if runs == "going"
+            else "the app vstatd-team did not list its runs")
+    assert said in r.stdout and "Nothing removed" in r.stdout
+    assert changes(home) == []  # no sessions cleanup, no uninstall, no member removed
+    assert home["state"].read_text() == before and (data / "runs.json").exists() and knowledge.is_dir()
+
+
+def test_cleanup_removes_the_app_and_its_sessions_once_every_run_has_ended(home, root):
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    crew(home, apps={"name": "vstatd-team"},
+         **{"/api/apps/vstatd-team/runs": {"runs": [{"id": "r3", "status": "stopped"}, {"id": "r2", "status": "failed"},
+                                                     {"id": "r1", "status": "done"}]},  # r1 signed off: removed too
+            "POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 0, r.stdout + r.stderr
+    log = calls(home)
+    asked = log.index(["GET", "/api/apps/vstatd-team/runs"])
+    assert asked < log.index(["POST", "/api/apps/vstatd-team/sessions/cleanup", '{"all": true}'])  # asked first
+    assert [c[1] for c in changes(home)] == ["/api/apps/vstatd-team/sessions/cleanup", "/api/apps/vstatd-team/disable",
+                                             "/api/apps/vstatd-team"]
+    assert "app removed" in r.stdout and not data.parent.exists() and not home["state"].exists()
 
 
 def test_cleanup_removes_the_knowledge_source_and_the_workspace_that_are_still_setups(home, root):

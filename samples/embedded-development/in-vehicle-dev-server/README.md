@@ -553,9 +553,12 @@ of its copy, the agent templates it added, and the board's `app/ui/node_modules`
 them; it puts back the templates it replaced, and `--dry-run` lists all of it. It checks that each one is still the
 one setup created, so one you made with the same name stays, as do files you added to `~/workplace/vstatd` or changed
 there (a file you add to that folder is indexed with the rest, so the team reads it as knowledge). An app installed
-before setup stays installed. When a step fails it keeps `.install-state.json` and exits 1:
+before setup stays installed. While a run of the app is still going it removes nothing and exits 1: stop the run on
+the board first. When a step fails it keeps `.install-state.json` and exits 1:
 fix the cause and run it again. It leaves the build container, the bench's images and volumes, the bench state
-(`~/.cc1-bench`) and the baseline, and prints the commands of [bench/README.md](bench/README.md#cleanup) that remove
-them. Left for you: the chat folder 「AI-DLC 团队」 in the Kiro Crew sidebar (only a person can delete a folder: the
+(`~/.cc1-bench`), the baseline and the servers-mode folder `~/workplace/vstatd-team/server` (its venv, configs, work
+tree and the servers' state: [app/README.md](app/README.md#servers-mode-trial)), and prints the commands that remove
+them: those of [bench/README.md](bench/README.md#cleanup), and one for that folder. Left for you: the chat folder
+「AI-DLC 团队」 in the Kiro Crew sidebar (only a person can delete a folder: the
 app hides the run folders in it, so delete it there), npm's shared cache (`~/.npm`), and the Python caches
 (`__pycache__`) the app and the checks wrote in this folder.

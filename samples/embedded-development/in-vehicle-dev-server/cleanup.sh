@@ -9,7 +9,8 @@
 # alone; so is one of the same name you made after setup (cleanup.sh checks the id, or where it points). When a step
 # fails it says so, keeps the record of what is still there and exits 1: fix it and run cleanup.sh again. It does not
 # touch Kiro Crew itself or its other settings, and it leaves the Docker images and volumes, the bench state
-# (~/.cc1-bench) and the baseline alone: it prints the commands that remove them, and what only you can remove.
+# (~/.cc1-bench), the baseline and the servers-mode folder alone: it prints the commands that remove them, and what
+# only you can remove.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd -P)"
 source "$ROOT/scripts/lib.sh"
@@ -39,6 +40,26 @@ sys.exit(0 if any(isinstance(r, dict) and all(str(r.get(k)) == v for k, v in wan
   return "$rc"
 }
 
+# The first of the app's runs (GET /runs, the board's list) that has not ended: print its id and exit 0; 1 when all
+# have, 3 when the app did not list them. Ended is the app's own: team.py ENDED (done, failed, stopped), as
+# cleanup_sessions in service.py counts them. A hidden run is not listed, and only an ended run can be hidden.
+going() {
+  local rc=0
+  "$KC" GET "/api/apps/$APP/runs" 2>/dev/null | "$PY" -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    sys.exit(3)
+rows = d.get("runs") if isinstance(d, dict) else None
+if not isinstance(rows, list) or not all(isinstance(r, dict) and isinstance(r.get("status"), str) for r in rows):
+    sys.exit(3)
+rid = next((str(r.get("id")) for r in rows if r["status"] not in ("done", "failed", "stopped")), None)
+if rid is None:
+    sys.exit(1)
+print(rid)' || rc=$?
+  return "$rc"
+}
+
 # remove <what> <GET path> <list key> <DELETE path> <identity: field=value ...>: delete it if it is still the one
 # setup made
 remove_if_ours() {
@@ -64,6 +85,7 @@ bench_note() {
   echo "      vstatd-build:amd64 vstatd-build:arm64   # the one you built"
   echo "    rm -rf ~/.cc1-bench            # the bench state, including the action record"
   echo "    rm -rf $RUNS/baseline   # the baseline the bench owner wrote"
+  echo "    rm -rf $RUNS/server   # servers mode (app/README): its venv, configs, work tree and the servers' state"
   echo "${B}Left for you:${N}"
   echo "  - the chat folder 「AI-DLC 团队」 in the Kiro Crew sidebar: only a person can delete a folder, so the app hid"
   echo "    the run folders in it. Delete it there (the agent-team sample's app makes one of the same name: delete the"
@@ -125,6 +147,14 @@ no_answer() { fail "Kiro Crew did not say whether the app $APP is installed: $*"
 if created app; then
   rc=0; installed || rc=$?
   if [ "$rc" = 0 ]; then
+    # a run still going keeps everything (its sessions, and the templates and knowledge its roles use)
+    rc=0; rid="$(going)" || rc=$?
+    if [ "$rc" != 1 ]; then
+      if [ "$rc" = 0 ]; then fail "run $rid is still going: stop it on the board, then run cleanup.sh again"
+      else fail "the app $APP did not list its runs: enable it in Kiro Crew -> Apps and run cleanup.sh again"; fi
+      echo "    Nothing removed: the app, its sessions, its data and the record of what setup.sh created stay."
+      exit 1
+    fi
     # every run's sessions (the board's own 清理 keeps the running and signed ones), while the app still answers
     out="$("$KC" POST "/api/apps/$APP/sessions/cleanup" '{"all": true}' 2>&1 || true)"
     # an app older than this folder ignores "all" and keeps the running and signed runs' sessions: kept_runs says so
@@ -199,7 +229,7 @@ fi
 forget created team_home; forget created knowledge_dir
 if [ "$APP_GONE" = 1 ]; then
   rm -rf "$RUNS/runs" "$APP_DATA"
-  rmdir "$RUNS" 2>/dev/null || true   # kept while it holds the baseline
+  rmdir "$RUNS" 2>/dev/null || true   # kept while it holds the baseline or the servers-mode folder
   forget created sample_record
 elif created sample_record && ! created app; then
   rm -f "$APP_DATA/data/sample.json" && forget created sample_record
