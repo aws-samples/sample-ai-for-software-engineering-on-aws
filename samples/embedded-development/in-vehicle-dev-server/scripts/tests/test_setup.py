@@ -346,12 +346,13 @@ def test_cleanup_removes_only_what_is_still_setups_and_keeps_the_record_when_a_s
          sources=[{"id": "k2", "name": "vstatd", "uri": str(knowledge)}],  # re-created by alice: not setup's
          workspaces=[{"name": "vstatd", "path": "/Users/alice/elsewhere"}],
          refuse=["/api/agents/embedded-quality"],  # Kiro Crew answers the DELETE, but the member is still listed
-         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "sessions": 3, "folders": 1, "failed": 1}})
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "sessions": 3, "folders": 1,
+                                                             "kept_runs": ["r1"]}})  # an older app ignores "all"
 
     first = run_cleanup(home)
     assert first.returncode == 1, first.stdout + first.stderr
     assert "the app's sessions were not all removed" in first.stdout and "Not everything was removed" in first.stdout
-    assert "member embedded-quality not removed" in first.stdout
+    assert "member embedded-quality not removed" in first.stdout and "run setup.sh to update it" in first.stdout
     log = calls(home)
     assert ["POST", "/api/apps/vstatd-team/sessions/cleanup", '{"all": true}'] in log
     deleted = [c[1] for c in log if c[0] == "DELETE"]
@@ -361,7 +362,8 @@ def test_cleanup_removes_only_what_is_still_setups_and_keeps_the_record_when_a_s
     assert (app_data / "runs.json").exists() and not knowledge.exists()
 
     answers = json.loads(home["kc"].read_text())
-    answers["POST /api/apps/vstatd-team/sessions/cleanup"]["failed"] = 0
+    answers["POST /api/apps/vstatd-team/sessions/cleanup"] = {"ok": True, "sessions": 3, "folders": 1, "failed": 0,
+                                                              "kept_runs": []}
     answers["refuse"] = []
     home["kc"].write_text(json.dumps(answers), encoding="utf-8")
     second = run_cleanup(home)

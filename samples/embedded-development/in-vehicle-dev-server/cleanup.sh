@@ -120,8 +120,9 @@ if created app; then
   if installed; then
     # every run's sessions (the board's own 清理 keeps the running and signed ones), while the app still answers
     out="$("$KC" POST "/api/apps/$APP/sessions/cleanup" '{"all": true}' 2>&1 || true)"
+    # an app older than this folder ignores "all" and keeps the running and signed runs' sessions: kept_runs says so
     if printf '%s' "$out" | "$PY" -c 'import json,sys; d=json.load(sys.stdin)
-sys.exit(0 if d.get("ok") and not d.get("failed") else 1)' 2>/dev/null; then
+sys.exit(0 if d.get("ok") and not d.get("failed") and not d.get("kept_runs") else 1)' 2>/dev/null; then
       ok "the app's sessions removed"
       "$KC" POST "/api/apps/$APP/disable" '{}' >/dev/null 2>&1 || true
       out="$("$KC" DELETE "/api/apps/$APP" 2>/dev/null || true)"
@@ -129,6 +130,10 @@ sys.exit(0 if d.get("ok") and not d.get("failed") else 1)' 2>/dev/null; then
       else ok "app removed"; APP_GONE=1; fi
     else
       fail "the app's sessions were not all removed (${out:0:80}):"
+      case "$out" in *'"kept_runs": ['[!\]]*)
+        echo "    the installed app is older than this folder and keeps some runs' sessions: run setup.sh to update it,"
+        echo "    then cleanup.sh again" ;;
+      esac
       echo "    enable the app in Kiro Crew -> Apps and run cleanup.sh again (or delete its sessions in the sidebar,"
       echo "    uninstall it in Kiro Crew -> Apps, and run cleanup.sh again)"
     fi
