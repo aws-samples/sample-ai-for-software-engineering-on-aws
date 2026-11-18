@@ -547,6 +547,11 @@ come from Kiro Crew at run time (`app/ui/vite.config.ts` keeps them external).
 | `@testing-library/user-event` | 14.6 | MIT | The board's tests |
 | pytest | 9.1 | MIT | The app's and the scripts' tests |
 
+The table lists the direct dependencies. `app/ui/package-lock.json` is the full list: 172 packages, all used only to
+build and test the board, 141 of them MIT and the rest ISC, Apache-2.0, BSD-2-Clause, BSD-3-Clause and MIT-0, apart
+from lightningcss (MPL-2.0, 12 packages with its platform builds) and caniuse-lite (CC-BY-4.0), which Vite uses at
+build time.
+
 The app also uses the four AI-DLC expert definitions from
 [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows) v2.10.0 (MIT-0), committed unmodified in
 `vendor/aidlc-workflows/`.
