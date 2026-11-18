@@ -42,13 +42,23 @@ ok "Kiro Crew ${v:-?}"
 step 2/5 "Build the app and install it into Kiro Crew"
 echo "  This adds the app $APP to Kiro Crew's trusted apps (for this one app only), so that Kiro Crew runs it."
 if [ "$DRY" = 1 ]; then
-  installed && echo "   (dry run) would update the app $APP in place" || echo "   (dry run) would build the board and install the app $APP"
+  rc=0; installed || rc=$?
+  case "$rc" in
+    0) echo "   (dry run) would update the app $APP in place" ;;
+    1) echo "   (dry run) would build the board and install the app $APP" ;;
+    *) echo "   (dry run) Kiro Crew did not say whether the app $APP is installed: setup.sh would stop here" ;;
+  esac
   echo "   (dry run) would ask whether the sessions the app opens may auto-approve their tool calls"
   echo "   (dry run) would record this folder in $APP_DATA/data/sample.json"
 else
-  # an app installed before setup.sh stays when cleanup.sh runs; what setup.sh adds to it is recorded and undone
-  if ! installed; then state add created app; elif ! state has created app; then state add found app; fi
-  trusted || state add created trust
+  # an app installed before setup.sh stays when cleanup.sh runs; what setup.sh adds to it is recorded and undone.
+  # When Kiro Crew does not say whether the app is installed or trusted, setup.sh stops before it records anything.
+  rc=0; installed || rc=$?
+  [ "$rc" -le 1 ] || { bad "Kiro Crew did not say whether the app $APP is installed: run setup.sh again"; exit 1; }
+  trc=0; trusted || trc=$?
+  [ "$trc" -le 1 ] || { bad "Kiro Crew did not list its trusted apps: run setup.sh again"; exit 1; }
+  if [ "$rc" = 1 ]; then state add created app; elif ! state has created app; then state add found app; fi
+  [ "$trc" = 0 ] || state add created trust
   [ -e "$ROOT/app/ui/node_modules" ] || state add created ui_node_modules   # npm ci (app/scripts/dev-install.sh)
   [ -e "$ROOT/app/ui/dist" ] || state add created ui_dist                   # the board's build
   if [ -z "$CONSENT" ]; then

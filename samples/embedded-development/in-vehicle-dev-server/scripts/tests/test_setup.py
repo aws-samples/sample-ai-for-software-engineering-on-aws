@@ -6,6 +6,7 @@ install record, a stand-in kcapi.sh that answers from a JSON file and logs every
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -20,11 +21,21 @@ MEMBERS = list(EXPERTS)
 
 KCAPI = """#!/usr/bin/env python3
 import json, os, sys
-method, path = sys.argv[1], sys.argv[2]
+args = sys.argv[1:]
+status = args[:1] == ["--status"]  # kcapi.sh --status: the HTTP status only
+args = args[1:] if status else args
+method, path = args[0], args[1]
 with open(os.environ["FAKE_KC_LOG"], "a") as f:
-    f.write(json.dumps([method, path] + sys.argv[3:]) + "\\n")
+    f.write(json.dumps(args) + "\\n")
 answers = json.load(open(os.environ["FAKE_KC"]))
-if method == "GET":
+if "up" in answers and path not in answers["up"]:  # the owner API refuses this shell: no token
+    print("kcapi: could not mint a token", file=sys.stderr)
+    sys.exit(1)
+if path in answers.get("fail", []):  # Kiro Crew answers with an error
+    print("500" if status else json.dumps({"error": "the stand-in fails this"}))
+elif status:
+    print("404" if answers.get(path, {"error": "not found"}) == {"error": "not found"} else "200")
+elif method == "GET":
     print(json.dumps(answers.get(path, {"error": "not found"})))
 elif method == "DELETE" and path not in answers.get("refuse", []):  # gone from the list that holds it
     if path in answers:
@@ -36,7 +47,8 @@ elif method == "DELETE" and path not in answers.get("refuse", []):  # gone from 
     json.dump(answers, open(os.environ["FAKE_KC"], "w"))
     print(json.dumps({"ok": True}))
 else:
-    print(json.dumps(answers.get(f"{method} {path}", {"error": "the stand-in refuses this"})))
+    a = answers.get(f"{method} {path}", {"error": "the stand-in refuses this"})
+    print(a if isinstance(a, str) else json.dumps(a))  # a string: a body that is not JSON
 """
 
 
@@ -375,3 +387,187 @@ def test_cleanup_removes_only_what_is_still_setups_and_keeps_the_record_when_a_s
                        "/api/agents/embedded-quality"]
     assert json.loads(home["kc"].read_text())["/api/security/trusted-apps"]["apps"] == ["other-app"]
     assert not home["state"].exists() and not app_data.parent.exists()
+
+
+@pytest.fixture
+def root(tmp_path):
+    """This scenario's folder for setup.sh and cleanup.sh to run in: their own copies, the rest linked, an empty app/ui
+    and a stand-in app/scripts/dev-install.sh, so that neither builds the board nor removes app/ui/ here."""
+    r = tmp_path / "root"
+    (r / "app" / "scripts").mkdir(parents=True)
+    (r / "app" / "ui").mkdir()
+    for name in ("setup.sh", "cleanup.sh"):
+        shutil.copyfile(SAMPLE / name, r / name)
+    for name in ("scripts", "agents", "vendor", "knowledge"):
+        (r / name).symlink_to(SAMPLE / name)
+    dev = r / "app" / "scripts" / "dev-install.sh"
+    dev.write_text("#!/bin/sh\necho '{\"started\": true}'\n", encoding="utf-8")
+    dev.chmod(0o755)
+    return r
+
+
+def sh(rig, root, script, *args, answer="remove\n"):
+    return subprocess.run(["bash", str(root / script), *args], input=answer, capture_output=True, text=True,
+                          env=rig["env"])
+
+
+def record(rig, *pairs):
+    for key, value in pairs:
+        run_py(SCRIPTS / "state.py", "add", key, value, env=rig["env"])
+
+
+def app_data(rig):
+    d = rig["home"] / ".kiro" / "crew" / "apps" / "vstatd-team" / "data"
+    d.mkdir(parents=True)
+    (d / "runs.json").write_text("{}\n", encoding="utf-8")
+    return d
+
+
+def changes(rig):
+    return [c for c in calls(rig) if c[0] != "GET"]
+
+
+def test_cleanup_stops_and_keeps_everything_when_the_owner_api_refuses_this_shell(home, root):
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"),
+           ("members", "embedded-quality"), ("created", "workspace"))
+    before = home["state"].read_text()
+    crew(home, apps={"name": "vstatd-team"}, up=["/api/health"])  # Kiro Crew runs; this shell gets no token
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "refused this shell as the dashboard owner" in r.stdout
+    assert home["state"].read_text() == before and (data / "runs.json").exists()
+    assert changes(home) == []
+
+
+def test_cleanup_keeps_the_app_its_data_and_its_trust_while_kiro_crew_does_not_say_whether_they_are_there(home, root):
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    crew(home, apps={"name": "vstatd-team"}, fail=["/api/apps/vstatd-team"])
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Kiro Crew did not say whether the app vstatd-team is installed" in r.stdout
+    assert json.loads(home["state"].read_text())["created"] == ["app", "sample_record", "consent"]
+    assert (data / "runs.json").exists() and changes(home) == []  # no sessions/cleanup, no uninstall
+
+    home["state"].unlink()  # an app installed before setup: its trust entry and the board's build
+    record(home, ("found", "app"), ("created", "trust"), ("created", "ui_dist"))
+    (root / "app" / "ui" / "dist").mkdir()
+    crew(home, apps={"name": "vstatd-team"}, trusted=["vstatd-team"],
+         fail=["/api/apps/vstatd-team", "/api/security/trusted-apps"])
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Kiro Crew did not list its trusted apps" in r.stdout
+    assert json.loads(home["state"].read_text()) == {"created": ["trust", "ui_dist"]}
+    assert (root / "app" / "ui" / "dist").is_dir() and changes(home) == []
+
+
+def test_cleanup_exits_1_and_keeps_the_record_when_kiro_crew_is_not_running(home, root):
+    record(home, ("created", "app"), ("members", "embedded-quality"))
+    before = home["state"].read_text()
+    crew(home, up=[])
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1 and "Kiro Crew is not running" in r.stdout
+    assert home["state"].read_text() == before and changes(home) == []
+
+
+@pytest.mark.parametrize("answer", [{"error": "502 Bad Gateway"}, "<html>502 Bad Gateway</html>"])
+def test_cleanup_keeps_the_app_when_its_sessions_cleanup_answers_an_error(home, root, answer):
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"))
+    crew(home, apps={"name": "vstatd-team"}, **{"POST /api/apps/vstatd-team/sessions/cleanup": answer})
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "the app's sessions were not all removed" in r.stdout and "run setup.sh to update it" not in r.stdout
+    assert [c[1] for c in changes(home)] == ["/api/apps/vstatd-team/sessions/cleanup"]  # no disable, no uninstall
+    assert json.loads(home["state"].read_text())["created"] == ["app", "sample_record"]
+    assert (data / "runs.json").exists()
+
+
+def test_cleanup_removes_the_knowledge_source_and_the_workspace_that_are_still_setups(home, root):
+    team = home["home"] / "workplace" / "vstatd"
+    record(home, ("created", "knowledge"), ("knowledge_id", "k1"), ("created", "workspace"))
+    crew(home, sources=[{"id": "k1", "name": "vstatd", "uri": "/Users/alice/elsewhere"}, {"id": "k2", "name": "x"}],
+         workspaces=[{"name": "vstatd", "path": str(team)}, {"name": "alice", "path": "/Users/alice"}])
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "knowledge source vstatd removed" in r.stdout and "workspace vstatd removed" in r.stdout
+    assert [c[1] for c in changes(home)] == ["/api/knowledge/sources/k1", "/api/workspaces/vstatd"]  # by its id
+    assert not home["state"].exists()
+
+    # recorded with no id (the reply to its POST had none): the source of that name on the copy, not another
+    record(home, ("created", "knowledge"))
+    crew(home, sources=[{"id": "k7", "name": "vstatd", "uri": "/Users/alice/elsewhere"},
+                        {"id": "k8", "name": "vstatd", "uri": str(team / "knowledge")}])
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert [c[1] for c in changes(home)][-1:] == ["/api/knowledge/sources/k8"]
+    assert [s["id"] for s in json.loads(home["kc"].read_text())["/api/knowledge/sources"]["sources"]] == ["k7"]
+
+
+@pytest.mark.parametrize("listed", [{"apps": ["vstatd-team", "other-app"]},
+                                    {"apps": ["other-app"], "ineffective": ["vstatd-team"]}])
+def test_cleanup_leaves_an_app_installed_before_setup_and_removes_the_trust_setup_added(home, root, listed):
+    data = app_data(home)
+    record(home, ("found", "app"), ("created", "trust"), ("created", "consent"), ("created", "ui_dist"))
+    (root / "app" / "ui" / "dist").mkdir()
+    crew(home, apps={"name": "vstatd-team"}, **{"/api/security/trusted-apps": listed})  # stored, in effect or not
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "trust removed" in r.stdout and "kept app/ui/dist: the app vstatd-team stays installed" in r.stdout
+    assert [c[1] for c in changes(home)] == ["/api/security/trusted-apps/vstatd-team"]  # not the app
+    after = json.loads(home["kc"].read_text())["/api/security/trusted-apps"]
+    assert "vstatd-team" not in after["apps"] + after.get("ineffective", [])
+    assert (root / "app" / "ui" / "dist").is_dir() and (data / "runs.json").exists() and not home["state"].exists()
+
+
+def test_cleanup_of_an_earlier_setups_copy_removes_the_scenarios_paths_whatever_they_hold(home):
+    env, src = home["env"], knowledge_tree(home["tmp"] / "knowledge")
+    dst = home["home"] / "workplace" / "vstatd" / "knowledge"
+    (dst / "facts").mkdir(parents=True)
+    (dst / "a.md").write_text("an older a.md\n", encoding="utf-8")  # an earlier setup's copy, with no file record
+    (dst / "facts" / "b.yaml").write_text("b: 1\n", encoding="utf-8")
+    (dst / "alice.md").write_text("mine\n", encoding="utf-8")
+    record(home, ("created", "team_home"))
+    out = run_py(SCRIPTS / "knowledge.py", "remove", src, dst, env=env).stdout
+    assert "- 2 files of the knowledge copy" in out and f"! kept {dst}: it holds files setup did not copy there" in out
+    assert sorted(p.relative_to(dst).as_posix() for p in dst.rglob("*")) == ["alice.md"]
+
+
+def setup_crew(rig, **kw):
+    """Kiro Crew for a setup.sh that runs to the end: the knowledge source is there and indexed"""
+    crew(rig, sources=[{"name": "vstatd", "sync_status": "synced", "spend": {"files_done": 3, "files_total": 3}}], **kw)
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
+def test_setup_records_what_it_creates_and_finds_an_app_trust_and_build_that_were_there(home, root):
+    setup_crew(home)  # nothing there yet
+    r = sh(home, root, "setup.sh", "--consent-session-approval", answer="")
+    assert r.returncode == 0, r.stdout + r.stderr
+    state = json.loads(home["state"].read_text())
+    assert {"app", "trust", "ui_node_modules", "ui_dist", "consent", "sample_record"} <= set(state["created"])
+    assert "found" not in state
+    sample = home["home"] / ".kiro" / "crew" / "apps" / "vstatd-team" / "data" / "sample.json"
+    assert json.loads(sample.read_text()) == {"sample": str(root.resolve())}
+
+    home["state"].unlink()
+    shutil.rmtree(home["home"])
+    home["home"].mkdir()
+    for d in ("node_modules", "dist"):
+        (root / "app" / "ui" / d).mkdir()
+    setup_crew(home, apps={"name": "vstatd-team"},  # installed and trusted (stored, not in effect) before setup
+               **{"/api/security/trusted-apps": {"apps": [], "ineffective": ["vstatd-team"]}})
+    r = sh(home, root, "setup.sh", answer="n\n")
+    assert r.returncode == 0, r.stdout + r.stderr
+    state = json.loads(home["state"].read_text())
+    assert state["found"] == ["app"] and state["created"] == ["sample_record", "team_home", "knowledge_dir"]
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
+@pytest.mark.parametrize("failing", ["/api/apps/vstatd-team", "/api/security/trusted-apps"])
+def test_setup_stops_before_it_records_anything_when_kiro_crew_does_not_say_what_is_there(home, root, failing):
+    setup_crew(home, apps={"name": "vstatd-team"}, fail=[failing])
+    r = sh(home, root, "setup.sh", "--consent-session-approval", answer="")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Kiro Crew did not" in r.stdout and "run setup.sh again" in r.stdout
+    assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and changes(home) == []

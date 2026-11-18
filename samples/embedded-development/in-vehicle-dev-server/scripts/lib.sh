@@ -47,16 +47,28 @@ has() {
   "$KC" GET "$1" | "$PY" -c "import json,sys; d=json.load(sys.stdin); items=d.get(sys.argv[1], d) if isinstance(d, dict) else d; sys.exit(0 if any(str(x.get(sys.argv[2]))==sys.argv[3] for x in items) else 1)" "$2" "$3" "$4"
 }
 
-# the app is installed in Kiro Crew
+# The app is installed in Kiro Crew: exit 0 when it is, 1 when Kiro Crew says it is not (404), 3 when Kiro Crew did not
+# answer that way (an error, no answer, or this shell is not the dashboard owner)
 installed() {
-  "$KC" GET "/api/apps/$APP" 2>/dev/null | "$PY" -c 'import json,sys; d=json.load(sys.stdin)
-sys.exit(0 if isinstance(d, dict) and d.get("name") else 1)' 2>/dev/null
+  local code
+  code="$("$KC" --status GET "/api/apps/$APP" 2>/dev/null)" || return 3
+  case "$code" in 200) return 0 ;; 404) return 1 ;; *) return 3 ;; esac
 }
 
-# the app is on Kiro Crew's list of trusted apps
+# The app is on Kiro Crew's list of trusted apps, in effect or stored but not in effect (both can be revoked): exit 0
+# when it is, 1 when the list does not have it, 3 when Kiro Crew did not list them
 trusted() {
+  local rc=0
   "$KC" GET /api/security/trusted-apps 2>/dev/null | "$PY" -c 'import json,sys
-sys.exit(0 if sys.argv[1] in (json.load(sys.stdin).get("apps") or []) else 1)' "$APP" 2>/dev/null
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    sys.exit(3)
+if not isinstance(d, dict) or not all(isinstance(d.get(k, []), list) for k in ("apps", "ineffective")) \
+        or "apps" not in d:
+    sys.exit(3)
+sys.exit(0 if sys.argv[1] in d["apps"] + d.get("ineffective", []) else 1)' "$APP" 2>/dev/null || rc=$?
+  return "$rc"
 }
 
 # knowledge source <name>: "<sync_status> <files_done> <files_total>", or "absent 0 0"

@@ -73,7 +73,7 @@ def install(src: Path, dst: Path, dry: bool) -> int:
     blocked += [rel for rel in want if (dst / rel).exists() and not (dst / rel).is_file()]
     if blocked:
         print(f"{dst} has files of its own where setup copies knowledge/ (setup did not write them, or they changed "
-              "since): move them away and run setup.sh again. Nothing was changed.", file=sys.stderr)
+              "since): move them away and run setup.sh again. The knowledge copy was not changed.", file=sys.stderr)
         for rel in blocked:
             print(f"  {rel}", file=sys.stderr)
         return 1

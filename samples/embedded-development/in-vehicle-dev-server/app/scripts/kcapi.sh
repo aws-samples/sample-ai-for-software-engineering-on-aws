@@ -4,6 +4,7 @@
 #   scripts/kcapi.sh GET  /api/apps
 #   scripts/kcapi.sh POST /api/apps/vstatd-team/route '{"requirement":"双十一大促"}'
 #   scripts/kcapi.sh GET  /api/apps/vstatd-team/health
+#   scripts/kcapi.sh --status GET /api/apps/vstatd-team   # prints the HTTP status only (000: no answer)
 #
 # Auth: `kirocrew token`, run with the gateway's OWN interpreter, mints a 5-minute link token signed with
 # ~/.kiro/crew/token_signing.key; the first request carrying `?token=` exchanges it for the HttpOnly session
@@ -29,7 +30,9 @@ if [ -z "${KC_PY:-}" ]; then  # the gateway's own interpreter: the running app's
   done
 fi
 
-usage() { echo "usage: $(basename "$0") <METHOD> <PATH> [JSON_BODY]" >&2; exit 2; }
+usage() { echo "usage: $(basename "$0") [--status] <METHOD> <PATH> [JSON_BODY]" >&2; exit 2; }
+STATUS=0
+[ "${1:-}" = --status ] && { STATUS=1; shift; }
 [ $# -ge 2 ] || usage
 METHOD="$1"; PATH_="$2"; BODY="${3:-}"
 
@@ -67,5 +70,6 @@ if [ "$code" = "401" ] || { [ "$code" = "403" ] && $GREP -q '"Token required"' "
   mint
   code=$(call) || code=000
 fi
+[ "$STATUS" = 1 ] && { echo "$code"; exit 0; }
 /bin/cat "$OUT"
 echo

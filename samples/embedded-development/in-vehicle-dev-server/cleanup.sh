@@ -115,9 +115,16 @@ crew_up || {
   warn "Kiro Crew is not running: open it and run cleanup.sh again to remove the app, members, knowledge source and workspace"
   exit 1
 }
+"$KC" GET /api/version >/dev/null 2>&1 || {
+  bad "Kiro Crew answers, but its API refused this shell as the dashboard owner: nothing removed."
+  echo "    Run cleanup.sh in your own terminal, not from an agent's shell."
+  exit 1
+}
 APP_GONE=0
+no_answer() { fail "Kiro Crew did not say whether the app $APP is installed: $*"; }
 if created app; then
-  if installed; then
+  rc=0; installed || rc=$?
+  if [ "$rc" = 0 ]; then
     # every run's sessions (the board's own 清理 keeps the running and signed ones), while the app still answers
     out="$("$KC" POST "/api/apps/$APP/sessions/cleanup" '{"all": true}' 2>&1 || true)"
     # an app older than this folder ignores "all" and keeps the running and signed runs' sessions: kept_runs says so
@@ -126,8 +133,12 @@ sys.exit(0 if d.get("ok") and not d.get("failed") and not d.get("kept_runs") els
       ok "the app's sessions removed"
       "$KC" POST "/api/apps/$APP/disable" '{}' >/dev/null 2>&1 || true
       out="$("$KC" DELETE "/api/apps/$APP" 2>/dev/null || true)"
-      if installed; then fail "app not uninstalled: remove it in Kiro Crew -> Apps (${out:0:80})"
-      else ok "app removed"; APP_GONE=1; fi
+      rc=0; installed || rc=$?
+      case "$rc" in
+        1) ok "app removed"; APP_GONE=1 ;;
+        0) fail "app not uninstalled: remove it in Kiro Crew -> Apps (${out:0:80})" ;;
+        *) no_answer "its data ($APP_DATA) kept: run cleanup.sh again" ;;
+      esac
     else
       fail "the app's sessions were not all removed (${out:0:80}):"
       case "$out" in *'"kept_runs": ['[!\]]*)
@@ -137,15 +148,21 @@ sys.exit(0 if d.get("ok") and not d.get("failed") and not d.get("kept_runs") els
       echo "    enable the app in Kiro Crew -> Apps and run cleanup.sh again (or delete its sessions in the sidebar,"
       echo "    uninstall it in Kiro Crew -> Apps, and run cleanup.sh again)"
     fi
-  else
+  elif [ "$rc" = 1 ]; then
     ok "app not installed any more (sessions it left, if any: delete them in the sidebar)"; APP_GONE=1
+  else
+    no_answer "the app, its sessions and its data ($APP_DATA) kept: run cleanup.sh again"
   fi
   [ "$APP_GONE" = 1 ] && forget created app && forget created consent
 fi
 if created trust && ! created app; then  # an uninstall drops the trust; an app that was there before setup keeps it
-  trusted && { "$KC" DELETE "/api/security/trusted-apps/$APP" >/dev/null 2>&1 || true; }
-  if trusted; then fail "$APP is still a trusted app: remove it in Kiro Crew's settings"
-  else ok "trust removed"; forget created trust; fi
+  rc=0; trusted || rc=$?
+  [ "$rc" = 0 ] && { "$KC" DELETE "/api/security/trusted-apps/$APP" >/dev/null 2>&1 || true; rc=0; trusted || rc=$?; }
+  case "$rc" in
+    1) ok "trust removed"; forget created trust ;;
+    0) fail "$APP is still a trusted app: remove it in Kiro Crew's settings" ;;
+    *) fail "Kiro Crew did not list its trusted apps: $APP's trust entry not removed" ;;
+  esac
 fi
 state has found app && forget found app && forget created consent
 for m in ${members[@]+"${members[@]}"}; do
@@ -190,14 +207,17 @@ fi
 for d in node_modules dist; do
   created "ui_$d" || continue
   if created app; then continue; fi        # the app is still installed: it runs from this folder
-  if [ "$APP_GONE" = 1 ] || ! installed; then rm -rf "$ROOT/app/ui/$d"; ok "app/ui/$d removed"
-  else
+  rc=1; [ "$APP_GONE" = 1 ] || { rc=0; installed || rc=$?; }
+  if [ "$rc" = 1 ]; then rm -rf "$ROOT/app/ui/$d"; ok "app/ui/$d removed"
+  elif [ "$rc" = 0 ]; then
     warn "kept app/ui/$d: the app $APP stays installed and runs from this folder. Once you uninstall the app in"
     echo "    Kiro Crew -> Apps, delete app/ui/$d yourself (cleanup.sh will not know about it any more)"
+  else
+    no_answer "app/ui/$d kept"; continue
   fi
   forget created "ui_$d"
 done
-rm -rf "$ROOT/scripts/__pycache__"   # an earlier setup's
+rm -rf "$ROOT/scripts/__pycache__"   # Python's caches there, whoever wrote them (an earlier setup, a test run)
 rm -f "${TMPDIR:-/tmp}/kc-cookies-5476.jar"
 if [ "$FAILED" = 1 ]; then
   echo
