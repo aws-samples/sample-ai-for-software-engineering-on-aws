@@ -8,9 +8,10 @@
 import { evText, person } from '../i18n/events'
 import { useState } from 'react'
 import { useAppApi } from '../api'
-import type { BenchView } from '../types'
+import type { BenchRequest, BenchView } from '../types'
 import { auditChanged } from './Audit'
 import { BASE } from './format'
+import { useServerNow } from './hooks'
 import { errorText } from './useBoard'
 import { t as tr } from '../i18n'
 
@@ -137,7 +138,47 @@ export function actionLine(a: Record<string, unknown>): string {
   }
 }
 
-export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () => Promise<void> }) {
+type LiveRequest = BenchRequest & { expires?: number | null } // expires: the bench state's epoch seconds
+
+/** 台架现在: on an ended run's panel (which shows the bench as it was then), the requests waiting at the console
+ * now, whoever made them (a person recording the baseline: bench tools), each with its seconds left and 批准 / 拒绝. */
+function LivePending({ pending, decides }: { pending: LiveRequest[]; decides?: boolean }) {
+  const now = useServerNow()
+  const left = (r: LiveRequest) => (typeof r.expires === 'number' ? Math.round(r.expires - now) : null)
+  const waiting = pending.filter((r) => !r.expired && (left(r) ?? 1) > 0)
+  const timedOut = pending.filter((r) => !waiting.includes(r))
+  return (
+    <div className="kt-bench-pending" data-testid="kt-bench-live">
+      <b>{tr('board.Bench.live')}</b> <span className="kt-dim">{tr('board.Bench.liveNote')}</span>
+      {waiting.length === 0 ? <p className="kt-dim">{tr('board.Bench.51')}</p> : (
+        <ul>
+          {waiting.map((r) => (
+            <li key={r.id}>
+              <span><b>{r.action}</b> · <code>{r.id}</code> · {person(String(r.requested_by ?? ''))}</span>
+              <span>{tr('board.Bench.53')} <Digest digest={r.digest} /></span>
+              {left(r) !== null && <span className="kt-dim">{tr('board.Bench.left', { s: left(r) })}</span>}
+              {decides !== false && <DecideRequest id={r.id} digest={r.digest} />}
+              {decides === false && (
+                <span className="kt-dim" data-testid="kt-console-only">{tr('board.Bench.consoleOnly')}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {timedOut.length > 0 && (
+        <p className="kt-dim" data-testid="kt-bench-expired">
+          {tr('board.Bench.expired', { n: timedOut.length, ids: timedOut.map((r) => r.id).join(tr('common.sep')) })}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** *live*: on an ended run, the bench state's pending requests as read now (shown under 台架现在), since *bench* is
+ * the bench as it was when the run ended. */
+export function BenchPanel({ bench, live, onRetry }: {
+  bench: BenchView; live?: BenchRequest[]; onRetry?: () => Promise<void>
+}) {
   const st = bench.state
   const waiting = st.pending.filter((r) => !r.expired)
   const timedOut = st.pending.filter((r) => r.expired)
@@ -241,6 +282,7 @@ export function BenchPanel({ bench, onRetry }: { bench: BenchView; onRetry?: () 
           </details>
         )}
       </div>
+      {live && <LivePending pending={live} decides={bench.board_decides} />}
       <div className="kt-bench-record">
         <b>{tr('board.Bench.recent', { n: Math.min(ACTION_SHOWN, st.actions.length) })}</b>
         {recent.length === 0 ? <p className="kt-dim">{tr('board.Bench.emptyRecord', { dir: st.dir })}</p> : (

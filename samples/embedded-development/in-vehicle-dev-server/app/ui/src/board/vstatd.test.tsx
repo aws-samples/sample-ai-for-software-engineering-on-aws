@@ -1,11 +1,11 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
-import { setApiRoutes } from '../test/stubs/app-sdk'
+import { apiCalls, setApiRoutes } from '../test/stubs/app-sdk'
 import { clone, vstatdBoard } from '../test/fixtures'
 import { TeamPage } from '../main'
 import { GateDialog, WORK_ITEM } from './Header'
-import type { Board, TestCase } from '../types'
+import type { BenchRequest, Board, TestCase } from '../types'
 
 const API = '/api/apps/vstatd-team'
 const serve = (b: Board) => setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
@@ -91,6 +91,91 @@ describe('the vstatd board', () => {
     expect(within(pending).queryByTestId('kt-cli')).toBeNull()
     expect(within(pending).getByTestId('kt-bench-expired'))
       .toHaveTextContent('已超时、没人能再批的旧请求 1 条，不用处理：20261103T094046-deploy-2570')
+  })
+
+  // an ended run's panel shows the bench as it was then; a request made since (a person recording the baseline) is
+  // decided under 台架现在, with the bench state as read now
+  const ended = (live: Partial<BenchRequest & { expires: number }> = {}) => {
+    const b = vstatdBoard('release')
+    const bench = b.run!.bench!
+    bench.history = clone(bench.state.actions)
+    bench.state.pending = [{ id: '20261118T212800-deploy-6bb0', action: 'deploy',
+      digest: 'e5b2a71d94c06e3fbc93723c5a1f',
+      detail: '', requested_at: '2026-11-18T13:28:00Z', requested_by: 'bench tools', expired: false,
+      expires: b.at + 200, ...live } as BenchRequest]
+    return b
+  }
+
+  test('an ended run: a live request waiting at the console now is listed under 台架现在 with 批准', async () => {
+    const user = userEvent.setup()
+    const b = ended()
+    setApiRoutes({
+      [`GET ${API}/board*`]: () => clone(b),
+      [`POST ${API}/bench/decide`]: () => ({ ok: true, decision: {} }),
+    })
+    render(<TeamPage pollMs={60_000} />)
+    const bench = await screen.findByTestId('kt-bench')
+    expect(within(bench).getByTestId('kt-bench-pending')).toHaveTextContent('等操作台批准的请求没有')  // as it ended
+    const live = within(bench).getByTestId('kt-bench-live')
+    expect(live).toHaveTextContent('台架现在')
+    expect(live).toHaveTextContent('deploy · 20261118T212800-deploy-6bb0 · bench tools')
+    expect(within(live).getByTestId('kt-digest')).toHaveTextContent(/^e5b2a71d94c0 复制$/)
+    expect(live).toHaveTextContent(/还剩 (199|200) 秒/)
+    await user.type(within(live).getByRole('textbox', { name: '构建摘要的前 6 位' }), 'e5b2a7')
+    await user.click(within(live).getByRole('button', { name: '批准' }))
+    expect(apiCalls.find((c) => c.method === 'POST' && c.path === `${API}/bench/decide`)?.body)
+      .toEqual({ id: '20261118T212800-deploy-6bb0', verdict: 'approve', digest: 'e5b2a7', reason: '' })
+  })
+
+  test('an ended run: a live request past its timeout is one grey line, with no 批准', async () => {
+    serve(ended({ expired: true }))
+    render(<TeamPage pollMs={60_000} />)
+    const live = within(await screen.findByTestId('kt-bench')).getByTestId('kt-bench-live')
+    expect(within(live).queryByTestId('kt-decide')).toBeNull()
+    expect(within(live).getByTestId('kt-bench-expired'))
+      .toHaveTextContent('已超时、没人能再批的旧请求 1 条，不用处理：20261118T212800-deploy-6bb0')
+  })
+
+  test('an ended run in servers mode without board_decides: 台架现在 says to approve at the console', async () => {
+    const b = ended()
+    b.run!.bench!.board_decides = false
+    serve(b)
+    render(<TeamPage pollMs={60_000} />)
+    const live = within(await screen.findByTestId('kt-bench')).getByTestId('kt-bench-live')
+    expect(within(live).queryByTestId('kt-decide')).toBeNull()
+    expect(within(live).getByTestId('kt-console-only')).toHaveTextContent('在操作台 bench/console.py 上批')
+  })
+
+  test('an ended run: a request made after the page opened shows up on the next poll', async () => {
+    const b = ended()
+    const later = clone(b)
+    b.run!.bench!.state.pending = []
+    let n = 0
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(++n > 1 ? later : b) })
+    render(<TeamPage pollMs={50} />)
+    const live = await screen.findByTestId('kt-bench-live')
+    expect(live).toHaveTextContent(/^台架现在.*没有$/)
+    await waitFor(() => expect(within(live).getByTestId('kt-decide')).toBeInTheDocument())
+  })
+
+  test('a replay of an ended run, and 投影, have no 台架现在', async () => {
+    const user = userEvent.setup()
+    const b = ended()
+    setApiRoutes({
+      [`GET ${API}/board*`]: () => clone(b),
+      [`GET ${API}/runs/${b.run!.id}/events`]: () => ({ run: b.run!.id, events: b.run!.events }),
+    })
+    const { unmount } = render(<TeamPage pollMs={60_000} />)
+    await screen.findByTestId('kt-bench-live')
+    await user.click(screen.getByRole('button', { name: '▶ 回放' }))
+    await screen.findByRole('group', { name: '回放' })
+    expect(screen.getByTestId('kt-bench')).toBeInTheDocument()
+    expect(screen.queryByTestId('kt-bench-live')).toBeNull()
+    unmount()
+    serve(b)
+    render(<TeamPage pollMs={60_000} projection />)
+    await screen.findByTestId('kt-bench')
+    expect(screen.queryByTestId('kt-bench-live')).toBeNull()
   })
 
   test('the merge conveyor shows only once there is a merge', async () => {
