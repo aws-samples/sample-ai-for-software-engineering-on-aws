@@ -1,9 +1,11 @@
 """What setup.sh created, so that cleanup.sh removes only that: a JSON file of lists in this folder (the agent-team
 sample's scripts/state.py; $VSTATD_INSTALL_STATE replaces the file, for tests).
 
-    python3 scripts/state.py add <key> <value>   # record that setup created <value> (a member, a template, ...)
-    python3 scripts/state.py has <key> <value>   # exit 0 when it is recorded
-    python3 scripts/state.py list <key>          # one value per line
+    python3 scripts/state.py add <key> <value>      # record that setup created <value> (a member, a template, ...)
+    python3 scripts/state.py has <key> <value>      # exit 0 when it is recorded
+    python3 scripts/state.py list <key>             # one value per line
+    python3 scripts/state.py remove <key> [<value>] # cleanup removed it: forget <value>, or the whole <key>
+    python3 scripts/state.py empty                  # exit 0 when nothing is recorded
 """
 import json
 import os
@@ -21,19 +23,36 @@ def load() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def save(data: dict) -> None:
+    tmp = STATE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, STATE)
+
+
 def main(argv: list) -> int:
-    if len(argv) < 2 or argv[0] not in ("add", "has", "list") or (argv[0] != "list" and len(argv) < 3):
-        print("usage: state.py add|has <key> <value>, or state.py list <key>", file=sys.stderr)
+    cmd = argv[0] if argv else ""
+    if not ((cmd in ("add", "has") and len(argv) == 3) or (cmd == "list" and len(argv) == 2)
+            or (cmd == "remove" and len(argv) in (2, 3)) or (cmd == "empty" and len(argv) == 1)):
+        print("usage: state.py add|has <key> <value>, list <key>, remove <key> [<value>], or empty", file=sys.stderr)
         return 2
-    cmd, key = argv[0], argv[1]
     data = load()
+    if cmd == "empty":
+        return 0 if not any(data.values()) else 1
+    key = argv[1]
     values = data.get(key) if isinstance(data.get(key), list) else []
     if cmd == "add":
         if argv[2] not in values:
             data[key] = values + [argv[2]]
-            tmp = STATE.with_suffix(".tmp")
-            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            os.replace(tmp, STATE)
+            save(data)
+        return 0
+    if cmd == "remove":
+        if key in data:
+            rest = [v for v in values if v != argv[2]] if len(argv) == 3 else []
+            if rest:
+                data[key] = rest
+            else:
+                del data[key]
+            save(data)
         return 0
     if cmd == "has":
         return 0 if argv[2] in values else 1

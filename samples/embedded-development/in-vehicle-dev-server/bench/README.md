@@ -187,4 +187,7 @@ bench/cc1.sh stop
 docker volume rm cc1-images cc1-sysroot cc1-br-dl cc1-br-work cc1-run cc1-bench-secrets cc1-build-out
 docker image rm cc1-image-builder cc1-bench-runner
 rm -rf ~/.cc1-bench          # the bench state, including the action record
+# the checks' build container and its stand-in sysroot (setup.sh prints how to build them; :arm64 on Apple silicon)
+docker volume rm vstatd-standin-sysroot
+docker image rm vstatd-build:arm64   # or vstatd-build:amd64
 ```

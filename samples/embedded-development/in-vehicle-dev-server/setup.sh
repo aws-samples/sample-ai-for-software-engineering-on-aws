@@ -41,13 +41,16 @@ ok "Kiro Crew ${v:-?}"
 
 step 2/5 "Build the app and install it into Kiro Crew"
 echo "  This adds the app $APP to Kiro Crew's trusted apps (for this one app only), so that Kiro Crew runs it."
-installed() { "$KC" GET "/api/apps/$APP" | "$PY" -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if isinstance(d, dict) and d.get("name") else 1)' 2>/dev/null; }
 if [ "$DRY" = 1 ]; then
   installed && echo "   (dry run) would update the app $APP in place" || echo "   (dry run) would build the board and install the app $APP"
   echo "   (dry run) would ask whether the sessions the app opens may auto-approve their tool calls"
   echo "   (dry run) would record this folder in $APP_DATA/data/sample.json"
 else
-  installed || state add created app
+  # an app installed before setup.sh stays when cleanup.sh runs; what setup.sh adds to it is recorded and undone
+  if ! installed; then state add created app; elif ! state has created app; then state add found app; fi
+  trusted || state add created trust
+  [ -e "$ROOT/app/ui/node_modules" ] || state add created ui_node_modules   # npm ci (app/scripts/dev-install.sh)
+  [ -e "$ROOT/app/ui/dist" ] || state add created ui_dist                   # the board's build
   if [ -z "$CONSENT" ]; then
     echo "  Each role on the team is a Kiro Crew chat session that this app opens. For the team to work on its own,"
     echo "  the app sets ${B}the sessions it opens itself${N} to auto-approve their tool calls (file edits and shell commands)."
@@ -57,6 +60,7 @@ else
     echo "  waits for you to approve it in Kiro Crew."
     ask "Allow it? Type y and press Return (Return alone = no):" && CONSENT="--consent-session-approval"
   fi
+  if [ -n "$CONSENT" ]; then state add created consent; fi   # kept by the app's record until the app is uninstalled
   out="$(cd "$ROOT/app" && NODE_BIN="$NODE_DIR" scripts/dev-install.sh --no-test $CONSENT 2>&1)" || true
   echo "$out" | tail -4 | sed 's/^/     /'
   if echo "$out" | grep -q '"started": true'; then ok "app installed: Kiro Crew sidebar -> Apps -> $APP_LABEL"; else

@@ -8,6 +8,7 @@
 ROOT="${ROOT:?}"
 KC="${VSTATD_KCAPI:-$ROOT/app/scripts/kcapi.sh}"   # calls the local Kiro Crew API as the dashboard owner
 PY=/usr/bin/python3
+export PYTHONDONTWRITEBYTECODE=1   # scripts/templates.py imports state.py: no __pycache__ left in scripts/
 B=$'\033[1m'; G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; N=$'\033[0m'
 
 step() { echo; echo "${B}[$1] $2${N}"; }
@@ -44,6 +45,18 @@ crew_app_dir() {
 # GET <path> lists <list key> with an item whose <field> is <value>
 has() {
   "$KC" GET "$1" | "$PY" -c "import json,sys; d=json.load(sys.stdin); items=d.get(sys.argv[1], d) if isinstance(d, dict) else d; sys.exit(0 if any(str(x.get(sys.argv[2]))==sys.argv[3] for x in items) else 1)" "$2" "$3" "$4"
+}
+
+# the app is installed in Kiro Crew
+installed() {
+  "$KC" GET "/api/apps/$APP" 2>/dev/null | "$PY" -c 'import json,sys; d=json.load(sys.stdin)
+sys.exit(0 if isinstance(d, dict) and d.get("name") else 1)' 2>/dev/null
+}
+
+# the app is on Kiro Crew's list of trusted apps
+trusted() {
+  "$KC" GET /api/security/trusted-apps 2>/dev/null | "$PY" -c 'import json,sys
+sys.exit(0 if sys.argv[1] in (json.load(sys.stdin).get("apps") or []) else 1)' "$APP" 2>/dev/null
 }
 
 # knowledge source <name>: "<sync_status> <files_done> <files_total>", or "absent 0 0"

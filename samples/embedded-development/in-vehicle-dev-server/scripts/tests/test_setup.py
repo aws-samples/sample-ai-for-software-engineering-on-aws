@@ -24,7 +24,19 @@ method, path = sys.argv[1], sys.argv[2]
 with open(os.environ["FAKE_KC_LOG"], "a") as f:
     f.write(json.dumps([method, path] + sys.argv[3:]) + "\\n")
 answers = json.load(open(os.environ["FAKE_KC"]))
-print(json.dumps(answers.get(path, {"error": "not found"}) if method == "GET" else {"error": "the stand-in takes no writes"}))
+if method == "GET":
+    print(json.dumps(answers.get(path, {"error": "not found"})))
+elif method == "DELETE" and path not in answers.get("refuse", []):  # gone from the list that holds it
+    if path in answers:
+        answers[path] = {"error": "not found"}
+    base, key = path.rsplit("/", 1)
+    for k, v in (answers.get(base) or {}).items():
+        answers[base][k] = [r for r in v if r != key
+                            and not (isinstance(r, dict) and key in (r.get("name"), r.get("id")))]
+    json.dump(answers, open(os.environ["FAKE_KC"], "w"))
+    print(json.dumps({"ok": True}))
+else:
+    print(json.dumps(answers.get(f"{method} {path}", {"error": "the stand-in refuses this"})))
 """
 
 
@@ -52,12 +64,13 @@ def home(tmp_path, monkeypatch):
             "log": tmp_path / "kc.log", "tmp": tmp_path}
 
 
-def crew(rig, apps=None, agents=(), workspaces=(), sources=()):
+def crew(rig, apps=None, agents=(), workspaces=(), sources=(), trusted=(), **more):
     rig["kc"].write_text(json.dumps({
         "/api/health": {"ok": True}, "/api/version": {"version": "0.12.0-test"},
         "/api/apps/vstatd-team": apps or {"error": "not found"},
         "/api/agents": {"agents": list(agents)}, "/api/workspaces": {"workspaces": list(workspaces)},
-        "/api/knowledge/sources": {"sources": list(sources)}}), encoding="utf-8")
+        "/api/knowledge/sources": {"sources": list(sources)},
+        "/api/security/trusted-apps": {"apps": list(trusted)}, **more}), encoding="utf-8")
 
 
 def calls(rig):
@@ -73,7 +86,13 @@ def test_state_records_lists_once_each(home):
     assert run_py(SCRIPTS / "state.py", "list", "created", env=env).stdout.split() == ["app", "workspace"]
     assert json.loads(home["state"].read_text()) == {"created": ["app", "workspace"]}
     assert run_py(SCRIPTS / "state.py", "list", "members", env=env).stdout.strip() == ""
-    assert run_py(SCRIPTS / "state.py", "remove", "x", env=env).returncode == 2
+    assert run_py(SCRIPTS / "state.py", "empty", env=env).returncode == 1
+    assert run_py(SCRIPTS / "state.py", "remove", "created", "app", env=env).returncode == 0
+    assert json.loads(home["state"].read_text()) == {"created": ["workspace"]}
+    assert run_py(SCRIPTS / "state.py", "remove", "created", env=env).returncode == 0
+    assert json.loads(home["state"].read_text()) == {}
+    assert run_py(SCRIPTS / "state.py", "empty", env=env).returncode == 0
+    assert run_py(SCRIPTS / "state.py", "drop", "x", env=env).returncode == 2
 
 
 def test_the_templates_are_the_four_experts_with_the_vstatd_note(tmp_path):
@@ -206,9 +225,144 @@ def test_cleanup_dry_run_lists_exactly_what_setup_recorded(home):
     out = subprocess.run(sh, capture_output=True, text=True, env=env).stdout
     listed = [ln.strip() for ln in out.split("This removes what setup.sh created here:")[1].split("(dry run")[0].splitlines() if ln.strip().startswith("- ")]
     home_ = env["HOME"]
-    assert listed == ["- 1 Kiro Crew members: embedded-quality", "- the Kiro Crew workspace vstatd",
+    assert listed == ["- 1 Kiro Crew members, those still in the workspace vstatd: embedded-quality",
+                      f"- the Kiro Crew workspace vstatd, if it still points to {home_}/workplace/vstatd",
                       f"- 1 agent templates in {home_}/.kiro/agents/: embedded-architect",
                       "- and puts back 1 agent templates it replaced: embedded-developer",
-                      f"- {home_}/workplace/vstatd (the knowledge copy)"]
+                      f"- the knowledge copy in {home_}/workplace/vstatd/knowledge (files you added or changed stay)"]
     assert "the app vstatd-team" not in out and "(dry run: nothing removed)" in out
+    for missing in ("vstatd-build:arm64", "vstatd-standin-sysroot", "「AI-DLC 团队」", "~/.npm"):  # left, and said so
+        assert missing in out, missing
     assert calls(home) == []  # a dry run asks Kiro Crew nothing
+
+    home["state"].unlink()
+    for value in ("trust", "consent", "ui_dist"):
+        run_py(SCRIPTS / "state.py", "add", "created", value, env=env)
+    run_py(SCRIPTS / "state.py", "add", "found", "app", env=env)  # installed before setup: it stays
+    out = subprocess.run(sh, capture_output=True, text=True, env=env).stdout
+    assert "nothing of the app vstatd-team itself: it was installed before setup.sh and stays" in out
+    assert "keeps the session-approval consent setup.sh sent" in out
+    assert "the app vstatd-team's entry in Kiro Crew's trusted apps, which setup.sh added" in out
+    assert "app/ui/dist (setup.sh built the board), once the app is gone" in out and "node_modules (" not in out
+
+
+def knowledge_tree(root):
+    for rel, text in (("a.md", "a\n"), ("facts/b.yaml", "b: 1\n"), ("tools/check.py", "x\n"), (".DS_Store", "")):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text, encoding="utf-8")
+    return root
+
+
+def test_the_knowledge_copy_never_replaces_or_deletes_a_file_setup_did_not_write(home):
+    env, src = home["env"], knowledge_tree(home["tmp"] / "knowledge")
+    team = home["home"] / "workplace" / "vstatd"
+    dst = team / "knowledge"
+    k = lambda *a: run_py(SCRIPTS / "knowledge.py", *a, src, dst, env=env)  # noqa: E731
+
+    assert k("plan").returncode == 0 and not dst.exists() and not home["state"].exists()
+    assert k("install").returncode == 0
+    assert sorted(p.relative_to(dst).as_posix() for p in dst.rglob("*") if p.is_file()) == ["a.md", "facts/b.yaml"]
+    state = json.loads(home["state"].read_text())
+    assert state["created"] == ["team_home", "knowledge_dir"]
+    assert sorted(state["knowledge_files"]) == ["a.md", "facts/b.yaml"]
+
+    (dst / "alice-notes.md").write_text("mine\n", encoding="utf-8")  # added after setup
+    (dst / "a.md").write_text("edited by alice\n", encoding="utf-8")
+    r = k("install")  # an edited copy stops it: nothing is changed
+    assert r.returncode == 1 and "a.md" in r.stderr and (dst / "a.md").read_text() == "edited by alice\n"
+    (dst / "a.md").write_text("a\n", encoding="utf-8")
+    (src / "facts" / "b.yaml").unlink()  # the scenario no longer has it: the unchanged copy goes
+    (src / "c.md").write_text("c\n", encoding="utf-8")
+    assert k("install").returncode == 0 and not (dst / "facts").exists() and (dst / "c.md").exists()
+    assert (dst / "alice-notes.md").read_text() == "mine\n"
+
+    (dst / "c.md").write_text("alice changed it\n", encoding="utf-8")
+    out = k("remove").stdout
+    assert "- 1 files of the knowledge copy" in out and f"! kept {dst / 'c.md'}: changed since setup copied it" in out
+    assert f"! kept {dst}: it holds files setup did not copy there" in out
+    assert sorted(p.name for p in dst.iterdir()) == ["alice-notes.md", "c.md"]
+    assert "knowledge_files" not in json.loads(home["state"].read_text())
+
+
+def test_a_knowledge_folder_that_was_there_before_setup_is_not_overwritten(home):
+    env, src = home["env"], knowledge_tree(home["tmp"] / "knowledge")
+    dst = home["home"] / "workplace" / "vstatd" / "knowledge"
+    dst.mkdir(parents=True)
+    (dst / "a.md").write_text("alice's own a.md\n", encoding="utf-8")
+    (dst / "other.md").write_text("alice's\n", encoding="utf-8")
+    r = run_py(SCRIPTS / "knowledge.py", "install", src, dst, env=env)
+    assert r.returncode == 1 and "  a.md" in r.stderr and not home["state"].exists()
+    assert sorted(p.name for p in dst.iterdir()) == ["a.md", "other.md"]
+    (dst / "a.md").unlink()
+    assert run_py(SCRIPTS / "knowledge.py", "install", src, dst, env=env).returncode == 0
+    assert "created" not in json.loads(home["state"].read_text())  # the folders were there: not setup's
+    out = run_py(SCRIPTS / "knowledge.py", "remove", src, dst, env=env).stdout
+    assert "- 2 files" in out and sorted(p.name for p in dst.iterdir()) == ["other.md"]
+
+
+def test_an_earlier_setups_copy_is_taken_as_setups_where_the_scenario_has_the_file(home):
+    env, src = home["env"], knowledge_tree(home["tmp"] / "knowledge")
+    dst = home["home"] / "workplace" / "vstatd" / "knowledge"
+    dst.mkdir(parents=True)
+    (dst / "a.md").write_text("an older a.md\n", encoding="utf-8")  # an earlier setup's copy, with no file record
+    (dst / "alice.md").write_text("mine\n", encoding="utf-8")
+    run_py(SCRIPTS / "state.py", "add", "created", "team_home", env=env)
+    assert run_py(SCRIPTS / "knowledge.py", "install", src, dst, env=env).returncode == 0
+    assert (dst / "a.md").read_text() == "a\n" and (dst / "alice.md").exists()
+    assert sorted(json.loads(home["state"].read_text())["knowledge_files"]) == ["a.md", "facts/b.yaml"]
+
+
+def test_install_team_records_the_knowledge_source_and_its_id_before_it_confirms(home):
+    sources = []
+    crew(home, sources=sources, **{"POST /api/knowledge/sources": {"source": {"id": "k9", "name": "vstatd"}}})
+    r = subprocess.run(["bash", str(SCRIPTS / "install-team.sh")], capture_output=True, text=True, env=home["env"])
+    assert r.returncode == 1 and "error:" in r.stderr  # the stand-in refuses the confirm
+    state = json.loads(home["state"].read_text())
+    assert "knowledge" in state["created"] and state["knowledge_id"] == ["k9"]
+    assert ["POST", "/api/knowledge/sources/k9/confirm", "{}"] in calls(home)
+
+
+def run_cleanup(rig):
+    return subprocess.run(["bash", str(SAMPLE / "cleanup.sh")], input="remove\n", capture_output=True, text=True,
+                          env=rig["env"])
+
+
+def test_cleanup_removes_only_what_is_still_setups_and_keeps_the_record_when_a_step_fails(home):
+    env, h = home["env"], home["home"]
+    knowledge = h / "workplace" / "vstatd" / "knowledge"
+    assert run_py(SCRIPTS / "knowledge.py", "install", SAMPLE / "knowledge", knowledge, env=env).returncode == 0
+    for key, value in (("created", "app"), ("created", "sample_record"), ("created", "trust"),
+                       ("created", "workspace"), ("created", "knowledge"), ("knowledge_id", "k1"),
+                       ("members", "embedded-quality"), ("members", "embedded-developer")):
+        run_py(SCRIPTS / "state.py", "add", key, value, env=env)
+    app_data = h / ".kiro" / "crew" / "apps" / "vstatd-team" / "data"
+    app_data.mkdir(parents=True)
+    (app_data / "runs.json").write_text("{}\n", encoding="utf-8")
+    crew(home, apps={"name": "vstatd-team"}, trusted=["vstatd-team", "other-app"],
+         agents=[{"name": "embedded-quality", "kiro_agent": "embedded-quality", "workspace": "vstatd"},
+                 {"name": "embedded-developer", "kiro_agent": "embedded-developer", "workspace": "alice"}],
+         sources=[{"id": "k2", "name": "vstatd", "uri": str(knowledge)}],  # re-created by alice: not setup's
+         workspaces=[{"name": "vstatd", "path": "/Users/alice/elsewhere"}],
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "sessions": 3, "folders": 1, "failed": 1}})
+
+    first = run_cleanup(home)
+    assert first.returncode == 1, first.stdout + first.stderr
+    assert "the app's sessions were not all removed" in first.stdout and "Not everything was removed" in first.stdout
+    log = calls(home)
+    assert ["POST", "/api/apps/vstatd-team/sessions/cleanup", '{"all": true}'] in log
+    deleted = [c[1] for c in log if c[0] == "DELETE"]
+    assert deleted == ["/api/agents/embedded-quality"]  # not the app (its sessions are still there), nor alice's
+    state = json.loads(home["state"].read_text())
+    assert state == {"created": ["app", "sample_record", "trust"]}  # what is left, for the next run
+    assert (app_data / "runs.json").exists() and not knowledge.exists()
+
+    answers = json.loads(home["kc"].read_text())
+    answers["POST /api/apps/vstatd-team/sessions/cleanup"]["failed"] = 0
+    home["kc"].write_text(json.dumps(answers), encoding="utf-8")
+    second = run_cleanup(home)
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert "app removed" in second.stdout and "trust removed" in second.stdout
+    deleted = [c[1] for c in calls(home)[len(log):] if c[0] == "DELETE"]
+    assert deleted == ["/api/apps/vstatd-team", "/api/security/trusted-apps/vstatd-team"]
+    assert json.loads(home["kc"].read_text())["/api/security/trusted-apps"]["apps"] == ["other-app"]
+    assert not home["state"].exists() and not app_data.parent.exists()

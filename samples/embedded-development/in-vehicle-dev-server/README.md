@@ -547,8 +547,13 @@ The run is a single sample, and its wall time is not what a run takes: it includ
 
 ## Cleanup
 
-`bash cleanup.sh` removes what `setup.sh` recorded: the app with its data and run repositories, any members and
-workspace an earlier setup created, the knowledge source and its copy, and the agent templates it added; it puts back the templates it replaced.
-`--dry-run` lists them. It leaves the build container, the bench's images and volumes, the bench state
+`bash cleanup.sh` removes what `setup.sh` recorded: the app with the sessions of every run, its data and run
+repositories, its trust entry, any members and workspace an earlier setup created, the knowledge source and the files
+of its copy, the agent templates it added, and the board's `app/ui/node_modules` and `app/ui/dist` when setup built
+them; it puts back the templates it replaced, and `--dry-run` lists all of it. It checks that each one is still the
+one setup created, so one you made with the same name stays, as do files you added to `~/workplace/vstatd` or changed
+there. An app installed before setup stays installed. When a step fails it keeps `.install-state.json` and exits 1:
+fix the cause and run it again. It leaves the build container, the bench's images and volumes, the bench state
 (`~/.cc1-bench`) and the baseline, and prints the commands of [bench/README.md](bench/README.md#cleanup) that remove
-them.
+them. Two things are left for you: the chat folder 「AI-DLC 团队」 in the Kiro Crew sidebar (only a person can delete
+a folder: the app hides the run folders in it, so delete it there), and npm's shared cache (`~/.npm`).
