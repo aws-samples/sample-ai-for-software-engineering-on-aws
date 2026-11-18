@@ -8,7 +8,9 @@ import contextlib
 import hashlib
 import json
 import logging
+import platform
 import re
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -500,17 +502,27 @@ class Service:
         return Path(path)
 
     async def open_folder(self, rid: str, role: Any = None, app: Any = "finder") -> dict[str, Any]:
-        """Open the folder on this Mac: in Finder, or in the Kiro IDE. Only a run's own folders, never a path from
-        the request."""
+        """Open the folder on this machine: on a Mac in Finder or the Kiro IDE; elsewhere (Linux) in the desktop's file
+        manager (xdg-open) or with the kiro on PATH. Only a run's own folders, never a path from the request."""
         if role is not None and not isinstance(role, str):
             raise AppError("role 必须是角色名", "invalid_role")
         if app not in ("finder", "kiro"):
             raise AppError("app 只能是 finder 或 kiro", "invalid_app")
         path = self.folder(rid, role)
-        cmd = ["/usr/bin/open", str(path)] if app == "finder" else ["/usr/bin/open", "-a", "Kiro", str(path)]
+        if platform.system() == "Darwin":
+            cmd = ["/usr/bin/open", str(path)] if app == "finder" else ["/usr/bin/open", "-a", "Kiro", str(path)]
+        else:
+            name = "xdg-open" if app == "finder" else "kiro"
+            exe = shutil.which(name)
+            if not exe:
+                what = "Kiro IDE 的命令行" if app == "kiro" else "打开文件管理器的命令"
+                raise AppError(f"打不开：这台机器的 PATH 里没有 {name}（{what}）", "open_failed", 502,
+                               detail=f"{name} is not on PATH")
+            cmd = [exe, str(path)]
         rc = await self._opener(cmd)
         if rc not in (0, None):
-            raise AppError("打不开：" + ("没装 Kiro" if app == "kiro" else "open 命令失败"), "open_failed", 502)
+            said = "没装 Kiro" if cmd[0] == "/usr/bin/open" and app == "kiro" else f"{Path(cmd[0]).name} 命令失败"
+            raise AppError("打不开：" + said, "open_failed", 502)
         return {"ok": True, "path": str(path), "app": app}
 
     async def events(self, rid: str) -> dict[str, Any]:
