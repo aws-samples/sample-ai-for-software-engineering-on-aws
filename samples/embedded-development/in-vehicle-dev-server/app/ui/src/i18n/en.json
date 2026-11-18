@@ -1143,6 +1143,7 @@
  "err.digest_required": "To approve, enter the first 6 characters of the build's digest (check it first)",
  "err.exists": "This run is already here",
  "err.imported": "This run was imported from another Mac with its records only; this cannot be done on it",
+ "err.invalid_all": "all can only be true or false",
  "err.invalid_app": "It can only be opened in Finder or Kiro",
  "err.invalid_finding": "The finding is not valid{detail}",
  "err.invalid_format": "The format can only be md or json",

@@ -39,6 +39,30 @@ def test_new_routes_are_owner_only(tmp_path):
     asyncio.run(go())
 
 
+def test_session_cleanup_keeps_running_and_signed_runs_unless_asked_for_all(tmp_path):
+    kept = []
+
+    class Sessions:
+        async def cleanup(self, keep_parents):
+            kept.append(keep_parents)
+            return {"sessions": 2, "folders": 1, "failed": 0}
+
+    svc, routes = make(tmp_path, FakeManager(), sessions=Sessions())
+    for rid, ended, s in (("r1", False, {}), ("r2", True, {"signoff": {"by": "alice"}}), ("r3", True, {})):
+        svc.runs[rid] = SimpleNamespace(rid=rid, parent=f"vstatd-team:{rid}", ended=ended, s=s)
+
+    async def go():
+        r = await call(routes, "POST", "/sessions/cleanup", json_body={})
+        assert r.status == 200 and r.body["kept_runs"] == ["r1", "r2"] and r.body["failed"] == 0
+        r = await call(routes, "POST", "/sessions/cleanup", json_body={"all": True})  # cleanup.sh, before the uninstall
+        assert r.status == 200 and r.body["kept_runs"] == [] and r.body["sessions"] == 2
+        assert kept == [{"vstatd-team:r1", "vstatd-team:r2"}, set()]
+        r = await call(routes, "POST", "/sessions/cleanup", json_body={"all": "yes"})
+        assert (r.status, r.code) == (400, "invalid_all") and len(kept) == 2
+
+    asyncio.run(go())
+
+
 def test_create_board_runs_and_stop_through_the_routes(tmp_path):
     mgr = FakeManager()
     svc, routes = make(tmp_path, mgr, tick_s=60)

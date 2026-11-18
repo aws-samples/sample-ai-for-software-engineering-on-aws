@@ -534,12 +534,13 @@ class SessionManager:
         keep_slots = {i.slot for i in self._infos.values() if i.parent_session_key in keep_parents and i.slot}
         keep_folders = {str(v.get("id")) for k, v in self._folders.items() if k in keep_parents}
         slots = [r for r in await self.gw.slots() if r.get("app") == self.app and str(r.get("key")) not in keep_slots]
-        deleted = 0
+        deleted, failed = 0, 0
         for r in slots:
             try:
                 await self.gw.delete_slot(str(r.get("key")))
                 deleted += 1
             except Exception as exc:  # noqa: BLE001
+                failed += 1
                 self.log.info("vstatd-team: deleting session %s: %s", r.get("key"), exc)
         folders = await self.gw.folders()
         root_ids = {str(f.get("id")) for f in folders if f.get("name") == ROOT_FOLDER and not f.get("parent_id")}
@@ -562,4 +563,4 @@ class SessionManager:
                 info.slot = None
         self._dirty = True
         await self.save()
-        return {"sessions": deleted, "folders": gone}
+        return {"sessions": deleted, "folders": gone, "failed": failed}

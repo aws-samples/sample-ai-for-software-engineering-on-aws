@@ -1143,6 +1143,7 @@
  "err.digest_required": "批准要输入构建摘要的前 6 位（核对过再批）",
  "err.exists": "已经有这次运行了",
  "err.imported": "这是从别的 Mac 导入的运行，只带运行记录，不能这样做",
+ "err.invalid_all": "all 只能是 true 或 false",
  "err.invalid_app": "只能用 Finder 或 Kiro 打开",
  "err.invalid_finding": "补登的发现不对{detail}",
  "err.invalid_format": "格式只能是 md 或 json",

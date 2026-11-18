@@ -548,15 +548,16 @@ class Service:
     def cards(self) -> list[dict[str, Any]]:
         return board.cards(self.runs)
 
-    async def cleanup_sessions(self) -> dict[str, Any]:
+    async def cleanup_sessions(self, everything: bool = False) -> dict[str, Any]:
         """清理已结束的会话: delete the Kiro Crew sessions and folders this app opened, except those of a running run and of
-        a signed one (a run a person signed off is one to show again: its sessions stay openable)."""
-        keep = {r.parent for r in self.runs.values() if not r.ended or r.s.get("signoff")}
+        a signed one (a run a person signed off is one to show again: its sessions stay openable). *everything*
+        (cleanup.sh, before it uninstalls the app) keeps none."""
+        kept = [] if everything else [r for r in self.runs.values() if not r.ended or r.s.get("signoff")]
         try:
-            done = await self.sessions.cleanup(keep)
+            done = await self.sessions.cleanup({r.parent for r in kept})
         except Exception as exc:  # noqa: BLE001
             raise AppError(f"清理会话失败：{exc}"[:300], "cleanup_failed", 502, detail=str(exc)[:280])
-        return {"ok": True, **done, "kept_runs": sorted(r.rid for r in self.runs.values() if not r.ended or r.s.get("signoff"))}
+        return {"ok": True, **done, "kept_runs": sorted(r.rid for r in kept)}
 
     async def scorecard(self) -> dict[str, Any]:
         """The rehearsal scorecard (D8), from the runs' records."""
