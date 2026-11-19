@@ -610,3 +610,29 @@ def test_the_board_cannot_decide_in_servers_mode_without_the_switch(tmp_path, mo
     with pytest.raises(httpkit.AppError) as off:
         asyncio.run(svc.bench_decide("20261116T120000-deploy-ab12", "approve", "bc9372", ""))
     assert off.value.code == "decide_off" and off.value.status == 409
+
+
+def test_with_the_switch_the_board_decides_a_request_made_outside_a_run_while_the_runs_are_over(tmp_path, monkeypatch):
+    """台架现在 on an ended run's panel: POST /bench/decide names no run, so a request from bench tools (a person
+    recording the baseline) is decided by the bench's own decide() whatever the runs' state."""
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    service = mod("service")
+    team = {k: v for k, v in rig.run.team.items() if k != "skip_owners"}
+    team["servers"] = {**team["servers"], "board_decides": True}
+    team_file = tmp_path / "team-servers.json"
+    team_file.write_text(json.dumps(team), encoding="utf-8")
+    data = tmp_path / "svc"
+    data.mkdir()
+    (data / "sample.json").write_text(json.dumps({"sample": str(Path(team_mod.__file__).parents[3])}))
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(data))
+    svc = service.Service(ctx, manager=rig.mgr, work_root=tmp_path / "work", tick_s=60, team_file=team_file)
+    rig.run.s.update(status="done", ended_at=time.time() - 600)
+    svc.runs[rig.run.s["id"]] = rig.run
+    state, rid, digest = Path(rig.state), "20261118T212800-deploy-6bb0", "e5b2a7" + "0" * 58
+    (state / "requests").mkdir(parents=True, exist_ok=True)
+    (state / "decisions").mkdir(exist_ok=True)
+    (state / "requests" / f"{rid}.json").write_text(json.dumps(
+        {"id": rid, "action": "deploy", "digest": digest, "detail": "", "requested_at": "2026-11-18T13:28:00.000Z",
+         "expires": time.time() + 200, "timeout_s": 300, "requested_by": "bench tools"}), encoding="utf-8")
+    res = asyncio.run(svc.bench_decide(rid, "approve", "e5b2a7", ""))
+    assert res["decision"]["verdict"] == "approved" and (state / "decisions" / f"{rid}.json").exists()
