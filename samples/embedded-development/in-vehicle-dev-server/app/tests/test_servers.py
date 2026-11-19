@@ -59,7 +59,7 @@ def build_tool(name, args):
     if check == sp.get("sleep_on"):
         time.sleep(30)
     if check in sp.get("refuse", []):
-        raise Refused("the repair count is over its limit; a person decides, then resets it")
+        raise Refused(sp.get("refuse_why", "the repair count is over its limit; a person decides, then resets it"))
     with open(state + "/judged.log", "a") as f:
         f.write(json.dumps({"check": check, "head": head, "files": git("ls-files").split(),
                             "triage": open(P["triage"]).read() if os.path.exists(P["triage"]) else None}) + "\n")
@@ -74,8 +74,11 @@ def build_tool(name, args):
         os.makedirs(state + "/results/artifacts", exist_ok=True)
         open(state + "/results/artifacts/vstatd", "w").write("ELF " + head)
         json.dump(data, open(state + "/results/build.json", "w"))
-    return {"outcome": "ok", "exit_status": 0, "check": check, "commit": head, "verdict": verdict,
-            "summary": f"$ checks/{check}.sh\n{check}: {verdict}\n", "result": data}
+    out = {"outcome": "ok", "exit_status": 0, "check": check, "commit": head, "verdict": verdict,
+           "summary": f"$ checks/{check}.sh\n{check}: {verdict}\n", "result": data}
+    if check == "build" and "repair" in sp:  # as mcp/build reports its repair count after each cross attempt
+        out["repair"] = {"failures_in_a_row": sp["repair"][0], "limit_retries": sp["repair"][1]}
+    return out
 
 LEASE = state + "/lease.json"
 
@@ -336,6 +339,100 @@ def test_a_refused_build_and_the_checks_it_blocked_are_run_again_on_retry(tmp_pa
         assert run.s["status"] == "done", [e["text"] for e in run.events][-4:]
 
     asyncio.run(go())
+
+
+# mcp/build's refusal at its bound (core.py charge_cross_attempt), as r1117e6af got it
+BOUND = ("cross attempts failed 4 times in a row: the first attempt and the 3 retries of TR §5.1. A person decides, "
+         "then resets the count (buildserver.admin reset-repair, see mcp/build/README.md, Running)")
+RESET = ("-I -m buildserver.admin reset-repair --config {conf} "
+         "--reason \"a person decided after {n} failed cross builds\"")
+
+
+def tilde(p) -> str:
+    home = str(Path.home())
+    return "~" + str(p)[len(home):] if str(p).startswith(home + "/") else str(p)
+
+
+def run_checks(srv, check="build"):
+    return [ln for ln in srv.audit_lines("build")
+            if ln["tool"] == "run_check" and ln["args"]["check"] == check and ln["outcome"] != "started"]
+
+
+def test_one_failure_before_the_build_servers_bound_the_round_waits_for_a_person(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    run, mgr = rig.run, rig.mgr
+    srv.set(build={"verdict": "FAIL", "reasons": ["src/a.cpp:1: error: x"]}, repair=[3, 3])
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.s["tests"].get("rounds"))
+        t = run.s["tests"]
+        assert t["rounds"] == {"build": 1} and t["repair"] == {"failures_in_a_row": 3, "limit_retries": 3}
+        srv.set(repair=[0, 3])  # the fix would pass, but the server is not asked before a person decides
+        await until(run, mgr, lambda: run.ended)
+        assert len(run_checks(srv)) == 1
+        assert run.s["status"] == "failed" and run.s["servers_held"] == "checks"
+        held = t["held"]
+        assert "build 服务器的交叉构建已连续失败 3 次、上限 3" in held["why"]
+        assert "再失败一次" in held["why"] and "最后一次尝试" in held["why"]  # one attempt is left: no reset yet
+        assert "commands" not in held
+        assert t["rounds"] == {"build": 1}  # the hold takes no repair round (D7)
+        view = board.detail(run, mgr=mgr, scrub=lambda x: x, now=time.time())["tests"]["held"]
+        assert not view.get("commands")
+        assert await run.retry(by="alice") == ["servers"]  # the person decided: this round runs
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["status"] == "done", [e["text"] for e in run.events][-4:]
+        assert len(run_checks(srv)) == 3  # the round, then the rerun
+        assert t["repair"] == {"failures_in_a_row": 0, "limit_retries": 3} and "repair_go" not in t
+
+    asyncio.run(go())
+
+
+def test_a_refusal_at_the_build_servers_bound_says_so_with_the_reset_command(tmp_path, monkeypatch):
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    run, mgr = rig.run, rig.mgr
+    srv.set(refuse=["build"], refuse_why=BOUND)  # a new run: the count was left at the bound by another
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
+        t = run.s["tests"]
+        assert run.s["servers_held"] == "checks" and t["repair"] == {"failures_in_a_row": 4, "limit_retries": 3}
+        assert "build 服务器的交叉构建已连续失败 4 次、上限 3" in t["held"]["why"]
+        assert t["held"]["commands"][0].endswith(RESET.format(conf=tilde(srv.build_conf), n=4))
+        srv.set(repair=[0, 3])  # a person reset the count
+        assert await run.retry(by="alice") == ["servers"]
+        await until(run, mgr, lambda: run.ended)
+        assert run.s["status"] == "done", [e["text"] for e in run.events][-4:]
+
+    asyncio.run(go())
+
+
+def test_the_reset_command_and_direct_mode():
+    words = ["~/s/venv/bin/python", "-I", "-m", "buildserver", "--config", "~/s/build.toml", "--role", "developer"]
+    assert servers.reset_command({"servers": {"build": words}}, 4) == "~/s/venv/bin/python " + RESET.format(
+        conf="~/s/build.toml", n=4)
+    home = str(Path.home())
+    full = [f"{home}/s/venv/bin/python", "-I", "-m", "buildserver", "--config", f"{home}/s/build.toml"]
+    assert servers.reset_command({"servers": {"build": full}}, 4).startswith("~/s/venv/bin/python -I")
+    assert "--config ~/s/build.toml " in servers.reset_command({"servers": {"build": full}}, 4)
+    assert servers.repair_count({"repair": {"failures_in_a_row": True, "limit_retries": 3}}) is None
+    run = SimpleNamespace(team={"checks": [{"name": "build", "when": "before_bench"}]},
+                          s={"tests": {"repair": {"failures_in_a_row": 4, "limit_retries": 3}}})
+    assert team_mod.TeamRun._repair_stop(run) is None and team_mod.TeamRun._reset_command(run) is None  # direct
+
+
+def test_at_the_bound_one_attempt_is_left_and_only_past_it_is_the_reset_command_given():
+    words = ["~/s/venv/bin/python", "-I", "-m", "buildserver", "--config", "~/s/build.toml"]
+    at, past = servers.at_bound(3, 3), servers.at_bound(4, 3)
+    assert "再失败一次，build 服务器就会拒绝" in at and "点「重试」用掉最后一次尝试" in at and "重置" not in at
+    assert "已经拒绝" in past and "重置计数" in past and "最后一次" not in past
+    run = SimpleNamespace(team={"connectors": "servers", "servers": {"build": words},
+                                "checks": [{"name": "build", "when": "before_bench"}]},
+                          s={"tests": {"repair": {"failures_in_a_row": 3, "limit_retries": 3}}})
+    assert team_mod.TeamRun._reset_command(run) is None and team_mod.TeamRun._repair_stop(run) == (3, 3)
+    run.s["tests"]["repair"]["failures_in_a_row"] = 4
+    assert team_mod.TeamRun._reset_command(run) == "~/s/venv/bin/python " + RESET.format(conf="~/s/build.toml", n=4)
 
 
 def test_a_refusal_at_the_console_holds_the_bench(tmp_path, monkeypatch):

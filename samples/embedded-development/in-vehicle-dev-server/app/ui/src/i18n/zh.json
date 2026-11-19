@@ -254,6 +254,7 @@
  "board.FlowStrip.39": "查的",
  "board.FlowStrip.40": "，正在重查",
  "board.FlowStrip.41": "）",
+ "board.FlowStrip.42": "build 服务器到了修复上限：要再试，先在终端里跑这条命令重置计数，再点顶部的「重试：让服务器再跑一遍」。",
  "board.Folder.1": "已经用 Kiro 打开",
  "board.Folder.2": "已经在 Finder 里打开",
  "board.Folder.3": "路径已复制",

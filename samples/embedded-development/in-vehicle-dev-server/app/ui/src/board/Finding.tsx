@@ -221,8 +221,16 @@ function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
 }
 
 function NewFinding({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onConfirm: Confirm; onCancel: () => void; onMode: (x: boolean) => void }) {
-  const [f, setF] = useState<FindingBody>(() => findingPreset(run)!)
-  const [extra, setExtra] = useState('')
+  // the app's prefill (GET /board tests.held.prefill): what the check's role said, for the person to check and send
+  const said = (check: string) => run.tests.held?.prefill?.find((p) => p.check === check)
+  const preset = (check?: string) => {
+    const p = findingPreset(run, check)!
+    const s = said(p.check)
+    if (!s) return p
+    return { ...p, note: s.note, role: implementers(run).some((l) => l.key === s.role) ? s.role : p.role }
+  }
+  const [f, setF] = useState<FindingBody>(() => preset())
+  const [extra, setExtra] = useState(() => said(f.check)?.paths.join(' ') ?? '')
   const [facts, setFacts] = useState('')
   const [cites, setCites] = useState('')
   const [busy, setBusy] = useState(false)
@@ -253,7 +261,13 @@ function NewFinding({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
       <div className="kt-start-row">
         {extendable(run).length > 0 && <ModePick extending={false} onPick={onMode} />}
         <label className="kt-start-field is-narrow"><span>{tr('board.Finding.38')}</span>
-          <select aria-label={tr('board.Finding.38')} value={f.check} onChange={(e) => setF({ ...findingPreset(run, e.target.value)!, by: f.by, note: f.note, continue: f.continue })}>
+          <select aria-label={tr('board.Finding.38')} value={f.check} onChange={(e) => {
+            const p = preset(e.target.value)
+            const [was, now] = [said(f.check), said(p.check)] // a prefill of the check left goes with it
+            const note = now ? p.note : was && f.note === was.note ? '' : f.note
+            setF({ ...p, by: f.by, note, continue: f.continue })
+            setExtra((x) => now ? now.paths.join(' ') : was && x === was.paths.join(' ') ? '' : x)
+          }}>
             {held.checks.map((c) => <option key={c}>{c}</option>)}
           </select>
         </label>

@@ -539,7 +539,20 @@ when it ends is not counted. The figure counts the app's calls; the agents make 
    after the fourth failing build, once a person had registered it (D15), so the server refused the next build
    (`cross attempts failed 4 times in a row`) while the app still allowed rounds. A person reset the count with
    `buildserver.admin reset-repair` and 重试 ran the round again. The two counts disagree whenever a fix needs a
-   person first.
+   person first. What the app does about it (2026-11-18, after `r1117e6af` stopped on the bare refusal): mcp/build
+   has no read-only tool for the count, but every `run_check build` answer carries `repair` (`failures_in_a_row`,
+   `limit_retries`), and the app keeps the last one with the run. Before a round of the checks before the bench,
+   when one more failure reaches the bound (`failures_in_a_row >= limit_retries`), it calls nothing and holds the
+   round for a person: the board says how many cross attempts failed in a row and the bound. mcp/build refuses only
+   past the bound, so at `failures_in_a_row == limit_retries` the board says that one more failure makes the server
+   refuse and that 重试 uses the last attempt, with no reset command (a reset there would wipe the server's count
+   early). Past the bound, the board gives the `buildserver.admin reset-repair` command with the build server's
+   config file from the team file. The app never resets the count. A person's 重试 there lets that one round run. A
+   refusal at the bound (a new run that finds the count past it) is worded the same, with the same command. The app
+   does not read the server's state folder, and a reset by hand is seen only in the next answer. The hold before
+   the call is a convenience only: the roles' own `run_check build` calls move the server's count too, between the
+   app's rounds, so the count the app keeps can be behind. What holds is mapping the server's refusal to the same
+   hold and command.
 3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
    Not decided: a triage tool of the server, or a person copying the approved file into place.
 4. **Release.** #42 (merged) lets `run_check release` read the bench server's published results; using it, and the
@@ -680,6 +693,17 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   unchanged, the paths added to the role and one more round of that check. When the role said in its reply that the
   cause is in a file outside its scope, or a unit-test finding has no test naming it (TR §4.1), the board proposes
   the paths (`tests.held.suggest`) and the person agrees with one click; each is recorded as the person's action.
+  Seen again in `r1117e6af`: the developer named the toolchain file under a heading with F-032, in other sentences,
+  as "不在我能改的文件里" and "加进我的可改范围", so nothing was proposed and the role went round with `src/main.cpp`
+  only. The app now reads a reply by block (fenced code left out; a blank line, a heading or a bold-only line starts
+  a block), and a sentence that says where the cause is or that the file is not the role's gives a path to the
+  finding (or, for a new finding, the check) named nearest before it in the block, unless the path follows 不在 or
+  不是. It quotes that sentence as the note and fills in 再加路径 and the note of a new finding the same way
+  (`tests.held.prefill`), at most 10 paths. A path is filled in only when it is a file of the project outside the
+  role's scope, not under `checks/`, `mcp/`, `bench/` or `.kiro/`, not `docs/aidlc/decisions.md`, and not in
+  another role's scope; the person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
+  can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
+  since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
   justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the
   board now offers 按评审意见再改一轮 (`review_redo`) with a decision prefilled for a justification the review names

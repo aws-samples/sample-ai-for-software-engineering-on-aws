@@ -254,6 +254,7 @@
  "board.FlowStrip.39": "",
  "board.FlowStrip.40": ", checking again",
  "board.FlowStrip.41": ")",
+ "board.FlowStrip.42": "At the build server's bound: reset its count with this command, then Retry at the top.",
  "board.Folder.1": "Opened in Kiro",
  "board.Folder.2": "Opened in Finder",
  "board.Folder.3": "Path copied",
