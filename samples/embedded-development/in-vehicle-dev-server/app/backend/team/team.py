@@ -59,24 +59,72 @@ REVIEW_KEEP = 12_000  # characters of a 要改 review a bounced role is given
 TALK_KEEP = 2_000  # characters of a role's answer in a 讨论 at its gate, kept for the gate card
 DECISIONS_FILE = "docs/aidlc/decisions.md"  # what people decided at the gates, written into the run branch by the app
 TRIAGE_FILE = "triage.json"  # the approved triage, beside the run's repository (runs/<run>/), out of the agents' worktrees
-PATH_SAID = re.compile(r"(?<![\w/.-])((?:[\w-]+/)+[\w.-]+\.[A-Za-z]\w*|CMakeLists\.txt)(?![\w/])")  # a project path in a reply
+# a project path in a reply. shortcut: a dot-directory (.github/…, .kiro/…) is never matched, a silent miss that is
+# safe (nothing there is a role's to be given); allow a leading dot here if a cause there must be proposed.
+PATH_SAID = re.compile(r"(?<![\w/.-])((?:[\w-]+/)+[\w.-]+\.[A-Za-z]\w*|CMakeLists\.txt)(?![\w/])")
 # a role saying where the cause is, or that a file is not its to change
 CAUSE_SAID = re.compile(r"根因|真正的原因|原因是|不归我|改不了|可写范围|可改范围|能改的|不在我|没有权限|分给")
+NOT_SAID = re.compile(r"(?:不在|不是)\s*[`*]*$")  # right before a path: 根因不在 X，在 Y names Y, not X
+FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,}).*?(?:^[ \t]*\1[ \t]*$|\Z)", re.M | re.S)  # a fenced code block, to its end
+# a reply's blocks: split at blank lines, headings and lines that are bold only (**F-032**)
+BLOCK_SPLIT = re.compile(r"\n[ \t]*\n|\n(?=[ \t]*(?:#{1,6}[ \t]|\*\*[^\n]*\*\*[ \t]*$))", re.M)
+FINDING_SAID = re.compile(r"F-\d{3}(?:\s*[~～–-]\s*F-\d{3})?")  # a finding, or a range of them, named in a reply
+# what a role is never given by a proposal or a person: what judges it, the servers, the bench, the gates' record
+FENCED = ("checks/**", "mcp/**", "bench/**", ".kiro/**", DECISIONS_FILE)
+PROPOSED_MAX = 10  # paths proposed for one finding or check at most
 
 
-def cause_paths(replies: list[str], about: Any, usable: Any) -> tuple[list[str], str]:
-    """The files a role said the cause is in, or are not its to change: in a paragraph of its replies that *about*
-    accepts (it names the finding or the check), each path of a sentence saying so that *usable* accepts (a file of
-    the project outside the role's scope). And the first of those sentences, in the role's words ('' for none)."""
+def cause_paths(replies: list[str], mention: re.Pattern[str], mine: Callable[[str], bool],
+                usable: Any) -> tuple[list[str], str]:
+    """The files a role said the cause is in, or are not its to change, for one finding or check: in a block of its
+    replies (fenced code left out), each path of a sentence saying so that *usable* accepts (a file of the project
+    the role may be given), when the nearest *mention* (of a finding, or a check) before it in the block is one that
+    *mine* accepts. And the first of those sentences, in the role's words ('' for none).
+
+    shortcut: only the nearest mention counts, so in "F-032 和 F-040 的根因都在 X" X goes to F-040 alone; read lists
+    of mentions if a role's replies need it."""
     paths: list[str] = []
     said = ""
-    for block in (b for r in replies for b in re.split(r"\n\s*\n", r) if about(b)):
-        for s in re.split(r"[。\n；;]", block):
-            got = ([p for p in dict.fromkeys(PATH_SAID.findall(s)) if p not in paths and usable(p)]
-                   if CAUSE_SAID.search(s) else [])
+    for block in (b for r in replies for b in BLOCK_SPLIT.split(FENCE.sub("", r))):
+        named = [(m.start(), mine(m.group())) for m in mention.finditer(block)]
+        for s in re.finditer(r"[^。\n；;]+", block):
+            if not CAUSE_SAID.search(s.group()):
+                continue
+            got: list[str] = []
+            for p in PATH_SAID.finditer(block, s.start(), s.end()):
+                near = [ok for at, ok in named if at < p.start()]
+                if (near and near[-1] and not NOT_SAID.search(block, 0, p.start()) and p.group(1) not in paths
+                        and p.group(1) not in got and usable(p.group(1))):
+                    got.append(p.group(1))
             paths += got
-            said = said or (re.sub(r"\*\*|`", "", s).strip(" -*") if got else "")
-    return paths, said[:300]
+            said = said or (re.sub(r"\*\*|`", "", s.group()).strip(" -*") if got else "")
+    return paths[:PROPOSED_MAX], said[:300]
+
+
+def fenced(globs: list[str]) -> list[str]:
+    """The paths or globs a person asked for that could reach what a role is never given (FENCED)."""
+    return [g for g in globs if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED)]
+
+
+def _globs_meet(a: list[str], b: list[str]) -> bool:
+    """Whether two globs, split at ``/``, may match one path: a ``**`` part (or a trailing ``/``) may match anything
+    from there on, and two parts that are both wild are taken to meet."""
+    a = [*a[:-1], "**"] if a and a[-1] == "" else a
+    b = [*b[:-1], "**"] if b and b[-1] == "" else b
+    if not a or not b:
+        return all(p == "**" for p in a + b)
+    x, y = a[0], b[0]
+    if "**" in (x, y):
+        return True
+    wild = lambda p: "*" in p or "?" in p  # noqa: E731
+    part = lambda p: "".join("[^/]*" if c == "*" else "." if c == "?" else re.escape(c) for c in p)  # noqa: E731
+    if wild(x) and wild(y):
+        meet = True
+    elif wild(x) or wild(y):
+        meet = bool(re.fullmatch(part(x), y) if wild(x) else re.fullmatch(part(y), x))
+    else:
+        meet = x == y
+    return meet and _globs_meet(a[1:], b[1:])
 
 
 def _ids_in(text: str) -> set[str]:
@@ -1048,6 +1096,10 @@ class TeamRun:
             if role not in self.impl or not self.roles[role]["writable"]:
                 choices = "、".join(self.impl)
                 raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}）", str(role))
+            bad = fenced(body["paths"])
+            if bad:  # what judges the role, the servers, the bench or the gates' record: never the role's to change
+                raise FindingRequestError(f"{'、'.join(bad)} 会碰到检查、服务器、台架或门禁决定的文件"
+                                          f"（{'、'.join(FENCED)}），不能交给角色改", ", ".join(bad))
             k, path = self._knowledge(), Path(self.s["repo"]).parent / TRIAGE_FILE
             data = self._approved_triage()
             if k is None or data is None:
@@ -1121,11 +1173,11 @@ class TeamRun:
             role = owners[0] if owners else next(iter(self.impl), None)
             if not mine or role is None:
                 continue
-            first, globs, ids = mine[0], self.roles[role]["writable"], {f["id"] for f in mine}
+            first, ids = mine[0], {f["id"] for f in mine}
             loc = str(first["added"].get("location") or "")
             same = [f["id"] for f in mine[1:] if f["added"].get("location") == loc]
-            free = self._free(root, globs)
-            paths, said = cause_paths(self._replies(role), lambda b: bool(ids & _ids_in(b)), free)
+            free = self._free(root, role)
+            paths, said = cause_paths(self._replies(role), FINDING_SAID, lambda m: bool(ids & _ids_in(m)), free)
             why = [f"{self.title(role)}说：{said}"] if paths else []
             reasons = " ".join(str(x) for x in (rows.get(c) or {}).get("reasons") or [])
             for f in mine:
@@ -1137,15 +1189,20 @@ class TeamRun:
                     why.append(f"{f['id']} 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 {test} 里加")
             if paths:
                 note = "；".join(why) + (f"。{'、'.join(same)} 和 {first['id']} 是同一个失败，提交说明一并写上 {first['id']}、{'、'.join(same)}" if same else "")
-                out.append({"extend": first["id"], "check": c, "role": role, "paths": paths, "note": note[:1000]})
+                out.append({"extend": first["id"], "check": c, "role": role, "paths": paths[:PROPOSED_MAX],
+                            "note": note[:1000]})
         return out
 
-    @staticmethod
-    def _free(root: Path, globs: list[str]) -> Any:
-        """Whether a path a role named can be given to it: a file of the project, outside its scope."""
+    def _free(self, root: Path, role: str) -> Any:
+        """Whether a path a role named can be proposed to a person for it: a file of the project, outside the role's
+        scope, not one a role is never given (FENCED) and not in another role's scope."""
+        others = [r["writable"] for k, r in self.roles.items() if k != role and r.get("writable")]
+
         def free(p: str) -> bool:
             f = root / p
-            return f.is_file() and f.resolve().is_relative_to(root.resolve()) and not gitwork.matches(p, globs)
+            return (f.is_file() and f.resolve().is_relative_to(root.resolve())
+                    and not gitwork.matches(p, self.roles[role]["writable"]) and not gitwork.matches(p, list(FENCED))
+                    and not any(gitwork.matches(p, g) for g in others))
         return free
 
     def _replies(self, role: str) -> list[str]:
@@ -1160,15 +1217,15 @@ class TeamRun:
         if not held or not wt:
             return []
         rows = {r["name"]: r for r in t.get("checks") or []}
+        names = sorted({c["name"] for c in self.team.get("checks") or []} | set(held.get("checks") or []), key=len)
+        word = re.compile(rf"(?<![\w/.-])(?:{'|'.join(re.escape(n) for n in names[::-1])})(?![\w/.-])")
         out: list[dict[str, Any]] = []
         for c in held.get("checks") or []:
             owners = [o for o in (rows.get(c) or {}).get("owners") or [] if o in self.impl]
             role = owners[0] if owners else next(iter(self.impl), None)
             if role is None:
                 continue
-            word = re.compile(rf"(?<![\w/.-]){re.escape(c)}(?![\w/.-])")
-            free = self._free(Path(wt), self.roles[role]["writable"])
-            paths, said = cause_paths(self._replies(role), word.search, free)
+            paths, said = cause_paths(self._replies(role), word, lambda m, c=c: m == c, self._free(Path(wt), role))
             if paths:
                 out.append({"check": c, "role": role, "paths": paths, "note": f"{self.title(role)}说：{said}"})
         return out

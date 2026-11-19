@@ -690,10 +690,15 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   the paths (`tests.held.suggest`) and the person agrees with one click; each is recorded as the person's action.
   Seen again in `r1117e6af`: the developer named the toolchain file under a heading with F-032, in other sentences,
   as "不在我能改的文件里" and "加进我的可改范围", so nothing was proposed and the role went round with `src/main.cpp`
-  only. The app now reads a reply by paragraph (the paragraph names the finding; a sentence of it says where the
-  cause is or that the file is not the role's), quotes that sentence as the note, and fills in 再加路径 and the note
-  of a new finding the same way (`tests.held.prefill`, by the paragraph naming the check). A path is filled in only
-  when it is a file of the project outside the role's scope; the person checks it and sends it.
+  only. The app now reads a reply by block (fenced code left out; a blank line, a heading or a bold-only line starts
+  a block), and a sentence that says where the cause is or that the file is not the role's gives a path to the
+  finding (or, for a new finding, the check) named nearest before it in the block, unless the path follows 不在 or
+  不是. It quotes that sentence as the note and fills in 再加路径 and the note of a new finding the same way
+  (`tests.held.prefill`), at most 10 paths. A path is filled in only when it is a file of the project outside the
+  role's scope, not under `checks/`, `mcp/`, `bench/` or `.kiro/`, not `docs/aidlc/decisions.md`, and not in
+  another role's scope; the person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
+  can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
+  since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
   justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the
   board now offers 按评审意见再改一轮 (`review_redo`) with a decision prefilled for a justification the review names

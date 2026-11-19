@@ -237,6 +237,79 @@ def test_a_new_finding_is_filled_in_with_the_files_the_role_said_for_its_check(t
     assert svc.board(run.rid)["run"]["tests"]["held"]["prefill"][0]["paths"] == ["cmake/tc.cmake"]
 
 
+def proposals(tmp_path, monkeypatch, reply, files=()):
+    """A run held with F-032 added for build, the files in its run work tree and *reply* the developer's last: what
+    the board proposes for F-032 (给已补登的发现加路径) and fills in for each check (补登发现)."""
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    wt = Path(run.s["run_wt"])
+    for p in ("cmake/tc.cmake", "cmake/other.cmake", *files):
+        (wt / p).parent.mkdir(parents=True, exist_ok=True)
+        (wt / p).write_text("x\n")
+    asyncio.run(svc_of(tmp_path, run, mgr).finding(run.rid, handlers.finding_body(
+        {**F032, "location": "src/a.cpp:12", "paths": ["src/a.cpp"], "continue": False})))
+    run.lane("dev")["attempts"].append({**run.lane("dev")["attempts"][-1], "reply": reply})
+    return ({s["check"]: s["paths"] for s in run.path_suggestions()},
+            {s["check"]: s["paths"] for s in run.finding_prefill()})
+
+
+FENCED = ("checks/build.sh", "mcp/build/core.py", "bench/cc1.sh", "docs/aidlc/decisions.md", "src/b.cpp")
+
+
+def test_the_proposal_never_offers_the_checks_the_servers_the_bench_the_decisions_or_another_roles_files(
+        tmp_path, monkeypatch):
+    reply = ("**build，F-032**\n- F-032 改不了：`checks/build.sh` 把阈值写死了，`mcp/build/core.py` 也是。\n"
+             "- 根因在 `bench/cc1.sh`、`docs/aidlc/decisions.md` 和 `src/b.cpp`，不归我。\n"
+             "- 真正的原因是 `cmake/tc.cmake`。")
+    suggest, prefill = proposals(tmp_path, monkeypatch, reply, FENCED)  # src/b.cpp is dev2's
+    assert suggest == {"build": ["cmake/tc.cmake"]} and prefill == {"build": ["cmake/tc.cmake"]}
+
+
+def test_a_person_may_not_give_a_role_the_checks_the_servers_the_bench_or_the_decisions(tmp_path, monkeypatch):
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+
+    async def go():
+        for paths in (["checks/build.sh"], ["cmake/tc.cmake", "mcp/**"], ["bench/"], [".kiro/settings/cli.json"],
+                      ["docs/aidlc/decisions.md"], ["docs/**"], ["**/*.sh"], ["*/build.sh"]):
+            with pytest.raises(httpkit.AppError) as e:
+                await svc.finding(run.rid, handlers.finding_body({**F032, "paths": paths}))
+            assert e.value.status == 400 and "不能交给角色" in str(e.value), paths
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+        # another role's file, typed by the person, is the person's call (TR §4.1: a test for a developer's finding)
+        await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["src/b.cpp", "docs/fix.md", "cmake/*"]}))
+        assert run.roles["dev"]["writable"] == ["src/a.*", "src/b.cpp", "docs/fix.md", "cmake/*"]
+        with pytest.raises(httpkit.AppError) as e:  # nor by extending a finding added already
+            await svc.finding(run.rid, handlers.finding_body(
+                {"extend": "F-032", "role": "dev", "paths": ["checks/lib/common.py"], "by": "王工"}))
+        assert e.value.status == 400 and e.value.extra.get("detail") == "checks/lib/common.py"
+
+    asyncio.run(go())
+
+
+def test_a_path_goes_only_to_the_finding_or_check_named_nearest_before_it(tmp_path, monkeypatch):
+    reply = ("**F-032**\n- 根因在 `cmake/tc.cmake`\n**F-099**\n- 根因在 `cmake/other.cmake`\n\n"
+             "F-032 和 F-040 都没修好：F-040 的根因在 `cmake/x.cmake`。\n\n"
+             "## unit\n- 根因在 `cmake/u.cmake`\n### build\n- 根因在 `cmake/b.cmake`")
+    suggest, prefill = proposals(tmp_path, monkeypatch, reply, ("cmake/x.cmake", "cmake/u.cmake", "cmake/b.cmake"))
+    assert suggest == {"build": ["cmake/tc.cmake"]}
+    assert prefill == {"unit": ["cmake/u.cmake"], "build": ["cmake/b.cmake"]}
+
+
+def test_a_fenced_code_block_in_a_reply_is_not_read(tmp_path, monkeypatch):
+    reply = ("F-032 的根因在 `cmake/tc.cmake`。\n\n```sh\n# F-032 根因在 cmake/other.cmake\n\n"
+             "# build 根因在 cmake/x.cmake\n```\n\n~~~\nbuild 根因在 cmake/y.cmake\n~~~")
+    suggest, prefill = proposals(tmp_path, monkeypatch, reply, ("cmake/x.cmake", "cmake/y.cmake"))
+    assert suggest == {"build": ["cmake/tc.cmake"]} and prefill == {}
+
+
+def test_a_path_said_not_to_be_the_cause_is_left_out_and_at_most_ten_are_proposed(tmp_path, monkeypatch):
+    many = [f"cmake/m{i}.cmake" for i in range(12)]
+    reply = ("build，F-032：根因不在 `cmake/tc.cmake`，在 `cmake/other.cmake`；根因也不是 cmake/x.cmake。\n\n"
+             "F-032 的根因在 " + "、".join(f"`{p}`" for p in many))
+    suggest, _ = proposals(tmp_path, monkeypatch, reply, ("cmake/x.cmake", *many))
+    assert suggest == {"build": ["cmake/other.cmake", *many[:9]]}
+
+
 def test_extending_refuses_an_id_not_added_by_a_check(tmp_path, monkeypatch):
     _, mgr, run, _ = held_run(tmp_path, monkeypatch)
     svc = svc_of(tmp_path, run, mgr)
