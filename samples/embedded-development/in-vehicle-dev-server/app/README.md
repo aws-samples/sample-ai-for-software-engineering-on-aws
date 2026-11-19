@@ -137,8 +137,9 @@ One run uses the servers at a time. Approve each bench request at `bench/console
 not approve it in this mode, unless `servers.board_decides` is true (the trial only, as in direct mode, D3).
 What a server refuses holds the run for a person; 重试 asks the server again.
 When the build server's last `run_check build` answer says one more cross failure reaches its bound (TR §5.1), the
-next round is held before any call, with the `buildserver.admin reset-repair` command on the board; the app never
-resets the count, and 重试 there runs that round (D17, open question 2).
+next round is held before any call, and 重试 there runs that round with the server's last attempt. Once the server
+refuses (past the bound) the board gives the `buildserver.admin reset-repair` command; the app never resets the
+count (D17, open question 2).
 
 ## Test
 

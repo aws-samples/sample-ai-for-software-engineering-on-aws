@@ -55,8 +55,12 @@ def repair_count(out: Any) -> dict[str, int] | None:
 
 
 def at_bound(n: int, m: int) -> str:
-    """Why a round is held at the build server's own bound (TR §5.1), for a person."""
-    return f"build 服务器的交叉构建已连续失败 {n} 次、上限 {m}（TR §5.1 的重试次数），再试一次前需要你决定"
+    """Why a round is held at the build server's own bound (TR §5.1), for a person. mcp/build refuses only once more
+    than *m* attempts in a row failed, so at ``n == m`` one attempt is left; past it the server refuses."""
+    said = f"build 服务器的交叉构建已连续失败 {n} 次、上限 {m}（TR §5.1 的重试次数）"
+    if n > m:
+        return f"{said}，build 服务器已经拒绝交叉构建：你决定以后，用下面的命令重置计数，再点「重试」"
+    return f"{said}：再失败一次，build 服务器就会拒绝之后的交叉构建。点「重试」用掉最后一次尝试"
 
 
 def reset_command(team: dict[str, Any], n: int) -> str:

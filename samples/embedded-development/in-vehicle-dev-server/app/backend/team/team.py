@@ -1005,7 +1005,7 @@ class TeamRun:
                 if held == "checks":
                     t = self.s["tests"]
                     t.update(held=None, head=None)
-                    if self._reset_command():  # the person decided at the build server's bound: this round runs
+                    if self._repair_stop():  # the person decided at the build server's bound: this round runs
                         t["repair_go"] = True
                     self.s["needs_test"] = True
                 self.say("run", "retry.servers", {"by": by, "note": note},
@@ -1486,10 +1486,11 @@ class TeamRun:
         return n, m
 
     def _reset_command(self) -> str | None:
-        """The build server's reset-repair command for a person, when its repair count is at the bound."""
+        """The build server's reset-repair command for a person, once its repair count is past the bound (it refuses
+        then); at the bound one attempt is left, and resetting there would wipe the server's count early."""
         r = self.s["tests"].get("repair") or {}
         n, m = r.get("failures_in_a_row"), r.get("limit_retries")
-        if servers_mod.on(self.team) and isinstance(n, int) and isinstance(m, int) and n >= m:
+        if servers_mod.on(self.team) and isinstance(n, int) and isinstance(m, int) and n > m:
             return servers_mod.reset_command(self.team, n)
         return None
 

@@ -543,11 +543,16 @@ when it ends is not counted. The figure counts the app's calls; the agents make 
    has no read-only tool for the count, but every `run_check build` answer carries `repair` (`failures_in_a_row`,
    `limit_retries`), and the app keeps the last one with the run. Before a round of the checks before the bench,
    when one more failure reaches the bound (`failures_in_a_row >= limit_retries`), it calls nothing and holds the
-   round for a person: the board says how many cross attempts failed in a row and the bound, and gives the
-   `buildserver.admin reset-repair` command with the build server's config file from the team file. The app never
-   resets the count. A person's 重试 there lets that one round run. A refusal at the bound (a new run that finds the
-   count at it) is worded the same, with the same command. The app does not read the server's state folder, and a
-   reset by hand is seen only in the next answer.
+   round for a person: the board says how many cross attempts failed in a row and the bound. mcp/build refuses only
+   past the bound, so at `failures_in_a_row == limit_retries` the board says that one more failure makes the server
+   refuse and that 重试 uses the last attempt, with no reset command (a reset there would wipe the server's count
+   early). Past the bound, the board gives the `buildserver.admin reset-repair` command with the build server's
+   config file from the team file. The app never resets the count. A person's 重试 there lets that one round run. A
+   refusal at the bound (a new run that finds the count past it) is worded the same, with the same command. The app
+   does not read the server's state folder, and a reset by hand is seen only in the next answer. The hold before
+   the call is a convenience only: the roles' own `run_check build` calls move the server's count too, between the
+   app's rounds, so the count the app keeps can be behind. What holds is mapping the server's refusal to the same
+   hold and command.
 3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
    Not decided: a triage tool of the server, or a person copying the approved file into place.
 4. **Release.** #42 (merged) lets `run_check release` read the bench server's published results; using it, and the

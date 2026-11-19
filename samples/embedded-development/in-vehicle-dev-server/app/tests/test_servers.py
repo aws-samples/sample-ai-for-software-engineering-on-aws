@@ -373,12 +373,12 @@ def test_one_failure_before_the_build_servers_bound_the_round_waits_for_a_person
         assert len(run_checks(srv)) == 1
         assert run.s["status"] == "failed" and run.s["servers_held"] == "checks"
         held = t["held"]
-        assert "build 服务器的交叉构建已连续失败 3 次、上限 3" in held["why"] and "拒绝" not in held["why"]
-        assert len(held["commands"]) == 1
-        assert held["commands"][0].endswith(RESET.format(conf=tilde(srv.build_conf), n=3))
+        assert "build 服务器的交叉构建已连续失败 3 次、上限 3" in held["why"]
+        assert "再失败一次" in held["why"] and "最后一次尝试" in held["why"]  # one attempt is left: no reset yet
+        assert "commands" not in held
         assert t["rounds"] == {"build": 1}  # the hold takes no repair round (D7)
         view = board.detail(run, mgr=mgr, scrub=lambda x: x, now=time.time())["tests"]["held"]
-        assert view["commands"] == held["commands"]  # the board shows it with the hold
+        assert not view.get("commands")
         assert await run.retry(by="alice") == ["servers"]  # the person decided: this round runs
         await until(run, mgr, lambda: run.ended)
         assert run.s["status"] == "done", [e["text"] for e in run.events][-4:]
@@ -420,6 +420,19 @@ def test_the_reset_command_and_direct_mode():
     run = SimpleNamespace(team={"checks": [{"name": "build", "when": "before_bench"}]},
                           s={"tests": {"repair": {"failures_in_a_row": 4, "limit_retries": 3}}})
     assert team_mod.TeamRun._repair_stop(run) is None and team_mod.TeamRun._reset_command(run) is None  # direct
+
+
+def test_at_the_bound_one_attempt_is_left_and_only_past_it_is_the_reset_command_given():
+    words = ["~/s/venv/bin/python", "-I", "-m", "buildserver", "--config", "~/s/build.toml"]
+    at, past = servers.at_bound(3, 3), servers.at_bound(4, 3)
+    assert "再失败一次，build 服务器就会拒绝" in at and "点「重试」用掉最后一次尝试" in at and "重置" not in at
+    assert "已经拒绝" in past and "重置计数" in past and "最后一次" not in past
+    run = SimpleNamespace(team={"connectors": "servers", "servers": {"build": words},
+                                "checks": [{"name": "build", "when": "before_bench"}]},
+                          s={"tests": {"repair": {"failures_in_a_row": 3, "limit_retries": 3}}})
+    assert team_mod.TeamRun._reset_command(run) is None and team_mod.TeamRun._repair_stop(run) == (3, 3)
+    run.s["tests"]["repair"]["failures_in_a_row"] = 4
+    assert team_mod.TeamRun._reset_command(run) == "~/s/venv/bin/python " + RESET.format(conf="~/s/build.toml", n=4)
 
 
 def test_a_refusal_at_the_console_holds_the_bench(tmp_path, monkeypatch):
