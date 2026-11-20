@@ -110,13 +110,25 @@ def test_which_run_the_board_shows_and_the_runs_order(tmp_path):
     old.s["status"] = "stopped"
     assert build([old, new], mgr, tools)["run"]["id"] == "r1002bbbb"  # else the newest
     assert build([old, new], mgr, tools, "r1001aaaa")["run"]["id"] == "r1001aaaa"
-    assert build([], None, None) == {"at": NOW, "runs": [], "run": None}
+    assert build([], None, None) == {"at": NOW, "host_os": board.host_os(), "runs": [], "run": None}
     for i in range(250):
         old.emit("tool", f"后端：{i}", role="backend")
     events = build([old], mgr, tools)["run"]["events"]
     assert len(events) == 200 and events[-1]["text"] == "后端：249" and events[0]["seq"] < events[-1]["seq"]
     card = build([old], mgr, tools)["runs"][0]
     assert card["roles_done"] == 1 and card["roles_total"] == 8 and card["tests"] == {"passed": 1, "failed": 1, "total": 2}
+
+
+def test_the_board_says_which_desktop_the_runs_are_on_so_the_words_follow_the_host(tmp_path, monkeypatch):
+    """The board is often read from another machine (an ssh tunnel to a Kiro Crew on a Linux host), so ui/src/i18n
+    picks Finder or the file manager by this field, not by the browser's user agent. service.py's open_folder opens
+    the folder by the same answer, so the words and the behaviour cannot disagree."""
+    mgr, tools = FakeManager(), None
+    run = rich_run(tmp_path, mgr, tools)
+    for system, want in (("Darwin", "mac"), ("Linux", "linux")):
+        monkeypatch.setattr(board.platform, "system", lambda s=system: s)
+        assert board.host_os() == want
+        assert build([run], mgr, tools)["host_os"] == want
 
 
 def test_a_fresh_run_before_setup_is_a_valid_board(tmp_path):

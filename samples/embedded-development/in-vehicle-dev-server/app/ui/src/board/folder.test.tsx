@@ -31,13 +31,15 @@ describe('打开文件夹', () => {
     expect(screen.queryByRole('region', { name: '项目文件夹' })).toBeNull()
   })
 
-  test('on a Linux host the board says file manager, not Finder, and this host, not this Mac', async () => {
+  test('the words for the host come from the backend: a Linux host, read in a Mac browser', async () => {
     const user = userEvent.setup()
     const ua = navigator.userAgent
-    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (X11; Linux x86_64)', configurable: true })
+    // the board read from a Mac over an ssh tunnel, while Kiro Crew and the runs are on a Linux host
+    const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
+    Object.defineProperty(navigator, 'userAgent', { value: MAC_UA, configurable: true })
     try {
       setApiRoutes({
-        [`GET ${API}/board*`]: () => runningBoard(),
+        [`GET ${API}/board*`]: () => ({ ...runningBoard(), host_os: 'linux' }),
         [`POST ${API}/runs/r1006a/open`]: () => ({ ok: true, path: '/x', app: 'finder' }),
       })
       render(<TeamPage pollMs={60_000} />)
@@ -48,6 +50,24 @@ describe('打开文件夹', () => {
       const panel = screen.getByRole('region', { name: '项目文件夹' })
       await user.click(within(panel).getByRole('button', { name: '📁 在 文件管理器 打开' }))
       expect(await within(panel).findByRole('status')).toHaveTextContent('已经在 文件管理器 里打开')
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
+    }
+  })
+
+  test('before the first snapshot, and from a backend that does not say, this browser decides', async () => {
+    const ua = navigator.userAgent
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (X11; Linux x86_64)', configurable: true })
+    try {
+      const older = () => {
+        const { host_os: _said, ...b } = runningBoard() // an older backend: the field is not in its answer
+        return b
+      }
+      setApiRoutes({ [`GET ${API}/board*`]: older })
+      render(<TeamPage pollMs={60_000} />)
+      await screen.findAllByTestId('kt-lane')
+      expect(screen.getByRole('button', { name: '📁 文件夹' }))
+        .toHaveAttribute('title', '项目在这台主机上的哪个文件夹：在 文件管理器 或 Kiro 里打开')
     } finally {
       Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
     }

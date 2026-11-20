@@ -8,7 +8,6 @@ import contextlib
 import hashlib
 import json
 import logging
-import platform
 import re
 import shutil
 import time
@@ -507,9 +506,9 @@ class Service:
         if role is not None and not isinstance(role, str):
             raise AppError("role 必须是角色名", "invalid_role")
         if app not in ("finder", "kiro"):
-            raise AppError("app 只能是 finder 或 kiro", "invalid_app")
+            raise AppError("只能用文件管理器或 Kiro 打开", "invalid_app")
         path = self.folder(rid, role)
-        if platform.system() == "Darwin":
+        if board.host_os() == "mac":
             cmd = ["/usr/bin/open", str(path)] if app == "finder" else ["/usr/bin/open", "-a", "Kiro", str(path)]
         else:
             name = "xdg-open" if app == "finder" else "kiro"

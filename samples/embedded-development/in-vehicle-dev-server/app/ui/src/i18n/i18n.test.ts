@@ -8,7 +8,7 @@ import ts from 'typescript'
 import { describe, expect, test } from 'vitest'
 import zh from './zh.json'
 import en from './en.json'
-import { fileApp, format, lang, locale, t, thisHost } from './index'
+import { fileApp, format, lang, locale, setHostOs, t, thisHost } from './index'
 import { evText, msgText } from './events'
 
 const CJK = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/
@@ -35,18 +35,27 @@ describe('the dictionaries', () => {
     expect(format('{a}/{b}', { a: 1 })).toBe('1/{b}')
   })
 
-  test('the words for the host follow the desktop this board runs on: a Mac, else a Linux file manager', () => {
+  test('the words for the host come from the backend (board.py host_os), with this browser as the fallback', () => {
     const ua = navigator.userAgent
-    const say = (value: string) => {
+    const say = (value: string, os?: string | null) => {
       Object.defineProperty(navigator, 'userAgent', { value, configurable: true })
+      setHostOs(os)
       return [fileApp(), thisHost()]
     }
+    const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) KiroCrew'
+    const LINUX_UA = 'Mozilla/5.0 (X11; Linux x86_64) KiroCrew'
     try {
-      expect(say('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) KiroCrew')).toEqual(['Finder', '这台 Mac'])
-      expect(say('Mozilla/5.0 (X11; Linux x86_64) KiroCrew')).toEqual(['文件管理器', '这台主机'])
-      expect(say(ua)).toEqual(['Finder', '这台 Mac']) // jsdom: taken for a Mac, as the sample's own host is
+      // what the backend says wins: the board is often read from another machine (an ssh tunnel)
+      expect(say(MAC_UA, 'linux')).toEqual(['文件管理器', '这台主机'])
+      expect(say(LINUX_UA, 'mac')).toEqual(['Finder', '这台 Mac'])
+      // no snapshot yet, or a backend that does not say: this browser's platform, as before
+      expect(say(MAC_UA, undefined)).toEqual(['Finder', '这台 Mac'])
+      expect(say(LINUX_UA, null)).toEqual(['文件管理器', '这台主机'])
+      expect(say(LINUX_UA, 'solaris')).toEqual(['文件管理器', '这台主机']) // not a platform the board knows
+      expect(say(ua, undefined)).toEqual(['Finder', '这台 Mac']) // jsdom: taken for a Mac, as this sample's host is
     } finally {
       Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
+      setHostOs(null)
     }
   })
 })

@@ -19,6 +19,7 @@ export type LaneStatus =
 
 export type Board = {
   at: number
+  host_os?: 'mac' | 'linux' // the desktop the runs are on, as the backend sees it (board.py): the words follow it
   runs: RunCard[] // newest first
   run: RunDetail | null // the selected run (?run=), else the newest active one, else the newest
 }

@@ -44,10 +44,20 @@ export function t(key: string, params?: Params): string {
 /** Whether a key exists (an event code the dictionary knows). */
 export const has = (key: string): boolean => key in DICTS.zh
 
-/** This board runs beside the Kiro Crew that serves it, so this browser's platform is the host's. A Linux desktop
- * says so in its user agent; anything else (including a test's jsdom) is taken for a Mac. */
-const onLinux = (): boolean =>
-  typeof navigator !== 'undefined' && /Linux|X11/i.test(navigator.userAgent) && !/Mac OS X/i.test(navigator.userAgent)
+/** What the backend says the desktop it runs on is (``host_os`` of GET /board); null until a snapshot says. */
+let hostOs: 'mac' | 'linux' | null = null
+/** Remembers what the last snapshot said, so the words follow the host and not this browser. */
+export function setHostOs(os: string | null | undefined): void {
+  hostOs = os === 'mac' || os === 'linux' ? os : null
+}
+/** Whether the runs are on a Linux host: what the backend said (board.py), else a guess from this browser. Reading
+ * the board from another machine (an ssh tunnel) is why the backend's answer comes first; before the first snapshot
+ * a Linux desktop says so in its user agent, and anything else (including a test's jsdom) is taken for a Mac. */
+const onLinux = (): boolean => (hostOs !== null ? hostOs === 'linux' : browserOnLinux())
+const browserOnLinux = (): boolean =>
+  typeof navigator !== 'undefined' &&
+  /Linux|X11/i.test(navigator.userAgent) &&
+  !/Mac OS X/i.test(navigator.userAgent)
 /** What a run's folder opens in here: Finder on a Mac, the desktop's file manager on a Linux host (service.py). */
 export const fileApp = (): string => t(onLinux() ? 'host.files' : 'host.finder')
 /** The machine the runs are on, as the board calls it. */
