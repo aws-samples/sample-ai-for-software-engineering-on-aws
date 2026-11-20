@@ -178,7 +178,13 @@ if created app; then
 sys.exit(0 if d.get("ok") and not d.get("failed") and not d.get("kept_runs") else 1)' 2>/dev/null; then
       ok "the app's sessions removed"
       "$KC" POST "/api/apps/$APP/disable" '{}' >/dev/null 2>&1 || true
-      out="$("$KC" DELETE "/api/apps/$APP" 2>/dev/null || true)"
+      # Kiro Crew 0.12.2 answers the DELETE below with a 405: uninstall it through the POST route, and fall back to
+      # the DELETE for a Kiro Crew that has no such route. Either way, installed() below says what was removed.
+      out="$("$KC" --status POST "/api/apps/$APP/uninstall" '{}' 2>/dev/null || true)"
+      case "$out" in
+        2??) out="uninstall: $out" ;;
+        *) out="uninstall: ${out:-no answer}; delete: $("$KC" DELETE "/api/apps/$APP" 2>/dev/null || true)" ;;
+      esac
       rc=0; installed || rc=$?
       case "$rc" in
         1) ok "app removed"; APP_GONE=1 ;;
@@ -270,7 +276,7 @@ for d in node_modules dist; do
   forget created "ui_$d"
 done
 rm -rf "$ROOT/scripts/__pycache__"   # Python's caches there, whoever wrote them (an earlier setup, a test run)
-rm -f "${TMPDIR:-/tmp}/kc-cookies-5476.jar"
+rm -f "${TMPDIR:-/tmp}/kc-cookies-${KC_PORT:-5476}.jar"
 if [ "$FAILED" = 1 ]; then
   echo
   bad "Not everything was removed. ${VSTATD_INSTALL_STATE:-$ROOT/.install-state.json} keeps what is left: fix what"

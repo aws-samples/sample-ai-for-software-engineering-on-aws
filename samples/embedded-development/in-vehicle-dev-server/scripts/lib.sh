@@ -25,7 +25,7 @@ else CREW_START="open it"; fi
 # Kiro Crew is running and answers on its loopback port
 crew_up() {
   if [ -n "${VSTATD_KCAPI:-}" ]; then "$KC" GET /api/health | grep -q '"ok": *true'; return; fi
-  curl -s --noproxy '*' --max-time 3 http://127.0.0.1:5476/api/health | grep -q '"ok": *true'
+  curl -s --noproxy '*' --max-time 3 "http://127.0.0.1:${KC_PORT:-5476}/api/health" | grep -q '"ok": *true'
 }
 
 # NODE_DIR := the folder of a node 22 or newer (PATH, Homebrew, nvm)

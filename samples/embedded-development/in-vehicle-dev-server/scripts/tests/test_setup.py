@@ -36,25 +36,30 @@ if "up" in answers and path not in answers["up"]:  # the owner API refuses this 
     print("kcapi: could not mint a token", file=sys.stderr)
     sys.exit(1)
 gets = sum(json.loads(ln) == ["GET", path] for ln in open(os.environ["FAKE_KC_LOG"]))  # this one included
+# POST <path>/uninstall and DELETE <path> both remove it; "refuse" answers them while it stays, "code" says what the
+# status is (a Kiro Crew without that route answers a 405)
+target = path[: -len("/uninstall")] if method == "POST" and path.endswith("/uninstall") else \\
+    path if method == "DELETE" else None
+refused = target is not None and target in answers.get("refuse", [])
+code = answers.get("code", {}).get(f"{method} {path}", 409 if refused else 200)
 # Kiro Crew answers with an error: every time (fail), or the Nth GET of that path (fail_get)
 if path in answers.get("fail", []) or gets in answers.get("fail_get", {}).get(path, []):
     print("500" if status else json.dumps({"error": "the stand-in fails this"}))
-elif status:
-    print("404" if answers.get(path, {"error": "not found"}) == {"error": "not found"} else "200")
 elif method == "GET":
-    print(json.dumps(answers.get(path, {"error": "not found"})))
-elif method == "DELETE" and path not in answers.get("refuse", []):  # gone from the list that holds it
-    if path in answers:
-        answers[path] = {"error": "not found"}
-    base, key = path.rsplit("/", 1)
+    print(("404" if answers.get(path, {"error": "not found"}) == {"error": "not found"} else "200") if status
+          else json.dumps(answers.get(path, {"error": "not found"})))
+elif target is not None and not refused and 200 <= code < 300:  # gone from the list that holds it
+    if target in answers:
+        answers[target] = {"error": "not found"}
+    base, key = target.rsplit("/", 1)
     for k, v in (answers.get(base) or {}).items():
         answers[base][k] = [r for r in v if r != key
                             and not (isinstance(r, dict) and key in (r.get("name"), r.get("id")))]
     json.dump(answers, open(os.environ["FAKE_KC"], "w"))
-    print(json.dumps({"ok": True}))
+    print(code if status else json.dumps({"ok": True}))
 else:
     a = answers.get(f"{method} {path}", {"error": "the stand-in refuses this"})
-    print(a if isinstance(a, str) else json.dumps(a))  # a string: a body that is not JSON
+    print(code if status else a if isinstance(a, str) else json.dumps(a))  # a string: a body that is not JSON
 """
 # the kirocrew program: `token` prints a link URL as `kirocrew token` does, with a made-up token
 KIROCREW = """#!/bin/sh
@@ -401,8 +406,8 @@ def test_cleanup_removes_only_what_is_still_setups_and_keeps_the_record_when_a_s
     for line in ("app removed", "trust removed", "member embedded-quality removed"):
         assert line in second.stdout, line
     deleted = [c[1] for c in calls(home)[len(log):] if c[0] == "DELETE"]
-    assert deleted == ["/api/apps/vstatd-team", "/api/security/trusted-apps/vstatd-team",
-                       "/api/agents/embedded-quality"]
+    assert deleted == ["/api/security/trusted-apps/vstatd-team", "/api/agents/embedded-quality"]
+    assert ["POST", "/api/apps/vstatd-team/uninstall", "{}"] in calls(home)[len(log):]  # the app's own route
     assert json.loads(home["kc"].read_text())["/api/security/trusted-apps"]["apps"] == ["other-app"]
     assert not home["state"].exists() and not app_data.parent.exists()
 
@@ -512,12 +517,12 @@ def test_cleanup_removes_nothing_while_kiro_crew_answers_a_404_to_every_path_but
 def test_cleanup_keeps_the_apps_data_and_record_when_kiro_crew_does_not_answer_after_the_uninstall(home, root):
     data = app_data(home)
     record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
-    crew(home, apps={"name": "vstatd-team"}, fail_get={"/api/apps/vstatd-team": [2]},  # the check after the DELETE
+    crew(home, apps={"name": "vstatd-team"}, fail_get={"/api/apps/vstatd-team": [2]},  # the check after the uninstall
          **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
     r = sh(home, root, "cleanup.sh")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "did not say whether the app vstatd-team is installed: its data" in r.stdout
-    assert [c[1] for c in changes(home)][-1] == "/api/apps/vstatd-team"  # the DELETE went out
+    assert [c[1] for c in changes(home)][-1] == "/api/apps/vstatd-team/uninstall"  # the uninstall went out
     assert json.loads(home["state"].read_text())["created"] == ["app", "sample_record", "consent"]
     assert (data / "runs.json").exists()
 
@@ -651,8 +656,25 @@ def test_cleanup_removes_the_app_and_its_sessions_once_every_run_has_ended(home,
     asked = log.index(["GET", "/api/apps/vstatd-team/runs"])
     assert asked < log.index(["POST", "/api/apps/vstatd-team/sessions/cleanup", '{"all": true}'])  # asked first
     assert [c[1] for c in changes(home)] == ["/api/apps/vstatd-team/sessions/cleanup", "/api/apps/vstatd-team/disable",
-                                             "/api/apps/vstatd-team"]
+                                             "/api/apps/vstatd-team/uninstall"]
     assert "app removed" in r.stdout and not data.parent.exists() and not home["state"].exists()
+
+
+@pytest.mark.parametrize("route", ["uninstall", "delete"])
+def test_cleanup_uninstalls_the_app_through_the_route_this_kiro_crew_has(home, root, route):
+    """Kiro Crew 0.12.2 answers the DELETE of an installed app with a 405 (glayyiyi's Ubuntu run), so cleanup.sh asks
+    for the app's own uninstall route first and falls back to the DELETE where that route answers a 405."""
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    a_405 = "DELETE /api/apps/vstatd-team" if route == "uninstall" else "POST /api/apps/vstatd-team/uninstall"
+    crew(home, apps={"name": "vstatd-team"}, code={a_405: 405},
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "app removed" in r.stdout and not data.parent.exists() and not home["state"].exists()
+    sent = [c[:2] for c in changes(home)]
+    assert ["POST", "/api/apps/vstatd-team/uninstall"] in sent  # asked for, whichever route answers
+    assert (["DELETE", "/api/apps/vstatd-team"] in sent) == (route == "delete")  # only once the POST answered a 405
 
 
 def test_cleanup_removes_the_knowledge_source_and_the_workspace_that_are_still_setups(home, root):
