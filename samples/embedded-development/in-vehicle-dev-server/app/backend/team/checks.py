@@ -345,10 +345,9 @@ def wall(names: list[str], rows: list[dict[str, Any]], cases: list[dict[str, Any
 
 
 async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: Path, phase: str = "before_bench",
-                     triage: Path | None = None, run: Path | None = None, baseline: Path | None = None,
-                     inputs_ro: tuple[Path, ...] = ()) -> dict[str, Any]:
-    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall.
-    *inputs_ro*: files a release check reads besides its arguments, mounted read-only (servers mode, D17)."""
+                     triage: Path | None = None, run: Path | None = None,
+                     baseline: Path | None = None) -> dict[str, Any]:
+    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall."""
     runner = team["check_runner"]
     results = Path(results)
     results.mkdir(parents=True, exist_ok=True)
@@ -371,7 +370,6 @@ async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: 
             # a release check reads again every input the other checks recorded (the baseline too): it sees them all
             mounts += [(str(Path(v)), False) for k, v in values.items() if (k in check["args"] or check["when"] == "release")
                        and v is not None and not Path(v).resolve().is_relative_to(root.resolve()) and k != "project"]
-            mounts += [(str(p), False) for p in inputs_ro]
             container = f"vstatd-check-{uuid.uuid4().hex[:12]}"
             cmd = docker_command(runner, mounts, argv, name=container)
             (results / f"{name}.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")

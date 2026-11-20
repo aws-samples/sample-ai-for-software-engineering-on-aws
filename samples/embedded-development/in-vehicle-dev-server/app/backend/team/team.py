@@ -1783,7 +1783,8 @@ class TeamRun:
         release = (await self.d.run_tests(Path(self.s["run_wt"]), self._tested_team(), phase="release", **common))["checks"]
         page = None
         if self.team.get("evidence_page"):
-            page = await checks.evidence_page(self.team["evidence_page"], self.team, results, root / TRIAGE_FILE)
+            make_page = servers_mod.evidence_page if servers_mod.on(self.team) else checks.evidence_page
+            page = await make_page(self.team["evidence_page"], self.team, results, root / TRIAGE_FILE)
         last = {r["name"]: r["verdict"] for r in (self.s["tests"].get("checks") or []) + ((b.get("after") or {}).get("checks") or [])}
         now = {r["name"]: r["verdict"] for r in rows}
         rel = release[0] if release else {"verdict": "BLOCKED", "reasons": ["团队配置里没有 release 检查"], "summary": ""}
