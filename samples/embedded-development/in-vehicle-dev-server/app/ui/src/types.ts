@@ -165,7 +165,9 @@ export type ReleaseInputs = {
   ok: boolean | null // null: the configuration could not be read at all
   detail: string
   missing: string[] // the bench_* keys that are not set
-  lines: string[] // the TOML lines to paste into the build server's [paths], derived from the bench server's
+  // the TOML lines to paste into the build server's [paths], derived from the bench server's; the home folder is
+  // written out in them, because that server takes absolute paths only and expands no ~ (display.py AS_WRITTEN)
+  paste_lines: string[]
   config: string // the build server's configuration file
 }
 

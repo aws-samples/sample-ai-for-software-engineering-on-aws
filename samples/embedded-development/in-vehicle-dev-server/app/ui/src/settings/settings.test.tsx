@@ -115,8 +115,8 @@ describe('设置', () => {
         ok: false,
         detail: '缺 bench_results、bench_runs、bench_baseline，build 服务器判不了 release 检查：把下面三行加到 build.toml 的 [paths] 里',
         missing: ['bench_results', 'bench_runs', 'bench_baseline'],
-        lines: ['bench_results = "~/srv/bench/state/results"', 'bench_runs = "~/srv/bench/state/runs"',
-          'bench_baseline = "~/srv/bench/baseline"'],
+        paste_lines: ['bench_results = "/srv/bench/state/results"', 'bench_runs = "/srv/bench/state/runs"',
+          'bench_baseline = "/srv/bench/baseline"'],
         config: '~/workplace/vstatd-team/server/build.toml',
       },
     }
@@ -124,12 +124,27 @@ describe('设置', () => {
     render(<SettingsView />)
     const block = await screen.findByTestId('st-release')
     expect(within(block).getByTestId('st-release-state')).toHaveTextContent('没配好')
-    expect(within(block).getByTestId('st-release-lines').textContent).toBe(page.release!.lines.join('\n'))
+    expect(within(block).getByTestId('st-release-lines').textContent).toBe(page.release!.paste_lines.join('\n'))
     expect(block).toHaveTextContent('app 只读这个文件')
     // the page never offers to write the server's file: the only write it has is 保存 of the app's own settings
     expect(within(block).queryAllByRole('button')).toHaveLength(0)
     // and direct mode's fields say they are not used now
     expect(screen.getByTestId('st-direct')).toHaveTextContent('现在是 servers 模式')
+  })
+
+  test('every field has an id of its own, not its translated label', async () => {
+    // a label's text holds spaces (and an apostrophe in English), which an HTML id may not, and it changes with
+    // the language: each field carries a written-out id instead, as the board_decides checkbox does
+    setApiRoutes({ [`GET ${API}/settings`]: () => clone(DIRECT) })
+    render(<SettingsView />)
+    const baseline = (await screen.findByLabelText('基线目录')) as HTMLInputElement
+    expect(baseline.id).toBe('st-baseline')
+    for (const [label, id] of [['build 服务器的配置文件', 'st-build-config'], ['Docker 主机', 'st-docker-host'],
+      ['servers 模式下看板上也能批准、拒绝（board_decides）', 'st-board-decides']]) {
+      const field = screen.getByLabelText(label) as HTMLInputElement
+      expect(field.id).toBe(id)
+      expect(document.querySelector(`label[for="${id}"]`)).toHaveTextContent(label)
+    }
   })
 
   test('a read that fails says so instead of an empty form', async () => {

@@ -589,6 +589,12 @@ class Service:
         team = load_team(self.team_file)
         return settings_mod.load(self.settings_file, team), team
 
+    def _release_inputs(self) -> dict[str, Any]:
+        """Blocking: the release check's inputs, read from the settings that are loaded — the same source 设置
+        itself reads (_settings_view), so 准备情况 and the page can never say two different things."""
+        got, _ = self._settings()
+        return settings_mod.release_inputs(got)
+
     def _settings_view(self, got: dict[str, Any], team: dict[str, Any]) -> dict[str, Any]:
         """Blocking: 设置 as the page shows it; ``release`` is read from the build server's own configuration in
         servers mode only, and nothing of it is ever written."""
@@ -645,8 +651,7 @@ class Service:
         state = await asyncio.to_thread(bench_mod.read_state)
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
         # in servers mode the build server's own configuration is read for the release check's inputs (read only)
-        release = await asyncio.to_thread(settings_mod.release_inputs,
-                                          settings_mod.defaults(team)) if servers_mod.on(team) else None
+        release = await asyncio.to_thread(self._release_inputs) if servers_mod.on(team) else None
         return {"at": now, "team": str(team.get("name") or ""), "error": "",
                 "items": readiness.items(team, self.probes, kb, state, sample, now, release),
                 "pending": readiness.pending(team, state, now), "board_decides": servers_mod.board_decides(team)}

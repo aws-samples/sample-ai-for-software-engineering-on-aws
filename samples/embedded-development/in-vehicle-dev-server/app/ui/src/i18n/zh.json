@@ -1385,7 +1385,7 @@
  "settings.direct.why": "只在 direct 模式下用：台架基线目录，和检查用的 Docker。",
  "settings.direct.off": "现在是 servers 模式，下面这几项不用：基线读 bench 服务器配置里的 baseline，容器由服务器自己起。",
  "settings.direct.baseline": "基线目录",
- "settings.direct.baseline.hint": "台架回放要比对的基线（团队文件的 bench.baseline）。绝对路径或以 ~ 开头。",
+ "settings.direct.baseline.hint": "台架回放要比对的基线（团队文件的 bench.baseline）。这个目录会被只读挂进跑检查的容器，所以要在场景目录（${sample}/…）或你的家目录下面：绝对路径或以 ~ 开头。",
  "settings.direct.runner": "Docker 命令",
  "settings.direct.host": "Docker 主机",
  "settings.direct.runner.hint": "留空用本机找到的 docker；也可以填一个说 Docker 命令行的可执行文件的绝对路径。",

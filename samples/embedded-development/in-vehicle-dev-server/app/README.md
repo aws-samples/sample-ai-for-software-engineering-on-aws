@@ -43,8 +43,7 @@ With no run yet, the board shows the work item, the flow from triage to sign-off
 checklist from `GET /readiness`: the knowledge source, the build container image, `bench/doctor.sh`, the target, the
 baseline, the operator console (which the app cannot see) and, in servers mode, whether the build server's
 configuration names the bench result paths its release check needs, each with the command for it when it is not
-ready. The
-image and doctor.sh are probed in the background and cached (doctor.sh runs once by itself and again on
+ready. The image and doctor.sh are probed in the background and cached (doctor.sh runs once by itself and again on
 `POST /readiness/doctor`); the bench state is only read. Above it, the requests waiting at the operator console now
 (from a run or from setting up the baseline), each with 批准 (after typing the first six characters of its digest) and
 拒绝 (with a reason): `POST /bench/decide` runs the bench's own `benchstate.decide()` (D3). During a run, a strip above the team graph shows the same
@@ -91,7 +90,10 @@ writes them (each server checks that it owns its configuration and its folders).
 `GET /readiness` both show whether the build server's `[paths]` has the three entries its release check needs
 (`bench_results`, `bench_runs`, `bench_baseline`, all three or none); when they are missing, 设置 gives the three
 lines to paste, derived from the bench server's own `state` and `baseline`. Pasting them is a person's job, in the
-server's own file.
+server's own file. Those lines are the one thing a reply writes with the home folder spelled out instead of `~`
+([backend/team/display.py](backend/team/display.py)), because the build server takes absolute paths only and expands
+no `~`. The baseline folder is a setting the checks' container sees — it is bind-mounted read-only — so 设置 keeps it
+inside the scenario folder or this user's home, resolved with `realpath`, and refuses a control character in any path.
 
 ## Code map
 

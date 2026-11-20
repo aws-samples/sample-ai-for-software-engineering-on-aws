@@ -43,14 +43,18 @@ const SET_CSS = `
 .kt-app.is-projection > .st-root { flex: 1 1 auto; min-height: 0; overflow: auto; font-size: 18px; }
 `
 
-/** One text field: its label, a line of help under it, and 恢复默认 when it differs from the team file's value. */
-function PathField({ label, help, value, dflt, onChange, disabled }:
-  { label: string; help: string; value: string; dflt: string; onChange: (v: string) => void; disabled?: boolean }) {
+/**
+ * One text field: its label, a line of help under it, and 恢复默认 when it differs from the team file's value.
+ * `id` is the field's own, written out here (as `st-board-decides` is) and the same in every language: a label's
+ * text is for a person to read, not an HTML id — the translations hold spaces and an apostrophe.
+ */
+function PathField({ id, label, help, value, dflt, onChange }:
+  { id: string; label: string; help: string; value: string; dflt: string; onChange: (v: string) => void }) {
   return (
     <div className="st-field">
-      <label htmlFor={`st-${label}`}>{label}</label>
+      <label htmlFor={id}>{label}</label>
       <div className="st-row">
-        <input id={`st-${label}`} type="text" value={value} disabled={disabled} spellCheck={false}
+        <input id={id} type="text" value={value} spellCheck={false}
           onChange={(e) => onChange(e.target.value)} />
         {value !== dflt && (
           <button type="button" className="kt-btn" onClick={() => onChange(dflt)}>{tr('settings.reset')}</button>
@@ -146,10 +150,10 @@ export function SettingsView() {
       <section className="kt-card" data-testid="st-servers">
         <h3>{tr('settings.servers')}</h3>
         <p className="st-why">{tr('settings.servers.why')}</p>
-        <PathField label={tr('settings.servers.build')} help={tr('settings.servers.build.hint')}
+        <PathField id="st-build-config" label={tr('settings.servers.build')} help={tr('settings.servers.build.hint')}
           value={draft.server_configs.build} dflt={d.server_configs.build}
           onChange={(v) => set({ server_configs: { ...draft.server_configs, build: v } })} />
-        <PathField label={tr('settings.servers.bench')} help={tr('settings.servers.bench.hint')}
+        <PathField id="st-bench-config" label={tr('settings.servers.bench')} help={tr('settings.servers.bench.hint')}
           value={draft.server_configs.bench} dflt={d.server_configs.bench}
           onChange={(v) => set({ server_configs: { ...draft.server_configs, bench: v } })} />
       </section>
@@ -157,12 +161,12 @@ export function SettingsView() {
       <section className="kt-card" data-testid="st-direct">
         <h3>{tr('settings.direct')}</h3>
         <p className="st-why">{servers ? tr('settings.direct.off') : tr('settings.direct.why')}</p>
-        <PathField label={tr('settings.direct.baseline')} help={tr('settings.direct.baseline.hint')}
+        <PathField id="st-baseline" label={tr('settings.direct.baseline')} help={tr('settings.direct.baseline.hint')}
           value={draft.baseline} dflt={d.baseline} onChange={(v) => set({ baseline: v })} />
-        <PathField label={tr('settings.direct.runner')} help={tr('settings.direct.runner.hint')}
+        <PathField id="st-docker-runner" label={tr('settings.direct.runner')} help={tr('settings.direct.runner.hint')}
           value={draft.docker.runner} dflt={d.docker.runner}
           onChange={(v) => set({ docker: { ...draft.docker, runner: v } })} />
-        <PathField label={tr('settings.direct.host')} help={tr('settings.direct.host.hint')}
+        <PathField id="st-docker-host" label={tr('settings.direct.host')} help={tr('settings.direct.host.hint')}
           value={draft.docker.host} dflt={d.docker.host}
           onChange={(v) => set({ docker: { ...draft.docker, host: v } })} />
       </section>
@@ -188,8 +192,8 @@ export function SettingsView() {
             {' · '}{release.detail}
           </p>
           {release.config && <small className="st-off">{release.config}</small>}
-          {release.lines.length > 0 && (
-            <pre className="st-lines" data-testid="st-release-lines">{release.lines.join('\n')}</pre>
+          {release.paste_lines.length > 0 && (
+            <pre className="st-lines" data-testid="st-release-lines">{release.paste_lines.join('\n')}</pre>
           )}
         </section>
       )}

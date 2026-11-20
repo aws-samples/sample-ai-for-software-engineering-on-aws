@@ -224,5 +224,5 @@ def items(team: dict[str, Any], probes: Probes, knowledge: dict[str, Any] | None
         # the three bench_* paths of the build server's own configuration: read, never written by the app (D17);
         # 设置 shows the lines to paste, because the server's user owns that file
         add("release_inputs", "build 服务器配置里的台架结果路径", release["ok"],
-            release["detail"] + ("；要粘的三行在「设置」页上" if release["lines"] else ""), "", "bench")
+            release["detail"] + ("；要粘的三行在「设置」页上" if release["paste_lines"] else ""), "", "bench")
     return out

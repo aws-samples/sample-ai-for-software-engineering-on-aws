@@ -409,7 +409,9 @@ files stay the servers': the app keeps their paths, reads them, and writes neith
 `bench_baseline` — the inputs `run_check release` needs, all three or none in `mcp/build/config.example.toml` — and,
 when they are missing, 设置 gives the three lines to paste, derived from the bench server's own `state` and
 `baseline`. A person pastes them in the server's own file; the app cannot, and the server would refuse a file it does
-not own (`check_trusted()`).
+not own (`check_trusted()`). Those lines spell the home folder out rather than `~` — the one exception to `display.py`
+— because that server expands no `~`. The baseline is the one path the checks' container sees (bind-mounted
+read-only), so it is kept inside the scenario folder or this user's home, resolved with `realpath`.
 
 The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
 and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A

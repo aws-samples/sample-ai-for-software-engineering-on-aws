@@ -1385,7 +1385,7 @@
  "settings.direct.why": "Used in direct mode only: the bench baseline directory, and the Docker the checks run in.",
  "settings.direct.off": "Servers mode is on, so these are not used: the baseline comes from the bench server's own configuration and the servers start the containers.",
  "settings.direct.baseline": "Baseline directory",
- "settings.direct.baseline.hint": "The baseline a replay is compared with (the team file's bench.baseline). An absolute path, or one starting with ~.",
+ "settings.direct.baseline.hint": "The baseline a replay is compared with (the team file's bench.baseline). This folder is mounted read-only into the container the checks run in, so it has to stay inside the scenario folder (${sample}/…) or your home folder: an absolute path, or one starting with ~.",
  "settings.direct.runner": "Docker command",
  "settings.direct.host": "Docker host",
  "settings.direct.runner.hint": "Empty: the docker found on this machine. Otherwise the absolute path of an executable that speaks Docker's command line.",
