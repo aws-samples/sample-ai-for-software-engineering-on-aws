@@ -284,7 +284,8 @@ On a Mac with Kiro Crew running, Docker, Node.js 22, git and Python 3:
 3. Before the first run: open the operator console in a terminal of its own (`python3 bench/console.py`), set the
    supply there (`v 13.5`, `k on`) and start the target (`bench/cc1.sh start && bench/cc1.sh wait`). The team file
    uses the committed baseline [bench/baseline/](bench/baseline/README.md) by default. Record one of your own only when
-   the correct release does not pass `logdiff` against it on your machine: deploy the current release, run
+   the correct release does not pass `logdiff` against it on your machine (checked on Apple Silicon and x86_64 only:
+   [Other hosts](bench/baseline/README.md#other-hosts)): deploy the current release, run
    `bench/cc1.sh replay --kind baseline --out ~/workplace/vstatd-team/baseline` (approved on the board or at the
    operator console) and set the team file's `bench.baseline` to that folder (see [bench/README.md](bench/README.md)).
    Until the bench is ready, a run stops before its first bench action and the board says what is missing and the

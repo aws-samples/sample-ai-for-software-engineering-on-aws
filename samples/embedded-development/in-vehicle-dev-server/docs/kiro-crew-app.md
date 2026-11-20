@@ -222,13 +222,13 @@ baseline directory; for `vstatd` it is `${sample}/bench/baseline`, the baseline 
 [bench/baseline/](../bench/baseline/README.md)). A bench owner whose correct release does not pass `logdiff` against it
 records one of their own with `cc1.sh replay --kind baseline` and points `baseline` at it; the command the board shows
 for that never records into the scenario folder, it records into `~/workplace/vstatd-team/baseline`. When the
-before-bench checks pass on what is
-merged and the reviewer has let it through, the app runs `doctor.sh`; it holds the run for a person when doctor
-fails, the target is off or not known, or the baseline is missing, with the command for each. Then deploy (the
-artifact of `build.sh` from that round's results), replay into `runs/<run>/bench/run-<n>/`, and the after-bench
-checks on that run directory. A refusal, a timeout at the console, a target left unknown, or an app restart in the
-middle of an action holds the run; 重试 carries on from that step. A failing after-bench check goes to its owner as
-in D7; the reviewer looks again, and the bench starts over with the new build.
+before-bench checks pass on what is merged and the reviewer has let it through, the app runs `doctor.sh`; it holds
+the run for a person when doctor fails, the target is off or not known, or the baseline is missing, with the command
+for each. Then deploy (the artifact of `build.sh` from that round's results), replay into
+`runs/<run>/bench/run-<n>/`, and the after-bench checks on that run directory. A refusal, a timeout at the console, a
+target left unknown, or an app restart in the middle of an action holds the run; 重试 carries on from that step. A
+failing after-bench check goes to its owner as in D7; the reviewer looks again, and the bench starts over with the new
+build.
 
 How (step 10): `setup.sh` checks Docker, git, Python, Node 22 and Kiro Crew, builds the board and installs the app
 with `app/scripts/dev-install.sh`, writes `sample.json` into the app's data directory, and runs

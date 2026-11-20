@@ -5,9 +5,13 @@ The baseline log of the current release on the recorded drive, for `checks/logdi
 `${sample}/bench/baseline`). Record one of your own only when the correct release does not pass `logdiff` against it
 on your machine ([bench/README.md](../README.md)), and point `bench.baseline` at that folder.
 
-- `baseline.jsonl`: the runtime log of `vstatd` on the replay, 328 entries.
+- `baseline.jsonl`: the runtime log of `vstatd` on the replay, 328 entries. SHA-256
+  `e250dda16838a6bef881d3dbee90d6613305345773f1684bc4a3e97d71d47ef3`.
 - `baseline-result.json`: the run's figures and the bench's facts (the run directory format of
-  [checks/README.md](../../checks/README.md#run-and-baseline-directories)).
+  [checks/README.md](../../checks/README.md#run-and-baseline-directories)). SHA-256
+  `e63076e8ce11e1461ac811079d354dced07d1d1a585b1e6325c86f996a5efb24`.
+
+The target image's `Image` and `rootfs.ext4` digests were not recorded with this replay, so they are not given here.
 
 ## What was recorded
 
@@ -58,3 +62,11 @@ ID and the dynamic linking tables. A person approving a deploy sees the digest o
   baseline.
 - Across hosts: the same 70 Mac replays against the x86_64 baseline of `rehearsal/check-examples/bench-data/baseline/`
   (2026-11-16) are 70 of 70 PASS as well.
+
+## Other hosts
+
+x86_64 runs (`rehearsal/check-examples`, 2026-11-16, an AMD EPYC 7R13 host under load) against this baseline: 10 of 10
+release runs pass `logdiff`, 328 of 328 entries paired, largest difference 11 ms in the 20 ms window and 25 ms in the
+50 ms window (`CLIENT_CONNECTED`: the x86_64 clients connect earlier). The F-008 wrong fix still fails `logdiff` and
+the F-021 wrong fix still fails `runtime-limits`, 10 of 10 each. Other host types are unverified: re-record when the
+correct release fails `logdiff`.
