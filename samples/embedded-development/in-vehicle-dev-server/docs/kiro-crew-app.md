@@ -205,7 +205,8 @@ the rerun for the scorecard. A failing `release.sh` holds the run for a person; 
 `release` carries `release.sh`'s verdict, the differing checks and the evidence page's text. In `servers` mode the
 page exists only after a release that passed (the build server publishes it then, D17 open question 1): when the
 release did not pass the board has no page, and the person reads the release's reasons and the server's
-`release.run.log` instead.
+`release.run.log` instead. A page the server says it published but the app cannot read back or check holds the run
+instead, with the release's own PASS named (D17 open question 1).
 
 Alternatives considered: a person reruns the checks and hands the results to the app; no rerun.
 
@@ -553,10 +554,13 @@ when it ends is not counted. The figure counts the app's calls; the agents make 
    the release round reads the page back and keeps it as `results/rerun/evidence.md`, where `direct` mode's own
    `evidence-page.sh` leaves it and where the sign-off dialog reads it. The app does not import the server's code.
    A page the server did not publish is left out: the release verdict stands, the dialog shows no page, and a person
-   decides. A published page the app cannot check (nothing read back, a SHA-256 missing from either answer, or one
-   that is no longer the one `run_check` just reported: another call published over it in between) is not kept, and
-   the release is BLOCKED for a person. The team file's `evidence_page` still says whether the team wants a page; in
-   `servers` mode the command itself is the build server's to run.
+   decides. A page the server says it published but the app cannot have whole and checked is not kept, and the
+   release is BLOCKED for a person with its own PASS named in the reason (the release check did pass; the page is
+   what is missing): a `read_result` the server refuses or exits during, no page read back, a `run_check` answer
+   with no SHA-256, and a page whose own SHA-256 is not the one `run_check` reported (another call published over
+   it in between, or bytes the server could only read with `errors="replace"`). The digest judged is of the text
+   read back, so it is of the bytes the app keeps. The team file's `evidence_page` still says whether the team wants
+   a page, and nothing is read back without it; in `servers` mode the command itself is the build server's to run.
    Still open: the server publishes a page only after a release that passed, and `run_check release` drops the
    last one first, so when the release did not pass the board has no page, while `direct` mode's page has a section
    on why. The person then reads the release's reasons and the server's `release.run.log`. A page on a failure too

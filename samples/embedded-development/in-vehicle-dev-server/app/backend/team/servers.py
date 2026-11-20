@@ -18,6 +18,7 @@ server's published results); the evidence page it publishes after a release that
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -409,31 +410,44 @@ async def run_tests(run_wt: Path, team: dict[str, Any], **kw: Any) -> dict[str, 
     return await _round(Path(run_wt), team, **kw)
 
 
-async def evidence_page(cmd: list[str], team: dict[str, Any], results: Path, triage: Path) -> Path | None:
-    """The evidence page of a rerun, in servers mode: nothing to run here. mcp/build publishes the page itself after
-    a ``run_check release`` that passed, and the release round above has already read it back into *results*; *cmd*
-    (the team file's ``evidence_page``) is the build server's to run. The page once it is there, else None: always
-    None after a release that did not pass, since the server publishes none then (direct mode still writes one)."""
+async def evidence_page(_cmd: list[str], _team: dict[str, Any], results: Path, _triage: Path) -> Path | None:
+    """The evidence page of a rerun, in servers mode: nothing to run here, so the parameters checks.evidence_page
+    needs are unused (the signature is kept so that team._rerun can call either one). mcp/build publishes the page
+    itself after a ``run_check release`` that passed, and the release round above has already read it back into
+    *results*; ``_cmd`` (the team file's ``evidence_page``) is the build server's to run. The page once it is there,
+    else None: always None after a release that did not pass, since the server publishes none then (direct mode
+    still writes one), and None when the app would not keep the page it read back (``_evidence``)."""
     page = Path(results) / EVIDENCE
     return page if page.is_file() else None
 
 
-async def _evidence(s: "Session", out: dict[str, Any], results: Path) -> str:
+async def _evidence(s: "Session", out: dict[str, Any], results: Path, team: dict[str, Any]) -> str:
     """The page mcp/build publishes itself after a ``run_check release`` that passed (#45): read it back with
     ``read_result release`` and keep it beside the release result, where direct mode's evidence-page.sh leaves it.
-    A page the server did not publish is left out: the sign-off dialog then shows no page and a person decides. A
-    published page that cannot be checked (no page read back, a SHA-256 missing from either answer, or one that is no
-    longer the one ``run_check`` reported: another call published over it in between) is not kept either, and what is
-    wrong is returned ("" otherwise): the release is then BLOCKED for a person (D7)."""
-    if str(out.get("evidence_page") or "") != "published":
+    Nothing is read back when the team file asks for no page (``evidence_page``, which team._rerun then ignores too).
+    A page the server did not publish is left out: the release verdict stands, the sign-off dialog shows no page and
+    a person decides. A page the server says it published but the app cannot have whole and checked is not kept, and
+    what is wrong is returned ("" otherwise): the release is then BLOCKED for a person (D7), with the release's own
+    PASS named in the reason, since the release check itself did pass. That is a ``read_result`` the server refuses
+    or exits during, no page read back, a ``run_check`` answer with no SHA-256, and a page whose own SHA-256 is not
+    the one ``run_check`` reported (another call published over it in between, or bytes the server could only read
+    with ``errors="replace"``). The digest judged is of the text read back, so it is of the bytes kept here."""
+    if not team.get("evidence_page") or str(out.get("evidence_page") or "") != "published":
         return ""
-    got = await s.call("read_result", {"check": "release"})
+    passed = "release 检查本身判的是 PASS"
+    try:
+        got = await s.call("read_result", {"check": "release"})
+    except (mcpclient.ToolRefused, mcpclient.McpError) as exc:
+        return f"读回证据页的 read_result release 没成功（{passed}）：{exc}"
     page, digest = got.get("evidence_page"), out.get("evidence_sha256")
     if not isinstance(page, str) or not page:
-        return "build 服务器说证据页已发布，但 read_result release 没读回页"
-    if not isinstance(digest, str) or not digest or got.get("evidence_sha256") != digest:
-        return (f"build 服务器的证据页摘要核对不上：run_check 报 {str(digest)[:12]}，"
-                f"read_result 报 {str(got.get('evidence_sha256'))[:12]}")
+        return f"build 服务器说证据页已发布，但 read_result release 没读回页（{passed}）"
+    if not isinstance(digest, str) or not digest:
+        return f"build 服务器说证据页已发布，但 run_check release 没报它的摘要（{passed}）"
+    mine = hashlib.sha256(page.encode()).hexdigest()
+    if mine != digest:
+        return (f"build 服务器的证据页摘要核对不上：run_check 报 {digest[:12]}，"
+                f"读回的页算出来是 {mine[:12]}（{passed}）")
     (results / EVIDENCE).write_text(page, encoding="utf-8")
     return ""
 
@@ -476,7 +490,7 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
                         res, server = _result(out, c["name"], which, head if which == "build" else None, results)
                         repair = repair_count(out) if which == "build" and c["name"] == "build" else repair
                         if phase == "release" and not server and res["verdict"] == "PASS":
-                            bad = await _evidence(s, out, results)
+                            bad = await _evidence(s, out, results, team)
                             res, server = (_blocked(bad), True) if bad else (res, server)
                         if which == "bench" and run is not None and out.get("run") != Path(run).name:
                             # another session replayed between this run's steps (D17): not this step's replay

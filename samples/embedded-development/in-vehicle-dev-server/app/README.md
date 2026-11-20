@@ -143,7 +143,9 @@ The rerun's release check is the build server's `run_check release`, which reads
 results through its own `paths.bench_results`; the page it publishes after a release that passed is read back with
 `read_result release` and kept as `results/rerun/evidence.md`, where the sign-off dialog reads it. A release that did
 not pass leaves no page in this mode (the server publishes none then; `direct` mode still writes one), so the person
-reads the release's reasons and `release.run.log` (D17 open question 1). In this mode the
+reads the release's reasons and `release.run.log` (D17 open question 1). A page the server says it published but the
+app cannot read back or check against the digest `run_check` reported holds the run for a person instead, with the
+release's own PASS named. In this mode the
 team file's `evidence_page` only says that the team wants a page: the command is the build server's to run.
 When the build server's last `run_check build` answer says one more cross failure reaches its bound (TR §5.1), the
 next round is held before any call, and 重试 there runs that round with the server's last attempt. Once the server

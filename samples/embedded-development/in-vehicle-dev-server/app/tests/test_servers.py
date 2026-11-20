@@ -59,14 +59,20 @@ def build_tool(name, args):
         return {"outcome": "ok", "head": git("rev-parse", "HEAD"), "changes": git("status", "--porcelain").splitlines()}
     check, sp, head = args["check"], spec(), git("rev-parse", "HEAD")
     if name == "read_result":
+        if sp.get("read") == "refuse":
+            raise Refused("read_result release is not granted to this session")
+        if sp.get("read") == "exit":
+            sys.exit(3)  # the server dies while the page is read back
         out = {"check": check, "result": None, "log_tail": ""}
         if check == "release":
-            page = open(PAGE).read() if os.path.exists(PAGE) else None
-            out["evidence_page"] = page
-            out["evidence_sha256"] = hashlib.sha256(page.encode()).hexdigest() if page else None
+            # as core.py _read_result does: the text decoded with errors="replace", the digest of the bytes
+            raw = open(PAGE, "rb").read() if os.path.exists(PAGE) else None
+            out["evidence_page"] = raw.decode(errors="replace") if raw else None
+            out["evidence_sha256"] = hashlib.sha256(raw).hexdigest() if raw else None
             if sp.get("page") == "changed":  # another call published over the page between the two calls
-                out["evidence_sha256"] = "00" * 32
-            if sp.get("page") == "readnodigest":  # an answer without the digest
+                out["evidence_page"] = "# Evidence page: another call's\n"
+                out["evidence_sha256"] = hashlib.sha256(out["evidence_page"].encode()).hexdigest()
+            if sp.get("page") == "readnodigest":  # an answer without the digest: the app computes its own
                 del out["evidence_sha256"]
         return out
     if check == sp.get("exit_on"):
@@ -102,10 +108,13 @@ def build_tool(name, args):
         else:
             judged = sorted(n[:-5] for n in os.listdir(state + "/results") if n.endswith(".json"))
             page = "# Evidence page: vstatd\n\n" + ", ".join(judged + ["release"]) + "\n"
+            raw = page.encode()
+            if sp.get("page") == "replaced":  # a byte the server can only read back with errors="replace"
+                raw += b"\xff\n"
             os.makedirs(state + "/results", exist_ok=True)
-            open(PAGE, "w").write(page)
+            open(PAGE, "wb").write(raw)
             out["evidence_page"] = "published"
-            out["evidence_sha256"] = hashlib.sha256(page.encode()).hexdigest()
+            out["evidence_sha256"] = hashlib.sha256(raw).hexdigest()
             if sp.get("page") == "nodigest":  # published, but the answer carries no digest
                 del out["evidence_sha256"]
     if check == "build" and "repair" in sp:  # as mcp/build reports its repair count after each cross attempt
@@ -440,9 +449,11 @@ def test_a_release_that_fails_on_the_build_server_has_no_evidence_page(tmp_path,
     _release_held_for_a_person(run, srv, held="独立重跑后 release.sh 没通过：logdiff: judged another build")
 
 
-@pytest.mark.parametrize("how", ["changed", "nodigest", "readnodigest"])
-def test_a_published_page_whose_digest_does_not_check_out_blocks_the_release(tmp_path, monkeypatch, how):
-    """A digest that changed between the two calls, or one missing from either answer: no page, BLOCKED (D7)."""
+@pytest.mark.parametrize("how, why", [("changed", "证据页摘要核对不上"), ("replaced", "证据页摘要核对不上"),
+                                      ("nodigest", "没报它的摘要")])
+def test_a_published_page_whose_digest_does_not_check_out_blocks_the_release(tmp_path, monkeypatch, how, why):
+    """The digest judged is the one of the text read back: a page another call published over in between, bytes the
+    server could only read with errors="replace", or a run_check answer with no digest: no page, BLOCKED (D7)."""
     rig, srv = servers_rig(tmp_path, monkeypatch, rid=f"r1120digest{how}")
     run, mgr = rig.run, rig.mgr
     srv.set(page=how)
@@ -452,9 +463,65 @@ def test_a_published_page_whose_digest_does_not_check_out_blocks_the_release(tmp
         await until(run, mgr, lambda: run.ended)
     asyncio.run(go())
     rel = run.s["rerun"]["release"]
-    assert rel["verdict"] == "BLOCKED" and "证据页摘要核对不上" in rel["reasons"][0]
+    assert rel["verdict"] == "BLOCKED" and why in rel["reasons"][0]
+    assert "release 检查本身判的是 PASS" in rel["reasons"][0]  # the release passed; the page is what is missing
     assert [t for t, _, _ in _rerun_session(srv)] == ["run_check", "read_result"]
     _release_held_for_a_person(run, srv)
+
+
+@pytest.mark.parametrize("how, why", [("refuse", "is not granted to this session"), ("exit", "exited with 3")])
+def test_a_read_result_the_server_refuses_or_dies_on_blocks_the_release(tmp_path, monkeypatch, how, why):
+    """read_result is read-only, but a page the app cannot read back is a page it cannot show at sign-off, so the
+    release is BLOCKED for a person (D7). The reason names read_result and that the release itself passed."""
+    rig, srv = servers_rig(tmp_path, monkeypatch, rid=f"r1120read{how}")
+    run, mgr = rig.run, rig.mgr
+    srv.set(read=how)
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended, timeout=40)
+    asyncio.run(go())
+    rel = run.s["rerun"]["release"]
+    assert rel["verdict"] == "BLOCKED" and "read_result release 没成功" in rel["reasons"][0]
+    assert "release 检查本身判的是 PASS" in rel["reasons"][0] and why in rel["reasons"][0]
+    results = Path(run.s["repo"]).parent / "results" / "rerun"
+    assert json.loads((results / "release.json").read_text())["verdict"] == "PASS"  # the server's own verdict is kept
+    _release_held_for_a_person(run, srv)
+
+
+def test_the_page_is_judged_by_its_own_digest_not_the_servers_second_claim(tmp_path, monkeypatch):
+    """read_result's own evidence_sha256 is read but not judged: a page whose text matches the digest run_check
+    reported is kept even when that second answer carries none."""
+    rig, srv = servers_rig(tmp_path, monkeypatch, rid="r1120readnodigest")
+    run, mgr = rig.run, rig.mgr
+    srv.set(page="readnodigest")
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
+    asyncio.run(go())
+    results = Path(run.s["repo"]).parent / "results" / "rerun"
+    assert run.s["status"] == "done" and run.s["rerun"]["release"]["verdict"] == "PASS"
+    page = (srv.build_state / "results" / "evidence.md").read_text()
+    assert (results / "evidence.md").read_text() == page and run.sign_block() == ""
+
+
+def test_a_team_that_asks_for_no_page_reads_none_back(tmp_path, monkeypatch):
+    """The team file's evidence_page says whether the team wants a page at all (team._rerun runs no page without
+    it): the app then makes no read_result call and writes no evidence.md beside the release result."""
+    rig, srv = servers_rig(tmp_path, monkeypatch, rid="r1120nopage")
+    run, mgr = rig.run, rig.mgr
+    run.team.pop("evidence_page")
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
+    asyncio.run(go())
+    results = Path(run.s["repo"]).parent / "results" / "rerun"
+    assert run.s["status"] == "done" and run.s["rerun"]["release"]["verdict"] == "PASS"
+    assert not (results / "evidence.md").exists() and run.s["rerun"]["evidence"] is None
+    assert board.release_view(run)["evidence"] is None and run.sign_block() == ""
+    assert [t for t, _, _ in _rerun_session(srv)][-1:] == ["run_check"]  # nothing read back
 
 
 def test_the_release_check_of_a_servers_team_must_be_the_build_servers_own(tmp_path, monkeypatch):
