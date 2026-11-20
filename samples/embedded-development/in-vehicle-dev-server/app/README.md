@@ -8,9 +8,10 @@ the bench actions through `bench/cc1.sh` (each one approved at the operator cons
 sign-off, and draws all of it on a live board. A finished run can be replayed and signed off.
 
 It is a copy of the [agent-team sample's app](../../../agent-team-on-kiro-crew/app/), changed here (D5 in
-[docs/kiro-crew-app.md](../docs/kiro-crew-app.md)). The page has two views that share one app bar: the **team board**
-(团队看板, one run) and the **scorecard** (评分卡, the measured figures of every run). Installing it, and what it does
-not enforce: [the scenario README](../README.md#the-kiro-crew-app).
+[docs/kiro-crew-app.md](../docs/kiro-crew-app.md)). The page has three views that share one app bar: the **team board**
+(团队看板, one run), the **scorecard** (评分卡, the measured figures of every run) and **设置** (the app's own settings:
+the mode, the servers' configuration files, the direct-mode baseline and Docker, and who approves at the bench).
+Installing it, and what it does not enforce: [the scenario README](../README.md#the-kiro-crew-app).
 
 ## How a run goes
 
@@ -40,7 +41,9 @@ is taken (D8).
 
 With no run yet, the board shows the work item, the flow from triage to sign-off as a 人机分工 grid (steps × 人 / AI / app / 台架, what each is to do; `ui/src/board/division.ts`), and a
 checklist from `GET /readiness`: the knowledge source, the build container image, `bench/doctor.sh`, the target, the
-baseline and the operator console (which the app cannot see), each with the command for it when it is not ready. The
+baseline, the operator console (which the app cannot see) and, in servers mode, whether the build server's
+configuration names the bench result paths its release check needs, each with the command for it when it is not
+ready. The
 image and doctor.sh are probed in the background and cached (doctor.sh runs once by itself and again on
 `POST /readiness/doctor`); the bench state is only read. Above it, the requests waiting at the operator console now
 (from a run or from setting up the baseline), each with 批准 (after typing the first six characters of its digest) and
@@ -61,14 +64,43 @@ file, and `POST /runs/{rid}/finding` refuses a path or glob that can reach the f
 
 `GET /backlog` returns the default team's work item (`work_item` in the team file, the start form's default) and the findings backlog rows; the home page shows them as 需求清单 with a label filter, and the board's 需求清单 shows the backlog until the triage exists, then each finding's decision, citations, evidence, behaviour, the answer at the triage gate and what the latest round's `static` and `trace` results recorded (— where there is no record).
 
+## Settings
+
+`GET /settings` and `POST /settings` are 设置 (`?view=settings`), the app's own settings in `settings.json` in its
+data directory ([backend/team/settings.py](backend/team/settings.py), [ui/src/settings/](ui/src/settings/)). Every
+default is read from the team file, so an install that never opens the page behaves exactly as before; a saved file
+is validated first (types, absolute or `~` paths, unknown keys dropped) and written in one step, and a field that
+does not hold up is refused with every problem named and nothing written. A save takes effect for the next run; a
+run in progress keeps the team it started with.
+
+| Field | Default (team file) | What it changes |
+| --- | --- | --- |
+| `mode` | `connectors` (`direct`) | `direct` or `servers` (D17), without editing the team file or reinstalling |
+| `server_configs.build` / `.bench` | the `--config` in `servers.build` / `servers.bench` | which configuration file each MCP server is started with |
+| `baseline` | `bench.baseline` | direct mode's baseline directory (servers mode reads the bench server's own `baseline`) |
+| `docker.runner` | `""`: the docker found on this machine | an executable that speaks Docker's command line, for the direct-mode checks (`check_runner.docker`'s first word) |
+| `docker.host` | `""`: the local daemon | a daemon address (`unix://`, `tcp://`, `ssh://`, `npipe://`, `fd://`), passed as `docker -H` |
+| `board_decides` | `servers.board_decides` (`false`) | security-relevant: 批准 / 拒绝 on the board in servers mode too (D17) |
+
+Both routes are the dashboard owner's alone, as every route of this app is but `/health`: the guard refuses a request
+with no signed-in user (401), one made with an app token, and one that is not the owner's (403, `owner_only`;
+[backend/team/httpkit.py](backend/team/httpkit.py)).
+
+The two servers' configuration files belong to the servers: the app keeps their paths here, reads them, and never
+writes them (each server checks that it owns its configuration and its folders). In servers mode the page and
+`GET /readiness` both show whether the build server's `[paths]` has the three entries its release check needs
+(`bench_results`, `bench_runs`, `bench_baseline`, all three or none); when they are missing, 设置 gives the three
+lines to paste, derived from the bench server's own `state` and `baseline`. Pasting them is a person's job, in the
+server's own file.
+
 ## Code map
 
 | Path | What it is |
 | --- | --- |
 | `app.json` | Kiro Crew app manifest |
-| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
+| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/settings.py` (`GET` / `POST /settings`), `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
 | `backend/team/servers.py`, `mcpclient.py` | Servers mode (D17): the steps as tool calls, and the stdio MCP client |
-| `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, audit trail (`Audit.tsx`), 人机分工 (`DivisionGrid.tsx`, `division.ts`), graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `item/` (交付详情), `types.ts` (the contract with the backend) |
+| `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, audit trail (`Audit.tsx`), 人机分工 (`DivisionGrid.tsx`, `division.ts`), graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `settings/` (设置), `item/` (交付详情), `types.ts` (the contract with the backend) |
 | `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd` (the default), `vstatd-triage`, `vstatd-release`, `empty`, `?view=score`, `?view=item&run=<id>`) |
 | `team/` | `team-vstatd.json` and its task template |
 | `scripts/dev-install.sh` | Builds the board and installs or updates the app in the local Kiro Crew; `scripts/kcapi.sh` calls Kiro Crew's local API as the dashboard owner |
@@ -90,9 +122,9 @@ Team level:
 | `checks` | Each `{name, command, args, when, owner, max_rounds, timeout_s}`. `args` of `project`, `triage`, `run`, `baseline` (besides `--results`); `when` is `before_bench`, `after_bench` or `release`; `owner` gets a failure that names no file (none for a release check); `max_rounds` defaults to 2. A check keeps the protocol of [checks/README.md](../checks/README.md): exit 0 PASS, 1 FAIL, 2 usage error, 3 BLOCKED, and `<results>/<name>.json` |
 | `evidence_page` | The command that writes `evidence.md` into the rerun's results |
 | `bench` | `deploy`, `replay` (and `restart`) with `{artifact}` and `{run}`, run by the app; `doctor`, run by the app; `build` and `start`, the bench owner's commands shown on the board; `baseline`, the baseline directory |
-| `connectors` | `direct` (default): checks in the build container, `bench/cc1.sh`; `servers`: the MCP servers (below) |
-| `servers` `{build, bench}` | The command line that starts each server, each with its `--config` |
-| `servers.board_decides` | `false` by default; `true`: 批准 / 拒绝 on the board too in servers mode (trial only) |
+| `connectors` | `direct` (default): checks in the build container, `bench/cc1.sh`; `servers`: the MCP servers (below). 设置 overrides it |
+| `servers` `{build, bench}` | The command line that starts each server, each with its `--config` (设置 overrides each `--config`) |
+| `servers.board_decides` | `false` by default; `true`: 批准 / 拒绝 on the board too in servers mode (trial only). 设置 overrides it |
 | `test_owners`, `test_command` | For a team without `checks`: who owns failing tests (globs), and the command the test wall shows |
 | `delivery_defaults` | Default delivery labels |
 | `defaults` | `model`, `max_fix_rounds` (2), `max_review_rounds` (0), `gate_discuss` (off), `max_discuss_rounds` (5) |
@@ -133,11 +165,16 @@ Set-up, once (the paths the shipped team file names):
    (the committed `bench/baseline/` of the sample by default, or a baseline of your own), and in `build.toml`
    `bench_baseline` the same folder.
    Leave out `[trust]`, and in `bench.toml` give the `developer` role the `physical` class.
-3. Set `"connectors": "servers"` in `team/team-vstatd.json` and reinstall the app.
+3. Switch the mode on 设置 (`?view=settings`), which also holds both `--config` paths: no edit of
+   `team/team-vstatd.json` and no reinstall. The team file's `"connectors": "servers"` still works for an install
+   that never opens the page.
 
 One run uses the servers at a time. Approve each bench request at `bench/console.py`: the board shows it and does
-not approve it in this mode, unless `servers.board_decides` is true (the trial only, as in direct mode, D3).
+not approve it in this mode, unless `board_decides` is on (设置, or `servers.board_decides` in the team file; the
+trial only, as in direct mode, D3).
 What a server refuses holds the run for a person; 重试 asks the server again.
+设置 and 准备情况 also say whether the build server's `[paths]` has `bench_results`, `bench_runs` and
+`bench_baseline`, which its release check needs; the app reads that file and never writes it.
 When the build server's last `run_check build` answer says one more cross failure reaches its bound (TR §5.1), the
 next round is held before any call, and 重试 there runs that round with the server's last attempt. Once the server
 refuses (past the bound) the board gives the `buildserver.admin reset-repair` command; the app never resets the

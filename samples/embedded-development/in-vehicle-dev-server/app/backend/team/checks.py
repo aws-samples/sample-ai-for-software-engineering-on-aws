@@ -201,6 +201,16 @@ def docker_command(runner: dict[str, Any], mounts: list[tuple[str, bool]], cmd: 
     return out + [runner["image"], *cmd]
 
 
+def docker_words(words: list[str]) -> list[str]:
+    """The Docker command without its ``run`` options: the executable and the global flags that pick the daemon
+    (``-H <host>``, which settings.py puts there), for ``docker image inspect`` and ``docker rm``."""
+    out = list(words[:1])
+    for i, w in enumerate(words[:-1]):
+        if w in ("-H", "--host"):
+            out += [w, words[i + 1]]
+    return out
+
+
 def docker_prefix(runner: dict[str, Any] | None, mounts: list[tuple[str, bool]], workdir: str | None = None) -> str:
     """The same as one shell line ending with the image, for a role's task ("" when the team has no build container)."""
     try:
@@ -306,12 +316,12 @@ async def _exec(cmd: list[str], log: Path, timeout: float, name: str) -> tuple[i
             if proc.returncode is None:
                 with contextlib.suppress(ProcessLookupError):
                     proc.kill()
-                await _remove(cmd[0], name)
+                await _remove(docker_words(cmd), name)
 
 
-async def _remove(docker: str, name: str) -> None:
+async def _remove(docker: list[str], name: str) -> None:
     with contextlib.suppress(OSError):
-        rm = await asyncio.create_subprocess_exec(docker, "rm", "-f", name, stdin=asyncio.subprocess.DEVNULL,
+        rm = await asyncio.create_subprocess_exec(*docker, "rm", "-f", name, stdin=asyncio.subprocess.DEVNULL,
                                                   stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         await asyncio.shield(rm.wait())
 

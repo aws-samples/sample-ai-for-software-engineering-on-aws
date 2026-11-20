@@ -56,23 +56,23 @@ def sysroot_command(runner: dict[str, Any], volume: str, sample: Path) -> str:
                        "python3", "/sample/reference-project/tools/make-standin-sysroot.py", checks.SYSROOT_AT])
 
 
-async def image_exists(docker: str, image: str) -> dict[str, Any]:
+async def image_exists(docker: list[str], image: str) -> dict[str, Any]:
     """``docker image inspect``: ok True (there), False (not there, or Docker does not answer: *why*)."""
     return await _inspect(docker, "image", image, "{{.Id}}", "镜像不在本机")
 
 
-async def volume_exists(docker: str, volume: str) -> dict[str, Any]:
+async def volume_exists(docker: list[str], volume: str) -> dict[str, Any]:
     """``docker volume inspect``: ok True (there), False (not there, or Docker does not answer: *why*)."""
     return await _inspect(docker, "volume", volume, "{{.Name}}", "卷不在本机")
 
 
-async def _inspect(docker: str, kind: str, name: str, fmt: str, missing_why: str) -> dict[str, Any]:
+async def _inspect(docker: list[str], kind: str, name: str, fmt: str, missing_why: str) -> dict[str, Any]:
     try:
-        proc = await asyncio.create_subprocess_exec(docker, kind, "inspect", "-f", fmt, name,
+        proc = await asyncio.create_subprocess_exec(*docker, kind, "inspect", "-f", fmt, name,
                                                     stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
                                                     stderr=asyncio.subprocess.PIPE)
     except OSError as exc:
-        return {"ok": False, "why": f"没有 {docker}：{exc}", "at": time.time()}
+        return {"ok": False, "why": f"没有 {docker[0]}：{exc}", "at": time.time()}
     try:
         out, err = await asyncio.wait_for(proc.communicate(), IMAGE_TIMEOUT_S)
     except asyncio.TimeoutError:
@@ -104,7 +104,7 @@ class Probes:
         """Start what is due: the image and sysroot probes when older than IMAGE_TTL_S, doctor.sh when never run or
         *doctor*."""
         runner, spec = runner_here(team), team.get("bench") or {}
-        docker = (runner.get("docker") or ["docker"])[0]
+        docker = checks.docker_words(runner.get("docker") or ["docker"])
         if runner.get("image") and not self.running("image") and (
                 self.image is None or time.time() - self.image["at"] >= IMAGE_TTL_S):
             self._start("image", self._image(docker, runner["image"]))
@@ -118,10 +118,10 @@ class Probes:
     def _start(self, name: str, coro: Any) -> None:
         self._tasks[name] = asyncio.create_task(coro)
 
-    async def _image(self, docker: str, image: str) -> None:
+    async def _image(self, docker: list[str], image: str) -> None:
         self.image = await image_exists(docker, image)
 
-    async def _sysroot(self, docker: str, volume: str) -> None:
+    async def _sysroot(self, docker: list[str], volume: str) -> None:
         self.sysroot = await volume_exists(docker, volume)
 
     async def _doctor(self, cmd: list[str]) -> None:
@@ -157,9 +157,12 @@ def pending(team: dict[str, Any], state: dict[str, Any], now: float) -> list[dic
 
 
 def items(team: dict[str, Any], probes: Probes, knowledge: dict[str, Any] | None, state: dict[str, Any],
-          sample: Path, now: float) -> list[dict[str, Any]]:
+          sample: Path, now: float, release: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """The checklist: each item's state (ok True, False, or None when the app cannot tell or has not read it yet),
-    what it found, the command a person runs when it is not ready, and from which step the run needs it."""
+    what it found, the command a person runs when it is not ready, and from which step the run needs it.
+
+    *release*: in servers mode, what the build server's configuration says about the three ``bench_*`` paths its
+    release check needs (settings.release_inputs, read only); None in direct mode, where they are not used."""
     runner, spec = runner_here(team), team.get("bench") or {}
     out: list[dict[str, Any]] = []
 
@@ -217,4 +220,9 @@ def items(team: dict[str, Any], probes: Probes, knowledge: dict[str, Any] | None
     if console is not None:
         add("console", "操作台", None, "app 看不出操作台开着没有：部署和回放要人在操作台上批准，它要在自己的终端里开着",
             shlex.join(["python3", str(console)]), "bench")
+    if release is not None:
+        # the three bench_* paths of the build server's own configuration: read, never written by the app (D17);
+        # 设置 shows the lines to paste, because the server's user owns that file
+        add("release_inputs", "build 服务器配置里的台架结果路径", release["ok"],
+            release["detail"] + ("；要粘的三行在「设置」页上" if release["lines"] else ""), "", "bench")
     return out

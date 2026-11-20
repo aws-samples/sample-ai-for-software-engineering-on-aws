@@ -82,7 +82,7 @@ describe('评分卡', () => {
     setApiRoutes({ [`GET ${API}/board*`]: () => clone(emptyBoard()), [`GET ${API}/scorecard`]: () => clone(EMPTY) })
     render(<VstatdTeamApp pollMs={60_000} />)
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
-    expect(tabs).toEqual(['团队看板', '评分卡'])
+    expect(tabs).toEqual(['团队看板', '评分卡', '设置'])
     await user.click(screen.getByRole('tab', { name: '评分卡' }))
     await waitFor(() => expect(screen.getByTestId('sc-root')).toBeInTheDocument())
     expect(window.location.search).toBe('?view=score')
