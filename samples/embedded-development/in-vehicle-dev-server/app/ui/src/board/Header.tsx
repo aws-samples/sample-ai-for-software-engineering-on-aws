@@ -21,7 +21,7 @@ import { ReadinessPanel, ReadinessSummary, useReadiness } from './FlowStrip'
 import { BenchAudit } from './Audit'
 import { KnowledgeHome } from './Knowledge'
 import { BacklogHome } from './Backlog'
-import { t as tr } from '../i18n'
+import { fileApp, t as tr, thisHost } from '../i18n'
 
 // ---------------------------------------------------------------------------------------------
 // the top bar
@@ -111,7 +111,8 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
           </select>
         )}
         {!projection && !replaying && run && onHide && !isRunActive(run.status) && (
-          <button type="button" className="kt-btn kt-btn-icon" onClick={() => onHide(run.id)} title={tr('board.Header.13')} aria-label={tr('board.Header.14')}>
+          <button type="button" className="kt-btn kt-btn-icon" onClick={() => onHide(run.id)}
+            title={tr('board.Header.13', { p0: thisHost() })} aria-label={tr('board.Header.14')}>
             🗑
           </button>
         )}
@@ -152,7 +153,8 @@ export function TopBar({ board, run, projection, follow, startOpen, onSelect, on
           </button>
         )}
         {!projection && run && !run.imported && onFolder && (
-          <button type="button" className="kt-btn" aria-expanded={folderOpen} onClick={onFolder} title={tr('board.Header.26')}>
+          <button type="button" className="kt-btn" aria-expanded={folderOpen} onClick={onFolder}
+            title={tr('board.Header.26', { p0: thisHost(), p1: fileApp() })}>
             {tr('board.Header.27')}
           </button>
         )}

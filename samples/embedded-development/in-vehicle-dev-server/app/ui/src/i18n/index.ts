@@ -44,6 +44,15 @@ export function t(key: string, params?: Params): string {
 /** Whether a key exists (an event code the dictionary knows). */
 export const has = (key: string): boolean => key in DICTS.zh
 
+/** This board runs beside the Kiro Crew that serves it, so this browser's platform is the host's. A Linux desktop
+ * says so in its user agent; anything else (including a test's jsdom) is taken for a Mac. */
+const onLinux = (): boolean =>
+  typeof navigator !== 'undefined' && /Linux|X11/i.test(navigator.userAgent) && !/Mac OS X/i.test(navigator.userAgent)
+/** What a run's folder opens in here: Finder on a Mac, the desktop's file manager on a Linux host (service.py). */
+export const fileApp = (): string => t(onLinux() ? 'host.files' : 'host.finder')
+/** The machine the runs are on, as the board calls it. */
+export const thisHost = (): string => t(onLinux() ? 'host.host' : 'host.mac')
+
 /** Remembers the choice and reloads the page in it. */
 export function setLang(next: Lang): void {
   try {

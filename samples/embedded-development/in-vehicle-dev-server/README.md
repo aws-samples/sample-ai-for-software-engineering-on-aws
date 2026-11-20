@@ -274,7 +274,7 @@ On a Mac or a Linux host with Kiro Crew running, Docker, Node.js 22, git and Pyt
 2. Build the checks' build container and the bench once (setup.sh does not, and prints these commands):
 
    ```bash
-   docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/   # Apple Silicon; linux/amd64 and vstatd-build:amd64 on Intel
+   docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/   # Apple Silicon; linux/amd64 and vstatd-build:amd64 on x86_64
    docker run --rm --platform linux/arm64 -v vstatd-standin-sysroot:/opt/cc1-sysroot -v "$PWD":/sample:ro vstatd-build:arm64 \
      python3 /sample/reference-project/tools/make-standin-sysroot.py /opt/cc1-sysroot   # the checks' sysroot (stand-in)
    bench/build-target.sh        # the target image and its sysroot (first build: about 40 min, bench/README.md)

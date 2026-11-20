@@ -125,8 +125,16 @@ echo "      python3 /sample/reference-project/tools/make-standin-sysroot.py /opt
 echo "    bench/build-target.sh        # target image and sysroot (Buildroot; the first build took about 40 min, bench/README.md)"
 echo "    bench/doctor.sh              # what is still missing"
 echo "  Then: open the operator console in a terminal of its own (python3 bench/console.py), start the target"
-echo "  (bench/cc1.sh start && bench/cc1.sh wait), deploy the current release (bench/cc1.sh deploy <stripped vstatd>) and"
-echo "  write the baseline once: bench/cc1.sh replay --kind baseline --out $RUNS/baseline (bench/README.md)."
+if [ -d "$ROOT/bench/baseline" ]; then
+  echo "  (bench/cc1.sh start && bench/cc1.sh wait) and deploy the current release"
+  echo "  (bench/cc1.sh deploy <stripped vstatd>). The runs compare against the baseline this folder comes with"
+  echo "  (bench/baseline/README.md): record one of your own only where the correct release does not pass logdiff"
+  echo "  against it on your machine."
+else
+  echo "  (bench/cc1.sh start && bench/cc1.sh wait), deploy the current release"
+  echo "  (bench/cc1.sh deploy <stripped vstatd>) and write the baseline once:"
+  echo "  bench/cc1.sh replay --kind baseline --out $RUNS/baseline (bench/README.md)."
+fi
 echo "  Until the bench is ready a run stops before its first bench action, and the board says what is missing."
 
 echo
@@ -135,5 +143,6 @@ if [ "$DRY" = 1 ]; then echo "${B}Dry run: nothing was changed.${N}"; else
   if [ "$(uname -s)" = Linux ]; then RESTART="kirocrew restart (or quit the desktop app and open it again)"
   else RESTART="quit Kiro Crew and open it again"; fi
   echo "${B}Done.${N} Restart Kiro Crew once so that it loads the team's agent templates: $RESTART."
+  echo "A restart ends every session Kiro Crew has going, this sample's and your own: restart it when none is running."
   echo "Then open Kiro Crew -> Apps -> $APP_LABEL -> 团队看板, and start a run with 新需求 (see README.md)."
 fi

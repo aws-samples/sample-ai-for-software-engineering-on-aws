@@ -8,7 +8,7 @@ import ts from 'typescript'
 import { describe, expect, test } from 'vitest'
 import zh from './zh.json'
 import en from './en.json'
-import { format, lang, locale, t } from './index'
+import { fileApp, format, lang, locale, t, thisHost } from './index'
 import { evText, msgText } from './events'
 
 const CJK = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/
@@ -33,6 +33,21 @@ describe('the dictionaries', () => {
     expect(locale()).toBe('zh-CN')
     expect(t('AppBar.1')).toBe('团队看板')
     expect(format('{a}/{b}', { a: 1 })).toBe('1/{b}')
+  })
+
+  test('the words for the host follow the desktop this board runs on: a Mac, else a Linux file manager', () => {
+    const ua = navigator.userAgent
+    const say = (value: string) => {
+      Object.defineProperty(navigator, 'userAgent', { value, configurable: true })
+      return [fileApp(), thisHost()]
+    }
+    try {
+      expect(say('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) KiroCrew')).toEqual(['Finder', '这台 Mac'])
+      expect(say('Mozilla/5.0 (X11; Linux x86_64) KiroCrew')).toEqual(['文件管理器', '这台主机'])
+      expect(say(ua)).toEqual(['Finder', '这台 Mac']) // jsdom: taken for a Mac, as the sample's own host is
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
+    }
   })
 })
 

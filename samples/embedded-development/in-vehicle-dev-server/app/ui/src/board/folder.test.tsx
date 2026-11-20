@@ -30,4 +30,26 @@ describe('打开文件夹', () => {
     await user.click(within(panel).getByRole('button', { name: '收起项目文件夹' }))
     expect(screen.queryByRole('region', { name: '项目文件夹' })).toBeNull()
   })
+
+  test('on a Linux host the board says file manager, not Finder, and this host, not this Mac', async () => {
+    const user = userEvent.setup()
+    const ua = navigator.userAgent
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (X11; Linux x86_64)', configurable: true })
+    try {
+      setApiRoutes({
+        [`GET ${API}/board*`]: () => runningBoard(),
+        [`POST ${API}/runs/r1006a/open`]: () => ({ ok: true, path: '/x', app: 'finder' }),
+      })
+      render(<TeamPage pollMs={60_000} />)
+      await screen.findAllByTestId('kt-lane')
+      const folder = screen.getByRole('button', { name: '📁 文件夹' })
+      expect(folder).toHaveAttribute('title', '项目在这台主机上的哪个文件夹：在 文件管理器 或 Kiro 里打开')
+      await user.click(folder)
+      const panel = screen.getByRole('region', { name: '项目文件夹' })
+      await user.click(within(panel).getByRole('button', { name: '📁 在 文件管理器 打开' }))
+      expect(await within(panel).findByRole('status')).toHaveTextContent('已经在 文件管理器 里打开')
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
+    }
+  })
 })
