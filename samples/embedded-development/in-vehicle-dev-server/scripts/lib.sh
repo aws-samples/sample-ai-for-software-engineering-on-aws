@@ -7,6 +7,9 @@
 # (kirocrew_bin below), for a test or a kirocrew setup.sh does not find.
 ROOT="${ROOT:?}"
 KC="${VSTATD_KCAPI:-$ROOT/app/scripts/kcapi.sh}"   # calls the local Kiro Crew API as the dashboard owner
+# the gateway's loopback port, exported so that kcapi.sh in a child process reads the same one: set as a shell
+# variable alone it would leave the health check and the API calls on two different ports
+export KC_PORT="${KC_PORT:-5476}"
 PY=/usr/bin/python3
 export PYTHONDONTWRITEBYTECODE=1   # scripts/templates.py imports state.py: no __pycache__ left in scripts/
 B=$'\033[1m'; G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; N=$'\033[0m'
@@ -25,7 +28,7 @@ else CREW_START="open it"; fi
 # Kiro Crew is running and answers on its loopback port
 crew_up() {
   if [ -n "${VSTATD_KCAPI:-}" ]; then "$KC" GET /api/health | grep -q '"ok": *true'; return; fi
-  curl -s --noproxy '*' --max-time 3 "http://127.0.0.1:${KC_PORT:-5476}/api/health" | grep -q '"ok": *true'
+  curl -s --noproxy '*' --max-time 3 "http://127.0.0.1:${KC_PORT}/api/health" | grep -q '"ok": *true'
 }
 
 # NODE_DIR := the folder of a node 22 or newer (PATH, Homebrew, nvm)

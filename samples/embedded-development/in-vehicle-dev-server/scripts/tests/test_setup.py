@@ -662,8 +662,9 @@ def test_cleanup_removes_the_app_and_its_sessions_once_every_run_has_ended(home,
 
 @pytest.mark.parametrize("route", ["uninstall", "delete"])
 def test_cleanup_uninstalls_the_app_through_the_route_this_kiro_crew_has(home, root, route):
-    """Kiro Crew 0.12.2 answers the DELETE of an installed app with a 405 (glayyiyi's Ubuntu run), so cleanup.sh asks
-    for the app's own uninstall route first and falls back to the DELETE where that route answers a 405."""
+    """Kiro Crew 0.12.2 answers the DELETE of an installed app with a 405 (seen on a run on Ubuntu 24.04), so
+    cleanup.sh asks for the app's own uninstall route first and falls back to the DELETE where that route answers
+    a 405."""
     data = app_data(home)
     record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
     a_405 = "DELETE /api/apps/vstatd-team" if route == "uninstall" else "POST /api/apps/vstatd-team/uninstall"
@@ -675,6 +676,61 @@ def test_cleanup_uninstalls_the_app_through_the_route_this_kiro_crew_has(home, r
     sent = [c[:2] for c in changes(home)]
     assert ["POST", "/api/apps/vstatd-team/uninstall"] in sent  # asked for, whichever route answers
     assert (["DELETE", "/api/apps/vstatd-team"] in sent) == (route == "delete")  # only once the POST answered a 405
+
+
+LIB_PORT_PROBE = """#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$1"
+. "$ROOT/scripts/lib.sh"
+{ printf 'lib=%s\\n' "$KC_PORT"
+  bash -c 'printf "child=%s\\n" "${KC_PORT:-unset}"'   # kcapi.sh runs in a child process: exported, or it disagrees
+} > "$2"
+unset VSTATD_KCAPI   # the health check then goes through the stand-in curl, which logs the URL it was asked for
+crew_up || true
+"""
+
+
+@pytest.mark.parametrize("port", [None, "6000"])
+def test_the_gateway_port_is_exported_so_the_health_check_and_the_api_calls_agree(home, root, port):
+    """KC_PORT read separately in three places and exported in none of them left the health check on one port and
+    kcapi.sh's calls on another. scripts/lib.sh exports it, so every reader sees the same one."""
+    curl_log = home["tmp"] / "curl.log"
+    curl = home["tmp"] / "bin" / "curl"
+    curl.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" >> {curl_log}\nexit 1\n', encoding="utf-8")
+    curl.chmod(0o755)
+    probe = home["tmp"] / "port-probe.sh"
+    probe.write_text(LIB_PORT_PROBE, encoding="utf-8")
+    seen = home["tmp"] / "port.txt"
+    env = {**home["env"], **({"KC_PORT": port} if port else {})}
+    r = subprocess.run(["bash", str(probe), str(root), str(seen)], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    want = port or "5476"
+    assert seen.read_text().split() == [f"lib={want}", f"child={want}"]
+    assert f"http://127.0.0.1:{want}/api/health" in curl_log.read_text().split()
+
+
+@pytest.mark.parametrize("where", ["jar", "port"])
+def test_cleanup_removes_the_cookie_jar_kcapi_keeps_wherever_it_keeps_it(home, root, where):
+    """kcapi.sh keeps the owner's session cookie at $KC_JAR, which defaults to the port's name under TMPDIR. cleanup.sh
+    removed the default-port path only, so a non-default port or KC_JAR left the cookie behind."""
+    tmp = home["tmp"] / "jars"
+    tmp.mkdir()
+    extra = {"TMPDIR": str(tmp), "KC_PORT": "6000"}
+    mine = tmp / "kc-cookies-6000.jar"
+    if where == "jar":
+        mine = home["tmp"] / "own-cookies.jar"
+        extra["KC_JAR"] = str(mine)
+    mine.write_text("cookie\n", encoding="utf-8")
+    other = tmp / "kc-cookies-5476.jar"  # another port's: not this run's to remove
+    other.write_text("cookie\n", encoding="utf-8")
+    app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    crew(home, apps={"name": "vstatd-team"},
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
+    r = subprocess.run(["bash", str(root / "cleanup.sh")], input="remove\n", capture_output=True, text=True,
+                       env={**home["env"], **extra})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not mine.exists() and other.exists()
 
 
 def test_cleanup_removes_the_knowledge_source_and_the_workspace_that_are_still_setups(home, root):

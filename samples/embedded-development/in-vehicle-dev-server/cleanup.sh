@@ -276,7 +276,7 @@ for d in node_modules dist; do
   forget created "ui_$d"
 done
 rm -rf "$ROOT/scripts/__pycache__"   # Python's caches there, whoever wrote them (an earlier setup, a test run)
-rm -f "${TMPDIR:-/tmp}/kc-cookies-${KC_PORT:-5476}.jar"
+rm -f "${KC_JAR:-${TMPDIR:-/tmp}/kc-cookies-${KC_PORT}.jar}"   # the owner cookie kcapi.sh kept, wherever it keeps it
 if [ "$FAILED" = 1 ]; then
   echo
   bad "Not everything was removed. ${VSTATD_INSTALL_STATE:-$ROOT/.install-state.json} keeps what is left: fix what"
