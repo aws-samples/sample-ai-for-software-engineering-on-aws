@@ -6,10 +6,12 @@
 #   scripts/kcapi.sh GET  /api/apps/vstatd-team/health
 #   scripts/kcapi.sh --status GET /api/apps/vstatd-team   # prints the HTTP status only (000: no answer)
 #
-# Auth: `kirocrew token`, run with the gateway's OWN interpreter, mints a 5-minute link token signed with
+# Auth: `kirocrew token`, run with the gateway's OWN interpreter, mints a link token signed with
 # ~/.kiro/crew/token_signing.key; the first request carrying `?token=` exchanges it for the HttpOnly session
-# cookie, which is cached in a jar and reused. The gateway has no `Authorization: Bearer` support: cookies are
-# the contract. KC_BASE defaults to the loopback address the gateway listens on.
+# cookie, which is cached in a jar and reused. On macOS that interpreter is the desktop app's (or $KC_PY); elsewhere
+# `kirocrew token --port $KC_PORT` mints it, with the kirocrew program at $KC_KIROCREW, else the one on PATH.
+# The gateway has no `Authorization: Bearer` support: cookies are the contract. KC_BASE defaults to the loopback
+# address the gateway listens on.
 set -euo pipefail
 
 CURL=/usr/bin/curl
@@ -22,13 +24,16 @@ KC_BASE="${KC_BASE:-http://127.0.0.1:${KC_PORT}}"
 # The session cookie is the dashboard owner's: keep it in the per-user temp folder, readable by this user only
 umask 077
 KC_JAR="${KC_JAR:-${TMPDIR:-/tmp}/kc-cookies-${KC_PORT}.jar}"
-if [ -z "${KC_PY:-}" ]; then  # the gateway's own interpreter: the running app's, else the one in /Applications
+# the gateway's own interpreter, on macOS: the running app's, else the one in /Applications
+if [ -z "${KC_PY:-}" ] && [ "$(uname -s)" = Darwin ]; then
   RUNNING_APP="$(/bin/ps -axo command= | /usr/bin/sed -n 's#^\(/.*/KiroCrew\.app\)/Contents/MacOS/KiroCrew.*#\1#p' | $HEAD -1)"
   for p in ${RUNNING_APP:+"$RUNNING_APP"/Contents/Resources/backend-dist/kirocrew-backend-*/bin/python3.12} \
            /Applications/KiroCrew.app/Contents/Resources/backend-dist/kirocrew-backend-*/bin/python3.12; do
     [ -x "$p" ] && "$p" -c 'import kiro_crew' 2>/dev/null && { KC_PY="$p"; break; }
   done
 fi
+# With no such interpreter (Linux: the desktop app or the CLI), the kirocrew program mints it: $KC_KIROCREW, else PATH's
+KC_KIROCREW="${KC_KIROCREW:-$(command -v kirocrew 2>/dev/null || true)}"
 
 usage() { echo "usage: $(basename "$0") [--status] <METHOD> <PATH> [JSON_BODY]" >&2; exit 2; }
 STATUS=0
@@ -39,8 +44,11 @@ METHOD="$1"; PATH_="$2"; BODY="${3:-}"
 session_ok() { $CURL --noproxy '*' -s -f -b "$KC_JAR" "${KC_BASE}/api/auth/me" >/dev/null 2>&1; }
 
 mint() {
-  local url token
-  url=$("$KC_PY" -m kiro_crew token 2>/dev/null | $GREP -o 'token=.*' | $HEAD -1) || true
+  local url="" token
+  if [ -n "${KC_PY:-}" ]; then url=$("$KC_PY" -m kiro_crew token 2>/dev/null | $GREP -o 'token=.*' | $HEAD -1) || true
+  elif [ -n "$KC_KIROCREW" ]; then
+    url=$("$KC_KIROCREW" token --port "$KC_PORT" 2>/dev/null | $GREP -o 'token=.*' | $HEAD -1) || true
+  fi
   token="${url#token=}"
   if [ -z "$token" ]; then
     echo "kcapi: could not mint a token — is the gateway running on ${KC_PORT}?" >&2

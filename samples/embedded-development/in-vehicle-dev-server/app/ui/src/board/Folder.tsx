@@ -1,20 +1,22 @@
 /**
- * 打开文件夹: where a run's code is on this Mac, and a way there. The run branch's worktree holds the whole project as
- * merged so far; every writing role also has its own worktree. The backend opens only those (Finder or the Kiro IDE).
+ * 打开文件夹: where a run's code is on this machine, and a way there. The run branch's worktree holds the whole project
+ * as merged so far; every writing role also has its own worktree. The backend opens only those, in Finder or the Kiro
+ * IDE on a Mac and in the desktop's file manager or the kiro on PATH on a Linux host.
  */
 import { useState } from 'react'
 import type { AppApi } from '@kirocrew/app-sdk'
 import { paths } from './format'
 import { errorText } from './useBoard'
-import { t as tr } from '../i18n'
+import { fileApp, t as tr } from '../i18n'
 
 export function FolderActions({ api, run, role, path }: { api: AppApi; run: string; role: string | null; path: string | null }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const open = (app: 'finder' | 'kiro') => {
     setMsg(null)
+    const opened = app === 'kiro' ? tr('board.Folder.1') : tr('board.Folder.2', { p0: fileApp() })
     api
       .post<{ ok: boolean; path: string; app: string }>(paths.open(run), { role, app })
-      .then((r) => setMsg({ ok: true, text: app === 'kiro' ? tr('board.Folder.1') : tr('board.Folder.2') }))
+      .then((r) => setMsg({ ok: true, text: opened }))
       .catch((e) => setMsg({ ok: false, text: errorText(e) }))
   }
   const copy = () => {
@@ -33,7 +35,7 @@ export function FolderActions({ api, run, role, path }: { api: AppApi; run: stri
       )}
       <span className="kt-folder-acts">
         <button type="button" className="kt-btn is-small" onClick={() => open('finder')}>
-          {tr('board.Folder.5')}
+          {tr('board.Folder.5', { p0: fileApp() })}
         </button>
         <button type="button" className="kt-btn is-small" onClick={() => open('kiro')}>
           {tr('board.Folder.6')}

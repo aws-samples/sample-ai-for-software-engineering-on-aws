@@ -15,7 +15,7 @@ import type { Board, RunDetail } from '../types'
 import { diffRuns, type BoardDiff } from './diff'
 import { POLL_MS, paths } from './format'
 import { useLatest } from './hooks'
-import { lang, has, t as tr } from '../i18n'
+import { lang, has, setHostOs, t as tr } from '../i18n'
 
 export interface BoardState {
   board: Board | null
@@ -78,6 +78,7 @@ export function useBoard(api: AppApi, opts: { run: string | null; pollMs?: numbe
     const gen = generation.current
     try {
       const got = localizeBoard(await apiRef.current.get<Board>(paths.board(runRef.current)))
+      setHostOs(got?.host_os) // the words for the host follow the machine the backend runs on, not this browser
       if (gen !== generation.current) return // the selection changed while this was on its way
       const next = got?.run ?? null
       const visible = typeof document === 'undefined' || !document.hidden

@@ -10,7 +10,10 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -33,26 +36,38 @@ if "up" in answers and path not in answers["up"]:  # the owner API refuses this 
     print("kcapi: could not mint a token", file=sys.stderr)
     sys.exit(1)
 gets = sum(json.loads(ln) == ["GET", path] for ln in open(os.environ["FAKE_KC_LOG"]))  # this one included
+# POST <path>/uninstall and DELETE <path> both remove it; "refuse" answers them while it stays, "code" says what the
+# status is (a Kiro Crew without that route answers a 405)
+target = path[: -len("/uninstall")] if method == "POST" and path.endswith("/uninstall") else \\
+    path if method == "DELETE" else None
+refused = target is not None and target in answers.get("refuse", [])
+code = answers.get("code", {}).get(f"{method} {path}", 409 if refused else 200)
 # Kiro Crew answers with an error: every time (fail), or the Nth GET of that path (fail_get)
 if path in answers.get("fail", []) or gets in answers.get("fail_get", {}).get(path, []):
     print("500" if status else json.dumps({"error": "the stand-in fails this"}))
-elif status:
-    print("404" if answers.get(path, {"error": "not found"}) == {"error": "not found"} else "200")
 elif method == "GET":
-    print(json.dumps(answers.get(path, {"error": "not found"})))
-elif method == "DELETE" and path not in answers.get("refuse", []):  # gone from the list that holds it
-    if path in answers:
-        answers[path] = {"error": "not found"}
-    base, key = path.rsplit("/", 1)
+    print(("404" if answers.get(path, {"error": "not found"}) == {"error": "not found"} else "200") if status
+          else json.dumps(answers.get(path, {"error": "not found"})))
+elif target is not None and not refused and 200 <= code < 300:  # gone from the list that holds it
+    if target in answers:
+        answers[target] = {"error": "not found"}
+    base, key = target.rsplit("/", 1)
     for k, v in (answers.get(base) or {}).items():
         answers[base][k] = [r for r in v if r != key
                             and not (isinstance(r, dict) and key in (r.get("name"), r.get("id")))]
     json.dump(answers, open(os.environ["FAKE_KC"], "w"))
-    print(json.dumps({"ok": True}))
+    print(code if status else json.dumps({"ok": True}))
 else:
     a = answers.get(f"{method} {path}", {"error": "the stand-in refuses this"})
-    print(a if isinstance(a, str) else json.dumps(a))  # a string: a body that is not JSON
+    print(code if status else a if isinstance(a, str) else json.dumps(a))  # a string: a body that is not JSON
 """
+# the kirocrew program: `token` prints a link URL as `kirocrew token` does, with a made-up token
+KIROCREW = """#!/bin/sh
+[ -n "$FAKE_KIROCREW_LOG" ] && echo "$0 $*" >> "$FAKE_KIROCREW_LOG"
+[ "$1" = token ] && echo "http://localhost:5476?token=alice-link-token"
+exit 0
+"""
+UNAME = '#!/bin/sh\n[ "$1" = -s ] && { echo Linux; exit 0; }\nexec /usr/bin/uname "$@"\n'  # a Linux host's
 
 
 def run_py(*args, env=None):
@@ -68,7 +83,9 @@ def home(tmp_path, monkeypatch):
     bin_.mkdir()
     (bin_ / "kcapi").write_text(KCAPI, encoding="utf-8")
     (bin_ / "docker").write_text("#!/bin/sh\n[ \"$1\" = version ] && echo 27.0 ; exit 0\n", encoding="utf-8")
-    (bin_ / "kirocrew").write_text("#!/bin/sh\n", encoding="utf-8")
+    (bin_ / "kirocrew").write_text(KIROCREW, encoding="utf-8")
+    node = "#!/bin/sh\n[ \"$1\" = -v ] && echo v22.0.0 || echo 22\n"  # a node 22 that builds nothing
+    (bin_ / "node").write_text(node, encoding="utf-8")
     for p in bin_.iterdir():
         p.chmod(0o755)
     env = {**os.environ, "HOME": str(h), "PATH": f"{bin_}:{os.environ['PATH']}",
@@ -208,7 +225,7 @@ def test_a_template_an_earlier_setup_wrote_under_an_old_name_goes(home):
     assert (agents / "embedded-quality.json").exists() and (agents / "embedded-developer-agent.json").exists()
 
 
-@pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
+@pytest.mark.skipif(platform.system() not in ("Darwin", "Linux"), reason="setup.sh runs on macOS and Linux")
 def test_setup_dry_run_says_what_it_would_do_and_writes_nothing(home):
     crew(home)
     r = subprocess.run(["bash", str(SAMPLE / "setup.sh"), "--dry-run"], capture_output=True, text=True, env=home["env"])
@@ -392,8 +409,8 @@ def test_cleanup_removes_only_what_is_still_setups_and_keeps_the_record_when_a_s
     for line in ("app removed", "trust removed", "member embedded-quality removed"):
         assert line in second.stdout, line
     deleted = [c[1] for c in calls(home)[len(log):] if c[0] == "DELETE"]
-    assert deleted == ["/api/apps/vstatd-team", "/api/security/trusted-apps/vstatd-team",
-                       "/api/agents/embedded-quality"]
+    assert deleted == ["/api/security/trusted-apps/vstatd-team", "/api/agents/embedded-quality"]
+    assert ["POST", "/api/apps/vstatd-team/uninstall", "{}"] in calls(home)[len(log):]  # the app's own route
     assert json.loads(home["kc"].read_text())["/api/security/trusted-apps"]["apps"] == ["other-app"]
     assert not home["state"].exists() and not app_data.parent.exists()
 
@@ -503,12 +520,12 @@ def test_cleanup_removes_nothing_while_kiro_crew_answers_a_404_to_every_path_but
 def test_cleanup_keeps_the_apps_data_and_record_when_kiro_crew_does_not_answer_after_the_uninstall(home, root):
     data = app_data(home)
     record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
-    crew(home, apps={"name": "vstatd-team"}, fail_get={"/api/apps/vstatd-team": [2]},  # the check after the DELETE
+    crew(home, apps={"name": "vstatd-team"}, fail_get={"/api/apps/vstatd-team": [2]},  # the check after the uninstall
          **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
     r = sh(home, root, "cleanup.sh")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "did not say whether the app vstatd-team is installed: its data" in r.stdout
-    assert [c[1] for c in changes(home)][-1] == "/api/apps/vstatd-team"  # the DELETE went out
+    assert [c[1] for c in changes(home)][-1] == "/api/apps/vstatd-team/uninstall"  # the uninstall went out
     assert json.loads(home["state"].read_text())["created"] == ["app", "sample_record", "consent"]
     assert (data / "runs.json").exists()
 
@@ -642,8 +659,81 @@ def test_cleanup_removes_the_app_and_its_sessions_once_every_run_has_ended(home,
     asked = log.index(["GET", "/api/apps/vstatd-team/runs"])
     assert asked < log.index(["POST", "/api/apps/vstatd-team/sessions/cleanup", '{"all": true}'])  # asked first
     assert [c[1] for c in changes(home)] == ["/api/apps/vstatd-team/sessions/cleanup", "/api/apps/vstatd-team/disable",
-                                             "/api/apps/vstatd-team"]
+                                             "/api/apps/vstatd-team/uninstall"]
     assert "app removed" in r.stdout and not data.parent.exists() and not home["state"].exists()
+
+
+@pytest.mark.parametrize("route", ["uninstall", "delete"])
+def test_cleanup_uninstalls_the_app_through_the_route_this_kiro_crew_has(home, root, route):
+    """Kiro Crew 0.12.2 answers the DELETE of an installed app with a 405 (seen on a run on Ubuntu 24.04), so
+    cleanup.sh asks for the app's own uninstall route first and falls back to the DELETE where that route answers
+    a 405."""
+    data = app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    a_405 = "DELETE /api/apps/vstatd-team" if route == "uninstall" else "POST /api/apps/vstatd-team/uninstall"
+    crew(home, apps={"name": "vstatd-team"}, code={a_405: 405},
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "app removed" in r.stdout and not data.parent.exists() and not home["state"].exists()
+    sent = [c[:2] for c in changes(home)]
+    assert ["POST", "/api/apps/vstatd-team/uninstall"] in sent  # asked for, whichever route answers
+    assert (["DELETE", "/api/apps/vstatd-team"] in sent) == (route == "delete")  # only once the POST answered a 405
+
+
+LIB_PORT_PROBE = """#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$1"
+. "$ROOT/scripts/lib.sh"
+{ printf 'lib=%s\\n' "$KC_PORT"
+  bash -c 'printf "child=%s\\n" "${KC_PORT:-unset}"'   # kcapi.sh runs in a child process: exported, or it disagrees
+} > "$2"
+unset VSTATD_KCAPI   # the health check then goes through the stand-in curl, which logs the URL it was asked for
+crew_up || true
+"""
+
+
+@pytest.mark.parametrize("port", [None, "6000"])
+def test_the_gateway_port_is_exported_so_the_health_check_and_the_api_calls_agree(home, root, port):
+    """KC_PORT read separately in three places and exported in none of them left the health check on one port and
+    kcapi.sh's calls on another. scripts/lib.sh exports it, so every reader sees the same one."""
+    curl_log = home["tmp"] / "curl.log"
+    curl = home["tmp"] / "bin" / "curl"
+    curl.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" >> {curl_log}\nexit 1\n', encoding="utf-8")
+    curl.chmod(0o755)
+    probe = home["tmp"] / "port-probe.sh"
+    probe.write_text(LIB_PORT_PROBE, encoding="utf-8")
+    seen = home["tmp"] / "port.txt"
+    env = {**home["env"], **({"KC_PORT": port} if port else {})}
+    r = subprocess.run(["bash", str(probe), str(root), str(seen)], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    want = port or "5476"
+    assert seen.read_text().split() == [f"lib={want}", f"child={want}"]
+    assert f"http://127.0.0.1:{want}/api/health" in curl_log.read_text().split()
+
+
+@pytest.mark.parametrize("where", ["jar", "port"])
+def test_cleanup_removes_the_cookie_jar_kcapi_keeps_wherever_it_keeps_it(home, root, where):
+    """kcapi.sh keeps the owner's session cookie at $KC_JAR, which defaults to the port's name under TMPDIR. cleanup.sh
+    removed the default-port path only, so a non-default port or KC_JAR left the cookie behind."""
+    tmp = home["tmp"] / "jars"
+    tmp.mkdir()
+    extra = {"TMPDIR": str(tmp), "KC_PORT": "6000"}
+    mine = tmp / "kc-cookies-6000.jar"
+    if where == "jar":
+        mine = home["tmp"] / "own-cookies.jar"
+        extra["KC_JAR"] = str(mine)
+    mine.write_text("cookie\n", encoding="utf-8")
+    other = tmp / "kc-cookies-5476.jar"  # another port's: not this run's to remove
+    other.write_text("cookie\n", encoding="utf-8")
+    app_data(home)
+    record(home, ("created", "app"), ("created", "sample_record"), ("created", "consent"))
+    crew(home, apps={"name": "vstatd-team"},
+         **{"POST /api/apps/vstatd-team/sessions/cleanup": {"ok": True, "failed": 0, "kept_runs": []}})
+    r = subprocess.run(["bash", str(root / "cleanup.sh")], input="remove\n", capture_output=True, text=True,
+                       env={**home["env"], **extra})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not mine.exists() and other.exists()
 
 
 def test_cleanup_removes_the_knowledge_source_and_the_workspace_that_are_still_setups(home, root):
@@ -763,7 +853,7 @@ def setup_crew(rig, **kw):
     crew(rig, sources=[{"name": "vstatd", "sync_status": "synced", "spend": {"files_done": 3, "files_total": 3}}], **kw)
 
 
-@pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
+@pytest.mark.skipif(platform.system() not in ("Darwin", "Linux"), reason="setup.sh runs on macOS and Linux")
 def test_setup_records_what_it_creates_and_finds_an_app_trust_and_build_that_were_there(home, root):
     setup_crew(home)  # nothing there yet
     r = sh(home, root, "setup.sh", "--consent-session-approval", answer="")
@@ -787,7 +877,7 @@ def test_setup_records_what_it_creates_and_finds_an_app_trust_and_build_that_wer
     assert state["found"] == ["app"] and state["created"] == ["sample_record", "team_home", "knowledge_dir"]
 
 
-@pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
+@pytest.mark.skipif(platform.system() not in ("Darwin", "Linux"), reason="setup.sh runs on macOS and Linux")
 @pytest.mark.parametrize("failing", ["/api/apps/vstatd-team", "/api/security/trusted-apps"])
 def test_setup_stops_before_it_records_anything_when_kiro_crew_does_not_say_what_is_there(home, root, failing):
     setup_crew(home, apps={"name": "vstatd-team"}, fail=[failing])
@@ -797,10 +887,116 @@ def test_setup_stops_before_it_records_anything_when_kiro_crew_does_not_say_what
     assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and changes(home) == []
 
 
-@pytest.mark.skipif(platform.system() != "Darwin", reason="setup.sh runs on macOS")
+@pytest.mark.skipif(platform.system() not in ("Darwin", "Linux"), reason="setup.sh runs on macOS and Linux")
 def test_setup_stops_while_kiro_crew_answers_a_404_to_every_path_but_its_health(home, root):
     sign_in_gateway(home)
     r = sh(home, root, "setup.sh", "--consent-session-approval", answer="")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "refused this shell as the dashboard owner" in r.stdout
     assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and changes(home) == []
+
+
+def linux_env(rig):
+    """The rig's environment as on a Linux host: a uname that says Linux, the stand-ins on a relative PATH entry (run
+    in rig["tmp"]), no other kirocrew on PATH and none named by VSTATD_KIROCREW_BIN, KC_KIROCREW or KC_PY"""
+    linux = rig["tmp"] / "linux"
+    linux.mkdir(exist_ok=True)
+    (linux / "uname").write_text(UNAME, encoding="utf-8")
+    (linux / "uname").chmod(0o755)
+    rest = [d for d in os.environ["PATH"].split(os.pathsep) if d and not os.path.exists(os.path.join(d, "kirocrew"))]
+    env = {k: v for k, v in rig["env"].items() if k not in ("VSTATD_KIROCREW_BIN", "KC_KIROCREW", "KC_PY")}
+    return {**env, "PATH": os.pathsep.join([str(linux), "bin", *rest])}
+
+
+def on_linux(rig, script, *args, answer=""):
+    return subprocess.run(["bash", str(script), *args], input=answer, capture_output=True, text=True,
+                          env=linux_env(rig), cwd=rig["tmp"])
+
+
+def the_kirocrew(rig):
+    return str((rig["tmp"] / "bin" / "kirocrew").resolve())  # by its absolute path, though PATH has it as bin/
+
+
+def test_setup_dry_run_on_a_linux_host_goes_to_the_end(home):
+    crew(home)
+    r = on_linux(home, SAMPLE / "setup.sh", "--dry-run")
+    assert r.returncode == 0, r.stdout + r.stderr
+    release = Path("/etc/os-release")
+    pretty = next((ln.split("=", 1)[1].strip().strip('"') for ln in release.read_text().splitlines()
+                   if ln.startswith("PRETTY_NAME=")), "Linux") if release.exists() else "Linux"
+    assert f"✓\x1b[0m {pretty} ({platform.machine()})" in r.stdout and "macOS" not in r.stdout
+    assert f"kirocrew {the_kirocrew(home)}" in r.stdout and "Dry run: nothing was changed." in r.stdout
+    assert {c[0] for c in calls(home)} == {"GET"} and not home["state"].exists()
+
+
+def test_setup_on_a_linux_host_names_the_kirocrew_on_path_in_the_templates_by_its_absolute_path(home, root):
+    setup_crew(home)
+    r = on_linux(home, root / "setup.sh", "--consent-session-approval")
+    assert r.returncode == 0, r.stdout + r.stderr
+    for name in MEMBERS:
+        t = json.loads((home["home"] / ".kiro" / "agents" / f"{name}-agent.json").read_text(encoding="utf-8"))
+        assert t["mcpServers"]["kirocrew-core"]["command"] == the_kirocrew(home)
+    assert "loads the team's agent templates: kirocrew restart (or quit the desktop app" in r.stdout
+
+
+def test_setup_on_a_linux_host_with_no_kirocrew_program_stops_before_it_records_anything(home, root):
+    setup_crew(home)
+    (home["tmp"] / "bin" / "kirocrew").unlink()
+    r = on_linux(home, root / "setup.sh", "--consent-session-approval")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "cannot find the kirocrew program" in r.stderr and "set VSTATD_KIROCREW_BIN" in r.stderr
+    assert not home["state"].exists() and not (home["home"] / ".kiro").exists() and calls(home) == []
+
+
+def test_cleanup_on_a_linux_host_says_how_to_start_kiro_crew(home, root):
+    record(home, ("created", "app"))
+    crew(home, up=[])
+    r = on_linux(home, root / "cleanup.sh", answer="remove\n")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Kiro Crew is not running: start it (the desktop app, kirocrew gateway, or kirocrew service" in r.stdout
+
+
+class Gateway(BaseHTTPRequestHandler):
+    """A gateway on loopback that takes the made-up link token for a session cookie, as Kiro Crew's does"""
+
+    def do_GET(self):  # noqa: N802
+        url = urlsplit(self.path)
+        if url.path == "/" and parse_qs(url.query).get("token") == ["alice-link-token"]:
+            self.send_response(200)
+            self.send_header("Set-Cookie", "s=alice-session; Path=/; HttpOnly")
+            body = b""
+        elif url.path in ("/api/auth/me", "/api/version") and "s=alice-session" in (self.headers["Cookie"] or ""):
+            self.send_response(200)
+            body = b'{"version": "0.13.0-test"}'
+        else:
+            self.send_response(401)
+            body = b""
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+def test_kcapi_on_a_linux_host_mints_its_token_with_the_kirocrew_program(home):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port, log, jar = server.server_address[1], home["tmp"] / "kirocrew.log", home["tmp"] / "jar"
+    env = {**linux_env(home), "KC_PORT": str(port), "KC_JAR": str(jar), "FAKE_KIROCREW_LOG": str(log)}
+    kc = ["bash", str(SAMPLE / "app" / "scripts" / "kcapi.sh"), "GET", "/api/version"]
+    try:
+        r = subprocess.run(kc, capture_output=True, text=True, env=env, cwd=home["tmp"])
+        assert r.returncode == 0 and json.loads(r.stdout) == {"version": "0.13.0-test"}, r.stdout + r.stderr
+        assert log.read_text().splitlines() == [f"bin/kirocrew token --port {port}"]  # the one on PATH
+        alices = home["tmp"] / "alices-kirocrew"
+        alices.write_text(KIROCREW, encoding="utf-8")
+        alices.chmod(0o755)
+        jar.unlink()
+        r = subprocess.run(kc, capture_output=True, text=True, env={**env, "KC_KIROCREW": str(alices)},
+                           cwd=home["tmp"])
+        assert r.returncode == 0 and json.loads(r.stdout) == {"version": "0.13.0-test"}, r.stdout + r.stderr
+        assert log.read_text().splitlines()[1:] == [f"{alices} token --port {port}"]  # KC_KIROCREW's, when set
+    finally:
+        server.shutdown()
+        server.server_close()

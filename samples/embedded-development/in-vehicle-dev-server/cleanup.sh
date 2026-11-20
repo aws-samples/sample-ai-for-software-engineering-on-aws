@@ -133,8 +133,11 @@ read -r -p "  Type remove and press Return to go on (anything else stops): " a
 [ "$a" = remove ] || { echo "  Nothing removed."; exit 0; }
 
 step 1/2 "Kiro Crew"
+# kcapi.sh's token, where it finds no desktop app (Linux)
+KC_KIROCREW="${KC_KIROCREW:-$(kirocrew_bin 2>/dev/null || true)}"; export KC_KIROCREW
 crew_up || {
-  warn "Kiro Crew is not running: open it and run cleanup.sh again to remove the app, members, knowledge source and workspace"
+  warn "Kiro Crew is not running: $CREW_START and run cleanup.sh again to remove the app, members, knowledge" \
+    "source and workspace"
   exit 1
 }
 [ "$("$KC" --status GET /api/version 2>/dev/null)" = 200 ] || {  # a 200: signed out, Kiro Crew answers a 404 here
@@ -175,7 +178,13 @@ if created app; then
 sys.exit(0 if d.get("ok") and not d.get("failed") and not d.get("kept_runs") else 1)' 2>/dev/null; then
       ok "the app's sessions removed"
       "$KC" POST "/api/apps/$APP/disable" '{}' >/dev/null 2>&1 || true
-      out="$("$KC" DELETE "/api/apps/$APP" 2>/dev/null || true)"
+      # Kiro Crew 0.12.2 answers the DELETE below with a 405: uninstall it through the POST route, and fall back to
+      # the DELETE for a Kiro Crew that has no such route. Either way, installed() below says what was removed.
+      out="$("$KC" --status POST "/api/apps/$APP/uninstall" '{}' 2>/dev/null || true)"
+      case "$out" in
+        2??) out="uninstall: $out" ;;
+        *) out="uninstall: ${out:-no answer}; delete: $("$KC" DELETE "/api/apps/$APP" 2>/dev/null || true)" ;;
+      esac
       rc=0; installed || rc=$?
       case "$rc" in
         1) ok "app removed"; APP_GONE=1 ;;
@@ -267,7 +276,7 @@ for d in node_modules dist; do
   forget created "ui_$d"
 done
 rm -rf "$ROOT/scripts/__pycache__"   # Python's caches there, whoever wrote them (an earlier setup, a test run)
-rm -f "${TMPDIR:-/tmp}/kc-cookies-5476.jar"
+rm -f "${KC_JAR:-${TMPDIR:-/tmp}/kc-cookies-${KC_PORT}.jar}"   # the owner cookie kcapi.sh kept, wherever it keeps it
 if [ "$FAILED" = 1 ]; then
   echo
   bad "Not everything was removed. ${VSTATD_INSTALL_STATE:-$ROOT/.install-state.json} keeps what is left: fix what"

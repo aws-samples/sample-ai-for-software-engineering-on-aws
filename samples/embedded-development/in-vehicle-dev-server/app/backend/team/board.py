@@ -4,6 +4,7 @@ about their agents right now (cheap attribute reads), so the live parts stay liv
 from __future__ import annotations
 
 import json
+import platform
 import re
 import shlex
 import time
@@ -30,6 +31,13 @@ def cards(runs: dict[str, TeamRun]) -> list[dict[str, Any]]:
     return [card(r) for r in _newest_first(runs)]
 
 
+def host_os() -> str:
+    """The desktop this app runs on, for the words the board uses about it and for how service.py opens a folder:
+    ``mac`` or ``linux``. The board is often read from another machine (an ssh tunnel), so the browser's own platform
+    is not the answer."""
+    return "mac" if platform.system() == "Darwin" else "linux"
+
+
 def build(runs: dict[str, TeamRun], selected: str | None, *, mgr: Any, scrub: Callable[[str], str],
           now: float, crew: Any = None) -> dict[str, Any]:
     """``run`` is the one asked for (``?run=``), else the newest active one, else the newest."""
@@ -39,7 +47,7 @@ def build(runs: dict[str, TeamRun], selected: str | None, *, mgr: Any, scrub: Ca
         pick = None
     if pick is None:
         pick = next((r for r in ordered if not r.ended), ordered[0] if ordered else None)
-    return {"at": now, "runs": [card(r) for r in ordered],
+    return {"at": now, "host_os": host_os(), "runs": [card(r) for r in ordered],
             "run": detail(pick, mgr=mgr, scrub=scrub, now=now, crew=crew) if pick is not None else None}
 
 

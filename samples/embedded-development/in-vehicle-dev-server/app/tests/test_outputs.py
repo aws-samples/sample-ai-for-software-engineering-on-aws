@@ -2,6 +2,8 @@
 
 import asyncio
 import os
+import platform
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -123,13 +125,14 @@ def test_the_outputs_contract_matches_types_ts(tmp_path):
 
 
 
-def test_open_folder_opens_only_the_runs_own_folders(tmp_path):
+def test_open_folder_opens_only_the_runs_own_folders(tmp_path, monkeypatch):
     opened = []
 
     async def opener(cmd):
         opened.append(cmd)
         return 0
 
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
     mgr = FakeManager()
     svc, routes = make(tmp_path, mgr, tick_s=60, opener=opener)
 
@@ -152,6 +155,44 @@ def test_open_folder_opens_only_the_runs_own_folders(tmp_path):
             assert r.status == 404 and len(opened) == 2
             out = await call(routes, "GET", f"/runs/{rid}/roles/pm")
             assert out.body["folder"].endswith("/wt/pm")
+        finally:
+            await svc.stop()
+
+    asyncio.run(go())
+
+
+def test_open_folder_on_linux_opens_with_xdg_open_and_the_kiro_on_path(tmp_path, monkeypatch):
+    opened, on_path, which = [], {"xdg-open": "/usr/bin/xdg-open"}, shutil.which
+
+    async def opener(cmd):
+        opened.append(cmd)
+        return 1 if cmd[0].endswith("/kiro") and len(opened) > 2 else 0
+
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: on_path.get(name) if name in ("xdg-open", "kiro")
+                        else which(name, *a, **k))
+    svc, routes = make(tmp_path, FakeManager(), tick_s=60, opener=opener)
+
+    async def go():
+        await svc.start()
+        try:
+            rid = (await call(routes, "POST", "/runs", json_body={})).body["run"]
+            run_wt = svc.runs[rid].s["run_wt"]
+            assert (await call(routes, "POST", f"/runs/{rid}/open", json_body={})).status == 200
+            r = await call(routes, "POST", f"/runs/{rid}/open", json_body={"role": "pm", "app": "kiro"})
+            assert (r.status, r.code) == (502, "open_failed")  # no kiro on PATH: said, and nothing run
+            assert "PATH 里没有 kiro" in r.body["error"] and r.body["detail"] == "kiro is not on PATH"
+            assert opened == [["/usr/bin/xdg-open", run_wt]]
+            on_path["kiro"] = "/opt/alice/bin/kiro"
+            r = await call(routes, "POST", f"/runs/{rid}/open", json_body={"role": "pm", "app": "kiro"})
+            assert r.status == 200 and opened[-1] == ["/opt/alice/bin/kiro", os.path.expanduser(r.body["path"])]
+            r = await call(routes, "POST", f"/runs/{rid}/open", json_body={"app": "kiro"})  # kiro answers 1
+            assert (r.status, r.code, r.body["error"]) == (502, "open_failed", "打不开：kiro 命令失败")
+            del on_path["xdg-open"]
+            r = await call(routes, "POST", f"/runs/{rid}/open", json_body={})
+            assert (r.status, r.code) == (502, "open_failed") and "PATH 里没有 xdg-open" in r.body["error"]
+            r = await call(routes, "POST", f"/runs/{rid}/open", json_body={"role": "../../etc", "app": "kiro"})
+            assert r.status == 404 and len(opened) == 3  # still only the run's own folders
         finally:
             await svc.stop()
 

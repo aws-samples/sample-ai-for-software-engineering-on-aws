@@ -2,11 +2,14 @@
 # Shared by setup.sh, cleanup.sh and install-team.sh (adapted from the agent-team sample's scripts/lib.sh). Source it
 # after setting ROOT to this scenario's folder.
 #
-# For tests only: VSTATD_KCAPI replaces app/scripts/kcapi.sh (Kiro Crew's health is then asked through it too),
-# VSTATD_INSTALL_STATE replaces .install-state.json (scripts/state.py) and VSTATD_KIROCREW_BIN the kirocrew program the
-# templates name (scripts/install-team.sh).
+# For tests only: VSTATD_KCAPI replaces app/scripts/kcapi.sh (Kiro Crew's health is then asked through it too) and
+# VSTATD_INSTALL_STATE replaces .install-state.json (scripts/state.py). VSTATD_KIROCREW_BIN names the kirocrew program
+# (kirocrew_bin below), for a test or a kirocrew setup.sh does not find.
 ROOT="${ROOT:?}"
 KC="${VSTATD_KCAPI:-$ROOT/app/scripts/kcapi.sh}"   # calls the local Kiro Crew API as the dashboard owner
+# the gateway's loopback port, exported so that kcapi.sh in a child process reads the same one: set as a shell
+# variable alone it would leave the health check and the API calls on two different ports
+export KC_PORT="${KC_PORT:-5476}"
 PY=/usr/bin/python3
 export PYTHONDONTWRITEBYTECODE=1   # scripts/templates.py imports state.py: no __pycache__ left in scripts/
 B=$'\033[1m'; G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; N=$'\033[0m'
@@ -17,11 +20,15 @@ warn() { echo "  ${Y}!${N} $*"; }
 bad()  { echo "  ${R}✗${N} $*"; }
 ask()  { local a; read -r -p "  $1 " a; [ "$a" = y ] || [ "$a" = Y ]; }
 state() { "$PY" "$ROOT/scripts/state.py" "$@"; }   # what setup created: see scripts/state.py
+# how to start Kiro Crew, for the messages: the desktop app on macOS; on Linux the desktop app or the CLI's gateway
+if [ "$(uname -s)" = Linux ]; then
+  CREW_START="start it (the desktop app, kirocrew gateway, or kirocrew service install)"
+else CREW_START="open it"; fi
 
 # Kiro Crew is running and answers on its loopback port
 crew_up() {
   if [ -n "${VSTATD_KCAPI:-}" ]; then "$KC" GET /api/health | grep -q '"ok": *true'; return; fi
-  curl -s --noproxy '*' --max-time 3 http://127.0.0.1:5476/api/health | grep -q '"ok": *true'
+  curl -s --noproxy '*' --max-time 3 "http://127.0.0.1:${KC_PORT}/api/health" | grep -q '"ok": *true'
 }
 
 # NODE_DIR := the folder of a node 22 or newer (PATH, Homebrew, nvm)
@@ -35,11 +42,32 @@ node_ok() {
   return 1
 }
 
-# the folder of the running Kiro Crew desktop app, else /Applications/KiroCrew.app
+# the folder of the running Kiro Crew desktop app, else /Applications/KiroCrew.app (macOS only)
 crew_app_dir() {
   local app
   app="$(/bin/ps -axo command= | /usr/bin/sed -n 's#^\(/.*/KiroCrew\.app\)/Contents/MacOS/KiroCrew.*#\1#p' | /usr/bin/head -1)"
   echo "${app:-/Applications/KiroCrew.app}"
+}
+
+# The kirocrew program, by its absolute path: $VSTATD_KIROCREW_BIN, else on macOS the one in the Kiro Crew desktop app,
+# else the first kirocrew on PATH (on Linux: the desktop app's, or the CLI's in pipx or ~/.kiro/crew-venv). Absolute,
+# because the templates name it and a gateway run as a systemd service may not have this shell's PATH.
+kirocrew_bin() {
+  local p="${VSTATD_KIROCREW_BIN:-}" arch
+  if [ -z "$p" ]; then
+    if [ "$(uname -s)" = Darwin ]; then
+      arch="$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x64)"
+      p="$(crew_app_dir)/Contents/Resources/backend-dist/kirocrew-backend-$arch/bin/kirocrew"
+    fi
+    [ -n "$p" ] && [ -f "$p" ] && [ -x "$p" ] || p="$(command -v kirocrew 2>/dev/null || true)"
+  fi
+  if [ -z "$p" ] || [ ! -f "$p" ] || [ ! -x "$p" ]; then
+    bad "cannot find the kirocrew program${p:+ at $p}: install Kiro Crew (the desktop app or its CLI," \
+      "https://kiro.dev/docs/crew/installation), or set VSTATD_KIROCREW_BIN to the kirocrew program" >&2
+    return 1
+  fi
+  case "$p" in /*) ;; *) p="$(cd "$(dirname "$p")" && pwd -P)/$(basename "$p")" ;; esac  # a relative PATH entry
+  echo "$p"
 }
 
 # GET <path> lists <list key> with an item whose <field> is <value>

@@ -58,7 +58,10 @@ def run_check(name, out, run, docker, image, triage):
     results = out / "results" / run.name
     results.mkdir(parents=True, exist_ok=True)
     rel = lambda p: f"/m/{p.relative_to(out)}"  # noqa: E731 - the data dir is mounted at /m
-    cmd = [docker, "run", "--rm", "--network", "none", "-v", f"{SAMPLE}:/sample:ro", "-v", f"{out}:/m", image,
+    # as this user, not root, so that the rows under -v {out}:/m stay removable without sudo on a Linux host; HOME
+    # with it, because this uid has no /etc/passwd entry in the image and would get the unwritable HOME=/
+    cmd = [docker, "run", "--rm", "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp",
+           "-v", f"{SAMPLE}:/sample:ro", "-v", f"{out}:/m", image,
            f"/sample/checks/{name}.sh", "--results", rel(results), "--run", rel(run), "--baseline", rel(out / "baseline")]
     if name == "logdiff":
         cmd += ["--triage", rel(triage)]
