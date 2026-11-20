@@ -66,6 +66,8 @@ def build_tool(name, args):
             out["evidence_sha256"] = hashlib.sha256(page.encode()).hexdigest() if page else None
             if sp.get("page") == "changed":  # another call published over the page between the two calls
                 out["evidence_sha256"] = "00" * 32
+            if sp.get("page") == "readnodigest":  # an answer without the digest
+                del out["evidence_sha256"]
         return out
     if check == sp.get("exit_on"):
         sys.exit(3)  # the server dies in the middle of the call
@@ -73,6 +75,9 @@ def build_tool(name, args):
         time.sleep(30)
     if check in sp.get("refuse", []):
         raise Refused(sp.get("refuse_why", "the repair count is over its limit; a person decides, then resets it"))
+    if check in sp.get("error_on", []):  # as mcp/build answers when release cannot read the bench's results
+        return {"outcome": "refused", "exit_status": None, "check": check, "commit": head, "verdict": "ERROR",
+                "summary": "", "problem": "the bench results are not published: no results.lock"}
     with open(state + "/judged.log", "a") as f:
         f.write(json.dumps({"check": check, "head": head, "files": git("ls-files").split(),
                             "triage": open(P["triage"]).read() if os.path.exists(P["triage"]) else None}) + "\n")
@@ -101,6 +106,8 @@ def build_tool(name, args):
             open(PAGE, "w").write(page)
             out["evidence_page"] = "published"
             out["evidence_sha256"] = hashlib.sha256(page.encode()).hexdigest()
+            if sp.get("page") == "nodigest":  # published, but the answer carries no digest
+                del out["evidence_sha256"]
     if check == "build" and "repair" in sp:  # as mcp/build reports its repair count after each cross attempt
         out["repair"] = {"failures_in_a_row": sp["repair"][0], "limit_retries": sp["repair"][1]}
     return out
@@ -356,9 +363,9 @@ def test_the_reruns_release_and_its_evidence_page_come_from_the_build_server(tmp
     assert "release" not in ran and "evidence" not in ran
 
 
-@pytest.mark.parametrize("how, tools", [("none", ["run_check"]), ("changed", ["run_check", "read_result"])])
-def test_a_page_the_server_did_not_publish_or_whose_digest_changed_is_left_out(tmp_path, monkeypatch, how, tools):
-    """The release verdict stands either way; the sign-off dialog then has no page and a person decides."""
+@pytest.mark.parametrize("how, tools", [("none", ["run_check"])])
+def test_a_page_the_server_did_not_publish_is_left_out(tmp_path, monkeypatch, how, tools):
+    """The release verdict stands; the sign-off dialog then has no page and a person decides."""
     rig, srv = servers_rig(tmp_path, monkeypatch, rid=f"r1120page{how}")
     run, mgr = rig.run, rig.mgr
     srv.set(page=how)
@@ -376,27 +383,78 @@ def test_a_page_the_server_did_not_publish_or_whose_digest_changed_is_left_out(t
     assert last[-len(tools):] == tools  # "none": nothing to read back
 
 
-@pytest.mark.parametrize("how, why", [("refuse", "build 服务器拒绝了"), ("exit", "exited"), ("hang", "no answer within")])
+def _release_held_for_a_person(run, srv, held="独立重跑后 release 检查没判出结果：") -> None:
+    """D7 and D9: no page, sign-off shut, the bench held at the rerun for a person, nothing sent to a role."""
+    assert not (Path(run.s["repo"]).parent / "results" / "rerun" / "evidence.md").exists()
+    assert run.s["rerun"]["evidence"] is None and board.release_view(run)["evidence"] is None
+    assert run.sign_block().startswith("独立重跑后 release.sh 没通过")
+    assert run.s["status"] == "failed" and run.s["bench"]["held"]["step"] == "rerun"
+    assert run.s["bench"]["held"]["why"].startswith(held)  # BLOCKED: release.sh did not run, or not to the end
+    assert not any(e.get("code") == "bounce.checks" for e in run.events)  # nothing went to a role
+
+
+@pytest.mark.parametrize("how, why", [("refuse", "build 服务器拒绝了"), ("exit", "exited"), ("hang", "no answer within"),
+                                      ("error", "the bench results are not published")])
 def test_a_server_that_refuses_dies_or_hangs_on_the_release_holds_sign_off(tmp_path, monkeypatch, how, why):
+    """The ``error`` answer is mcp/build's when release cannot read the bench's results: an answer, with no result."""
     rig, srv = servers_rig(tmp_path, monkeypatch)
     run, mgr = rig.run, rig.mgr
     if how == "hang":
         monkeypatch.setattr(servers, "MARGIN_S", 0)
         for c in run.team["checks"]:
             c["timeout_s"] = 1
-    srv.set(**{"refuse": ["release"]} if how == "refuse" else
-            {"exit_on": "release"} if how == "exit" else {"sleep_on": "release"})
+    srv.set(**{"refuse": ["release"]} if how == "refuse" else {"exit_on": "release"} if how == "exit" else
+            {"error_on": ["release"]} if how == "error" else {"sleep_on": "release"})
 
     async def go():
         await setup_run(run, mgr)
         await until(run, mgr, lambda: run.ended, timeout=40)
+        rel = run.s["rerun"]["release"]
+        assert rel["verdict"] == "BLOCKED" and why in rel["reasons"][0]  # D7: no retry of its own
+        _release_held_for_a_person(run, srv)
+        if how == "error":  # the bench panel's 重试 runs the rerun again, the release on the build server included
+            srv.set()
+            assert await run.retry(by="alice") == ["bench"]
+            await until(run, mgr, lambda: run.ended, timeout=40)
+            assert run.s["status"] == "done" and run.s["rerun"]["release"]["verdict"] == "PASS"
+            assert run.s["rerun"]["evidence"] and run.sign_block() == ""
+    asyncio.run(go())
+
+
+def test_a_release_that_fails_on_the_build_server_has_no_evidence_page(tmp_path, monkeypatch):
+    """Unlike direct mode, whose evidence-page.sh still writes a page: mcp/build publishes one only after a release
+    that passed, so the app reads none back, not even a page an earlier release left on the server."""
+    rig, srv = servers_rig(tmp_path, monkeypatch)
+    run, mgr = rig.run, rig.mgr
+    srv.set(release={"verdict": "FAIL", "reasons": ["logdiff: judged another build"]})
+    (srv.build_state / "results").mkdir(parents=True, exist_ok=True)
+    (srv.build_state / "results" / "evidence.md").write_text("# Evidence page: an earlier release\n")
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
+    asyncio.run(go())
+    assert run.s["rerun"]["release"] == {"verdict": "FAIL", "summary": "release: FAIL",
+                                         "reasons": ["logdiff: judged another build"]}
+    assert _rerun_session(srv)[-1] == ("run_check", {"check": "release"}, "controlled-write")  # nothing read back
+    _release_held_for_a_person(run, srv, held="独立重跑后 release.sh 没通过：logdiff: judged another build")
+
+
+@pytest.mark.parametrize("how", ["changed", "nodigest", "readnodigest"])
+def test_a_published_page_whose_digest_does_not_check_out_blocks_the_release(tmp_path, monkeypatch, how):
+    """A digest that changed between the two calls, or one missing from either answer: no page, BLOCKED (D7)."""
+    rig, srv = servers_rig(tmp_path, monkeypatch, rid=f"r1120digest{how}")
+    run, mgr = rig.run, rig.mgr
+    srv.set(page=how)
+
+    async def go():
+        await setup_run(run, mgr)
+        await until(run, mgr, lambda: run.ended)
     asyncio.run(go())
     rel = run.s["rerun"]["release"]
-    assert rel["verdict"] == "BLOCKED" and why in rel["reasons"][0]  # D7: no retry of its own
-    assert not (Path(run.s["repo"]).parent / "results" / "rerun" / "evidence.md").exists()
-    assert run.sign_block().startswith("独立重跑后 release.sh 没通过")
-    assert run.s["status"] == "failed" and run.s["bench"]["held"]["step"] == "rerun"
-    assert not any(e.get("code") == "bounce.checks" for e in run.events)  # nothing went to a role
+    assert rel["verdict"] == "BLOCKED" and "证据页摘要核对不上" in rel["reasons"][0]
+    assert [t for t, _, _ in _rerun_session(srv)] == ["run_check", "read_result"]
+    _release_held_for_a_person(run, srv)
 
 
 def test_the_release_check_of_a_servers_team_must_be_the_build_servers_own(tmp_path, monkeypatch):

@@ -1758,7 +1758,9 @@ class TeamRun:
             self.say("tests", "tests.rerun", {"verdict": rerun["release"]["verdict"], "differs": [d["name"] for d in rerun["differs"]]},
                      data={"checks": [[r["name"], r["verdict"]] for r in rerun["checks"]], "differs": rerun["differs"], "phase": "rerun"})
             if rerun["release"]["verdict"] != "PASS":
-                self._bench_hold("hold.release", {"why": "；".join(rerun["release"]["reasons"][:3] or [rerun["release"]["summary"]])})
+                rel = rerun["release"]  # BLOCKED: release.sh, or the build server (D17), gave no verdict
+                self._bench_hold("hold.release", {"why": "；".join(rel["reasons"][:3] or [rel["summary"]]),
+                                                  "blocked": rel["verdict"] == "BLOCKED" or None})
                 return
             b["step"] = "done"
 

@@ -412,25 +412,30 @@ async def run_tests(run_wt: Path, team: dict[str, Any], **kw: Any) -> dict[str, 
 async def evidence_page(cmd: list[str], team: dict[str, Any], results: Path, triage: Path) -> Path | None:
     """The evidence page of a rerun, in servers mode: nothing to run here. mcp/build publishes the page itself after
     a ``run_check release`` that passed, and the release round above has already read it back into *results*; *cmd*
-    (the team file's ``evidence_page``) is the build server's to run. The page once it is there, else None."""
+    (the team file's ``evidence_page``) is the build server's to run. The page once it is there, else None: always
+    None after a release that did not pass, since the server publishes none then (direct mode still writes one)."""
     page = Path(results) / EVIDENCE
     return page if page.is_file() else None
 
 
-async def _evidence(s: "Session", out: dict[str, Any], results: Path) -> None:
+async def _evidence(s: "Session", out: dict[str, Any], results: Path) -> str:
     """The page mcp/build publishes itself after a ``run_check release`` that passed (#45): read it back with
     ``read_result release`` and keep it beside the release result, where direct mode's evidence-page.sh leaves it.
-    A page the server did not publish, or one whose SHA-256 is no longer the one that answer reported (another call
-    published over it in between), is left out: the sign-off dialog then shows no page and a person decides."""
+    A page the server did not publish is left out: the sign-off dialog then shows no page and a person decides. A
+    published page that cannot be checked (no page read back, a SHA-256 missing from either answer, or one that is no
+    longer the one ``run_check`` reported: another call published over it in between) is not kept either, and what is
+    wrong is returned ("" otherwise): the release is then BLOCKED for a person (D7)."""
     if str(out.get("evidence_page") or "") != "published":
-        return
+        return ""
     got = await s.call("read_result", {"check": "release"})
     page, digest = got.get("evidence_page"), out.get("evidence_sha256")
     if not isinstance(page, str) or not page:
-        return
-    if isinstance(digest, str) and got.get("evidence_sha256") != digest:
-        return
+        return "build 服务器说证据页已发布，但 read_result release 没读回页"
+    if not isinstance(digest, str) or not digest or got.get("evidence_sha256") != digest:
+        return (f"build 服务器的证据页摘要核对不上：run_check 报 {str(digest)[:12]}，"
+                f"read_result 报 {str(got.get('evidence_sha256'))[:12]}")
     (results / EVIDENCE).write_text(page, encoding="utf-8")
+    return ""
 
 
 async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path, phase: str = "before_bench",
@@ -471,7 +476,8 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
                         res, server = _result(out, c["name"], which, head if which == "build" else None, results)
                         repair = repair_count(out) if which == "build" and c["name"] == "build" else repair
                         if phase == "release" and not server and res["verdict"] == "PASS":
-                            await _evidence(s, out, results)
+                            bad = await _evidence(s, out, results)
+                            res, server = (_blocked(bad), True) if bad else (res, server)
                         if which == "bench" and run is not None and out.get("run") != Path(run).name:
                             # another session replayed between this run's steps (D17): not this step's replay
                             res, server = _blocked(f"bench 服务器判的是回放 {out.get('run')}，不是这一步的 "
