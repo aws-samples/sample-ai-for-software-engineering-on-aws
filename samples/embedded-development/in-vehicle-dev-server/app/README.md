@@ -114,11 +114,12 @@ Role level:
 
 ## Servers mode (trial)
 
-With `"connectors": "servers"` the app runs the checks before the bench and the bench actions as tool calls of the
+With `"connectors": "servers"` the app runs the checks before the bench, the bench actions, and the independent
+rerun's release check and evidence page as tool calls of the
 [`build`](../mcp/build/README.md) and [`bench`](../mcp/bench/README.md) MCP servers
 ([D17](../docs/kiro-crew-app.md#d17-app-通过-build--bench-服务器跑检查和台架)). Both run as the current user, which
 their READMEs say suits a trial only: the agents' shell can still write the servers' state, so this connects the
-interface and does not close the paths around the guardrails. The release check and the evidence page stay direct.
+interface and does not close the paths around the guardrails.
 
 Set-up, once (the paths the shipped team file names):
 
@@ -138,6 +139,10 @@ Set-up, once (the paths the shipped team file names):
 One run uses the servers at a time. Approve each bench request at `bench/console.py`: the board shows it and does
 not approve it in this mode, unless `servers.board_decides` is true (the trial only, as in direct mode, D3).
 What a server refuses holds the run for a person; 重试 asks the server again.
+The rerun's release check is the build server's `run_check release`, which reads the bench server's published
+results through its own `paths.bench_results`; the page it publishes after a release that passed is read back with
+`read_result release` and kept as `results/rerun/evidence.md`, where the sign-off dialog reads it. In this mode the
+team file's `evidence_page` only says that the team wants a page: the command is the build server's to run.
 When the build server's last `run_check build` answer says one more cross failure reaches its bound (TR §5.1), the
 next round is held before any call, and 重试 there runs that round with the server's last attempt. Once the server
 refuses (past the bound) the board gives the `buildserver.admin reset-repair` command; the app never resets the

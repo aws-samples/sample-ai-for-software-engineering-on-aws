@@ -199,7 +199,8 @@ results directory is a clean build. The rerun judges the commit the bench deploy
 judge the run directory of the last replay: `checks/README.md` does not ask for a fresh replay, and `release.sh`
 requires that the after-deploy checks judged the build it checked, which another replay would only give after another
 deploy approval. The app writes `repair-rounds.json` (rounds used and limits, TR §5.2) into the rerun's results, runs
-`release.sh` there, then `evidence-page.sh`. Checks whose verdict differs from the run's last round are recorded with
+`release.sh` there, then `evidence-page.sh` (in `servers` mode both run on the build server, D17). Checks whose
+verdict differs from the run's last round are recorded with
 the rerun for the scorecard. A failing `release.sh` holds the run for a person; 重试 reruns everything. The board's
 `release` carries `release.sh`'s verdict, the differing checks and the evidence page's text.
 
@@ -384,8 +385,9 @@ may not read the same one).
 ### D17. App 通过 build / bench 服务器跑检查和台架
 
 Decided on 2026-11-16 and implemented in `backend/team/servers.py`; one delivery ran end to end in `servers` mode
-on 2026-11-17 (run `r11170658`, at the end of this section). Release and the evidence page still run `direct`;
-through the build server they are a follow-up (#42 and #45, merged on main).
+on 2026-11-17 (run `r11170658`, at the end of this section). The release check and the evidence page of the
+independent rerun went through the build server afterwards (#42 and #45, merged on main); that part has run on
+stand-in servers only, never on a real server or a real run.
 
 **Two modes, one switch.** The team file's `"connectors"` picks one, `"direct"` by default:
 
@@ -414,7 +416,7 @@ repair round and goes to no role; 重试 asks the server again (the round of che
 | Replay | bench `lease_acquire`, `request_replay`, `lease_release` |
 | After-bench checks | bench `lease_acquire`, `run_check` `runtime-limits` and `logdiff`, `lease_release` |
 | Independent rerun (D9) | build `run_check` for each before-bench check, bench `run_check` for each after-bench one |
-| Release (D9) | `direct` for now; build `run_check release` (#42) in a follow-up |
+| Release and the evidence page (D9) | build `run_check release`, then build `read_result release` for the page |
 
 - Each build `run_check` judges a clean clone of the work tree's committed HEAD with no cache, which is also what
   D9's rerun needs.
@@ -453,7 +455,11 @@ sequenceDiagram
     Note over A,C: independent rerun on the final commit
     A->>B: run_check for each before-bench check
     A->>C: lease_acquire, run_check runtime-limits and logdiff, lease_release
-    A->>A: release.sh (direct for now), sign-off enabled when it passes
+    A->>B: run_check release (reads the bench's published results)
+    B-->>A: verdict, and the page it published when it passed
+    A->>B: read_result release
+    B-->>A: the evidence page and its SHA-256
+    Note over A,P: sign-off enabled when release passed; the person reads the page
 ```
 
 **Fixed paths, and one run at a time.** The build server's `paths.workspace`, `paths.triage` and `paths.state` are
@@ -533,8 +539,16 @@ when it ends is not counted. The figure counts the app's calls; the agents make 
 
 **Open questions.**
 
-1. **The evidence page.** Neither server has a tool for `checks/evidence-page.sh`. Asked of the build server's owner
-   on #42; until the answer, the app runs it as in `direct` mode.
+1. **The evidence page.** *Answered on 2026-11-20.* Neither server has a tool of its own for
+   `checks/evidence-page.sh`, but the page needs none: `mcp/build` runs the script itself after a `run_check
+   release` that passed and publishes the page beside its results (`core.py` `evidence_page`, #45). That answer
+   carries the page's outcome and SHA-256, never the page, and `read_result release` returns its text and digest
+   (`core.py` `_read_result`). So the app calls the two tools it already has: the release round reads the page back
+   and keeps it as `results/rerun/evidence.md`, where `direct` mode's own `evidence-page.sh` leaves it and where the
+   sign-off dialog reads it. The app does not import the server's code. A page the server did not publish, or one
+   whose digest is no longer the one `run_check` just reported (another call published over it in between), is left
+   out: the release verdict stands, the dialog shows no page, and a person decides. The team file's `evidence_page`
+   still says whether the team wants a page; in `servers` mode the command itself is the build server's to run.
 2. **The log comparison's repair rounds.** `build` counts the cross build's (its `repair.json`, reset by a person
    with `buildserver.admin reset-repair`) and writes `repair-rounds.json` with that count only. Who counts
    `logdiff`'s two rounds for `release.sh` is asked on #42 too; until then the app counts both, as now, and a
@@ -558,11 +572,20 @@ when it ends is not counted. The figure counts the app's calls; the agents make 
    hold and command.
 3. **Handing over the approved triage under separate users.** The app's user cannot write a folder of `buildsrv`.
    Not decided: a triage tool of the server, or a person copying the approved file into place.
-4. **Release.** #42 (merged) lets `run_check release` read the bench server's published results; using it, and the
-   evidence page of #45, is a follow-up. Until then release in `servers` mode stays `direct`: `release.sh` runs
-   in the app's build container on the rerun's results,
-   which the app keeps from the servers' answers, and is given read-only the input files those results recorded
-   (the build server's artifact, the bench server's run, the baseline). It re-checks each file's sha256.
+4. **Release.** *Answered on 2026-11-20.* #42 (merged) lets `run_check release` read the bench server's published
+   results, so `servers` mode now runs the rerun's release check on the build server, in the same session as the
+   page above: the work tree at the final commit, `workspace_status` first, then `run_check release`. The result
+   lands where `direct` mode leaves it (`results/rerun/release.json` and `release.run.log`), so the board, the
+   audit trail and the scorecard read the same files. The app no longer mounts the input files into a container of
+   its own: the build server finds the bench's results through its `paths.bench_results` and re-checks each input's
+   sha256 itself. A refusal, a timeout or a server that exits is BLOCKED and sign-off stays shut (D7), with no
+   retry of its own. Left open: the server's results folder holds the last result of each check, not of each round.
+   The rerun's own before-bench round is the last thing the build server ran, so release judges that round, but a
+   role's own `run_check` in between would be what it sees instead. `judge()` on the server refuses a result for
+   another commit, and `release.sh` re-checks the recorded sha256, so a mismatch shows up as FAIL or ERROR, not as a
+   quiet pass. A results folder per round on the server would close it; that is the server owner's to decide.
+   Not run yet on a real build server or a real run: the whole path above is covered by the app's stand-in servers
+   only.
 
 **Trust boundary.** `servers` mode connects the app to the servers' interface, and no more. With both servers
 running as the current user, an agent's shell can still write their state, audit logs, published results, the
