@@ -202,7 +202,10 @@ deploy approval. The app writes `repair-rounds.json` (rounds used and limits, TR
 `release.sh` there, then `evidence-page.sh` (in `servers` mode both run on the build server, D17). Checks whose
 verdict differs from the run's last round are recorded with
 the rerun for the scorecard. A failing `release.sh` holds the run for a person; 重试 reruns everything. The board's
-`release` carries `release.sh`'s verdict, the differing checks and the evidence page's text.
+`release` carries `release.sh`'s verdict, the differing checks and the evidence page's text. In `servers` mode the
+page exists only after a release that passed (the build server publishes it then, D17 open question 1): when the
+release did not pass the board has no page, and the person reads the release's reasons and the server's
+`release.run.log` instead.
 
 Alternatives considered: a person reruns the checks and hands the results to the app; no rerun.
 
@@ -405,6 +408,9 @@ and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair
 server's refusal (`ToolRefused`), a call that times out (`McpTimeout`, the client then ends the server) and a server
 that exits (`McpExited`) hold the run for a person like BLOCKED, with the server's own message. Such a check takes no
 repair round and goes to no role; 重试 asks the server again (the round of checks, tests first, or the bench step).
+For the rerun's release check that is the bench panel's button 「重试，从「独立重跑全部检查和 release.sh」接着做」
+(English board: "Retry, carrying on from …"): the run ends held at the rerun step, and 重试 runs the whole rerun
+again, the release on the build server included; the header's servers 重试 (`servers_held`) is not used for it.
 
 **Each step and its tool.**
 
@@ -539,16 +545,22 @@ when it ends is not counted. The figure counts the app's calls; the agents make 
 
 **Open questions.**
 
-1. **The evidence page.** *Answered on 2026-11-20.* Neither server has a tool of its own for
-   `checks/evidence-page.sh`, but the page needs none: `mcp/build` runs the script itself after a `run_check
-   release` that passed and publishes the page beside its results (`core.py` `evidence_page`, #45). That answer
-   carries the page's outcome and SHA-256, never the page, and `read_result release` returns its text and digest
-   (`core.py` `_read_result`). So the app calls the two tools it already has: the release round reads the page back
-   and keeps it as `results/rerun/evidence.md`, where `direct` mode's own `evidence-page.sh` leaves it and where the
-   sign-off dialog reads it. The app does not import the server's code. A page the server did not publish, or one
-   whose digest is no longer the one `run_check` just reported (another call published over it in between), is left
-   out: the release verdict stands, the dialog shows no page, and a person decides. The team file's `evidence_page`
-   still says whether the team wants a page; in `servers` mode the command itself is the build server's to run.
+1. **The evidence page.** *Answered on 2026-11-20 for a release that passed; open for one that did not.* Neither
+   server has a tool of its own for `checks/evidence-page.sh`, but the page needs none: `mcp/build` runs the script
+   itself after a `run_check release` that passed and publishes the page beside its results (`core.py`
+   `evidence_page`, #45). That answer carries the page's outcome and SHA-256, never the page, and `read_result
+   release` returns its text and digest (`core.py` `_read_result`). So the app calls the two tools it already has:
+   the release round reads the page back and keeps it as `results/rerun/evidence.md`, where `direct` mode's own
+   `evidence-page.sh` leaves it and where the sign-off dialog reads it. The app does not import the server's code.
+   A page the server did not publish is left out: the release verdict stands, the dialog shows no page, and a person
+   decides. A published page the app cannot check (nothing read back, a SHA-256 missing from either answer, or one
+   that is no longer the one `run_check` just reported: another call published over it in between) is not kept, and
+   the release is BLOCKED for a person. The team file's `evidence_page` still says whether the team wants a page; in
+   `servers` mode the command itself is the build server's to run.
+   Still open: the server publishes a page only after a release that passed, and `run_check release` drops the
+   last one first, so when the release did not pass the board has no page, while `direct` mode's page has a section
+   on why. The person then reads the release's reasons and the server's `release.run.log`. A page on a failure too
+   needs a change in `mcp/build`, for its owner to decide.
 2. **The log comparison's repair rounds.** `build` counts the cross build's (its `repair.json`, reset by a person
    with `buildserver.admin reset-repair`) and writes `repair-rounds.json` with that count only. Who counts
    `logdiff`'s two rounds for `release.sh` is asked on #42 too; until then the app counts both, as now, and a
@@ -626,7 +638,7 @@ approved on the board (`servers.board_decides`, added during the run).
 | One check, over the rounds | build 4.2–7.4 s, static 19.4–35.4 s, unit 26.0–43.0 s, size 1.2–2.5 s, trace 1.5–2.7 s |
 | Deploy, replay | 26.5 s and 26.6 s each, from the request to the result, approval included |
 | After-bench checks | 1.2 s (runtime-limits 0.8 s, logdiff 0.4 s) |
-| Independent rerun | 72.9 s on the servers, then `release.sh` direct |
+| Independent rerun | 72.9 s on the servers, then `release.sh` direct (at the time of that run) |
 
 The times are the servers' `duration_ms` and leave out the app's tick. The run's wall clock, 09:54 to 16:31, holds
 four and a half hours of waiting for a person and is not a measure of the work.

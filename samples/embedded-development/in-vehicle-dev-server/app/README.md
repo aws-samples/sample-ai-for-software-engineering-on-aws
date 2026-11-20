@@ -141,7 +141,9 @@ not approve it in this mode, unless `servers.board_decides` is true (the trial o
 What a server refuses holds the run for a person; 重试 asks the server again.
 The rerun's release check is the build server's `run_check release`, which reads the bench server's published
 results through its own `paths.bench_results`; the page it publishes after a release that passed is read back with
-`read_result release` and kept as `results/rerun/evidence.md`, where the sign-off dialog reads it. In this mode the
+`read_result release` and kept as `results/rerun/evidence.md`, where the sign-off dialog reads it. A release that did
+not pass leaves no page in this mode (the server publishes none then; `direct` mode still writes one), so the person
+reads the release's reasons and `release.run.log` (D17 open question 1). In this mode the
 team file's `evidence_page` only says that the team wants a page: the command is the build server's to run.
 When the build server's last `run_check build` answer says one more cross failure reaches its bound (TR §5.1), the
 next round is held before any call, and 重试 there runs that round with the server's last attempt. Once the server
