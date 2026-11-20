@@ -6,6 +6,7 @@ import json
 import logging
 import sys
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -144,6 +145,30 @@ def test_the_checklist_answers_at_once_and_says_what_to_run(tmp_path, monkeypatc
 
     known = asyncio.run(go())
     assert snapshot(state) == known and before != known  # the app wrote nothing there; only the test did
+
+
+def test_the_committed_baseline_is_ready_and_recording_one_never_writes_into_the_scenario(tmp_path, monkeypatch):
+    svc, routes, sample, _ = scenario(tmp_path, monkeypatch)
+    team_file = tmp_path / "team" / "team-vstatd.json"
+    team = json.loads(team_file.read_text(encoding="utf-8"))
+    team["bench"]["baseline"] = "${sample}/bench/baseline"  # the team file's default
+    team_file.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
+    own = Path(mod("bench").OWN_BASELINE).expanduser()
+
+    async def go():
+        try:
+            item = {i["key"]: i for i in (await call(routes, "GET", "/readiness")).body["items"]}["baseline"]
+            assert item["ok"] is False and item["detail"] == shown(str(sample / "bench" / "baseline"))
+            assert item["command"].endswith(f"replay --kind baseline --out {shown(str(own))}"
+                                            "，再把团队文件的 bench.baseline 改成 ~/workplace/vstatd-team/baseline")
+            (sample / "bench" / "baseline").mkdir()
+            (sample / "bench" / "baseline" / "baseline-result.json").write_text("{}", encoding="utf-8")
+            item = {i["key"]: i for i in (await call(routes, "GET", "/readiness")).body["items"]}["baseline"]
+            assert item["ok"] and item["command"] == ""
+        finally:
+            await svc.stop()
+
+    asyncio.run(go())
 
 
 def test_without_a_scenario_folder_the_checklist_says_why(tmp_path, monkeypatch):

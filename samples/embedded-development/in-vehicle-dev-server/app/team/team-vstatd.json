@@ -46,7 +46,7 @@
     "doctor": ["${sample}/bench/doctor.sh"],
     "build": ["${sample}/bench/build-target.sh"],
     "start": ["${sample}/bench/cc1.sh", "start"],
-    "baseline": "~/workplace/vstatd-team/baseline"
+    "baseline": "${sample}/bench/baseline"
   },
   "connectors": "direct",
   "servers": {

@@ -3,7 +3,7 @@
 > **Status: in development.** Build plan item 3 of the [in-vehicle scenario](../README.md#build-plan). Built so far:
 > the target image and sysroot, the emulated CC-1, deployment with digest read-back, the recorded drive and its
 > player, the replay clients, the run directories for the checks, the simulated supply, the physical gate, the
-> operator console, the action record, reset and doctor. Still to do: the final baseline (see [Open](#open)).
+> operator console, the action record, reset and doctor, and the final baseline ([baseline/](baseline/README.md)).
 
 The bench is the half of the scenario that stands in for the cockpit computer and its test bench, on one machine and
 without automotive hardware. It is for the bench owner and the person at the operator console. The agents never use
@@ -146,7 +146,9 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
   CC1-PN §6.3 now gives `CLIENT_CONNECTED` and `SERVICE_STOP` 50 ms and keeps 20 ms for every other event; with that,
   all 60 runs pass, the smallest margin to a window is 11 ms, and the F-008 wrong fixes are caught as before, since
   they add or remove timeouts rather than shift them.
-- **Final baseline.** Generated once the reference project is calibrated, on the commit the scenario ships.
+- **Final baseline (closed 2026-11-18).** Recorded from the release with F-031 only, build digest `c95309f5…` (arm64
+  build image; `bc93723c…` from `vstatd-build:amd64` (x86_64 hosts, and the Mac when it builds with that image)), in
+  [baseline/](baseline/README.md); the team file uses it.
 - **Build container on Apple Silicon (closed 2026-11-03).** `reference-project/tools/Dockerfile` now builds natively
   for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on
   Apple Silicon (the host `g++-12` and `binutils` already target `aarch64-linux-gnu`), `linux/amd64` and
