@@ -6,7 +6,9 @@ file it did not write:
   someone changed since) stops it before it changes anything. A file an earlier setup copied and the scenario no
   longer has goes, unless it was changed.
 - remove deletes the files setup copied and has not seen changed, then the folders it created once they are empty, and
-  says what it kept.
+  says what it kept. A file it cannot read or delete stays, and stays in the record: it exits 1.
+- Neither follows a symbolic link: a path in the copy that is a link, is under one, or leads out of the copy is kept
+  as it is and said so (a copied folder replaced by a link to a person's own folder is theirs).
 
 A copy an earlier setup made, before this record (created team_home but no knowledge_files), is taken as setup's
 where the scenario has a file of the same path, whatever the file holds now: that setup overwrote those paths on every
@@ -61,6 +63,16 @@ def _record(files: dict) -> None:
     state.save(data)
 
 
+def _linked(dst: Path, rel: str) -> bool:
+    """*rel* in the copy is a symbolic link, is under one, or leads out of *dst*"""
+    p = dst
+    for part in Path(rel).parts:
+        p = p / part
+        if p.is_symlink():
+            return True
+    return not (dst / rel).resolve().is_relative_to(dst.resolve())
+
+
 def _ours(dst: Path, rel: str, mine: dict) -> bool:
     """the file at *rel* is setup's copy, unchanged since (an earlier setup's copy: any content)"""
     return rel in mine and (mine[rel] == "" or sha(dst / rel) == mine[rel])
@@ -68,6 +80,9 @@ def _ours(dst: Path, rel: str, mine: dict) -> bool:
 
 def install(src: Path, dst: Path, dry: bool) -> int:
     want, mine = sources(src), recorded(src)
+    linked = sorted(rel for rel in {**mine, **want} if _linked(dst, rel))  # not setup's to write or delete
+    want = {rel: h for rel, h in want.items() if rel not in linked}
+    mine = {rel: h for rel, h in mine.items() if rel not in linked}
     blocked = [rel for rel, h in want.items()
                if (dst / rel).is_file() and sha(dst / rel) != h and not _ours(dst, rel, mine)]
     blocked += [rel for rel in want if (dst / rel).exists() and not (dst / rel).is_file()]
@@ -81,6 +96,8 @@ def install(src: Path, dst: Path, dry: bool) -> int:
     updated = sum(1 for rel, h in want.items() if (dst / rel).is_file() and sha(dst / rel) != h)
     gone = [rel for rel in mine if rel not in want and (dst / rel).is_file()]
     kept = [rel for rel in gone if not _ours(dst, rel, mine)]
+    for rel in linked:
+        print(f"! kept {dst / rel}: a symbolic link, under one, or outside the copy (not followed)")
     if dry:
         print(f"would copy knowledge/ to {dst}: {added} new, {updated} updated, {len(gone) - len(kept)} removed")
         return 0
@@ -122,18 +139,25 @@ def remove(src: Path, dst: Path) -> int:
     mine, created = recorded(src), state.load().get("created") or []
     if not mine and not {"team_home", "knowledge_dir"}.intersection(created):
         return 0  # setup copied nothing
-    removed, kept = 0, []
+    removed, kept, linked, failed = 0, [], [], {}
     for rel in mine:
         p = dst / rel
-        if not p.is_file():
-            continue
-        if _ours(dst, rel, mine):
-            p.unlink()
-            _prune(p.parent, dst)
-            removed += 1
-        else:
-            kept.append(rel)
-    _record({})
+        try:
+            if _linked(dst, rel):
+                if p.is_symlink() or p.exists():
+                    linked.append(rel)
+                continue
+            if not p.is_file():
+                continue
+            if _ours(dst, rel, mine):
+                p.unlink()
+                _prune(p.parent, dst)
+                removed += 1
+            else:
+                kept.append(rel)
+        except OSError as e:  # e.g. a copy made unreadable: it stays, and so does its record, for the next cleanup
+            failed[rel] = (mine[rel], e.strerror or str(e))
+    _record({rel: h for rel, (h, _) in failed.items()})
     print(f"- {removed} files of the knowledge copy")
     for folder, key in ((dst, "knowledge_dir"), (dst.parent, "team_home")):
         if key in created or (key == "knowledge_dir" and "team_home" in created):
@@ -143,10 +167,15 @@ def remove(src: Path, dst: Path) -> int:
             except FileNotFoundError:
                 pass
             except OSError:
-                print(f"! kept {folder}: it holds files setup did not copy there")
+                print(f"! kept {folder}: it holds files setup did not copy there" +
+                      (", or could not remove" if failed else ""))
     for rel in kept:
         print(f"! kept {dst / rel}: changed since setup copied it")
-    return 0
+    for rel in linked:
+        print(f"! kept {dst / rel}: a symbolic link, under one, or outside the copy (not followed)")
+    for rel, (_, why) in failed.items():
+        print(f"! kept {dst / rel}: could not remove it ({why})")
+    return 1 if failed else 0
 
 
 def main(argv: list) -> int:

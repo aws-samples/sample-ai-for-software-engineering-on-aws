@@ -144,17 +144,24 @@ crew_up || {
 }
 APP_GONE=0
 no_answer() { fail "Kiro Crew did not say whether the app $APP is installed: $*"; }
+APP_RC=1   # installed: 0 it is, 1 it is not, 3 Kiro Crew did not say
+if created app || state has found app; then
+  APP_RC=0; installed || APP_RC=$?
+fi
+if [ "$APP_RC" = 0 ]; then
+  # a run still going keeps everything (its sessions, and the templates and knowledge its roles use), whether
+  # setup.sh installed the app or found it installed
+  rc=0; rid="$(going)" || rc=$?
+  if [ "$rc" != 1 ]; then
+    if [ "$rc" = 0 ]; then fail "run $rid is still going: stop it on the board, then run cleanup.sh again"
+    else fail "the app $APP did not list its runs: enable it in Kiro Crew -> Apps and run cleanup.sh again"; fi
+    echo "    Nothing removed: the app, its sessions, its data and the record of what setup.sh created stay."
+    exit 1
+  fi
+fi
 if created app; then
-  rc=0; installed || rc=$?
+  rc="$APP_RC"
   if [ "$rc" = 0 ]; then
-    # a run still going keeps everything (its sessions, and the templates and knowledge its roles use)
-    rc=0; rid="$(going)" || rc=$?
-    if [ "$rc" != 1 ]; then
-      if [ "$rc" = 0 ]; then fail "run $rid is still going: stop it on the board, then run cleanup.sh again"
-      else fail "the app $APP did not list its runs: enable it in Kiro Crew -> Apps and run cleanup.sh again"; fi
-      echo "    Nothing removed: the app, its sessions, its data and the record of what setup.sh created stay."
-      exit 1
-    fi
     # every run's sessions (the board's own 清理 keeps the running and signed ones), while the app still answers
     out="$("$KC" POST "/api/apps/$APP/sessions/cleanup" '{"all": true}' 2>&1 || true)"
     # an app older than this folder ignores "all" and keeps the running and signed runs' sessions: kept_runs says so
@@ -222,11 +229,17 @@ fi
 
 step 2/2 "Files"
 if [ ${#templates[@]} -gt 0 ] || [ ${#backed_up[@]} -gt 0 ]; then
-  "$PY" "$ROOT/scripts/templates.py" remove "$AGENTS" "$BACKUP" | sed 's/^/   /'
-  forget templates; forget backed_up
+  if "$PY" "$ROOT/scripts/templates.py" remove "$AGENTS" "$BACKUP" | sed 's/^/   /'; then
+    forget templates; forget backed_up
+  else
+    fail "some agent templates could not be removed or put back (above): their record stays"
+  fi
 fi
-"$PY" "$ROOT/scripts/knowledge.py" remove "$ROOT/knowledge" "$TEAM_HOME/knowledge" | sed 's/^/   /'
-forget created team_home; forget created knowledge_dir
+if "$PY" "$ROOT/scripts/knowledge.py" remove "$ROOT/knowledge" "$TEAM_HOME/knowledge" | sed 's/^/   /'; then
+  forget created team_home; forget created knowledge_dir
+else
+  fail "some files of the knowledge copy could not be removed (above): their record stays"
+fi
 if [ "$APP_GONE" = 1 ]; then
   rm -rf "$RUNS/runs" "$APP_DATA"
   rmdir "$RUNS" 2>/dev/null || true   # kept while it holds the baseline or the servers-mode folder

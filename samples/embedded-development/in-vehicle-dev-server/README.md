@@ -427,9 +427,10 @@ been dry-run once.
    `checks/backtoback.sh`.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
-to a signed-off evidence page; `cleanup.sh` removes everything it created; every third-party tool is listed with its
-licence; synthetic data only, with no customer names, code, data or identifying details; no credentials or account
-identifiers; no `--trust-all-tools`.
+to a signed-off evidence page; `cleanup.sh` removes everything it created, apart from the chat folder and the
+session-approval consent of an app installed before setup, which it names for you to remove; every third-party tool is
+listed with its licence; synthetic data only, with no customer names, code, data or identifying details; no
+credentials or account identifiers; no `--trust-all-tools`.
 
 ## Layout
 
@@ -552,7 +553,9 @@ repositories, its trust entry, any members and workspace an earlier setup create
 of its copy, the agent templates it added, and the board's `app/ui/node_modules` and `app/ui/dist` when setup built
 them; it puts back the templates it replaced, and `--dry-run` lists all of it. It checks that each one is still the
 one setup created, so one you made with the same name stays, as do files you added to `~/workplace/vstatd` or changed
-there (a file you add to that folder is indexed with the rest, so the team reads it as knowledge). An app installed
+there (a file you add to that folder is indexed with the rest, so the team reads it as knowledge). Members and the
+workspace an earlier setup created have no recorded id, so they are matched by name and by where they point (a
+member's workspace, the workspace's path): one you re-created with the same name there is removed too. An app installed
 before setup stays installed. While a run of the app is still going it removes nothing and exits 1: stop the run on
 the board first. When a step fails it keeps `.install-state.json` and exits 1:
 fix the cause and run it again. It leaves the build container, the bench's images and volumes, the bench state
