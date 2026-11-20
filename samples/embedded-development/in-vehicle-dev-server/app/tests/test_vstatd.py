@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import logging
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -167,6 +168,17 @@ def test_the_check_runner_is_the_native_image_of_the_machine_it_runs_on(machine,
         "docker": [*one["docker"], "-v", "vol:/opt/cc1-sysroot:ro"], "image": "img"}
 
 
+def test_the_build_container_runs_as_this_user_so_that_it_leaves_no_results_only_root_can_remove():
+    """A root container's results in the mounted tree cannot be removed by the user afterwards on a Linux host
+    (glayyiyi's DCV run left 520 root-owned files cleanup.sh could not remove)."""
+    runner = checks_mod.resolve_runner(raw_team()["check_runner"], "arm64")
+    for cmd in (checks_mod.docker_command(runner, [], ["true"]),
+                checks_mod.docker_command(runner, [("/x", True)], ["true"], workdir="/x", name="c1")):
+        assert cmd[cmd.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}" and cmd.count("--user") == 1
+        assert cmd.index("--user") < cmd.index(runner["image"])
+    assert f"--user {os.getuid()}:{os.getgid()}" in checks_mod.docker_prefix(runner, [])
+
+
 def test_the_sysroot_is_one_volume_name_and_docker_mounts_nothing_else_there():
     runner = raw_team()["check_runner"]
     checks_mod._check_runner(runner)
@@ -245,7 +257,8 @@ def test_a_run_starts_from_the_scenarios_reference_project(tmp_path, monkeypatch
             assert "知识库来源「vstatd」" in task and "[VSTATD-IF p.7 §4.1]" in task
             wt = run.lane("triage")["worktree"]
             assert (f"docker run --rm --security-opt seccomp=unconfined --platform linux/{arch} "
-                    f"-v vstatd-standin-sysroot:/opt/cc1-sysroot:ro -v {wt}:{wt}:ro") in task
+                    f"-v vstatd-standin-sysroot:/opt/cc1-sysroot:ro --user {os.getuid()}:{os.getgid()} "
+                    f"-v {wt}:{wt}:ro") in task
             assert f"-w {wt} vstatd-build:{arch} sh -c 'cmake -S . -B /tmp/build" in task
             assert "{build_env}" not in task and "`docs/aidlc/triage.json`" in task
         finally:

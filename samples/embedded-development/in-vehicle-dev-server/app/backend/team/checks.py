@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import platform
 import re
 import shlex
@@ -187,6 +188,9 @@ def docker_command(runner: dict[str, Any], mounts: list[tuple[str, bool]], cmd: 
     out = list(runner["docker"]) + (["--name", name] if name else [])
     if out[0] == "docker":  # the gateway's PATH may not have it
         out[0] = DOCKER_BIN
+    # as this user, not root: a root container writes results into the mounted tree that this user cannot remove
+    # afterwards (on a Linux host; a Docker Desktop VM maps the owner for us), and cleanup.sh cannot either
+    out += ["--user", f"{os.getuid()}:{os.getgid()}"]
     for path, writable in mounts:
         out += ["-v", f"{path}:{path}" + ("" if writable else ":ro")]
     out += ["-e", "GIT_CONFIG_COUNT=1", "-e", "GIT_CONFIG_KEY_0=safe.directory", "-e", "GIT_CONFIG_VALUE_0=*"]
