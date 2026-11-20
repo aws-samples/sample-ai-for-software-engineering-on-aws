@@ -147,7 +147,7 @@ On an Apple Silicon Mac with Docker Desktop (6 CPUs, 4.3 GiB), 2026-10-29, with 
   all 60 runs pass, the smallest margin to a window is 11 ms, and the F-008 wrong fixes are caught as before, since
   they add or remove timeouts rather than shift them.
 - **Final baseline (closed 2026-11-18).** Recorded from the release with F-031 only, build digest `c95309f5…` (arm64
-  build image; `bc93723c…` from `vstatd-build:amd64`: x86_64 hosts, and the Mac's builds before 2026-11-03), in
+  build image; `bc93723c…` from `vstatd-build:amd64` (x86_64 hosts, and the Mac when it builds with that image)), in
   [baseline/](baseline/README.md); the team file uses it.
 - **Build container on Apple Silicon (closed 2026-11-03).** `reference-project/tools/Dockerfile` now builds natively
   for both architectures: `docker build --platform linux/arm64 -t vstatd-build:arm64 reference-project/tools/` on
