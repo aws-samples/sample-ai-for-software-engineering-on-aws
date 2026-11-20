@@ -24,6 +24,7 @@ ACTION_TIMEOUT_S = 3600  # one action: the console's own timeout (CC1_APPROVAL_T
 DOCTOR_TIMEOUT_S = 900  # doctor.sh builds the runner image when it is not cached
 ACTIONS_SHOWN = 30
 TAIL_LINES = 12
+OWN_BASELINE = "~/workplace/vstatd-team/baseline"  # where a bench owner records a baseline of their own
 
 
 def state_dir() -> Path:
@@ -166,11 +167,17 @@ def has_baseline(bench: dict[str, Any]) -> bool:
 
 
 def baseline_command(bench: dict[str, Any]) -> str:
-    """How the bench owner writes the baseline once: the replay command with ``--kind baseline`` into it."""
-    cmd = argv(bench["replay"], {"run": str(Path(bench["baseline"]).expanduser())})
+    """How the bench owner writes the baseline once: the replay command with ``--kind baseline`` into it. A baseline in
+    the scenario folder (the committed ``bench/baseline/``) is never recorded over: the command records into
+    OWN_BASELINE instead, and says to point ``bench.baseline`` at it."""
+    base = Path(bench["baseline"]).expanduser()
+    script = Path(bench["replay"][0]).expanduser().resolve()  # ${sample}/bench/cc1.sh
+    committed = script.parent.name == "bench" and base.resolve().is_relative_to(script.parents[1])
+    cmd = argv(bench["replay"], {"run": str(Path(OWN_BASELINE).expanduser() if committed else base)})
     if "--kind" in cmd[:-1]:
         cmd[cmd.index("--kind") + 1] = "baseline"
-    return "部署当前版本以后运行 " + shlex.join(cmd)
+    text = "部署当前版本以后运行 " + shlex.join(cmd)
+    return text + f"，再把团队文件的 bench.baseline 改成 {OWN_BASELINE}" if committed else text
 
 
 def outcome(rc: int | None, tail: str, target: dict[str, Any]) -> tuple[str, str]:

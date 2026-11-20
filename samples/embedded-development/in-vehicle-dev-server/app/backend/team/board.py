@@ -87,7 +87,9 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "tests": {"at": t["at"], "command": t.get("command", ""), "cases": [_case(c) for c in t["cases"]],
                   "passed": t["passed"], "failed": t["failed"], "total": t["total"],
                   "history": [{"at": h["at"], "passed": h["passed"], "failed": h["failed"]} for h in t["history"]],
-                  "held": ({**messages.scrubbed(t["held"], scrub), "suggest": run.path_suggestions()}
+                  "held": ({**messages.scrubbed(t["held"], scrub),
+                            "suggest": messages.scrubbed(run.path_suggestions(), scrub),
+                            "prefill": messages.scrubbed(run.finding_prefill(), scrub)}
                            if t.get("held") else None), "round": int(t.get("round") or 0),
                   "running": bool(s.get("needs_test"))},
         "merges": [{k: m.get(k) for k in ("role", "sha", "at", "status", "files", "note")} for m in s["merges"]],

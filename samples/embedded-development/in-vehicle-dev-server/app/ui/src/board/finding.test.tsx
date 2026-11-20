@@ -84,6 +84,48 @@ describe('补登发现并交给角色', () => {
     await waitFor(() => expect(screen.queryByTestId('kt-finding-dialog')).toBeNull())
   })
 
+  test('past the build server\'s bound: the hold shows the reset command the person runs before 重试', async () => {
+    const b = heldBoard()
+    const cmd = '~/workplace/vstatd-team/server/venv/bin/python -I -m buildserver.admin reset-repair --config '
+      + '~/workplace/vstatd-team/server/build.toml --reason "a person decided after 4 failed cross builds"'
+    b.run!.tests.held = { checks: ['build'], why: 'build 没法判定：build 服务器的交叉构建已连续失败 4 次、上限 3', commands: [cmd] }
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    render(<TeamPage pollMs={60_000} />)
+    const box = within(await screen.findByTestId('kt-flow-held-commands'))
+    expect(box.getByText(cmd)).toBeInTheDocument()
+    expect(box.getByText(/build 服务器到了修复上限/)).toBeInTheDocument()
+  })
+
+  test('the role named the root-cause file it cannot write: 再加路径 and 备注 are filled in, sent only on 补登', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('vstatd-team:signer', '王工')
+    const b = heldBoard()
+    const note = '开发 · 修复说：需要有人把 cmake/cc1-aarch64.cmake 加进我的可改范围，提交说明里写 F-032'
+    b.run!.tests.held!.prefill = [{ check: 'build', role: 'dev-fix', paths: ['cmake/cc1-aarch64.cmake'], note }]
+    setApiRoutes({
+      [`GET ${API}/board*`]: () => clone(b),
+      [`POST ${API}/runs/r1006a/finding`]: () => ({ id: 'F-032', triage_sha256: 'ab', held: false, status: 'running' }),
+    })
+    render(<TeamPage pollMs={60_000} />)
+    await user.click(within(await screen.findByTestId('kt-wall-held')).getByRole('button', { name: '补登发现并交给角色' }))
+    const q = within(await screen.findByTestId('kt-finding-dialog'))
+    expect(q.getByLabelText('检查')).toHaveValue('build')
+    expect(q.getByLabelText('可写路径')).toHaveValue('src/main.cpp')
+    expect(q.getByLabelText('再加路径')).toHaveValue('cmake/cc1-aarch64.cmake')
+    expect(q.getByLabelText('备注')).toHaveValue(note)
+    expect(posts()).toEqual([]) // filled in, not sent
+    await user.selectOptions(q.getByLabelText('检查'), 'unit') // the prefill is the build check's: it does not follow
+    expect(q.getByLabelText('再加路径')).toHaveValue('')
+    expect(q.getByLabelText('备注')).toHaveValue('')
+    await user.selectOptions(q.getByLabelText('检查'), 'build')
+    expect(q.getByLabelText('再加路径')).toHaveValue('cmake/cc1-aarch64.cmake')
+    await user.click(q.getByRole('button', { name: '补登并接着运行' }))
+    await waitFor(() => expect(posts()).toEqual([[`${API}/runs/r1006a/finding`, expect.objectContaining({
+      check: 'build', role: 'dev-fix', paths: ['src/main.cpp', 'cmake/cc1-aarch64.cmake'], note, by: '王工',
+      continue: true,
+    })]]))
+  })
+
   test('a check registered at the same place already: the dialog starts on the next one and says so for that one', async () => {
     const user = userEvent.setup()
     const b = heldBoard()

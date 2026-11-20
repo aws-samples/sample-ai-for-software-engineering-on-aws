@@ -53,10 +53,10 @@ engineers.
    ([check-examples/](check-examples/README.md#last-run-on-the-bench)).
 4. **Run the check examples** ([check-examples/](check-examples/README.md)): every verdict as expected, before and
    after the bench.
-5. **Once build plan item 6 is merged,** run its permission probe test (to come in `agents/`) with the Kiro version of
-   the day, and read what the bypass hook refuses and what gets through. Until then the templates carry no bypass
-   hook, and the paths that [Guardrails](../README.md#guardrails) lists stay open; the probe shows which of them the
-   hook closes. The boundary is still a build server without Docker access, as Guardrails says.
+5. **Run the permission probe** ([agents/README.md](../agents/README.md#the-permission-probe)) with the Kiro version
+   of the day, and read what the bypass hook refuses and what gets through. The probe shows which of the paths that
+   [Guardrails](../README.md#guardrails) lists the hook closes. The rest stay open, and the boundary is still a build
+   server without Docker access, as Guardrails says.
 6. **Agree on the definition of done** with the release owner: by default, `release.sh` passes on the independent
    rerun and the release owner signs the evidence page. Write down anything the team adds.
 7. **Decide what the figures are compared with** (next section) and print the [scorecard](scorecard.md) sheet, one

@@ -282,10 +282,14 @@ On a Mac or a Linux host with Kiro Crew running, Docker, Node.js 22, git and Pyt
    ```
 
 3. Before the first run: open the operator console in a terminal of its own (`python3 bench/console.py`), set the
-   supply there (`v 13.5`, `k on`), start the target (`bench/cc1.sh start && bench/cc1.sh wait`), deploy the current
-   release and write the baseline once with `bench/cc1.sh replay --kind baseline --out ~/workplace/vstatd-team/baseline`
-   (see [bench/README.md](bench/README.md)). Until the bench is ready, a run stops before its first bench action and the
-   board says what is missing and the command for it.
+   supply there (`v 13.5`, `k on`) and start the target (`bench/cc1.sh start && bench/cc1.sh wait`). The team file
+   uses the committed baseline [bench/baseline/](bench/baseline/README.md) by default. Record one of your own only when
+   the correct release does not pass `logdiff` against it on your machine (checked on Apple Silicon and x86_64 only:
+   [Other hosts](bench/baseline/README.md#other-hosts)): deploy the current release, run
+   `bench/cc1.sh replay --kind baseline --out ~/workplace/vstatd-team/baseline` (approved on the board or at the
+   operator console) and set the team file's `bench.baseline` to that folder (see [bench/README.md](bench/README.md)).
+   Until the bench is ready, a run stops before its first bench action and the board says what is missing and the
+   command for it.
 4. Open Kiro Crew → Apps → AIDLC-Embedded团队 → 团队看板, choose 新需求 (it is filled in with the work item) and
    hand it to the team.
 5. At the triage gate, answer each question (its citations are shown); then approve build start.
@@ -393,7 +397,8 @@ been dry-run once.
    [rehearsal/seed-checks/](rehearsal/seed-checks/).
 3. Bench emulation: a script that builds the emulated CC-1 image, the gateway socket and drive replay, the baseline
    log, the simulated supply, the operator console and a reset script. Also a `doctor` script that checks the host
-   before a session. *Done* except the final baseline: [bench/](bench/README.md).
+   before a session. *Done:* [bench/](bench/README.md), with the final baseline in
+   [bench/baseline/](bench/baseline/README.md) (2026-11-18).
 4. Checks, each with a failing and a passing example; the release check and the evidence page generator.
    *Done:* [checks/](checks/README.md), with the triage format and the run directories the bench hands over (a
    proposed interface with item 3); the facilitators' runs on the reference project are in
@@ -414,7 +419,8 @@ been dry-run once.
    Kiro Crew app (item 8) does not need this item's configurations. *Done in part (2026-11-16):* the bypass hook in
    the roles' templates, its tests and the permission probe, run with kiro-cli 2.34.0 ([agents/](agents/README.md)).
    The templates load in both of kiro-cli's engines (V2 and V3), and the developer role's template ran as expected in
-   a Kiro Crew 0.12.2 chat session (2026-11-17). Open: the whole app on a Mac with Kiro Crew 0.12, the Kiro IDE.
+   a Kiro Crew 0.12.2 chat session (2026-11-17); the app's roles booted from them on a Mac (Kiro Crew 0.13.0-rc.1).
+   Open: a first install without a gateway restart, the whole app on Kiro Crew 0.12, the Kiro IDE.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the board's gates and the operator console, followed by an independent rerun
    of the checks.
@@ -454,11 +460,18 @@ The optional model-based profile adds `model/` (the model, its generated code an
 
 ## Prerequisites
 
-To be completed with the build: a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro
-or Kiro Crew. Third-party tools and their licences will be listed here, among them QEMU (GPL-2.0) and the emulated
-target's Linux image built by `bench/build-target.sh` with Buildroot (GPL-2.0; Linux kernel GPL-2.0) and not committed
-to the repository. They are used as tools and not redistributed. The bench's own tools are listed in
-[bench/README.md](bench/README.md#third-party-tools).
+You need a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro or Kiro Crew. Kiro and
+Kiro Crew are AWS products under their own terms. Docker Engine is listed below; Podman (Apache-2.0) and Colima (MIT)
+work as well, and Docker Desktop has its own subscription terms. The third-party tools and their licences are listed in
+this section and in the READMEs it links to. They are used as tools and are not redistributed.
+
+Two kinds of third-party content are committed to the repository: the four AI-DLC expert definitions in
+[vendor/aidlc-workflows/](vendor/aidlc-workflows/SOURCE.md) (MIT-0), and the font subsets embedded in
+`knowledge/vstatd-interface.pdf` ([knowledge/README.md](knowledge/README.md#third-party-references)).
+
+The bench's tools are listed in [bench/README.md](bench/README.md#third-party-tools). Among them are QEMU (GPL-2.0) and
+Buildroot (GPL-2.0-or-later; Linux kernel GPL-2.0). `bench/build-target.sh` uses Buildroot to build the emulated
+target's Linux image, which is not committed.
 
 The [Kiro Crew app](#the-kiro-crew-app) needs, besides the bench: a Mac or a Linux host with Kiro Crew running and
 signed in, as the desktop app or, on Linux, the CLI's gateway (`kirocrew gateway` or `kirocrew service install`; the
@@ -524,6 +537,35 @@ until the Buildroot sysroot in `cc1-sysroot` also carries the C++ standard heade
 The knowledge uses signal names from the COVESA Vehicle Signal Specification
 v6.1 (MPL-2.0) without copying its files, and its check needs cantools (MIT) and PyYAML (MIT); see
 [knowledge/README.md](knowledge/README.md#third-party-references).
+
+The Kiro Crew app's backend runs in Kiro Crew's own Python and installs no Python packages. Besides the standard
+library it imports only `kiro_crew` and aiohttp (Apache-2.0), both provided by Kiro Crew. Its board is built on the
+user's machine from npm packages (`app/ui/package.json`, versions pinned in `app/ui/package-lock.json`), which only
+build and test it. The built board is not committed and holds none of them: React, React DOM and Kiro Crew's app SDK
+come from Kiro Crew at run time (`app/ui/vite.config.ts` keeps them external).
+
+| Tool | Version | Licence | Used for |
+| --- | --- | --- | --- |
+| Node.js | 22 or newer | MIT | Building the board |
+| React, React DOM | 18.3 | MIT | The board's types and tests |
+| Vite | 8.3 | MIT | Building the board |
+| `@vitejs/plugin-react` | 5.2 | MIT | Building the board |
+| TypeScript | 5.9 | Apache-2.0 | Building the board |
+| Vitest | 5.0 | MIT | The board's tests |
+| jsdom | 26.1 | MIT | The board's tests |
+| `@testing-library/react` | 16.3 | MIT | The board's tests |
+| `@testing-library/jest-dom` | 7.0 | MIT | The board's tests |
+| `@testing-library/user-event` | 14.6 | MIT | The board's tests |
+| pytest | 9.1 | MIT | The app's and the scripts' tests |
+
+The table lists the direct dependencies. `app/ui/package-lock.json` is the full list: 172 packages, all used only to
+build and test the board, 141 of them MIT and the rest ISC, Apache-2.0, BSD-2-Clause, BSD-3-Clause and MIT-0, apart
+from lightningcss (MPL-2.0, 12 packages with its platform builds) and caniuse-lite (CC-BY-4.0), which Vite uses at
+build time.
+
+The app also uses the four AI-DLC expert definitions from
+[awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows) v2.10.0 (MIT-0), committed unmodified in
+`vendor/aidlc-workflows/`.
 
 The optional model-based profile also needs MATLAB, Simulink and Embedded Coder from MathWorks (commercial
 licences), and the MATLAB MCP Core Server and the Simulink Agentic Toolkit, whose terms are checked before the profile

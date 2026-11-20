@@ -457,7 +457,16 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
               </div>
               <aside className="kt-side" aria-label={projection ? tr('main.8') : tr('main.9')}>
                 <TestWall tests={run.tests} roles={run.roles} focus={focus} onRole={onRole} flips={fx.flips} onFinding={onFinding} />
-                {run.bench && <BenchPanel bench={run.ended_at && run.bench.history ? benchAt(run.bench, (run.signoff?.at ?? run.ended_at) + 60) : run.bench} onRetry={!projection && !inReplay && !run.imported && run.bench.held ? benchRetry : undefined} />}
+                {run.bench && (
+                  <BenchPanel
+                    bench={run.ended_at && run.bench.history
+                      ? benchAt(run.bench, (run.signoff?.at ?? run.ended_at) + 60) : run.bench}
+                    // the panel of an ended run shows the bench as it was then; what waits at the console now under it
+                    live={run.ended_at && run.bench.history && !projection && !inReplay && !run.imported
+                      ? run.bench.state.pending : undefined}
+                    onRetry={!projection && !inReplay && !run.imported && run.bench.held ? benchRetry : undefined}
+                  />
+                )}
                 {projection && eventFeed}
               </aside>
             </div>

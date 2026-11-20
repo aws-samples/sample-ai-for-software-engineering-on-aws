@@ -48,6 +48,10 @@ image and doctor.sh are probed in the background and cached (doctor.sh runs once
 steps and what comes next (`ui/src/board/flow.ts`), and the 人机分工 grid under it what each actor did at each step, counted from the run's 审计记录; a cell opens those entries in the 审计记录 panel. The strip and the grid sit at the top of the run, under the counters; each event in the feed carries the actor chip its 审计记录 entry has, and the app bar shows 下一步需要你 N while gates or bench requests of the run wait for the person.
 
 `POST /runs/{rid}/finding` is 补登发现 (D15): on a run held for a person after the checks, a person registers what a check found under TR §4.4 with the next free ID (body: `check, tool, location, decision, evidence, behaviour, facts, cites, reason, pick_up_when, role, paths, note, by, continue`); the app appends it to the approved triage (`triage.problems()` must pass, else 400 with `problems`), rewrites `triage.json` and its `.sha256`, adds `paths` to the role's write scope, and with `continue` (the default) ends the hold and sends the role a fix round; 409 when the run is not held. It answers `{id, triage_sha256, held, status}`. [backend/team/team.py](backend/team/team.py) `register_finding`. With `extend` (an ID a check added already; body: `extend, role, paths, note, by, continue`) it adds no finding and leaves the triage as it is: the role gets the paths and that check one more round. On a held run the board's `tests.held.suggest` proposes such paths (from what the role said it cannot change, and the test file a unit-test finding still needs, TR §4.1), for a person to agree to; `team.path_suggestions`.
+`tests.held.prefill` fills in 再加路径 and the note of a new finding for a held check the same way, from the role's
+paragraphs naming the check, for the person to check and send; `team.finding_prefill`.
+Neither proposes a path under `checks/`, `mcp/`, `bench/` or `.kiro/`, `docs/aidlc/decisions.md` or another role's
+file, and `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five (400, `invalid_finding`).
 
 `POST /runs/{rid}/retry` takes `note` and `by` (who decides, named in the audit). On a run that ended on a 要改 review after its rounds (the board's `review_redo`), it sends that review back once more with the person's decision (按评审意见再改一轮); on a held bench step it carries on from that step.
 
@@ -125,13 +129,19 @@ Set-up, once (the paths the shipped team file names):
    `workspace` is `~/workplace/vstatd-team/server/worktree` (an empty folder or none: the app makes it a repository
    of its own and marks it; it refuses a repository it did not make), `sysroot` a folder with the CC-1 sysroot and
    `image` this machine's build image. In `bench.toml`,
-   `bench_state` is `~/.cc1-bench`, `build_results` the build server's `<state>/results`, `baseline` the team file's.
+   `bench_state` is `~/.cc1-bench`, `build_results` the build server's `<state>/results`, `baseline` the team file's
+   (the committed `bench/baseline/` of the sample by default, or a baseline of your own), and in `build.toml`
+   `bench_baseline` the same folder.
    Leave out `[trust]`, and in `bench.toml` give the `developer` role the `physical` class.
 3. Set `"connectors": "servers"` in `team/team-vstatd.json` and reinstall the app.
 
 One run uses the servers at a time. Approve each bench request at `bench/console.py`: the board shows it and does
 not approve it in this mode, unless `servers.board_decides` is true (the trial only, as in direct mode, D3).
 What a server refuses holds the run for a person; 重试 asks the server again.
+When the build server's last `run_check build` answer says one more cross failure reaches its bound (TR §5.1), the
+next round is held before any call, and 重试 there runs that round with the server's last attempt. Once the server
+refuses (past the bound) the board gives the `buildserver.admin reset-repair` command; the app never resets the
+count (D17, open question 2).
 
 ## Test
 

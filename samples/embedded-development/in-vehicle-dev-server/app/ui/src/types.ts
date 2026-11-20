@@ -332,6 +332,8 @@ export type ReviewRedo = { role: string; summary: string; targets: string[] }
 
 /** The app's proposal on a held run: give *role* the files *paths* for the finding *extend* added already (note: why). */
 export type PathSuggestion = { extend: string; check: string; role: string; paths: string[]; note: string }
+/** 补登发现 filled in: the files *role* said the cause of the held *check* is in and it cannot change (note: its words). */
+export type FindingPrefill = { check: string; role: string; paths: string[]; note: string }
 
 /** One finding of the triage, with only what the app records about it (null: no record). */
 export type TriageRow = {
@@ -468,7 +470,11 @@ export type TestWall = {
   failed: number
   total: number
   history: { at: number; passed: number; failed: number }[] // one point per test run
-  held: { checks: string[]; why: string; suggest?: PathSuggestion[] } | null // a check a person decides: BLOCKED, misconfigured, or out of its repair rounds (D7)
+  // a check a person decides: BLOCKED, misconfigured, or out of its repair rounds (D7); commands: what the person runs
+  // first (the build server's reset-repair at its bound, D17)
+  held: {
+    checks: string[]; why: string; suggest?: PathSuggestion[]; prefill?: FindingPrefill[]; commands?: string[]
+  } | null
   round: number // the team file's checks: how many rounds before the bench were started
   running: boolean // a round of checks is due or running on what is merged
 }
