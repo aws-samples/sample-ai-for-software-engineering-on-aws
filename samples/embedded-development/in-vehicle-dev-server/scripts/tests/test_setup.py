@@ -460,11 +460,13 @@ def test_cleanup_keeps_the_app_its_data_and_its_trust_while_kiro_crew_does_not_s
     record(home, ("found", "app"), ("created", "trust"), ("created", "ui_dist"))
     (root / "app" / "ui" / "dist").mkdir()
     crew(home, apps={"name": "vstatd-team"}, trusted=["vstatd-team"],
-         fail=["/api/apps/vstatd-team", "/api/security/trusted-apps"])
+         fail=["/api/security/trusted-apps"])  # the app answers: cleanup goes on to its trusted apps
     r = sh(home, root, "cleanup.sh")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "Kiro Crew did not list its trusted apps" in r.stdout
-    assert json.loads(home["state"].read_text()) == {"created": ["trust", "ui_dist"]}
+    # the app stays installed and runs from this folder: app/ui/dist stays, and cleanup stops knowing about it
+    assert json.loads(home["state"].read_text()) == {"created": ["trust"]}
+    assert "kept app/ui/dist" in r.stdout
     assert (root / "app" / "ui" / "dist").is_dir() and changes(home) == []
 
 
@@ -564,6 +566,31 @@ def test_cleanup_removes_nothing_while_a_run_of_an_app_installed_before_setup_is
     assert home["state"].read_text() == before and (data / "runs.json").exists()
     assert (agents / "embedded-quality-agent.json").exists() and copy
     assert sorted(p for p in knowledge.rglob("*") if p.is_file()) == copy  # the knowledge copy its roles read
+
+
+@pytest.mark.parametrize("record_app", ["created", "found"])
+def test_cleanup_removes_nothing_while_kiro_crew_does_not_say_whether_the_app_is_installed(home, root, record_app):
+    data = app_data(home)
+    knowledge = home["home"] / "workplace" / "vstatd" / "knowledge"
+    assert run_py(SCRIPTS / "knowledge.py", "install", SAMPLE / "knowledge", knowledge, env=home["env"]).returncode == 0
+    agents = home["home"] / ".kiro" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "embedded-quality-agent.json").write_text("{}\n", encoding="utf-8")  # the template its roles run
+    record(home, (record_app, "app"), ("created", "trust"), ("created", "consent"),
+           ("templates", "embedded-quality-agent"))
+    before, copy = home["state"].read_text(), sorted(p for p in knowledge.rglob("*") if p.is_file())
+    # Kiro Crew answers an error for the app, so cleanup cannot see that run r2 is still going
+    crew(home, apps={"name": "vstatd-team"}, trusted=["vstatd-team"], fail=["/api/apps/vstatd-team"],
+         **{"/api/apps/vstatd-team/runs": {"runs": [{"id": "r2", "status": "reviewing"}]}})
+    r = sh(home, root, "cleanup.sh")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Kiro Crew did not say whether the app vstatd-team is installed: nothing removed" in r.stdout
+    assert "Nothing removed: the app, its sessions, its data and the record" in r.stdout
+    assert "Done." not in r.stdout and "✓" not in r.stdout  # nothing is reported as removed either
+    assert changes(home) == []  # no sessions cleanup, no uninstall, not even the trust entry
+    assert home["state"].read_text() == before and (data / "runs.json").exists()
+    assert (agents / "embedded-quality-agent.json").exists() and copy
+    assert sorted(p for p in knowledge.rglob("*") if p.is_file()) == copy  # the templates and copy r2's roles use
 
 
 def test_cleanup_keeps_a_file_it_cannot_read_or_remove_and_says_what_is_left(home, root):
@@ -702,6 +729,30 @@ def test_the_knowledge_copy_neither_writes_nor_deletes_through_a_symbolic_link(h
         assert f"! kept {dst / rel}: a symbolic link, under one, or outside the copy" in r.stdout, rel
     assert (mine / "b.yaml").read_text() == "b: 1\n" and (mine / "a.md").read_text() == "a\n"
     assert (dst / "a.md").is_symlink() and (dst / "facts").is_symlink() and outside.read_text() == "mine\n"
+
+
+def test_the_knowledge_copy_is_not_followed_when_its_own_folder_is_a_symbolic_link(home):
+    env, src = home["env"], knowledge_tree(home["tmp"] / "knowledge")
+    dst = home["home"] / "workplace" / "vstatd" / "knowledge"
+    k = lambda *a: run_py(SCRIPTS / "knowledge.py", *a, src, dst, env=env)  # noqa: E731
+    assert k("install").returncode == 0
+    mine = home["home"] / "my docs"  # alice moved the copy into her own folder and left a link behind
+    shutil.move(str(dst), str(mine))
+    dst.symlink_to(mine)
+    (mine / "notes.md").write_text("alice\n", encoding="utf-8")
+    before = sorted(p.relative_to(mine).as_posix() for p in mine.rglob("*") if p.is_file())
+    recorded = home["state"].read_text()
+
+    (src / "facts" / "b.yaml").write_text("b: 2\n", encoding="utf-8")  # the scenario's update: not written there
+    r = k("install")
+    assert r.returncode == 1 and f"{dst} is a symbolic link (not followed)" in r.stderr
+    assert (mine / "facts" / "b.yaml").read_text() == "b: 1\n"
+
+    r = k("remove")
+    assert r.returncode == 1, r.stderr
+    assert f"! kept {dst}: a symbolic link (not followed)" in r.stdout
+    assert sorted(p.relative_to(mine).as_posix() for p in mine.rglob("*") if p.is_file()) == before
+    assert dst.is_symlink() and home["state"].read_text() == recorded  # the record stays for the next cleanup
 
 
 def setup_crew(rig, **kw):

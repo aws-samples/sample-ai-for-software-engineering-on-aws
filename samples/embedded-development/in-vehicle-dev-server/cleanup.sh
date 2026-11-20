@@ -148,6 +148,12 @@ APP_RC=1   # installed: 0 it is, 1 it is not, 3 Kiro Crew did not say
 if created app || state has found app; then
   APP_RC=0; installed || APP_RC=$?
 fi
+if [ "$APP_RC" = 3 ]; then
+  # Kiro Crew did not say whether the app is there, so a run of it can be going: keep everything, as going's own 3 does
+  no_answer "nothing removed: run cleanup.sh again"
+  echo "    Nothing removed: the app, its sessions, its data and the record of what setup.sh created stay."
+  exit 1
+fi
 if [ "$APP_RC" = 0 ]; then
   # a run still going keeps everything (its sessions, and the templates and knowledge its roles use), whether
   # setup.sh installed the app or found it installed

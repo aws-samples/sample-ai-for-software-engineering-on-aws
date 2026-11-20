@@ -79,6 +79,10 @@ def _ours(dst: Path, rel: str, mine: dict) -> bool:
 
 
 def install(src: Path, dst: Path, dry: bool) -> int:
+    if dst.is_symlink():  # the copy's own folder is a link: setup writes nothing through it, wherever it leads
+        print(f"{dst} is a symbolic link (not followed): move it away and run setup.sh again. The knowledge copy "
+              "was not changed.", file=sys.stderr)
+        return 1
     want, mine = sources(src), recorded(src)
     linked = sorted(rel for rel in {**mine, **want} if _linked(dst, rel))  # not setup's to write or delete
     want = {rel: h for rel, h in want.items() if rel not in linked}
@@ -139,6 +143,9 @@ def remove(src: Path, dst: Path) -> int:
     mine, created = recorded(src), state.load().get("created") or []
     if not mine and not {"team_home", "knowledge_dir"}.intersection(created):
         return 0  # setup copied nothing
+    if dst.is_symlink():  # the copy's own folder is a link: everything under it stays, and so does the record
+        print(f"! kept {dst}: a symbolic link (not followed)")
+        return 1
     removed, kept, linked, failed = 0, [], [], {}
     for rel in mine:
         p = dst / rel
