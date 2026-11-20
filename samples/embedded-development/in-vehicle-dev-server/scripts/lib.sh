@@ -8,6 +8,7 @@
 ROOT="${ROOT:?}"
 KC="${VSTATD_KCAPI:-$ROOT/app/scripts/kcapi.sh}"   # calls the local Kiro Crew API as the dashboard owner
 PY=/usr/bin/python3
+export PYTHONDONTWRITEBYTECODE=1   # scripts/templates.py imports state.py: no __pycache__ left in scripts/
 B=$'\033[1m'; G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; N=$'\033[0m'
 
 step() { echo; echo "${B}[$1] $2${N}"; }
@@ -44,6 +45,30 @@ crew_app_dir() {
 # GET <path> lists <list key> with an item whose <field> is <value>
 has() {
   "$KC" GET "$1" | "$PY" -c "import json,sys; d=json.load(sys.stdin); items=d.get(sys.argv[1], d) if isinstance(d, dict) else d; sys.exit(0 if any(str(x.get(sys.argv[2]))==sys.argv[3] for x in items) else 1)" "$2" "$3" "$4"
+}
+
+# The app is installed in Kiro Crew: exit 0 when it is, 1 when Kiro Crew says it is not (404), 3 when Kiro Crew did not
+# answer that way (an error, no answer, or this shell is not the dashboard owner)
+installed() {
+  local code
+  code="$("$KC" --status GET "/api/apps/$APP" 2>/dev/null)" || return 3
+  case "$code" in 200) return 0 ;; 404) return 1 ;; *) return 3 ;; esac
+}
+
+# The app is on Kiro Crew's list of trusted apps, in effect or stored but not in effect (both can be revoked): exit 0
+# when it is, 1 when the list does not have it, 3 when Kiro Crew did not list them
+trusted() {
+  local rc=0
+  "$KC" GET /api/security/trusted-apps 2>/dev/null | "$PY" -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    sys.exit(3)
+if not isinstance(d, dict) or not all(isinstance(d.get(k, []), list) for k in ("apps", "ineffective")) \
+        or "apps" not in d:
+    sys.exit(3)
+sys.exit(0 if sys.argv[1] in d["apps"] + d.get("ineffective", []) else 1)' "$APP" 2>/dev/null || rc=$?
+  return "$rc"
 }
 
 # knowledge source <name>: "<sync_status> <files_done> <files_total>", or "absent 0 0"

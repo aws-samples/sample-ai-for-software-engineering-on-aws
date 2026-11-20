@@ -433,9 +433,10 @@ been dry-run once.
    `checks/backtoback.sh`.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
-to a signed-off evidence page; `cleanup.sh` removes everything it created; every third-party tool is listed with its
-licence; synthetic data only, with no customer names, code, data or identifying details; no credentials or account
-identifiers; no `--trust-all-tools`.
+to a signed-off evidence page; `cleanup.sh` removes everything it created, apart from the chat folder and the
+session-approval consent of an app installed before setup, which it names for you to remove; every third-party tool is
+listed with its licence; synthetic data only, with no customer names, code, data or identifying details; no
+credentials or account identifiers; no `--trust-all-tools`.
 
 ## Layout
 
@@ -589,8 +590,20 @@ The run is a single sample, and its wall time is not what a run takes: it includ
 
 ## Cleanup
 
-`bash cleanup.sh` removes what `setup.sh` recorded: the app with its data and run repositories, any members and
-workspace an earlier setup created, the knowledge source and its copy, and the agent templates it added; it puts back the templates it replaced.
-`--dry-run` lists them. It leaves the build container, the bench's images and volumes, the bench state
-(`~/.cc1-bench`) and the baseline, and prints the commands of [bench/README.md](bench/README.md#cleanup) that remove
-them.
+`bash cleanup.sh` removes what `setup.sh` recorded: the app with the sessions of every run, its data and run
+repositories, its trust entry, any members and workspace an earlier setup created, the knowledge source and the files
+of its copy, the agent templates it added, and the board's `app/ui/node_modules` and `app/ui/dist` when setup built
+them; it puts back the templates it replaced, and `--dry-run` lists all of it. It checks that each one is still the
+one setup created, so one you made with the same name stays, as do files you added to `~/workplace/vstatd` or changed
+there (a file you add to that folder is indexed with the rest, so the team reads it as knowledge). Members and the
+workspace an earlier setup created have no recorded id, so they are matched by name and by where they point (a
+member's workspace, the workspace's path): one you re-created with the same name there is removed too. An app installed
+before setup stays installed. While a run of the app is still going it removes nothing and exits 1: stop the run on
+the board first. When a step fails it keeps `.install-state.json` and exits 1:
+fix the cause and run it again. It leaves the build container, the bench's images and volumes, the bench state
+(`~/.cc1-bench`), the baseline and the servers-mode folder `~/workplace/vstatd-team/server` (its venv, configs, work
+tree and the servers' state: [app/README.md](app/README.md#servers-mode-trial)), and prints the commands that remove
+them: those of [bench/README.md](bench/README.md#cleanup), and one for that folder. Left for you: the chat folder
+「AI-DLC 团队」 in the Kiro Crew sidebar (only a person can delete a folder: the
+app hides the run folders in it, so delete it there), npm's shared cache (`~/.npm`), and the Python caches
+(`__pycache__`) the app and the checks wrote in this folder.

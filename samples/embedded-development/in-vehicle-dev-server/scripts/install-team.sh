@@ -23,13 +23,9 @@ KIROCREW_BIN="${VSTATD_KIROCREW_BIN:-$(crew_app_dir)/Contents/Resources/backend-
 [ -x "$KIROCREW_BIN" ] || { echo "Cannot find the kirocrew program at $KIROCREW_BIN: open Kiro Crew first" >&2; exit 1; }
 
 echo "1/3 Knowledge -> $TEAM_HOME/knowledge"
-if [ "$DRY" = 1 ]; then
-  [ -e "$TEAM_HOME" ] && would "update $TEAM_HOME/knowledge from knowledge/" || would "create $TEAM_HOME and copy knowledge/ there"
-else
-  [ -e "$TEAM_HOME" ] || state add created team_home
-  mkdir -p "$TEAM_HOME/knowledge"
-  rsync -a --delete --exclude .DS_Store --exclude __pycache__ --exclude tools/ "$ROOT/knowledge/" "$TEAM_HOME/knowledge/"
-fi
+# file by file: a file there that setup did not copy is never replaced or deleted (scripts/knowledge.py)
+"$PY" "$ROOT/scripts/knowledge.py" "$([ "$DRY" = 1 ] && echo plan || echo install)" "$ROOT/knowledge" \
+  "$TEAM_HOME/knowledge" | sed 's/^/   /'
 
 echo "2/3 Agent templates -> $AGENTS/ (${#TEMPLATES[@]} AI-DLC experts)"
 TPL="$(mktemp -d)"
@@ -44,9 +40,15 @@ echo "3/3 Knowledge source $KNOWLEDGE"
 if has /api/knowledge/sources sources name "$KNOWLEDGE"; then echo "   exists"
 elif [ "$DRY" = 1 ]; then would "add it ($TEAM_HOME/knowledge) and let Kiro Crew index it"
 else
-  sid="$("$KC" POST /api/knowledge/sources "$(body name="$KNOWLEDGE" source_type=local_folder uri="$TEAM_HOME/knowledge")" \
-         | "$PY" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("source") or d).get("id"))')"
-  "$KC" POST "/api/knowledge/sources/$sid/confirm" '{}' >/dev/null
-  state add created knowledge
+  out="$("$KC" POST /api/knowledge/sources \
+         "$(body name="$KNOWLEDGE" source_type=local_folder uri="$TEAM_HOME/knowledge")" || true)"
+  sid="$(printf '%s' "$out" \
+         | "$PY" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("source") or d).get("id") or "")' \
+         2>/dev/null || true)"
+  # recorded before anything else can fail, with its id: cleanup.sh removes this source, not another of the same name
+  if [ -n "$sid" ] || has /api/knowledge/sources sources name "$KNOWLEDGE"; then state add created knowledge; fi
+  [ -n "$sid" ] && state add knowledge_id "$sid"
+  [ -n "$sid" ] || { echo "   error: Kiro Crew did not add the source: ${out:0:200}" >&2; exit 1; }
+  post "/api/knowledge/sources/$sid/confirm" '{}' || exit 1
   echo "   + added; Kiro Crew is indexing it (Knowledge -> Sources shows the progress)"
 fi

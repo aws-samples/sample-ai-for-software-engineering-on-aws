@@ -32,8 +32,9 @@ docker info >/dev/null 2>&1 && ok "docker $(docker version --format '{{.Server.V
 node_ok && ok "Node $("$NODE_DIR/node" -v) (builds the board)" || { bad "Node 22 or newer is missing: install it from https://nodejs.org"; exit 1; }
 export PATH="$NODE_DIR:$PATH"
 crew_up || { bad "Kiro Crew is not running: open it, sign in, and run setup.sh again"; exit 1; }
-ver="$("$KC" GET /api/version 2>/dev/null)" || {
+[ "$("$KC" --status GET /api/version 2>/dev/null)" = 200 ] && ver="$("$KC" GET /api/version 2>/dev/null)" || {
   bad "Kiro Crew answers, but its API refused this shell as the dashboard owner: run setup.sh in your own terminal, not from an agent's shell"
+  echo "    (or Kiro Crew is signed out: sign in to it first)"
   exit 1
 }
 v="$(printf '%s' "$ver" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
@@ -41,13 +42,26 @@ ok "Kiro Crew ${v:-?}"
 
 step 2/5 "Build the app and install it into Kiro Crew"
 echo "  This adds the app $APP to Kiro Crew's trusted apps (for this one app only), so that Kiro Crew runs it."
-installed() { "$KC" GET "/api/apps/$APP" | "$PY" -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if isinstance(d, dict) and d.get("name") else 1)' 2>/dev/null; }
 if [ "$DRY" = 1 ]; then
-  installed && echo "   (dry run) would update the app $APP in place" || echo "   (dry run) would build the board and install the app $APP"
+  rc=0; installed || rc=$?
+  case "$rc" in
+    0) echo "   (dry run) would update the app $APP in place" ;;
+    1) echo "   (dry run) would build the board and install the app $APP" ;;
+    *) echo "   (dry run) Kiro Crew did not say whether the app $APP is installed: setup.sh would stop here" ;;
+  esac
   echo "   (dry run) would ask whether the sessions the app opens may auto-approve their tool calls"
   echo "   (dry run) would record this folder in $APP_DATA/data/sample.json"
 else
-  installed || state add created app
+  # an app installed before setup.sh stays when cleanup.sh runs; what setup.sh adds to it is recorded and undone.
+  # When Kiro Crew does not say whether the app is installed or trusted, setup.sh stops before it records anything.
+  rc=0; installed || rc=$?
+  [ "$rc" -le 1 ] || { bad "Kiro Crew did not say whether the app $APP is installed: run setup.sh again"; exit 1; }
+  trc=0; trusted || trc=$?
+  [ "$trc" -le 1 ] || { bad "Kiro Crew did not list its trusted apps: run setup.sh again"; exit 1; }
+  if [ "$rc" = 1 ]; then state add created app; elif ! state has created app; then state add found app; fi
+  [ "$trc" = 0 ] || state add created trust
+  [ -e "$ROOT/app/ui/node_modules" ] || state add created ui_node_modules   # npm ci (app/scripts/dev-install.sh)
+  [ -e "$ROOT/app/ui/dist" ] || state add created ui_dist                   # the board's build
   if [ -z "$CONSENT" ]; then
     echo "  Each role on the team is a Kiro Crew chat session that this app opens. For the team to work on its own,"
     echo "  the app sets ${B}the sessions it opens itself${N} to auto-approve their tool calls (file edits and shell commands)."
@@ -57,6 +71,7 @@ else
     echo "  waits for you to approve it in Kiro Crew."
     ask "Allow it? Type y and press Return (Return alone = no):" && CONSENT="--consent-session-approval"
   fi
+  if [ -n "$CONSENT" ]; then state add created consent; fi   # kept by the app's record until the app is uninstalled
   out="$(cd "$ROOT/app" && NODE_BIN="$NODE_DIR" scripts/dev-install.sh --no-test $CONSENT 2>&1)" || true
   echo "$out" | tail -4 | sed 's/^/     /'
   if echo "$out" | grep -q '"started": true'; then ok "app installed: Kiro Crew sidebar -> Apps -> $APP_LABEL"; else

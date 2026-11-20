@@ -146,7 +146,10 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         return kit.json({"run": await svc.create_run(requirement, model or None, source or None, team_name or None)})
 
     async def cleanup_sessions(request: Any) -> Any:
-        return kit.json(await svc.cleanup_sessions())
+        everything = (await kit.body(request)).get("all", False)
+        if not isinstance(everything, bool):
+            raise AppError("all 只能是 true 或 false", "invalid_all")
+        return kit.json(await svc.cleanup_sessions(everything))
 
     async def stop_run(request: Any) -> Any:
         return kit.json(await svc.stop_run(str(request.match_info.get("rid", ""))))

@@ -190,9 +190,26 @@ def test_state_survives_a_reload_and_cleanup_keeps_a_running_run(tmp_path):
         again.load()
         assert again.get(a.id).slot == a.slot and again.get(b.id).slot == b.slot
         done = await again.cleanup({"vstatd-team:live"})
-        assert done == {"sessions": 1, "folders": 1} and a.slot not in gw.slot_rows and b.slot in gw.slot_rows
+        assert done == {"sessions": 1, "folders": 1, "failed": 0}
+        assert a.slot not in gw.slot_rows and b.slot in gw.slot_rows
         assert [f["name"] for f in gw.folder_rows if f.get("hidden")] == ["vstatd-team:old"]  # the old run folder, not the live one
         assert again.get(a.id).slot is None and again.get(b.id).slot == b.slot
+
+    asyncio.run(go())
+
+
+def test_cleanup_counts_the_sessions_it_could_not_delete(tmp_path):
+    async def go():
+        gw, mgr = make(tmp_path)
+        mgr.spawn_session("t", parent_session_key="vstatd-team:old", cwd=str(tmp_path / "a" / "b" / "c"), title="a")
+        await asyncio.sleep(0)
+        await asyncio.gather(*mgr._tasks)
+
+        async def refused(key):
+            raise RuntimeError("409 busy")
+
+        gw.delete_slot = refused
+        assert await mgr.cleanup(set()) == {"sessions": 0, "folders": 1, "failed": 1}  # cleanup.sh: kept, said so
 
     asyncio.run(go())
 

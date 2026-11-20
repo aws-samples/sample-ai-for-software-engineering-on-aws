@@ -65,17 +65,27 @@ def _listed(key: str) -> list:
 
 
 def remove(agents: Path, backup: Path) -> list:
+    """One line per template; a line that starts with "!" is one it could not remove or put back, and kept"""
     out = []
     for name in _listed("templates"):
-        for p in (agents / f"{name}.json", agents / f"{name}.lock"):
-            p.unlink(missing_ok=True)
-        out.append(f"- {name}")
+        try:
+            for p in (agents / f"{name}.json", agents / f"{name}.lock"):
+                p.unlink(missing_ok=True)
+            out.append(f"- {name}")
+        except OSError as e:
+            out.append(f"! kept {name}: could not remove it ({e.strerror or e})")
     for name in _listed("backed_up"):
-        if (backup / f"{name}.json").is_file():
-            shutil.move(str(backup / f"{name}.json"), str(agents / f"{name}.json"))
-            out.append(f"< {name} (put back)")
+        try:
+            if (backup / f"{name}.json").is_file():
+                shutil.move(str(backup / f"{name}.json"), str(agents / f"{name}.json"))
+                out.append(f"< {name} (put back)")
+        except OSError as e:
+            out.append(f"! kept {backup / name}.json: could not put it back ({e.strerror or e})")
     if backup.is_dir() and not any(backup.iterdir()):
-        backup.rmdir()
+        try:
+            backup.rmdir()
+        except OSError as e:
+            out.append(f"! kept {backup}: could not remove it ({e.strerror or e})")
     return out
 
 
@@ -89,7 +99,7 @@ def main(argv: list) -> int:
               file=sys.stderr)
         return 2
     print("\n".join(lines))
-    return 0
+    return 1 if any(ln.startswith("!") for ln in lines) else 0
 
 
 if __name__ == "__main__":
