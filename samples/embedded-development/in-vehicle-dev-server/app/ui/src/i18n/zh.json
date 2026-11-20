@@ -1271,7 +1271,7 @@
  "ev.hold.replay": "回放没做成（{kind}）：{why}",
  "ev.hold.servers": "build / bench 服务器用不了：{why}",
  "ev.hold.after_bench": "台架之后的检查要人决定：{why}",
- "ev.hold.release": "独立重跑后 release.sh 没通过：{why}",
+ "ev.hold.release": "独立重跑后 [[blocked|release 检查没判出结果|release.sh 没通过]]：{why}",
  "ev.review": "审查：[[summary|{summary}|没有给结论]]",
  "ev.gate.wait": "等人批准：{g_gate}",
  "ev.gate.after_talk": "等人批准：{g_gate}（讨论之后）",

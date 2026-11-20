@@ -1271,7 +1271,7 @@
  "ev.hold.replay": "Replay did not succeed ({kind}): {why}",
  "ev.hold.servers": "The build and bench servers cannot be used: {why}",
  "ev.hold.after_bench": "Post-bench checks need a person's decision: {why}",
- "ev.hold.release": "release.sh did not pass on the independent rerun: {why}",
+ "ev.hold.release": "[[blocked|The release gave no verdict|release.sh did not pass on the independent rerun]]: {why}",
  "ev.review": "Review: [[summary|{summary}|no verdict given]]",
  "ev.gate.wait": "Waiting for approval: {g_gate}",
  "ev.gate.after_talk": "Waiting for approval: {g_gate} (after the discussion)",
