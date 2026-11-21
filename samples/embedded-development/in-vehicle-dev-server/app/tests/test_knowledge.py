@@ -56,7 +56,7 @@ def test_the_documents_with_figures_from_the_files_and_the_source_state(tmp_path
                               "facts/messages.yaml", "facts/rules.yaml"]
         figures = {p: {c["label"]: c["n"] for c in d["counts"]} for p, d in docs.items()}
         assert figures["vstatd-interface.md"] == {"节": 41, "页": 11}
-        assert figures["findings-backlog.md"] == {"发现": 30, "fix": 22, "later": 8}
+        assert figures["findings-backlog.md"] == {"发现": 30, "fix": 25, "later": 5}
         assert figures["cc1-gateway.dbc"] == {"报文": 9, "信号": 24}
         assert figures["vss-mapping.yaml"] == {"信号路径": 24}
         assert [figures[f"facts/{n}.yaml"]["条目"] for n in ("signals", "messages", "rules")] == [24, 9, 39]
@@ -68,7 +68,7 @@ def test_the_documents_with_figures_from_the_files_and_the_source_state(tmp_path
         with (sample / "knowledge" / "findings-backlog.md").open("a", encoding="utf-8") as f:
             f.write("| F-031 | cppcheck | x | `a.cpp` | m | later |\n")
         again = {d["path"]: d for d in (await call(routes, "GET", "/knowledge")).body["docs"]}
-        assert {c["label"]: c["n"] for c in again["findings-backlog.md"]["counts"]} == {"发现": 31, "fix": 22, "later": 9}
+        assert {c["label"]: c["n"] for c in again["findings-backlog.md"]["counts"]} == {"发现": 31, "fix": 25, "later": 6}
         svc.crew["knowledge"] = [{"name": "vstatd", "item_count": 14, "sync_status": "synced"}]
         src = (await call(routes, "GET", "/knowledge")).body["source"]
         assert src["name"] == "vstatd" and src["present"] is True and src["items"] == 14
