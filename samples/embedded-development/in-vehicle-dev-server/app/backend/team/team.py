@@ -101,9 +101,24 @@ def cause_paths(replies: list[str], mention: re.Pattern[str], mine: Callable[[st
     return paths[:PROPOSED_MAX], said[:300]
 
 
-def fenced(globs: list[str]) -> list[str]:
-    """The paths or globs a person asked for that could reach what a role is never given (FENCED)."""
-    return [g for g in globs if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED)]
+def fenced(globs: list[str], root: Path | None = None) -> list[str]:
+    """The paths or globs a person asked for that could reach what a role is never given (FENCED): by what the glob
+    itself says and, with *root* (the work tree), by what a path of it resolves to, so a symlink committed at a path
+    outside FENCED cannot stand in for a file inside it."""
+    return [g for g in globs
+            if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED) or resolves_fenced(g, root)]
+
+
+def resolves_fenced(p: str, root: Path | None) -> bool:
+    """Whether a path of the work tree *root* resolves, through a symlink, to what a role is never given (FENCED).
+    False without a *root*, and for a path that resolves outside the work tree (not FENCED's to judge)."""
+    if root is None:
+        return False
+    try:
+        rel = (root / p).resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return gitwork.matches(str(rel), list(FENCED))
 
 
 def _globs_meet(a: list[str], b: list[str]) -> bool:
@@ -1096,7 +1111,8 @@ class TeamRun:
             if role not in self.impl or not self.roles[role]["writable"]:
                 choices = "、".join(self.impl)
                 raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}）", str(role))
-            bad = fenced(body["paths"])
+            wt = self.s.get("run_wt")
+            bad = fenced(body["paths"], Path(wt) if wt else None)
             if bad:  # what judges the role, the servers, the bench or the gates' record: never the role's to change
                 raise FindingRequestError(f"{'、'.join(bad)} 会碰到检查、服务器、台架或门禁决定的文件"
                                           f"（{'、'.join(FENCED)}），不能交给角色改", ", ".join(bad))
@@ -1158,7 +1174,9 @@ class TeamRun:
         """给已补登的发现加路径, proposed for a person to agree to: for each held check that has a finding added for it
         already, the files its role cannot write that would let it fix it. From what the role said (a path in its
         replies about the finding that is in the project and outside its scope) and, for a unit-test finding no test
-        names yet (TR §4.1), the test file of its location. [] when there is nothing to propose; nothing changes here."""
+        names yet (TR §4.1), the test file of its location when the project has it already (a new one would not be
+        compiled: reference-project/tests/CMakeLists.txt names its test sources one by one). The app's own path goes
+        first, so PROPOSED_MAX does not drop it. [] when there is nothing to propose; nothing changes here."""
         t, data = self.s["tests"], self._approved_triage()
         held, wt = t.get("held"), self.s.get("run_wt")
         if not held or not data or not wt:
@@ -1177,33 +1195,56 @@ class TeamRun:
             loc = str(first["added"].get("location") or "")
             same = [f["id"] for f in mine[1:] if f["added"].get("location") == loc]
             free = self._free(root, role)
-            paths, said = cause_paths(self._replies(role), FINDING_SAID, lambda m: bool(ids & _ids_in(m)), free)
-            why = [f"{self.title(role)}说：{said}"] if paths else []
+            free_test = self._free(root, role, cross=True)
+            said_paths, said = cause_paths(self._replies(role), FINDING_SAID, lambda m: bool(ids & _ids_in(m)), free)
             reasons = " ".join(str(x) for x in (rows.get(c) or {}).get("reasons") or [])
+            own: list[tuple[str, str]] = []  # the app's own path for a finding of this check, before any truncation
             for f in mine:
                 stem = Path(str(f["added"].get("location") or "").split(":")[0]).stem
                 test = f"tests/test_{stem}.cpp"
                 if (f.get("evidence") == "unit-test" and f"{f['id']}: triaged as fix with evidence unit-test, but no test" in reasons
-                        and stem and free(test) and test not in paths):
-                    paths.append(test)
-                    why.append(f"{f['id']} 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 {test} 里加")
+                        and stem and free_test(test) and test not in said_paths
+                        and test not in [p for _, p in own]):
+                    own.append((f["id"], test))
+            # the app's own paths go first, so PROPOSED_MAX cannot drop the one path this proposal is for, and the
+            # note is built from what is left after truncation, so it never tells a person to add a path not proposed
+            paths = ([p for _, p in own] + said_paths)[:PROPOSED_MAX]
+            why = [f"{self.title(role)}说：{said}"] if any(p in paths for p in said_paths) else []
+            for fid, test in own:
+                if test not in paths:
+                    continue
+                across = self._scope_of(test, role)
+                why.append(f"{fid} 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 {test} 里加"
+                           + (f"。{test} 属于{across}的可改范围，加上它等于把这个文件交给"
+                              f"{self.title(role)}一轮，由你批准" if across else ""))
             if paths:
                 note = "；".join(why) + (f"。{'、'.join(same)} 和 {first['id']} 是同一个失败，提交说明一并写上 {first['id']}、{'、'.join(same)}" if same else "")
-                out.append({"extend": first["id"], "check": c, "role": role, "paths": paths[:PROPOSED_MAX],
+                out.append({"extend": first["id"], "check": c, "role": role, "paths": paths,
                             "note": note[:1000]})
         return out
 
-    def _free(self, root: Path, role: str) -> Any:
+    def _free(self, root: Path, role: str, cross: bool = False) -> Any:
         """Whether a path a role named can be proposed to a person for it: a file of the project, outside the role's
-        scope, not one a role is never given (FENCED) and not in another role's scope."""
-        others = [r["writable"] for k, r in self.roles.items() if k != role and r.get("writable")]
+        scope, not one a role is never given (FENCED, by what the path says and by what it resolves to) and not in
+        another role's scope. cross=True drops that last test, for the one path the app names itself: the test file
+        of a unit-test finding no test names (TR §4.1)."""
+        others = [] if cross else [r["writable"] for k, r in self.roles.items() if k != role and r.get("writable")]
 
         def free(p: str) -> bool:
             f = root / p
             return (f.is_file() and f.resolve().is_relative_to(root.resolve())
                     and not gitwork.matches(p, self.roles[role]["writable"]) and not gitwork.matches(p, list(FENCED))
+                    and not resolves_fenced(p, root)
                     and not any(gitwork.matches(p, g) for g in others))
         return free
+
+    def _scope_of(self, p: str, role: str) -> str | None:
+        """The title of the other role whose scope has p, to say in a proposal that it crosses roles. None when no
+        other role's scope has it."""
+        for k, r in self.roles.items():
+            if k != role and r.get("writable") and gitwork.matches(p, r["writable"]):
+                return self.title(k)
+        return None
 
     def _replies(self, role: str) -> list[str]:
         return [str(a.get("reply") or "") for a in self.lane(role)["attempts"]]
