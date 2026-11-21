@@ -10,7 +10,7 @@ this sample.
 | [`vss-mapping.yaml`](vss-mapping.yaml) | Each published signal path (a COVESA VSS v6.1 name) and the CAN signal it is decoded from | `[VSTATD-IF p.4–5 §3.1]` |
 | [`cc1-platform-notes.md`](cc1-platform-notes.md) | The target, the emulated CC-1, resource limits, start-up order, log format, log comparison settings, toolchain, bench states and runs | `[CC1-PN §6.3]` |
 | [`team-rules.md`](team-rules.md) | C++ rules, build flags, analyser settings, triage policy, repair bounds, definition of done | `[TR §4.1]` |
-| [`findings-backlog.md`](findings-backlog.md) | 30 static analysis findings on the current release; 22 labelled `fix` for this batch | `F-001` … `F-030` |
+| [`findings-backlog.md`](findings-backlog.md) | 30 static analysis findings on the current release; 25 labelled `fix` for this batch | `F-001` … `F-030` |
 | [`facts/`](facts/) | Fact entries extracted from VSTATD-IF, 72 in all: one per signal (24, `signals.yaml`), per message (9, `messages.yaml`) and per rule (39, `rules.yaml`), each with its page and section | the entry's `source` |
 
 ## How the agents use it

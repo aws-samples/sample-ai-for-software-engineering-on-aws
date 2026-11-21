@@ -132,7 +132,7 @@ def test_the_triage_gate_and_a_history_that_trace_sh_passes(tmp_path):
         write_triage(mgr.by_role("triage"), t, "[triage] 补上 F-001")
         await ticks(run, lambda: run.lane("triage").get("gate") == "pending")
         qs = run.s["questions"]["triage"]
-        assert len(qs) == 21 and qs[[q["id"] for q in qs].index("F-008")]["cites"] == ["[VSTATD-IF p.7 §4.2]"]
+        assert len(qs) == 24 and qs[[q["id"] for q in qs].index("F-008")]["cites"] == ["[VSTATD-IF p.7 §4.2]"]
         assert [r["id"] for r in run.s["triage_listed"]] == ["F-003", "F-018"]
 
         # the person takes neither the deferral of F-021 nor the justification of F-008: back to the triage role, no

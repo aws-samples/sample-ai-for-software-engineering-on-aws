@@ -126,13 +126,31 @@
       "pick_up_when": "The real triage decides it."
     },
     {
+      "id": "F-022",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
       "id": "F-023",
       "decision": "defer",
       "reason": "Not decided in this example.",
       "pick_up_when": "The real triage decides it."
     },
     {
+      "id": "F-024",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
       "id": "F-025",
+      "decision": "defer",
+      "reason": "Not decided in this example.",
+      "pick_up_when": "The real triage decides it."
+    },
+    {
+      "id": "F-026",
       "decision": "defer",
       "reason": "Not decided in this example.",
       "pick_up_when": "The real triage decides it."

@@ -24,7 +24,7 @@ def test_the_work_item_and_the_backlog(tmp_path):
         assert out["work_item"] and f"WORK_ITEM = '{out['work_item']}'" in header  # the StartForm's default
         assert len(out["rows"]) == 30 and out["next_id"] == "F-031"
         assert set(out["rows"][0]) == ts_types()[0]["BacklogRow"]
-        assert [r["label"] for r in out["rows"]].count("fix") == 22
+        assert [r["label"] for r in out["rows"]].count("fix") == 25
         first = out["rows"][0]
         assert first["id"] == "F-001" and "`" not in first["location"] and first["tool"] in ("cppcheck", "clang-tidy")
         with (sample / "knowledge" / "findings-backlog.md").open("a", encoding="utf-8") as f:
