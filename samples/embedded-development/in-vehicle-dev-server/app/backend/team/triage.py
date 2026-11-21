@@ -24,18 +24,22 @@ from typing import Any
 from . import messages
 
 FINDING_ID = re.compile(r"\bF-\d{3}\b")
+CHECK_FOUND_BY = re.compile(r"^checks/[\w-]+\.sh$")  # an added finding a check found; anything else is the work item's
 DECISIONS = ("fix", "justify", "defer")
 EVIDENCE = ("unit-test", "static-analysis", "build")
 SPEC = ("VSTATD-IF", "CC1-PN")
 DOCS = {"VSTATD-IF": "vstatd-interface.md", "CC1-PN": "cc1-platform-notes.md", "TR": "team-rules.md"}
 CITATION = re.compile(r"^\[(?P<doc>VSTATD-IF|CC1-PN|TR)(?: p\.(?P<page>\d+))? §(?P<sec>\d+(?:\.\d+)?)\]$")
 AGREE = "A"  # the option of every question that takes the proposal as it is
+BACKLOG_FILE = "findings-backlog.md"  # the knowledge document that labels each finding fix or later
+QUALIFIED = re.compile(r"\b([A-Z]\w*(?:::\w+)+)\s*\(")  # Service::run() in the work item's words
+SOURCE_FILE = re.compile(r"\b((?:\w+/)*\w+\.(?:cpp|h|hpp|cc))\b")  # src/service.cpp in the work item's words
 
 
 def backlog(knowledge: Path) -> dict[str, dict[str, str]]:
     """The backlog's rows: ID → tool, check, location, message, label (findings-backlog.md)."""
     rows = {}
-    for line in (Path(knowledge) / "findings-backlog.md").read_text(encoding="utf-8").splitlines():
+    for line in (Path(knowledge) / BACKLOG_FILE).read_text(encoding="utf-8").splitlines():
         if line.startswith("| F-"):
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             rows[cells[0]] = {"tool": cells[1], "check": cells[2], "location": cells[3].replace("`", ""),
@@ -175,6 +179,49 @@ def questions(t: dict[str, Any], rows: dict[str, dict[str, str]]) -> list[dict[s
                                 for k, x in zip("AB", opts)],
                     "recommend": AGREE, "why": why, "cites": [str(c) for c in f.get("cites") or []], "decision": decision})
     return out
+
+
+def place(location: Any) -> tuple[str, str]:
+    """A location ``src/service.cpp › Service::run`` as (file, function); either part is "" when it has none."""
+    parts = [p.strip().strip("`") for p in str(location or "").split("›")]
+    return (parts[0], parts[1] if len(parts) > 1 else "")
+
+
+def refactor_scope(t: Any, work_item: str = "") -> list[tuple[str, str]]:
+    """(file, function) of the code this batch refactors, from the two sources the run has at the triage gate: the
+    entries the triage added for the work item (TR §4.4, ``added.found_by`` not a check's), and the work item's own
+    words (a ``Class::method()`` names the function, a path ending in .cpp or .h the file). Either part is "" when
+    that source does not name it. Empty when neither names code: then nothing is reported as in the refactor."""
+    out: list[tuple[str, str]] = []
+    for f in (t.get("findings") or []) if isinstance(t, dict) else []:
+        a = f.get("added") if isinstance(f, dict) and isinstance(f.get("added"), dict) else None
+        if a and not CHECK_FOUND_BY.match(str(a.get("found_by") or "")):
+            out.append(place(a.get("location")))
+    out += [("", m) for m in QUALIFIED.findall(work_item or "")]
+    out += [(m, "") for m in SOURCE_FILE.findall(work_item or "")]
+    return [(f, fn) for f, fn in dict.fromkeys(out) if f or fn]
+
+
+def in_refactor(location: Any, scope: list[tuple[str, str]]) -> str:
+    """How *location* sits in the refactored code: ``func`` when it is a function the scope names, ``file`` when only
+    its file is, "" when neither (the function decides: a scope entry that names no file still matches on it)."""
+    file, func = place(location)
+    if func and any(func == s_func for _, s_func in scope):
+        return "func"
+    return "file" if file and any(file == s_file for s_file, _ in scope) else ""
+
+
+def later_in_refactor(t: Any, rows: dict[str, dict[str, str]], work_item: str = "") -> list[dict[str, str]]:
+    """The backlog findings this batch is not fixing that sit in the code it refactors: the refactor is likely to
+    remove them, and then checks/lib/check_static.py fails the run on a decision nothing can reach, because the
+    triage may not carry a finding the backlog labels other than fix (TR §4.1, checks/lib/common.py). For the gate to
+    warn while a person can still act: {id, label, where, scope}, no question and no decision to edit."""
+    scope = refactor_scope(t, work_item)
+    if not scope:
+        return []
+    return [{"id": fid, "label": row["label"], "where": row["location"], "scope": kind}
+            for fid, row in sorted(rows.items()) if row["label"] != "fix"
+            for kind in [in_refactor(row["location"], scope)] if kind]
 
 
 def listed(t: dict[str, Any], rows: dict[str, dict[str, str]]) -> list[dict[str, Any]]:

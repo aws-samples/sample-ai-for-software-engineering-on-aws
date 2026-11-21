@@ -217,3 +217,43 @@ def test_the_triage_role_that_runs_out_of_rounds_on_a_malformed_file_fails(tmp_p
         assert "分诊文件 docs/aidlc/triage.json 不合格式" in run.events[-2]["text"] + run.events[-1]["text"]
 
     asyncio.run(go())
+
+
+WORK_ITEM = json.loads((constants.APP_ROOT / "team" / "team-vstatd.json").read_text(encoding="utf-8"))["work_item"]
+
+
+def test_the_refactor_scope_comes_from_the_added_work_item_entry_and_the_work_items_words():
+    t = proposal("a" * 40)
+    assert ("src/service.cpp", "Service::run") in triage.refactor_scope(t)
+    # the work item names the function but no file; a check's own addition is not the work item's
+    assert triage.refactor_scope({}, WORK_ITEM) == [("", "Service::run")]
+    added_by_check = {"findings": [{"id": "F-032", "decision": "fix",
+                                    "added": {"found_by": "checks/build.sh", "location": "src/main.cpp:12"}}]}
+    assert triage.refactor_scope(added_by_check, "") == []
+    assert triage.in_refactor("src/service.cpp › Service::run", [("", "Service::run")]) == "func"
+    assert triage.in_refactor("src/service.cpp › Service::stop", [("src/service.cpp", "")]) == "file"
+    assert triage.in_refactor("src/config.cpp › Config::Config", [("src/service.cpp", "Service::run")]) == ""
+
+
+def test_the_gate_names_the_later_findings_that_sit_in_the_code_this_batch_refactors():
+    """F-022, F-024 and F-026 are labelled later in src/service.cpp › Service::run, which the work item refactors:
+    the refactor removes them and static then fails on a decision the triage may not carry (TR §4.1)."""
+    t = proposal("a" * 40)
+    rows = triage.backlog(KNOWLEDGE)
+    out = triage.later_in_refactor(t, rows, WORK_ITEM)
+    assert [x["id"] for x in out] == ["F-022", "F-024", "F-026"]
+    assert out[0] == {"id": "F-022", "label": "later", "where": "src/service.cpp › Service::run", "scope": "func"}
+    # F-020 is labelled later too, but in src/log_writer.cpp, which this work item does not refactor
+    assert "F-020" not in {x["id"] for x in out}
+    # no scope named anywhere: nothing is reported as sitting in the refactor
+    assert triage.later_in_refactor({"findings": []}, rows, "行为不变，内存不超限额") == []
+
+
+def test_the_gate_says_which_later_findings_sit_in_the_refactor(tmp_path):
+    """The warning is an event at the triage gate, while a person can still relabel the backlog."""
+    t = proposal("a" * 40)
+    rows = triage.backlog(KNOWLEDGE)
+    out = triage.later_in_refactor(t, rows, WORK_ITEM)
+    text = mod("messages").render("plan.triage_refactor", {"items": out, "backlog": triage.BACKLOG_FILE})
+    assert "F-022（标 later，src/service.cpp › Service::run）" in text
+    assert triage.BACKLOG_FILE in text and "fix" in text

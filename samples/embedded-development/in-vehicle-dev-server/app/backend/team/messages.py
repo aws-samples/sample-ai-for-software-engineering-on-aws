@@ -124,6 +124,9 @@ ZH: dict[str, str] = {
     "plan.delivery_confirmed": "人确认交付标签：{delivery}",
     "plan.questions": "{r_role}列出 {n} 件要人决定的事",
     "plan.triage": "{r_role}的分诊：{n} 件要人决定，{listed} 条照分诊做（见分诊文档）",
+    "plan.triage_refactor": "待办里不进本批的 {items} 落在本批重构的代码里：重构把它们改掉以后静态检查就卡住，而分诊不能带它们（TR §4.1）；"
+                            "只有在运行开始之前把它们在 {backlog} 里改标 fix 才行",
+    "plan.triage_refactor.items": "{id}（标 {label}，{where}）",
     "plan.triage_approved": "分诊批准（{by}），记在 {file}（sha256 {sha}）",
     "plan.triage_base": "分诊的 base 定为开工时的运行分支 {base}：之后每个提交都要写发现编号",
     # the delivery details (flow.py): segments, their results and the moments
@@ -282,6 +285,10 @@ EN: dict[str, str] = {
     "plan.delivery_confirmed": "The person confirmed the delivery labels: {delivery}",
     "plan.questions": "{r_role} lists {n} things for a person to decide",
     "plan.triage": "{r_role}'s triage: {n} for a person to decide, {listed} done as triaged (see the triage document)",
+    "plan.triage_refactor": "{items} are left out of this batch by the backlog but sit in the code it refactors: once "
+                            "the refactor removes them the static check holds the run, and the triage may not carry "
+                            "them (TR §4.1); only relabelling them fix in {backlog} before the run starts helps",
+    "plan.triage_refactor.items": "{id} (labelled {label}, {where})",
     "plan.triage_approved": "Triage approved ({by}), recorded in {file} (sha256 {sha})",
     "plan.triage_base": "Triage base set to the run branch at kickoff, {base}: every commit from now on names its findings",
     "flow.agent": "{r_role} · {label}",

@@ -2160,6 +2160,11 @@ class TeamRun:
         self.s["triage_listed"] = triage_mod.listed(data, rows)
         self.say("plan", "plan.triage", {"r_role": key, "n": len(out), "listed": len(self.s["triage_listed"])},
                  role=key, data={"questions": len(out)})
+        later = triage_mod.later_in_refactor(data, rows, str(self.team.get("work_item") or ""))
+        self.s["triage_later_in_refactor"] = later
+        if later:  # the gate warns while a person can still act: after the checks nothing can clear them
+            self.say("plan", "plan.triage_refactor", {"items": later, "backlog": triage_mod.BACKLOG_FILE}, role=key,
+                     data={"later_in_refactor": [x["id"] for x in later]})
 
     async def _approve_triage(self, key: str, picked: list[dict[str, Any]], by: str) -> list[dict[str, Any]]:
         """The person's answers at the triage gate: those that take a proposal as it is (A) leave it; the others
