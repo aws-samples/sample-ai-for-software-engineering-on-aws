@@ -246,3 +246,44 @@ def test_a_turn_cut_short_by_a_transient_model_error_or_a_hang_is_continued_in_t
         assert hung.done and "DONE: 好了" in hung.result
 
     asyncio.run(go())
+
+
+NETWORK = "❌ Kiro cannot reach the network. Check your connection and try again."
+
+
+def _cut_by_network(tmp_path, nudges):
+    """A turn that said one line, ran a tool and was then cut off by the network (r1119826c rounds 2 and 3)."""
+    async def go():
+        gw, mgr = make(tmp_path)
+        gw.script = [[{"role": "assistant", "content": "I'll start by checking the sources.", "meta": {}},
+                      {"role": "tool", "content": "🔧 ls", "meta": {"tool_name": "shell", "input": '{"command": "ls"}'}},
+                      {"role": "error", "content": NETWORK, "meta": {}}]]
+        info = mgr.spawn_session("写测试", parent_session_key="vstatd-team:r8", cwd=str(tmp_path / "a" / "b" / "c"),
+                                 title="测试 agent")
+        await asyncio.sleep(0)
+        await asyncio.gather(*mgr._tasks)
+        info.nudges = nudges
+        gw.finish(info.slot)
+        for _ in range(sessions.IDLE_POLLS + 1):
+            await mgr.poll()
+        return gw, info
+
+    return asyncio.run(go())
+
+
+def test_a_turn_cut_off_by_the_network_is_continued_in_the_same_session(tmp_path):
+    gw, info = _cut_by_network(tmp_path, nudges=0)
+    assert info.nudges == 1 and not info.done
+    assert "你上一轮被中断了" in gw.msgs[info.slot][-1]["content"]
+    for text in (NETWORK, "❌ A network error occurred. Please try again."):
+        assert sessions.TRANSIENT.search(text)
+
+
+def test_a_turn_that_ends_on_an_error_fails_even_after_a_reply_and_is_tried_again_in_a_new_session(tmp_path):
+    team_mod = mod("team")
+    _, info = _cut_by_network(tmp_path, nudges=sessions.NUDGES)  # carried on as often as it may: it ends here
+    f = sessions.agent_fields(info)
+    assert f["done"] and f["outcome"] == "failed" and f["error"] == NETWORK
+    assert "I'll start by checking" in f["result"]  # what it said is kept for the board
+    assert team_mod.TRANSIENT_ERROR.search(f["error"])  # _finish: once more in a new session, before the role fails
+    assert team_mod.TRANSIENT_ERROR.search("❌ A network error occurred. Please try again.")

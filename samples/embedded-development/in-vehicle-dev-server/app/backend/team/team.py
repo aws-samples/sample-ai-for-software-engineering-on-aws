@@ -46,8 +46,10 @@ LOST_GRACE_S = 60.0  # an agent KiroCrew no longer knows is given up on after th
 TOOL_EVENT_GAP_S = 3.0  # at most one ``tool`` event per role this often
 STATS_GAP_S, STATS_EVERY_S = 6.0, 30.0  # a running worktree's git stats: at most / at least this often
 HUMAN_MARK = "【负责人退回】"  # a review-kind fix task that a person, not the reviewer, sent back
-# a turn the model backend could not finish (an HTTP 5xx, a runtime that died): worth one more go in a new session
-TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?out|overloaded|rate.?limit|throttl", re.I)
+# a turn the model backend could not finish (an HTTP 5xx, a runtime that died, no network): worth one more go in a
+# new session
+TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?out|overloaded|rate.?limit|throttl"
+                             r"|network|connection", re.I)
 ERRORS_TO_FAIL = 30  # this many failing ticks in a row (about a minute) end the run
 REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 view
 # also mid-line (KiroCrew joins messages with no break), but not `DONE:` quoted in backticks in the reply's prose

@@ -45,8 +45,8 @@ NO_START_S = 90.0       # sent, idle and nothing in the transcript for this long
 STALL_S = 180.0         # busy with no new transcript row for this long: shown as 卡住
 STUCK_S = 240.0         # busy with nothing new for this long: the turn is stopped and the agent told to carry on
 NUDGES = 2              # a turn cut short (a transient model error, or stuck) is continued at most this often
-TRANSIENT = re.compile(r"transient|5\d\d|runtime failed|timed? ?out|overloaded|rate.?limit|throttl|temporarily|unavailable",
-                       re.I)
+TRANSIENT = re.compile(r"transient|5\d\d|runtime failed|timed? ?out|overloaded|rate.?limit|throttl|temporarily"
+                       r"|unavailable|network|connection", re.I)
 HISTORY = 400
 _FIELDS = ("id", "task", "parent_session_key", "slot", "title", "folder", "cwd", "model", "conv_root", "send_ids",
            "requested", "started", "sent_at", "done", "queued", "queued_reason", "result", "streaming_text", "error",
@@ -524,6 +524,8 @@ class SessionManager:
             info.error = (str(errors[-1].get("content") or "") or "KiroCrew 报错")[:300]
         else:
             info.error = "这一轮结束了，但没有回复"
+        if last is not None and last.get("role") == "error":  # cut off by an error, even after a reply: it failed
+            info.error = (str(last.get("content") or "") or "KiroCrew 报错")[:300]
         info.done = True
 
     # ---- cleaning up the demo sessions ----------------------------------------------------------------- #
