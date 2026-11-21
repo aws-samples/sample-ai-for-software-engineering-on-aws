@@ -175,12 +175,12 @@ One run uses the servers at a time. Approve each bench request at `bench/console
 not approve it in this mode, unless `board_decides` is on (设置, or `servers.board_decides` in the team file; the
 trial only, as in direct mode, D3).
 What a server refuses holds the run for a person; 重试 asks the server again.
-设置 and 准备情况 also say whether the build server's `[paths]` has `bench_results`, `bench_runs` and
-`bench_baseline`, which its release check needs; the app reads that file and never writes it.
 When the build server's last `run_check build` answer says one more cross failure reaches its bound (TR §5.1), the
 next round is held before any call, and 重试 there runs that round with the server's last attempt. Once the server
 refuses (past the bound) the board gives the `buildserver.admin reset-repair` command; the app never resets the
 count (D17, open question 2).
+设置 and 准备情况 also say whether the build server's `[paths]` has `bench_results`, `bench_runs` and
+`bench_baseline`, which its release check needs; the app reads that file and never writes it.
 
 ## Test
 
