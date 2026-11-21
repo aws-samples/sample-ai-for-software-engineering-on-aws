@@ -92,8 +92,11 @@ export function startsExtending(run: RunDetail): boolean {
 const GONE = /\b(F-\d{3}): no longer reported, but triaged as (later|defer)\b/ // i18n-keep: the check's own words
 /** The finding a held check cannot be cleared for: it is no longer reported, and its decision is later or defer, which
  * neither 补登发现 nor 加路径 can change (both only add). Null when the hold is any other shape. */
-export function goneFinding(held: { why: string } | null | undefined): { id: string; decision: string } | null {
-  const m = GONE.exec(held?.why ?? '')
+type Held = { why: string; reasons?: string[] } | null | undefined
+export function goneFinding(held: Held): { id: string; decision: string } | null {
+  if (!held) return null
+  // why carries only the first reason of each held check, and the check writes new findings before removed ones
+  const m = [...(held.reasons ?? []), held.why].map((r) => GONE.exec(r)).find(Boolean)
   return m ? { id: m[1], decision: m[2] } : null
 }
 

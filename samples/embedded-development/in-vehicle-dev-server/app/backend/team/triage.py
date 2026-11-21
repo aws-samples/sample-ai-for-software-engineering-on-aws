@@ -33,7 +33,6 @@ CITATION = re.compile(r"^\[(?P<doc>VSTATD-IF|CC1-PN|TR)(?: p\.(?P<page>\d+))? §
 AGREE = "A"  # the option of every question that takes the proposal as it is
 BACKLOG_FILE = "findings-backlog.md"  # the knowledge document that labels each finding fix or later
 QUALIFIED = re.compile(r"\b([A-Z]\w*(?:::\w+)+)\s*\(")  # Service::run() in the work item's words
-SOURCE_FILE = re.compile(r"\b((?:\w+/)*\w+\.(?:cpp|h|hpp|cc))\b")  # src/service.cpp in the work item's words
 
 
 def backlog(knowledge: Path) -> dict[str, dict[str, str]]:
@@ -187,41 +186,47 @@ def place(location: Any) -> tuple[str, str]:
     return (parts[0], parts[1] if len(parts) > 1 else "")
 
 
-def refactor_scope(t: Any, work_item: str = "") -> list[tuple[str, str]]:
-    """(file, function) of the code this batch refactors, from the two sources the run has at the triage gate: the
-    entries the triage added for the work item (TR §4.4, ``added.found_by`` not a check's), and the work item's own
-    words (a ``Class::method()`` names the function, a path ending in .cpp or .h the file). Either part is "" when
-    that source does not name it. Empty when neither names code: then nothing is reported as in the refactor."""
-    out: list[tuple[str, str]] = []
-    for f in (t.get("findings") or []) if isinstance(t, dict) else []:
-        a = f.get("added") if isinstance(f, dict) and isinstance(f.get("added"), dict) else None
-        if a and not CHECK_FOUND_BY.match(str(a.get("found_by") or "")):
-            out.append(place(a.get("location")))
-    out += [("", m) for m in QUALIFIED.findall(work_item or "")]
-    out += [(m, "") for m in SOURCE_FILE.findall(work_item or "")]
-    return [(f, fn) for f, fn in dict.fromkeys(out) if f or fn]
+def refactor_scope(t: Any, work_item: str = "") -> list[str]:
+    """The functions this batch refactors, from the two sources the run has at the triage gate: the entries the triage
+    added for the work item (TR §4.4, ``added.found_by`` not a check's) and the work item's own words (a
+    ``Class::method()``). Only functions: a finding in an untouched function of a refactored file is not at risk.
+
+    What makes the match work is the ``file › function`` form the backlog gives every location (findings-backlog.md)
+    and the triage role is told to give ``added.location``; a location written any other way (``src/service.cpp:412``)
+    names no function here, and nothing is reported as in the refactor — as when the work item refactors nothing."""
+    out = [place(f["added"].get("location"))[1]
+           for f in ((t.get("findings") or []) if isinstance(t, dict) else [])
+           if isinstance(f, dict) and isinstance(f.get("added"), dict)
+           and not CHECK_FOUND_BY.match(str(f["added"].get("found_by") or ""))]
+    return [fn for fn in dict.fromkeys(out + QUALIFIED.findall(work_item or "")) if fn]
 
 
-def in_refactor(location: Any, scope: list[tuple[str, str]]) -> str:
-    """How *location* sits in the refactored code: ``func`` when it is a function the scope names, ``file`` when only
-    its file is, "" when neither (the function decides: a scope entry that names no file still matches on it)."""
-    file, func = place(location)
-    if func and any(func == s_func for _, s_func in scope):
-        return "func"
-    return "file" if file and any(file == s_file for s_file, _ in scope) else ""
+def in_refactor(location: Any, scope: list[str]) -> bool:
+    """Whether *location* names a function this batch refactors."""
+    return place(location)[1] in scope
 
 
 def later_in_refactor(t: Any, rows: dict[str, dict[str, str]], work_item: str = "") -> list[dict[str, str]]:
-    """The backlog findings this batch is not fixing that sit in the code it refactors: the refactor is likely to
-    remove them, and then checks/lib/check_static.py fails the run on a decision nothing can reach, because the
-    triage may not carry a finding the backlog labels other than fix (TR §4.1, checks/lib/common.py). For the gate to
-    warn while a person can still act: {id, label, where, scope}, no question and no decision to edit."""
+    """The backlog findings in a refactored function that this batch is not fixing: the refactor is likely to remove
+    them, and then checks/lib/check_static.py fails the run on a decision nothing can reach, because the triage may
+    not carry a finding the backlog labels other than fix (TR §4.1, checks/lib/common.py). Only the backlog, before a
+    run, can change them. For the gate to warn while a person can still act: {id, label, where}, no question."""
     scope = refactor_scope(t, work_item)
-    if not scope:
-        return []
-    return [{"id": fid, "label": row["label"], "where": row["location"], "scope": kind}
-            for fid, row in sorted(rows.items()) if row["label"] != "fix"
-            for kind in [in_refactor(row["location"], scope)] if kind]
+    return [{"id": fid, "label": row["label"], "where": row["location"]}
+            for fid, row in sorted(rows.items())
+            if row["label"] != "fix" and in_refactor(row["location"], scope)]
+
+
+def defer_in_refactor(t: Any, rows: dict[str, dict[str, str]], work_item: str = "") -> list[dict[str, str]]:
+    """The findings of this batch that the triage proposes to defer in a function it refactors: check_static.py reads
+    the triage's decision before the backlog's label, so these walk into the same dead end. Unlike a ``later``
+    finding, the way out is at this gate: its own question already offers fixing it in this batch."""
+    scope = refactor_scope(t, work_item)
+    by = decided(t)
+    return [{"id": fid, "where": row["location"]}
+            for fid, row in sorted(rows.items())
+            if row["label"] == "fix" and (by.get(fid) or {}).get("decision") == "defer"
+            and in_refactor(row["location"], scope)]
 
 
 def listed(t: dict[str, Any], rows: dict[str, dict[str, str]]) -> list[dict[str, Any]]:

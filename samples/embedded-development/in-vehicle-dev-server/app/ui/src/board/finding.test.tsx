@@ -217,8 +217,10 @@ describe('补登发现并交给角色', () => {
 })
 
 // what checks/lib/check_static.py says of a finding the batch's own refactor removed, triaged later
-const GONE_WHY = 'static 没过，负责的角色没法再改：F-022: no longer reported, but triaged as later; '
-  + 'a change outside the batch removed it'
+const GONE_REASON = 'F-022: no longer reported, but triaged as later; a change outside the batch removed it'
+const GONE_WHY = `static 没过，负责的角色没法再改：${GONE_REASON}`
+// the reason the same check writes first when the batch also tripped one new finding
+const NEW_FINDING = 'new finding, not in the backlog: cppcheck nullPointer src/service.cpp:88 (Service::run): x'
 
 describe('一个已经不报的发现卡住了运行', () => {
   test('goneFinding reads the id and the decision, and only for this shape of hold', () => {
@@ -228,6 +230,24 @@ describe('一个已经不报的发现卡住了运行', () => {
     expect(goneFinding({ why: `build 没过，负责的角色没法再改：${BUILD}` })).toBeNull()
     expect(goneFinding({ why: 'F-019: triaged as fix but still reported at src/service.cpp:88' })).toBeNull()
     expect(goneFinding(null)).toBeNull()
+  })
+
+  test('the sentence is found in any reason, not only the first one why carries', () => {
+    // checks/lib/check_static.py writes the new findings before the ones the batch removed
+    const held = { why: `static 没过，负责的角色没法再改：${NEW_FINDING}`, reasons: [NEW_FINDING, GONE_REASON] }
+    expect(goneFinding(held)).toEqual({ id: 'F-022', decision: 'later' })
+    expect(goneFinding({ why: held.why })).toBeNull() // why alone still misses it: that is what reasons is for
+    expect(goneFinding({ why: held.why, reasons: [NEW_FINDING] })).toBeNull()
+  })
+
+  test('a new finding reported first still shows the gone panel, not the forms', async () => {
+    const b = heldBoard()
+    b.run!.tests.held = { checks: ['static'], why: `static 没过，负责的角色没法再改：${NEW_FINDING}`,
+      reasons: [NEW_FINDING, GONE_REASON] }
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    render(<TeamPage pollMs={60_000} />)
+    expect(within(await screen.findByTestId('kt-flow-held-gone')).getByText(/F-022 已经不再被报出来/)).toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: '补登发现并交给角色' })).toHaveLength(0)
   })
 
   test('no 补登发现 and no 加路径: the hold says what is true and leaves 停止 as the only action', async () => {

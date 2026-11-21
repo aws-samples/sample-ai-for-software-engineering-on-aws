@@ -473,7 +473,9 @@ export type TestWall = {
   // a check a person decides: BLOCKED, misconfigured, or out of its repair rounds (D7); commands: what the person runs
   // first (the build server's reset-repair at its bound, D17)
   held: {
-    checks: string[]; why: string; suggest?: PathSuggestion[]; prefill?: FindingPrefill[]; commands?: string[]
+    // reasons: every reason of the held checks; why and params carry only the first of each
+    checks: string[]; why: string; reasons?: string[]; suggest?: PathSuggestion[]; prefill?: FindingPrefill[]
+    commands?: string[]
   } | null
   round: number // the team file's checks: how many rounds before the bench were started
   running: boolean // a round of checks is due or running on what is merged
