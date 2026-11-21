@@ -1,12 +1,14 @@
 import { lang, presentation, setLang, setPresentation, t as tr, type Lang } from './i18n'
 /**
  * The app bar the views share: the app's name, the views as tabs — 团队看板 (how the run went), 评分卡 (the measured
- * figures over the runs) — 下一步需要你 (how many gates and bench requests wait for the person on the board) and 投影. It stays where it is when the view changes, and 投影 belongs to the
+ * figures over the runs), 设置 (the app's own settings: the mode, the servers' configuration files, who approves at
+ * the bench) — 下一步需要你 (how many gates and bench requests wait for the person on the board) and 投影. It stays
+ * where it is when the view changes, and 投影 belongs to the
  * app, not to a view: full screen goes on, the person moves between views, it stays on. Each view's own controls
  * (the run, 回放, 新需求 … on the board) sit in the row below.
  */
 
-export type ViewKind = 'board' | 'score'
+export type ViewKind = 'board' | 'score' | 'settings'
 
 export const APP_CSS = `
 .kt-app { display: flex; flex-direction: column; min-height: 100%; color: var(--text); font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); }
@@ -34,6 +36,7 @@ export const APP_CSS = `
 const TABS: [ViewKind, string, string][] = [
   ['board', tr('AppBar.1'), tr('AppBar.2')],
   ['score', tr('AppBar.3'), tr('AppBar.4')],
+  ['settings', tr('AppBar.13'), tr('AppBar.14')],
 ]
 
 export function AppBar({ view, projection, onView, onProjection, needs = 0 }: { view: ViewKind | 'item'; projection: boolean; onView: (v: ViewKind) => void; onProjection: () => void; needs?: number }) {

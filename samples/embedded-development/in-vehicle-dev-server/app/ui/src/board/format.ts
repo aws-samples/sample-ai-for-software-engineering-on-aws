@@ -24,6 +24,7 @@ export const paths = {
   gate: (run: string) => `${BASE}/runs/${enc(run)}/gate`,
   open: (run: string) => `${BASE}/runs/${enc(run)}/open`,
   cleanup: () => `${BASE}/sessions/cleanup`,
+  settings: () => `${BASE}/settings`,
   signoff: (run: string) => `${BASE}/runs/${enc(run)}/signoff`,
   hide: (run: string) => `${BASE}/runs/${enc(run)}/hide`,
   events: (run: string) => `${BASE}/runs/${enc(run)}/events`,

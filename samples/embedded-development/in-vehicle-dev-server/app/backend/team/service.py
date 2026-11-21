@@ -17,6 +17,7 @@ from typing import Any, Callable
 from . import bench as bench_mod
 from . import audit, board, checks, display, flow, library, messages, outputs, paths, readiness, roster, scorecard
 from . import servers as servers_mod
+from . import settings as settings_mod
 from . import store as store_mod
 from .constants import APP_NAME, APP_ROOT, TEAM_FILE, TICK_S, WORK_ROOT
 from .gateway import Gateway, GatewayError
@@ -55,6 +56,7 @@ class Service:
         self.work_root = Path(work_root) if work_root else WORK_ROOT
         self.tick_s = tick_s
         self.team_file = Path(team_file) if team_file else TEAM_FILE
+        self.settings_file = self.data_dir / "settings.json"  # the app's own settings (设置), the owner's to edit
         self._opener = opener or _open_on_this_mac
         # every role's agent is a Kiro Crew chat session, opened through the gateway's chat API
         gateway = Gateway(self.name, APP_ROOT / ".app_secret", app_token=getattr(ctx, "app_token", None))
@@ -150,6 +152,7 @@ class Service:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         try:  # a run made before the image was per architecture or the sysroot a setting takes the team file's
             current = await asyncio.to_thread(load_team, self.team_file)
+            current = settings_mod.apply(current, settings_mod.load(self.settings_file, current))
         except (OSError, ValueError):
             current = {}
         runner = current.get("check_runner")
@@ -285,6 +288,7 @@ class Service:
             team_file = team_dir / team_name if team_name else self.team_file
             try:
                 team = await asyncio.to_thread(load_team, team_file)
+                team = settings_mod.apply(team, settings_mod.load(self.settings_file, team))  # 设置 (settings.py)
                 tmpl_name = team.get("task_template")  # a team file may bring its own task template (team/ 下的 .md)
                 if tmpl_name is not None and (not isinstance(tmpl_name, str) or not re.fullmatch(r"[\w-]+\.md", tmpl_name)):
                     raise ValueError(f"task_template 必须是 team/ 下的 .md 文件名：{tmpl_name}")
@@ -575,9 +579,52 @@ class Service:
         return await asyncio.to_thread(scorecard.build, [r.s for r in self.runs.values()], self.data_dir / "runs")
 
     def _default_team(self) -> tuple[dict[str, Any], Path]:
-        """The team a new run gets, with the scenario's folder filled in (D12)."""
+        """The team a new run gets, with 设置 applied (settings.py) and the scenario's folder filled in (D12)."""
         team, sample = load_team(self.team_file), paths.sample_dir(self.data_dir)
+        team = settings_mod.apply(team, settings_mod.load(self.settings_file, team))
         return paths.expand(team, sample), sample
+
+    def _settings(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Blocking: (the settings now, the team file they are read against)."""
+        team = load_team(self.team_file)
+        return settings_mod.load(self.settings_file, team), team
+
+    def _release_inputs(self) -> dict[str, Any]:
+        """Blocking: the release check's inputs, read from the settings that are loaded — the same source 设置
+        itself reads (_settings_view), so 准备情况 and the page can never say two different things."""
+        got, _ = self._settings()
+        return settings_mod.release_inputs(got)
+
+    def _settings_view(self, got: dict[str, Any], team: dict[str, Any]) -> dict[str, Any]:
+        """Blocking: 设置 as the page shows it; ``release`` is read from the build server's own configuration in
+        servers mode only, and nothing of it is ever written."""
+        return {"settings": got, "defaults": settings_mod.defaults(team),
+                "release": settings_mod.release_inputs(got) if got["mode"] == "servers" else None}
+
+    async def settings(self) -> dict[str, Any]:
+        """设置: the app's own settings, the team file's defaults beside them, and — in servers mode — what the build
+        server's configuration says about the three paths its release check needs."""
+        try:
+            got, team = await asyncio.to_thread(self._settings)
+        except (OSError, ValueError) as exc:
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
+        return await asyncio.to_thread(self._settings_view, got, team)
+
+    async def save_settings(self, body: dict[str, Any]) -> dict[str, Any]:
+        """设置 saved by the dashboard owner (every route of this app is theirs alone): checked first, then written
+        in one step. What does not hold up is refused with every problem named, and nothing is written."""
+        try:
+            _, team = await asyncio.to_thread(self._settings)
+        except (OSError, ValueError) as exc:
+            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
+        got, problems = settings_mod.check(body.get("settings"), team)
+        if problems:
+            raise AppError("设置没存：" + "；".join(problems), "invalid_settings", 400, {"problems": problems})
+        try:
+            await asyncio.to_thread(settings_mod.save, self.settings_file, got)
+        except OSError as exc:
+            raise AppError(f"设置写不进去：{exc}", "settings_write_failed", 500, detail=exc)
+        return {"ok": True, **await asyncio.to_thread(self._settings_view, got, team)}
 
     async def bench_decide(self, rid: Any, verdict: Any, digest: Any, reason: Any) -> dict[str, Any]:
         """批准 / 拒绝 a bench request on the board (D3): the bench's own decide() does it, with its rules (the digest
@@ -603,8 +650,10 @@ class Service:
         self.probes.refresh(team, doctor=doctor)
         state = await asyncio.to_thread(bench_mod.read_state)
         kb = self.knowledge_view(str((team.get("knowledge") or {}).get("source") or ""))
+        # in servers mode the build server's own configuration is read for the release check's inputs (read only)
+        release = await asyncio.to_thread(self._release_inputs) if servers_mod.on(team) else None
         return {"at": now, "team": str(team.get("name") or ""), "error": "",
-                "items": readiness.items(team, self.probes, kb, state, sample, now),
+                "items": readiness.items(team, self.probes, kb, state, sample, now, release),
                 "pending": readiness.pending(team, state, now), "board_decides": servers_mod.board_decides(team)}
 
     async def knowledge(self) -> dict[str, Any]:

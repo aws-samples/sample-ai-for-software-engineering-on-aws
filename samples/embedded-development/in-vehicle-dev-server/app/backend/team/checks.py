@@ -201,6 +201,16 @@ def docker_command(runner: dict[str, Any], mounts: list[tuple[str, bool]], cmd: 
     return out + [runner["image"], *cmd]
 
 
+def docker_words(words: list[str]) -> list[str]:
+    """The Docker command without its ``run`` options: the executable and the global flags that pick the daemon
+    (``-H <host>``, which settings.py puts there), for ``docker image inspect`` and ``docker rm``."""
+    out = list(words[:1])
+    for i, w in enumerate(words[:-1]):
+        if w in ("-H", "--host"):
+            out += [w, words[i + 1]]
+    return out
+
+
 def docker_prefix(runner: dict[str, Any] | None, mounts: list[tuple[str, bool]], workdir: str | None = None) -> str:
     """The same as one shell line ending with the image, for a role's task ("" when the team has no build container)."""
     try:
@@ -290,7 +300,8 @@ def _read_result(results: Path, name: str, rc: int | None, why: str) -> dict[str
             "summary": str(data.get("summary") or ""), "commit": data.get("commit")}
 
 
-async def _exec(cmd: list[str], log: Path, timeout: float, name: str) -> tuple[int | None, str]:
+async def _exec(cmd: list[str], log: Path, timeout: float, name: str,
+                runner: dict[str, Any] | None = None) -> tuple[int | None, str]:
     """(exit status, why there is none). The container is removed when its check times out or is cancelled."""
     with open(log, "ab") as out:
         try:
@@ -306,12 +317,13 @@ async def _exec(cmd: list[str], log: Path, timeout: float, name: str) -> tuple[i
             if proc.returncode is None:
                 with contextlib.suppress(ProcessLookupError):
                     proc.kill()
-                await _remove(cmd[0], name)
+                # the runner's own words, not the whole command line: a check's own argv may hold a -H of its own
+                await _remove(docker_words((runner or {}).get("docker") or cmd), name)
 
 
-async def _remove(docker: str, name: str) -> None:
+async def _remove(docker: list[str], name: str) -> None:
     with contextlib.suppress(OSError):
-        rm = await asyncio.create_subprocess_exec(docker, "rm", "-f", name, stdin=asyncio.subprocess.DEVNULL,
+        rm = await asyncio.create_subprocess_exec(*docker, "rm", "-f", name, stdin=asyncio.subprocess.DEVNULL,
                                                   stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         await asyncio.shield(rm.wait())
 
@@ -381,7 +393,7 @@ async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: 
             container = f"vstatd-check-{uuid.uuid4().hex[:12]}"
             cmd = docker_command(runner, mounts, argv, name=container)
             (results / f"{name}.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")
-            rc, why = await _exec(cmd, results / f"{name}.run.log", float(check["timeout_s"]), container)
+            rc, why = await _exec(cmd, results / f"{name}.run.log", float(check["timeout_s"]), container, runner)
             res = _read_result(results, name, rc, why)
         add_result(rows, cases, check, res, project, team, round((time.time() - started) * 1000))
     return wall(names, rows, cases, head, results)
@@ -494,7 +506,7 @@ async def tests_first(run_wt: Path, team: dict[str, Any], *, base: str, head: st
     container = f"vstatd-tests-first-{uuid.uuid4().hex[:12]}"
     cmd = docker_command(team["check_runner"], [(str(root), True)], ["sh", "-c", script], name=container)
     (results / "tests-first.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")
-    rc, why = await _exec(cmd, log, DEFAULT_TIMEOUT_S, container)
+    rc, why = await _exec(cmd, log, DEFAULT_TIMEOUT_S, container, team["check_runner"])
     try:
         data = json.loads(report.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -520,6 +532,6 @@ async def evidence_page(cmd: list[str], team: dict[str, Any], results: Path, tri
     container = f"vstatd-evidence-{uuid.uuid4().hex[:12]}"
     argv = docker_command(team["check_runner"], [(str(sample), False), (str(results.parents[1]), True)],
                           [*cmd, "--results", str(results), "--triage", str(triage)], name=container)
-    rc, _ = await _exec(argv, results / "evidence-page.run.log", DEFAULT_TIMEOUT_S, container)
+    rc, _ = await _exec(argv, results / "evidence-page.run.log", DEFAULT_TIMEOUT_S, container, team["check_runner"])
     page = results / "evidence.md"
     return page if rc == 0 and page.is_file() else None
