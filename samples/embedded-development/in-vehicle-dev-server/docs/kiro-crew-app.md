@@ -703,10 +703,15 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   finding (or, for a new finding, the check) named nearest before it in the block, unless the path follows 不在 or
   不是. It quotes that sentence as the note and fills in 再加路径 and the note of a new finding the same way
   (`tests.held.prefill`), at most 10 paths. A path is filled in only when it is a file of the project outside the
-  role's scope, not under `checks/`, `mcp/`, `bench/` or `.kiro/`, not `docs/aidlc/decisions.md`, and not in
-  another role's scope, with one exception: the test file a unit-test finding still needs is proposed even though
-  `tests/**` is the tester's, and its note says whose scope it is and that adding it hands that file to the
-  developer for a round. Every other path in another role's scope is still the person's to type.
+  role's scope, not under `checks/`, `mcp/`, `bench/` or `.kiro/`, not `docs/aidlc/decisions.md` (by what the path
+  says and by what it resolves to, so a committed symlink cannot stand in for one of them), and not in
+  another role's scope, with one exception, `tests.held.suggest`'s only: the test file a unit-test finding still
+  needs is proposed even though `tests/**` is the tester's, and its note says whose scope it is and that adding it
+  hands that file to the developer for a round. That one path is proposed ahead of the paths the role named, so the
+  limit of 10 cannot drop it, and only when the project has that test file already: `reference-project` names its
+  test sources one by one in `tests/CMakeLists.txt`, so a new file would not be compiled or run, and a module
+  without a test file still gets nothing proposed. Every other path in another role's scope is still the person's
+  to type.
   The person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
   can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
   since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
