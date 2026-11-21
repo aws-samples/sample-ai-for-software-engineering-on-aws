@@ -649,7 +649,9 @@ bench images; step 12 needs them.
    owner; BLOCKED and exhausted repair rounds to a person. *Verify:* tests with stand-in check scripts for each exit
    status and each routing case; `build.sh` and `static.sh` run once through the adapter on `reference-project/`.
 4. **Tests first.** After the tester merges, the app runs the new tests on the base commit and sends them back to
-   the tester when any of them passes there. *Verify:* a test with a new test that passes on the base commit.
+   the tester when any of them passes there. A send-back round that changes nothing, or a tester out of its rounds,
+   fails that role and ends the run for a person; 重试 gives it that round again. *Verify:* a test with a new test
+   that passes on the base commit.
 5. **Triage gate.** `triage.py` turns `triage.json` and the backlog into the gate's questions (D4). *Verify:* tests
    on a triage file with fixes, justifications, deferrals and a disagreement with the backlog.
 6. **Bench.** `bench.py` calls `cc1.sh` for deploy, restart and replay, and reads the pending requests, the action
