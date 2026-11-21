@@ -24,18 +24,21 @@ from typing import Any
 from . import messages
 
 FINDING_ID = re.compile(r"\bF-\d{3}\b")
+CHECK_FOUND_BY = re.compile(r"^checks/[\w-]+\.sh$")  # an added finding a check found; anything else is the work item's
 DECISIONS = ("fix", "justify", "defer")
 EVIDENCE = ("unit-test", "static-analysis", "build")
 SPEC = ("VSTATD-IF", "CC1-PN")
 DOCS = {"VSTATD-IF": "vstatd-interface.md", "CC1-PN": "cc1-platform-notes.md", "TR": "team-rules.md"}
 CITATION = re.compile(r"^\[(?P<doc>VSTATD-IF|CC1-PN|TR)(?: p\.(?P<page>\d+))? §(?P<sec>\d+(?:\.\d+)?)\]$")
 AGREE = "A"  # the option of every question that takes the proposal as it is
+BACKLOG_FILE = "findings-backlog.md"  # the knowledge document that labels each finding fix or later
+QUALIFIED = re.compile(r"\b([A-Z]\w*(?:::\w+)+)\s*\(")  # Service::run() in the work item's words
 
 
 def backlog(knowledge: Path) -> dict[str, dict[str, str]]:
     """The backlog's rows: ID → tool, check, location, message, label (findings-backlog.md)."""
     rows = {}
-    for line in (Path(knowledge) / "findings-backlog.md").read_text(encoding="utf-8").splitlines():
+    for line in (Path(knowledge) / BACKLOG_FILE).read_text(encoding="utf-8").splitlines():
         if line.startswith("| F-"):
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             rows[cells[0]] = {"tool": cells[1], "check": cells[2], "location": cells[3].replace("`", ""),
@@ -175,6 +178,55 @@ def questions(t: dict[str, Any], rows: dict[str, dict[str, str]]) -> list[dict[s
                                 for k, x in zip("AB", opts)],
                     "recommend": AGREE, "why": why, "cites": [str(c) for c in f.get("cites") or []], "decision": decision})
     return out
+
+
+def place(location: Any) -> tuple[str, str]:
+    """A location ``src/service.cpp › Service::run`` as (file, function); either part is "" when it has none."""
+    parts = [p.strip().strip("`") for p in str(location or "").split("›")]
+    return (parts[0], parts[1] if len(parts) > 1 else "")
+
+
+def refactor_scope(t: Any, work_item: str = "") -> list[str]:
+    """The functions this batch refactors, from the two sources the run has at the triage gate: the entries the triage
+    added for the work item (TR §4.4, ``added.found_by`` not a check's) and the work item's own words (a
+    ``Class::method()``). Only functions: a finding in an untouched function of a refactored file is not at risk.
+
+    What makes the match work is the ``file › function`` form the backlog gives every location (findings-backlog.md)
+    and the triage role is told to give ``added.location``; a location written any other way (``src/service.cpp:412``)
+    names no function here, and nothing is reported as in the refactor — as when the work item refactors nothing."""
+    out = [place(f["added"].get("location"))[1]
+           for f in ((t.get("findings") or []) if isinstance(t, dict) else [])
+           if isinstance(f, dict) and isinstance(f.get("added"), dict)
+           and not CHECK_FOUND_BY.match(str(f["added"].get("found_by") or ""))]
+    return [fn for fn in dict.fromkeys(out + QUALIFIED.findall(work_item or "")) if fn]
+
+
+def in_refactor(location: Any, scope: list[str]) -> bool:
+    """Whether *location* names a function this batch refactors."""
+    return place(location)[1] in scope
+
+
+def later_in_refactor(t: Any, rows: dict[str, dict[str, str]], work_item: str = "") -> list[dict[str, str]]:
+    """The backlog findings in a refactored function that this batch is not fixing: the refactor is likely to remove
+    them, and then checks/lib/check_static.py fails the run on a decision nothing can reach, because the triage may
+    not carry a finding the backlog labels other than fix (TR §4.1, checks/lib/common.py). Only the backlog, before a
+    run, can change them. For the gate to warn while a person can still act: {id, label, where}, no question."""
+    scope = refactor_scope(t, work_item)
+    return [{"id": fid, "label": row["label"], "where": row["location"]}
+            for fid, row in sorted(rows.items())
+            if row["label"] != "fix" and in_refactor(row["location"], scope)]
+
+
+def defer_in_refactor(t: Any, rows: dict[str, dict[str, str]], work_item: str = "") -> list[dict[str, str]]:
+    """The findings of this batch that the triage proposes to defer in a function it refactors: check_static.py reads
+    the triage's decision before the backlog's label, so these walk into the same dead end. Unlike a ``later``
+    finding, the way out is at this gate: its own question already offers fixing it in this batch."""
+    scope = refactor_scope(t, work_item)
+    by = decided(t)
+    return [{"id": fid, "where": row["location"]}
+            for fid, row in sorted(rows.items())
+            if row["label"] == "fix" and (by.get(fid) or {}).get("decision") == "defer"
+            and in_refactor(row["location"], scope)]
 
 
 def listed(t: dict[str, Any], rows: dict[str, dict[str, str]]) -> list[dict[str, Any]]:

@@ -43,7 +43,7 @@ import { BacklogPanel } from './board/Backlog'
 import { SignOff } from './board/SignOff'
 import { BenchPanel } from './board/Bench'
 import { FlowStrip } from './board/FlowStrip'
-import { FindingDialog, type ExtendBody, type FindingBody } from './board/Finding'
+import { FindingDialog, goneFinding, type ExtendBody, type FindingBody } from './board/Finding'
 import { AuditPanel, useAudit, type AuditPick } from './board/Audit'
 import { DivisionView } from './board/DivisionGrid'
 import { flowOf } from './board/flow'
@@ -435,7 +435,7 @@ export function TeamPage({ pollMs = POLL_MS, entry, onPick, onDetail, returning 
         {!projection && !inReplay && startOpen && run && <StartForm onStart={start} onCancel={() => setStartOpen(false)} />}
         {!projection && !inReplay && stopAsk && run && <StopConfirm run={run} onConfirm={stop} onCancel={() => setStopAsk(false)} />}
         {gateAsk && run && <GateDialog key={`${gateAsk.role}-${gateAsk.decision}-${gateLane?.talk.length ?? 0}`} label={gateLane?.gate_label || gateLane?.title || gateAsk.role} who={gateLane?.title} questions={gateLane?.questions} talk={gateLane?.talk} outputs={gateDocs.length > 1 ? gateDocs : []} decision={gateAsk.decision} preset={gateAsk.decision === 'discuss' ? undefined : gateAsk.decision === 'revise' ? gateLane?.gate_revise_preset : gateLane?.gate_preset} presetRisk={gateAsk.decision === 'revise' ? gateLane?.gate_revise_risk : undefined} askRisk={!!gateLane?.gate_revise_risk} split={gateLane && gateLane.writable.length === 0 ? undefined : run.roles.filter((l) => l.key !== gateAsk.role && l.status !== 'skipped' && !(l.key in run.plan_skip)).map((l) => ({ key: l.key, title: l.title, icon: l.icon, assignment: assignmentText(l) }))} skips={gateLane && gateLane.writable.length > 0 ? Object.entries(run.plan_skip).map(([k, why]) => ({ key: k, title: run.roles.find((l) => l.key === k)?.title ?? k, why })) : undefined} overrule={gateLane?.overrule} delivery={gateLane?.delivery_gate && gateAsk.decision === 'approve' ? run.delivery : undefined} report={gateLane && gateLane.writable.length === 0 ? gateLane.summary || '' : undefined} onReport={gateLane && gateLane.writable.length === 0 ? () => openOutputs(gateLane.key) : undefined} replay={inReplay} onConfirm={gate} onCancel={() => setGateAsk(null)} />}
-        {findingAsk && run?.tests.held && <FindingDialog key={run.id} run={run} onConfirm={finding} onCancel={() => setFindingAsk(false)} />}
+        {findingAsk && run?.tests.held && !goneFinding(run.tests.held) && <FindingDialog key={run.id} run={run} onConfirm={finding} onCancel={() => setFindingAsk(false)} />}
         {board && !run && board.runs.length === 0 && <EmptyStart onStart={start} />}
         {run && lay && (
           <>
