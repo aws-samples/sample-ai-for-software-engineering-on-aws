@@ -51,7 +51,10 @@ steps and what comes next (`ui/src/board/flow.ts`), and the 人机分工 grid un
 `tests.held.prefill` fills in 再加路径 and the note of a new finding for a held check the same way, from the role's
 paragraphs naming the check, for the person to check and send; `team.finding_prefill`.
 Neither proposes a path under `checks/`, `mcp/`, `bench/` or `.kiro/`, `docs/aidlc/decisions.md` or another role's
-file, and `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five (400, `invalid_finding`).
+file, except the one path the app names itself: the test file a unit-test finding still needs is proposed although
+`tests/**` is the tester's, with a note saying whose scope it is and that adding it hands that file over for a round;
+any other path in another role's scope stays the person's to type. `POST /runs/{rid}/finding` refuses a path or glob
+that can reach the first five (400, `invalid_finding`).
 
 `POST /runs/{rid}/retry` takes `note` and `by` (who decides, named in the audit). On a run that ended on a 要改 review after its rounds (the board's `review_redo`), it sends that review back once more with the person's decision (按评审意见再改一轮); on a held bench step it carries on from that step.
 

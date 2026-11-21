@@ -704,7 +704,10 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   不是. It quotes that sentence as the note and fills in 再加路径 and the note of a new finding the same way
   (`tests.held.prefill`), at most 10 paths. A path is filled in only when it is a file of the project outside the
   role's scope, not under `checks/`, `mcp/`, `bench/` or `.kiro/`, not `docs/aidlc/decisions.md`, and not in
-  another role's scope; the person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
+  another role's scope, with one exception: the test file a unit-test finding still needs is proposed even though
+  `tests/**` is the tester's, and its note says whose scope it is and that adding it hands that file to the
+  developer for a round. Every other path in another role's scope is still the person's to type.
+  The person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
   can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
   since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
