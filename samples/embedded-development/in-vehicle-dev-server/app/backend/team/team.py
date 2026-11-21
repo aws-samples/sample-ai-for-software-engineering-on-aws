@@ -46,8 +46,12 @@ LOST_GRACE_S = 60.0  # an agent KiroCrew no longer knows is given up on after th
 TOOL_EVENT_GAP_S = 3.0  # at most one ``tool`` event per role this often
 STATS_GAP_S, STATS_EVERY_S = 6.0, 30.0  # a running worktree's git stats: at most / at least this often
 HUMAN_MARK = "【负责人退回】"  # a review-kind fix task that a person, not the reviewer, sent back
-# a turn the model backend could not finish (an HTTP 5xx, a runtime that died): worth one more go in a new session
-TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?out|overloaded|rate.?limit|throttl", re.I)
+# a turn the model backend could not finish (an HTTP 5xx, a runtime that died, no network): worth one more go in a
+# new session
+# the network wordings are the model backend's own; a bare ``connection`` would also take in the permanent failures
+# (connection refused, connection closed) that are a person's to look at right away
+TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?out|overloaded|rate.?limit|throttl"
+                             r"|cannot reach the network|network error|connection (?:unstable|lost|reset by)", re.I)
 ERRORS_TO_FAIL = 30  # this many failing ticks in a row (about a minute) end the run
 REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 view
 # also mid-line (KiroCrew joins messages with no break), but not `DONE:` quoted in backticks in the reply's prose
@@ -1312,6 +1316,16 @@ class TeamRun:
             self._discussed(key, att)
             return
         if att["kind"] != "work" and head == lane.get("merged_sha"):
+            first = lane.get("first") or {}
+            if first.get("status") == "sent_back":
+                # Tests first sent it back and this round changed nothing: nothing else looks at a send-back again, and
+                # the developers wait for it, so the run would go on with nothing to move (r1119826c). It fails for a
+                # person; 重试 sends it back once more (retry: failed -> sent_back).
+                first["status"] = "failed"
+                self.say("failed", "failed.nochange",
+                         {"r_role": key, "n": lane["attempt"], "summary": att.get("summary")}, role=key)
+                self._fail_first(key, "测试先行没过，打回以后这一轮没有改动：" + "；".join(first.get("reasons") or [])[:120])
+                return
             # Nothing new since its last merge: sending the same failures back again would only spend credits.
             lane.update(status="merged", done_at=self.d.now(), stuck=True)
             self.say("failed", "failed.nochange", {"r_role": key, "n": lane["attempt"], "summary": att.get("summary")}, role=key)
@@ -1568,11 +1582,20 @@ class TeamRun:
             return
         why = "；".join(res["reasons"][:6])
         if lane["attempt"] >= self.max_attempts(key):
-            self._fail_lane(key, f"测试先行没过，修改的轮数用完了：{why}")
+            self._fail_first(key, f"测试先行没过，修改的轮数用完了：{why}")
             return
         lane["first"]["status"] = "sent_back"
         self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
+
+    def _fail_first(self, key: str, why: str) -> None:
+        """Tests first gave up on test writer *key*: it fails, for a person. With the team file's checks its merge is
+        tested only once the developers' are in, and they wait for it: the run is not kept busy for that test run.
+        An implementer that does have work to test writes the flag again as it merges (``_integrate``)."""
+        self.s["needs_test"] = False
+        if self._tests is not None:  # a test run of a head nothing waits for now: it would outlive the run
+            self.cancel_tests()
+        self._fail_lane(key, why)
 
     def _hold_failing(self) -> bool:
         """The team's checks: a last round that still fails, with nothing holding it, holds the run for a person
