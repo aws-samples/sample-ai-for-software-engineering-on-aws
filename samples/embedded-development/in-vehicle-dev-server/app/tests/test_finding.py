@@ -223,6 +223,46 @@ def test_no_test_file_is_proposed_when_the_project_has_none(tmp_path, monkeypatc
     assert run.path_suggestions() == []
 
 
+def test_the_apps_own_test_file_is_proposed_even_when_the_role_named_ten_files_of_its_own(tmp_path, monkeypatch):
+    """PROPOSED_MAX must not drop the one path this proposal exists for: ten free files the role named plus the
+    app's own test file is eleven, and the note tells the person to add that test file."""
+    many = [f"cmake/f{i}.cmake" for i in range(10)]
+    reply = "unit，F-032 的根因在 " + "、".join(f"`{p}`" for p in many) + "，都不归我改。"
+    run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp", *many), reply)
+    [s] = run.path_suggestions()
+    assert s["paths"][0] == "tests/test_a.cpp"  # the app's own path, ahead of what the role named
+    assert len(s["paths"]) == 10 and s["paths"][1:] == many[:9]  # at most ten, the role's last one dropped
+    assert "在 tests/test_a.cpp 里加" in s["note"]
+    # the note never names an app path that truncation dropped
+    assert [p for p in s["paths"] + many if p.startswith("tests/") and p in s["note"]] == ["tests/test_a.cpp"]
+
+
+def test_a_test_file_that_is_a_symlink_to_a_fenced_file_is_not_proposed(tmp_path, monkeypatch):
+    run = unit_held(tmp_path, monkeypatch, ("mcp/build/core.py",))
+    wt = Path(run.s["run_wt"])
+    (wt / "tests").mkdir(parents=True, exist_ok=True)
+    (wt / "tests" / "test_a.cpp").symlink_to(wt / "mcp" / "build" / "core.py")
+    assert run.path_suggestions() == []  # FENCED by what the path resolves to, not only by what it says
+
+
+def test_a_person_may_not_give_a_role_a_symlink_that_resolves_to_a_fenced_file(tmp_path, monkeypatch):
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    wt = Path(run.s["run_wt"])
+    (wt / "mcp" / "build").mkdir(parents=True, exist_ok=True)
+    (wt / "mcp" / "build" / "core.py").write_text("x\n")
+    (wt / "tests").mkdir(parents=True, exist_ok=True)
+    (wt / "tests" / "test_a.cpp").symlink_to(wt / "mcp" / "build" / "core.py")
+
+    async def go():
+        with pytest.raises(httpkit.AppError) as e:
+            await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["tests/test_a.cpp"]}))
+        assert e.value.status == 400 and "不能交给角色" in str(e.value)
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
 # As a role wrote it in r1117e6af: the finding in the paragraph's heading, the file in other sentences of it, and
 # "不在我能改的文件里" / "加进我的可改范围" rather than 不归我.
 SAID_1117 = ("我修了 `SignalTable::get()` 的数据竞争，build 仍然没有修好。\n\n"
