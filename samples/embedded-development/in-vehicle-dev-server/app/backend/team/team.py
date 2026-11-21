@@ -1312,6 +1312,16 @@ class TeamRun:
             self._discussed(key, att)
             return
         if att["kind"] != "work" and head == lane.get("merged_sha"):
+            first = lane.get("first") or {}
+            if first.get("status") == "sent_back":
+                # Tests first sent it back and this round changed nothing: nothing else looks at a send-back again, and
+                # the developers wait for it, so the run would go on with nothing to move (r1119826c). It fails for a
+                # person; 重试 sends it back once more (retry: failed -> sent_back).
+                first["status"] = "failed"
+                self.say("failed", "failed.nochange",
+                         {"r_role": key, "n": lane["attempt"], "summary": att.get("summary")}, role=key)
+                self._fail_first(key, "测试先行没过，打回以后这一轮没有改动：" + "；".join(first.get("reasons") or [])[:120])
+                return
             # Nothing new since its last merge: sending the same failures back again would only spend credits.
             lane.update(status="merged", done_at=self.d.now(), stuck=True)
             self.say("failed", "failed.nochange", {"r_role": key, "n": lane["attempt"], "summary": att.get("summary")}, role=key)
@@ -1568,11 +1578,18 @@ class TeamRun:
             return
         why = "；".join(res["reasons"][:6])
         if lane["attempt"] >= self.max_attempts(key):
-            self._fail_lane(key, f"测试先行没过，修改的轮数用完了：{why}")
+            self._fail_first(key, f"测试先行没过，修改的轮数用完了：{why}")
             return
         lane["first"]["status"] = "sent_back"
         self.say("bounce", "bounce.tests_first", {"r_role": key, "why": why}, role=key, frm="tests", to=key)
         await self._start(key, "revise", self.d.manager(), review=self._first_review(res))
+
+    def _fail_first(self, key: str, why: str) -> None:
+        """Tests first gave up on test writer *key*: it fails, for a person. With the team file's checks its merge is
+        tested only once the developers' are in, and they wait for it: the run is not kept busy for that test run."""
+        if not any(self.lane(k).get("merged_sha") for k in self.impl if k != key):
+            self.s["needs_test"] = False
+        self._fail_lane(key, why)
 
     def _hold_failing(self) -> bool:
         """The team's checks: a last round that still fails, with nothing holding it, holds the run for a person
