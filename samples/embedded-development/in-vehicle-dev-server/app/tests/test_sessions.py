@@ -249,15 +249,18 @@ def test_a_turn_cut_short_by_a_transient_model_error_or_a_hang_is_continued_in_t
 
 
 NETWORK = "❌ Kiro cannot reach the network. Check your connection and try again."
+REFUSED = "❌ Tool error: the build container refused the connection: connection refused"
+SAID = "I'll start by checking the sources."
+DELIVERED = "两个用例都补好了，跑过一遍。\nDONE: 区间解析的用例写完了"
 
 
-def _cut_by_network(tmp_path, nudges):
-    """A turn that said one line, ran a tool and was then cut off by the network (r1119826c rounds 2 and 3)."""
+def _cut_by_error(tmp_path, nudges, error=NETWORK, reply=SAID):
+    """A turn that said one line, ran a tool and was then cut off by an error row (r1119826c rounds 2 and 3)."""
     async def go():
         gw, mgr = make(tmp_path)
-        gw.script = [[{"role": "assistant", "content": "I'll start by checking the sources.", "meta": {}},
+        gw.script = [[{"role": "assistant", "content": reply, "meta": {}},
                       {"role": "tool", "content": "🔧 ls", "meta": {"tool_name": "shell", "input": '{"command": "ls"}'}},
-                      {"role": "error", "content": NETWORK, "meta": {}}]]
+                      {"role": "error", "content": error, "meta": {}}]]
         info = mgr.spawn_session("写测试", parent_session_key="vstatd-team:r8", cwd=str(tmp_path / "a" / "b" / "c"),
                                  title="测试 agent")
         await asyncio.sleep(0)
@@ -272,7 +275,7 @@ def _cut_by_network(tmp_path, nudges):
 
 
 def test_a_turn_cut_off_by_the_network_is_continued_in_the_same_session(tmp_path):
-    gw, info = _cut_by_network(tmp_path, nudges=0)
+    gw, info = _cut_by_error(tmp_path, nudges=0)
     assert info.nudges == 1 and not info.done
     assert "你上一轮被中断了" in gw.msgs[info.slot][-1]["content"]
     for text in (NETWORK, "❌ A network error occurred. Please try again."):
@@ -281,9 +284,30 @@ def test_a_turn_cut_off_by_the_network_is_continued_in_the_same_session(tmp_path
 
 def test_a_turn_that_ends_on_an_error_fails_even_after_a_reply_and_is_tried_again_in_a_new_session(tmp_path):
     team_mod = mod("team")
-    _, info = _cut_by_network(tmp_path, nudges=sessions.NUDGES)  # carried on as often as it may: it ends here
+    _, info = _cut_by_error(tmp_path, nudges=sessions.NUDGES)  # carried on as often as it may: it ends here
     f = sessions.agent_fields(info)
     assert f["done"] and f["outcome"] == "failed" and f["error"] == NETWORK
     assert "I'll start by checking" in f["result"]  # what it said is kept for the board
     assert team_mod.TRANSIENT_ERROR.search(f["error"])  # _finish: once more in a new session, before the role fails
     assert team_mod.TRANSIENT_ERROR.search("❌ A network error occurred. Please try again.")
+
+
+def test_a_connection_a_tool_refused_is_not_continued_but_goes_to_a_person_right_away(tmp_path):
+    """A refused or closed connection does not come back by itself: carrying the turn on would only spend rounds, so
+    a permanent wording is left out of the transient ones even on the first nudge."""
+    team_mod = mod("team")
+    gw, info = _cut_by_error(tmp_path, nudges=0, error=REFUSED)
+    f = sessions.agent_fields(info)
+    assert info.nudges == 0 and f["done"] and f["outcome"] == "failed" and f["error"] == REFUSED
+    assert "你上一轮被中断了" not in str(gw.msgs[info.slot][-1].get("content") or "")
+    for text in (REFUSED, "mcp server: connection closed"):
+        assert not sessions.TRANSIENT.search(text) and not team_mod.TRANSIENT_ERROR.search(text)
+
+
+def test_a_turn_that_said_done_before_the_error_row_still_counts_as_finished(tmp_path):
+    """It handed the work over and only then did a row fail: failing that turn would send a second agent to a
+    worktree where the work is already committed, with nothing to do but report it again."""
+    _, info = _cut_by_error(tmp_path, nudges=sessions.NUDGES, error=NETWORK, reply=DELIVERED)
+    f = sessions.agent_fields(info)
+    assert f["done"] and f["outcome"] == "completed" and f["error"] is None
+    assert mod("team").parse_done(f["result"]) == "区间解析的用例写完了"

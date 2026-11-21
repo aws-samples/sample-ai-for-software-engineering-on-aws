@@ -45,8 +45,11 @@ NO_START_S = 90.0       # sent, idle and nothing in the transcript for this long
 STALL_S = 180.0         # busy with no new transcript row for this long: shown as 卡住
 STUCK_S = 240.0         # busy with nothing new for this long: the turn is stopped and the agent told to carry on
 NUDGES = 2              # a turn cut short (a transient model error, or stuck) is continued at most this often
+# the network wordings are the model backend's own; a bare ``connection`` would also take in the permanent failures
+# (connection refused, connection closed) that are a person's to look at right away
 TRANSIENT = re.compile(r"transient|5\d\d|runtime failed|timed? ?out|overloaded|rate.?limit|throttl|temporarily"
-                       r"|unavailable|network|connection", re.I)
+                       r"|unavailable|cannot reach the network|network error"
+                       r"|connection (?:unstable|lost|reset by)", re.I)
 HISTORY = 400
 _FIELDS = ("id", "task", "parent_session_key", "slot", "title", "folder", "cwd", "model", "conv_root", "send_ids",
            "requested", "started", "sent_at", "done", "queued", "queued_reason", "result", "streaming_text", "error",
@@ -61,6 +64,12 @@ def _num(val: Any, default: float = 0) -> float:
 
 def first_line(text: Any) -> str:
     return str(text or "").split("\n", 1)[0].strip()
+
+
+def delivered(replies: list[dict[str, Any]]) -> bool:
+    """One of this turn's replies says ``DONE: …``: it handed its work over, whatever row came after it."""
+    from .team import parse_done  # team.py reads this module, so this import cannot stand at the top
+    return any(parse_done(str(m.get("content") or "")) for m in replies)
 
 
 def find_agent(mgr: Any, agent_id: str | None) -> Any | None:
@@ -524,7 +533,8 @@ class SessionManager:
             info.error = (str(errors[-1].get("content") or "") or "KiroCrew 报错")[:300]
         else:
             info.error = "这一轮结束了，但没有回复"
-        if last is not None and last.get("role") == "error":  # cut off by an error, even after a reply: it failed
+        if last is not None and last.get("role") == "error" and not delivered(replies):
+            # cut off by an error before it handed anything over: it failed (a turn that said DONE: is done)
             info.error = (str(last.get("content") or "") or "KiroCrew 报错")[:300]
         info.done = True
 

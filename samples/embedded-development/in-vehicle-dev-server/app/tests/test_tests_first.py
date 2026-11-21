@@ -47,7 +47,7 @@ BUILD = {"name": "build", "command": ["checks/build.sh"], "when": "before_bench"
 
 
 class Setup:
-    def __init__(self, tmp: Path, monkeypatch, checks=()) -> None:
+    def __init__(self, tmp: Path, monkeypatch, team_checks=()) -> None:
         docker = tmp / "docker"
         docker.write_text(FAKE_DOCKER.format(python=sys.executable), encoding="utf-8")
         docker.chmod(0o755)
@@ -64,7 +64,7 @@ class Setup:
         team = team_mod.check_team({
             "roles": [role("tester", [], ["tests/**"]), role("dev", ["tester"], ["src/**"]), role("reviewer", ["dev"], [])],
             "defaults": {"max_fix_rounds": 2}, "check_runner": {"docker": [str(docker), "run", "--rm"], "image": "img"},
-            "checks": list(checks)})
+            "checks": list(team_checks)})
         self.mgr = FakeManager()
         state = team_mod.new_state("r1102first", "", team, "{run}", tmp / "work", src, time.time(), source=src)
         self.run = team_mod.TeamRun(state, make_deps(tmp, self.mgr, FakeTests([])))
@@ -144,10 +144,10 @@ def test_when_every_new_test_fails_on_the_base_the_developers_start(tmp_path, mo
     asyncio.run(go())
 
 
-@pytest.mark.parametrize("checks", [(), [BUILD]], ids=["no-checks", "team-checks"])
+@pytest.mark.parametrize("team_checks", [(), [BUILD]], ids=["no-checks", "team-checks"])
 def test_a_missing_test_or_one_that_does_not_build_on_the_base_goes_back_and_the_rounds_run_out(tmp_path, monkeypatch,
-                                                                                                checks):
-    t = Setup(tmp_path, monkeypatch, checks=checks)
+                                                                                                team_checks):
+    t = Setup(tmp_path, monkeypatch, team_checks=team_checks)
     run, mgr = t.run, t.mgr
     t.ran([], build_fails=True)
 
@@ -169,11 +169,11 @@ def test_a_missing_test_or_one_that_does_not_build_on_the_base_goes_back_and_the
     asyncio.run(go())
 
 
-@pytest.mark.parametrize("checks", [(), [BUILD]], ids=["no-checks", "team-checks"])
-def test_a_send_back_round_with_no_change_fails_the_tester_and_the_run_ends(tmp_path, monkeypatch, checks):
+@pytest.mark.parametrize("team_checks", [(), [BUILD]], ids=["no-checks", "team-checks"])
+def test_a_send_back_round_with_no_change_fails_the_tester_and_the_run_ends(tmp_path, monkeypatch, team_checks):
     """Tests first sends the tester back, and its round after that commits nothing (r1119826c): the tester fails and
     the run ends for a person, instead of running on with nothing left to move; 重试 gives it that round again."""
-    t = Setup(tmp_path, monkeypatch, checks=checks)
+    t = Setup(tmp_path, monkeypatch, team_checks=team_checks)
     run, mgr = t.run, t.mgr
     t.ran(["Old.Works", "Fixes.F013_PassByConstRef", "Fixes.IntervalRejectsJunk"],
           failing=["Fixes.F013_PassByConstRef"])

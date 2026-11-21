@@ -48,8 +48,10 @@ STATS_GAP_S, STATS_EVERY_S = 6.0, 30.0  # a running worktree's git stats: at mos
 HUMAN_MARK = "【负责人退回】"  # a review-kind fix task that a person, not the reviewer, sent back
 # a turn the model backend could not finish (an HTTP 5xx, a runtime that died, no network): worth one more go in a
 # new session
+# the network wordings are the model backend's own; a bare ``connection`` would also take in the permanent failures
+# (connection refused, connection closed) that are a person's to look at right away
 TRANSIENT_ERROR = re.compile(r"transient|HTTP 5\d\d|5xx|runtime failed|timed? ?out|overloaded|rate.?limit|throttl"
-                             r"|network|connection", re.I)
+                             r"|cannot reach the network|network error|connection (?:unstable|lost|reset by)", re.I)
 ERRORS_TO_FAIL = 30  # this many failing ticks in a row (about a minute) end the run
 REPLY_KEEP = 20_000  # characters of an agent's last reply kept for the 产出 view
 # also mid-line (KiroCrew joins messages with no break), but not `DONE:` quoted in backticks in the reply's prose
@@ -1588,9 +1590,11 @@ class TeamRun:
 
     def _fail_first(self, key: str, why: str) -> None:
         """Tests first gave up on test writer *key*: it fails, for a person. With the team file's checks its merge is
-        tested only once the developers' are in, and they wait for it: the run is not kept busy for that test run."""
-        if not any(self.lane(k).get("merged_sha") for k in self.impl if k != key):
-            self.s["needs_test"] = False
+        tested only once the developers' are in, and they wait for it: the run is not kept busy for that test run.
+        An implementer that does have work to test writes the flag again as it merges (``_integrate``)."""
+        self.s["needs_test"] = False
+        if self._tests is not None:  # a test run of a head nothing waits for now: it would outlive the run
+            self.cancel_tests()
         self._fail_lane(key, why)
 
     def _hold_failing(self) -> bool:
