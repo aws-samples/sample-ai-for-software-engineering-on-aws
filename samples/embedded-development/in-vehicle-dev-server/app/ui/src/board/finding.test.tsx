@@ -5,7 +5,7 @@ import type { Board } from '../types'
 import { apiCalls, apiError, setApiRoutes } from '../test/stubs/app-sdk'
 import { clone, vstatdBoard } from '../test/fixtures'
 import { TeamPage } from '../main'
-import { locationOf, toolOf } from './Finding'
+import { goneFinding, locationOf, toolOf } from './Finding'
 
 const API = '/api/apps/vstatd-team'
 const TREE = '/Users/you/workplace/vstatd-team/runs/r1006a/results/1/work/unit/tree/'
@@ -213,5 +213,45 @@ describe('补登发现并交给角色', () => {
     await user.click(q.getByRole('button', { name: '补登并接着运行' }))
     expect(await q.findByRole('alert')).toHaveTextContent('引 VSTATD-IF 要写页码')
     expect((posts()[0][1] as { paths: string[] }).paths).toEqual(['src/main.cpp', 'tests/test_signal_table.cpp'])
+  })
+})
+
+// what checks/lib/check_static.py says of a finding the batch's own refactor removed, triaged later
+const GONE_WHY = 'static 没过，负责的角色没法再改：F-022: no longer reported, but triaged as later; '
+  + 'a change outside the batch removed it'
+
+describe('一个已经不报的发现卡住了运行', () => {
+  test('goneFinding reads the id and the decision, and only for this shape of hold', () => {
+    expect(goneFinding({ why: GONE_WHY })).toEqual({ id: 'F-022', decision: 'later' })
+    expect(goneFinding({ why: 'static 没过：F-025: no longer reported, but triaged as defer; …' }))
+      .toEqual({ id: 'F-025', decision: 'defer' })
+    expect(goneFinding({ why: `build 没过，负责的角色没法再改：${BUILD}` })).toBeNull()
+    expect(goneFinding({ why: 'F-019: triaged as fix but still reported at src/service.cpp:88' })).toBeNull()
+    expect(goneFinding(null)).toBeNull()
+  })
+
+  test('no 补登发现 and no 加路径: the hold says what is true and leaves 停止 as the only action', async () => {
+    const b = heldBoard()
+    const suggest = [{ extend: 'F-032', check: 'static', role: 'dev-fix', paths: ['src/service.cpp'], note: '根因在这里' }]
+    b.run!.tests.held = { checks: ['static'], why: GONE_WHY, suggest }
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    render(<TeamPage pollMs={60_000} />)
+    const box = within(await screen.findByTestId('kt-flow-held-gone'))
+    expect(box.getByText(/F-022 已经不再被报出来/)).toBeInTheDocument()
+    expect(box.getByText(/findings-backlog\.md 里改标 fix/)).toBeInTheDocument()
+    expect(box.getByText(/static 过不去/)).toBeInTheDocument()
+    expect(box.getByText(/「停止」/)).toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: '补登发现并交给角色' })).toHaveLength(0)
+    expect(screen.queryByTestId('kt-suggest')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('kt-finding-dialog')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('kt-wall-held')).toHaveTextContent('F-022: no longer reported')
+  })
+
+  test('the generic hold is unchanged: the forms are still offered', async () => {
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(heldBoard()) })
+    render(<TeamPage pollMs={60_000} />)
+    await screen.findByTestId('kt-wall-held')
+    expect(screen.getAllByRole('button', { name: '补登发现并交给角色' })).toHaveLength(2)
+    expect(screen.queryByTestId('kt-flow-held-gone')).not.toBeInTheDocument()
   })
 })

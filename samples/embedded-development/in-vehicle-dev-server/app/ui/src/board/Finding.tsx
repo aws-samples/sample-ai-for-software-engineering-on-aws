@@ -88,6 +88,15 @@ export function startsExtending(run: RunDetail): boolean {
   })
 }
 
+// what checks/lib/check_static.py says of a finding the batch removed without a decision that allows it
+const GONE = /\b(F-\d{3}): no longer reported, but triaged as (later|defer)\b/ // i18n-keep: the check's own words
+/** The finding a held check cannot be cleared for: it is no longer reported, and its decision is later or defer, which
+ * neither 补登发现 nor 加路径 can change (both only add). Null when the hold is any other shape. */
+export function goneFinding(held: { why: string } | null | undefined): { id: string; decision: string } | null {
+  const m = GONE.exec(held?.why ?? '')
+  return m ? { id: m[1], decision: m[2] } : null
+}
+
 /** The roles that write code: the ones a finding can be handed to. */
 function implementers(run: RunDetail) {
   return run.roles.filter((l) => l.writable.length > 0 && l.status !== 'skipped' && !l.writable.every((g) => g.startsWith('docs/') || g.startsWith('tests/')))
