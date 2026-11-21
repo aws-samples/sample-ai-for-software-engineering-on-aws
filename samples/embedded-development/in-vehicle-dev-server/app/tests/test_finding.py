@@ -186,6 +186,43 @@ def test_the_app_proposes_the_files_the_role_said_it_cannot_change_and_the_test_
     assert [s["extend"] for s in held["suggest"]] == ["F-032", "F-034"]
 
 
+def unit_held(tmp_path, monkeypatch, files, reply=None):
+    """A run held with a unit-test finding added for unit and no test naming it, as r11219de1 was: 测试 (dev2 here)
+    owns tests/** and docs/aidlc/triage.json, *files* are in the run work tree and *reply* is the developer's last."""
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+    wt = Path(run.s["run_wt"])
+    run.roles["dev2"].update({"title": "测试", "writable": ["src/b.*", "tests/**", "docs/aidlc/triage.json"]})
+    for p in files:
+        (wt / p).parent.mkdir(parents=True, exist_ok=True)
+        (wt / p).write_text("x\n")
+    asyncio.run(svc.finding(run.rid, handlers.finding_body({**F033, "paths": ["src/a.*"], "continue": False})))
+    unit = next(r for r in run.s["tests"]["checks"] if r["name"] == "unit")
+    unit["reasons"] = ["F-032: triaged as fix with evidence unit-test, but no test that is new or changed in the "
+                       "batch and runs names it (TR §4.1)"]
+    if reply:
+        run.lane("dev")["attempts"].append({**run.lane("dev")["attempts"][-1], "reply": reply})
+    return run
+
+
+def test_the_test_file_of_a_unit_test_finding_is_proposed_though_the_tests_are_another_roles(tmp_path, monkeypatch):
+    reply = ("**unit，F-032**\n- 根因在 `docs/aidlc/triage.json`，这个文件不归我改。\n"
+             "- `cmake/tc.cmake` 也不归我。")
+    run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp", "docs/aidlc/triage.json", "cmake/tc.cmake"), reply)
+    [s] = run.path_suggestions()
+    assert (s["extend"], s["check"], s["role"]) == ("F-032", "unit", "dev")
+    assert "tests/test_a.cpp" in s["paths"]  # the app's own path for this case, across roles
+    assert "docs/aidlc/triage.json" not in s["paths"]  # what the role said, still 测试's to write (#54)
+    assert "cmake/tc.cmake" in s["paths"]  # what the role said, no role's to write
+    assert s["note"].endswith("在 tests/test_a.cpp 里加。tests/test_a.cpp 属于测试的可改范围，"
+                              "加上它等于把这个文件交给dev一轮，由你批准")
+
+
+def test_no_test_file_is_proposed_when_the_project_has_none(tmp_path, monkeypatch):
+    run = unit_held(tmp_path, monkeypatch, ("docs/aidlc/triage.json",))
+    assert run.path_suggestions() == []
+
+
 # As a role wrote it in r1117e6af: the finding in the paragraph's heading, the file in other sentences of it, and
 # "不在我能改的文件里" / "加进我的可改范围" rather than 不归我.
 SAID_1117 = ("我修了 `SignalTable::get()` 的数据竞争，build 仍然没有修好。\n\n"

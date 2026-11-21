@@ -1177,6 +1177,7 @@ class TeamRun:
             loc = str(first["added"].get("location") or "")
             same = [f["id"] for f in mine[1:] if f["added"].get("location") == loc]
             free = self._free(root, role)
+            free_test = self._free(root, role, cross=True)
             paths, said = cause_paths(self._replies(role), FINDING_SAID, lambda m: bool(ids & _ids_in(m)), free)
             why = [f"{self.title(role)}说：{said}"] if paths else []
             reasons = " ".join(str(x) for x in (rows.get(c) or {}).get("reasons") or [])
@@ -1184,19 +1185,23 @@ class TeamRun:
                 stem = Path(str(f["added"].get("location") or "").split(":")[0]).stem
                 test = f"tests/test_{stem}.cpp"
                 if (f.get("evidence") == "unit-test" and f"{f['id']}: triaged as fix with evidence unit-test, but no test" in reasons
-                        and stem and free(test) and test not in paths):
+                        and stem and free_test(test) and test not in paths):
                     paths.append(test)
-                    why.append(f"{f['id']} 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 {test} 里加")
+                    across = self._scope_of(test, role)
+                    why.append(f"{f['id']} 的证据是单元测试，还没有测试写它的编号（TR §4.1）：在 {test} 里加"
+                               + (f"。{test} 属于{across}的可改范围，加上它等于把这个文件交给"
+                                  f"{self.title(role)}一轮，由你批准" if across else ""))
             if paths:
                 note = "；".join(why) + (f"。{'、'.join(same)} 和 {first['id']} 是同一个失败，提交说明一并写上 {first['id']}、{'、'.join(same)}" if same else "")
                 out.append({"extend": first["id"], "check": c, "role": role, "paths": paths[:PROPOSED_MAX],
                             "note": note[:1000]})
         return out
 
-    def _free(self, root: Path, role: str) -> Any:
+    def _free(self, root: Path, role: str, cross: bool = False) -> Any:
         """Whether a path a role named can be proposed to a person for it: a file of the project, outside the role's
-        scope, not one a role is never given (FENCED) and not in another role's scope."""
-        others = [r["writable"] for k, r in self.roles.items() if k != role and r.get("writable")]
+        scope, not one a role is never given (FENCED) and not in another role's scope. cross=True drops that last
+        test, for the one path the app names itself: the test file of a unit-test finding no test names (TR §4.1)."""
+        others = [] if cross else [r["writable"] for k, r in self.roles.items() if k != role and r.get("writable")]
 
         def free(p: str) -> bool:
             f = root / p
@@ -1204,6 +1209,14 @@ class TeamRun:
                     and not gitwork.matches(p, self.roles[role]["writable"]) and not gitwork.matches(p, list(FENCED))
                     and not any(gitwork.matches(p, g) for g in others))
         return free
+
+    def _scope_of(self, p: str, role: str) -> str | None:
+        """The title of the other role whose scope has p, to say in a proposal that it crosses roles. None when no
+        other role's scope has it."""
+        for k, r in self.roles.items():
+            if k != role and r.get("writable") and gitwork.matches(p, r["writable"]):
+                return self.title(k)
+        return None
 
     def _replies(self, role: str) -> list[str]:
         return [str(a.get("reply") or "") for a in self.lane(role)["attempts"]]
