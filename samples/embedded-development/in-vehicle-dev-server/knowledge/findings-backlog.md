@@ -30,11 +30,11 @@ it in the backlog.
 | F-019 | cppcheck | uselessCallsSubstr | `src/client_session.cpp` › `ClientSession::parse_line` | Ineffective call of function 'substr' because it returns a copy of the object. Use operator= instead. | later |
 | F-020 | clang-tidy | performance-inefficient-string-concatenation | `src/log_writer.cpp` › `LogWriter::format` | string concatenation results in allocation of unnecessary temporary strings; consider using 'operator+=' or 'string::append()' instead | later |
 | F-021 | clang-tidy | cppcoreguidelines-pro-type-member-init | `src/client_session.h` › `ClientSession::ClientSession` | constructor does not initialize these fields: lines_ | fix |
-| F-022 | cppcheck | shadowVariable | `src/service.cpp` › `Service::run` | Local variable 'status' shadows outer variable | later |
+| F-022 | cppcheck | shadowVariable | `src/service.cpp` › `Service::run` | Local variable 'status' shadows outer variable | fix |
 | F-023 | clang-tidy | bugprone-branch-clone | `src/service.cpp` › `Service::run` | repeated branch body in conditional chain | fix |
-| F-024 | cppcheck | duplicateCondition | `src/service.cpp` › `Service::run` | The if condition is the same as the previous if condition | later |
+| F-024 | cppcheck | duplicateCondition | `src/service.cpp` › `Service::run` | The if condition is the same as the previous if condition | fix |
 | F-025 | clang-tidy | bugprone-empty-catch | `src/service.cpp` › `Service::run` | empty catch statements hide issues; to handle exceptions appropriately, consider re-throwing, handling, or avoiding catch altogether | fix |
-| F-026 | cppcheck | unreadVariable | `src/service.cpp` › `Service::run` | Variable 'loops' is assigned a value that is never used. | later |
+| F-026 | cppcheck | unreadVariable | `src/service.cpp` › `Service::run` | Variable 'loops' is assigned a value that is never used. | fix |
 | F-027 | clang-tidy | cppcoreguidelines-pro-type-member-init | `src/config.cpp` › `Config::Config` | constructor does not initialize these fields: grace_ms_ | fix |
 | F-028 | clang-tidy | bugprone-unused-return-value | `src/main.cpp` › `main` | the value returned by this function should not be disregarded; neglecting it may lead to errors (`sd_notify`) | fix |
 | F-029 | cppcheck | missingOverride | `src/log_writer.h` › `JournalSink::write` | The function 'write' overrides a function in a base class but is not marked with a 'override' specifier. | later |

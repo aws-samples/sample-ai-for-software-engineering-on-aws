@@ -52,7 +52,7 @@ export function BacklogTable({ rows }: { rows: BacklogRow[] }) {
   )
 }
 
-/** 30 条（fix 22 / later 8） */
+/** 30 条（fix 25 / later 5） */
 export function countText(rows: BacklogRow[]): string {
   const by = (l: string) => rows.filter((r) => r.label === l).length
   return tr('board.Backlog.9', { p0: rows.length, p1: by('fix'), p2: by('later') })
