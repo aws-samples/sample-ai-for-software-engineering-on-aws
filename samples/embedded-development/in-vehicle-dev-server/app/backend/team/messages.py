@@ -101,7 +101,7 @@ ZH: dict[str, str] = {
     "hold.replay": "回放没做成（{kind}）：{why}",
     "hold.servers": "build / bench 服务器用不了：{why}",
     "hold.after_bench": "台架之后的检查要人决定：{why}",
-    "hold.release": "独立重跑后 release.sh 没通过：{why}",
+    "hold.release": "独立重跑后 [[blocked|release 检查没判出结果|release.sh 没通过]]：{why}",
     # review, gates and plans
     "review": "审查：[[summary|{summary}|没有给结论]]",
     "gate.wait": "等人批准：{g_gate}",
@@ -260,7 +260,7 @@ EN: dict[str, str] = {
     "hold.replay": "Replay did not succeed ({kind}): {why}",
     "hold.servers": "The build and bench servers cannot be used: {why}",
     "hold.after_bench": "Post-bench checks need a person's decision: {why}",
-    "hold.release": "release.sh did not pass on the independent rerun: {why}",
+    "hold.release": "[[blocked|The release gave no verdict|release.sh did not pass on the independent rerun]]: {why}",
     "review": "Review: [[summary|{summary}|no verdict given]]",
     "gate.wait": "Waiting for approval: {g_gate}",
     "gate.after_talk": "Waiting for approval: {g_gate} (after the discussion)",

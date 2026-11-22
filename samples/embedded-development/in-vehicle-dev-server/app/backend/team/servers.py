@@ -10,12 +10,15 @@ each session with its part of the server's audit log, for the audit trail and th
 
 One run uses the servers at a time (``holder.json`` beside the work tree), until it is done or a person stops it.
 What a server refuses, a call that times out and a server that exits are BLOCKED: a person decides (D7). The release
-check stays direct until the build server's ``run_check release`` reads the bench server's results.
+check of the independent rerun (D9) runs on the build server too (``run_check release``, which reads the bench
+server's published results); the evidence page it publishes after a release that passed is read back with
+``read_result release`` and kept beside the release result, where the sign-off dialog reads it.
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -30,12 +33,14 @@ from .constants import APP_NAME, DOCKER_BIN
 MODES = ("direct", "servers")
 BUILD_CHECKS = ("build", "static", "unit", "size", "trace")  # before the bench, on the build server
 BENCH_CHECKS = ("runtime-limits", "logdiff")  # after the bench, on the bench server
+RELEASE_CHECKS = ("release",)  # the rerun's release check, on the build server (mcp/build's own `release`)
 CALLS = "servers.jsonl"  # runs/<run>/servers.jsonl
 HOLDER = "holder.json"  # beside the work tree: the run that uses the servers
 FREE = ("done", "stopped")  # a holder run in one of these has given the servers back
 MARK = "vstatd-team-server-worktree"  # in the work tree's .git: the app made this repository (move_tree)
 MARGIN_S = 60  # a call's time on top of the server's own timeout for it
 READ_S = 120
+EVIDENCE = "evidence.md"  # the page mcp/build publishes after a passing `run_check release`, as direct mode names it
 REQUESTER = "bench MCP server (role {role}, session {session})"  # how mcp/bench names its requests at the console
 CLASSES = ("read-only", "controlled-write", "physical")
 UNIT_LISTED = 10  # checks/lib/check_unit.py lists at most this many failed tests per build
@@ -111,7 +116,7 @@ def check(team: dict[str, Any]) -> None:
     if sv is None or not team.get("checks") or not team.get("bench"):
         raise ValueError("team.json：connectors 是 servers 就要有 servers、checks 和 bench")
     for c in team["checks"]:
-        where = {"before_bench": BUILD_CHECKS, "after_bench": BENCH_CHECKS}.get(c["when"])
+        where = {"before_bench": BUILD_CHECKS, "after_bench": BENCH_CHECKS, "release": RELEASE_CHECKS}.get(c["when"])
         if where is not None and c["name"] not in where:
             raise ValueError(f"team.json：servers 模式下检查 {c['name']} 不归任何服务器（{c['when']} 只能是 {'、'.join(where)}）")
 
@@ -399,23 +404,52 @@ def _result(out: dict[str, Any], name: str, which: str, head: str | None, result
 
 async def run_tests(run_wt: Path, team: dict[str, Any], **kw: Any) -> dict[str, Any]:
     """Deps.run_tests: the checks of a round through the servers in servers mode, else as checks.run_checks does. The
-    release check stays direct; in servers mode it is given every input file the servers' results recorded."""
+    release check of the rerun goes to the build server as well, which reads the bench server's published results."""
     if not on(team):
         return await checks.run_checks(run_wt, team, **kw)
-    if kw.get("phase") == "release":
-        inputs = _inputs(Path(kw["results"]), Path(run_wt).parents[1])
-        return await checks.run_checks(run_wt, team, inputs_ro=inputs, **kw)
     return await _round(Path(run_wt), team, **kw)
 
 
-def _inputs(results: Path, root: Path) -> tuple[Path, ...]:
-    out: list[Path] = []
-    for p in sorted(results.glob("*.json")):
-        for inp in ((_json(p) or {}).get("inputs") or {}).values():
-            path = Path(str((inp or {}).get("path") or "")) if isinstance(inp, dict) else None
-            if path and path.is_absolute() and path.is_file() and not path.resolve().is_relative_to(root.resolve()):
-                out.append(path)
-    return tuple(dict.fromkeys(out))
+async def evidence_page(_cmd: list[str], _team: dict[str, Any], results: Path, _triage: Path) -> Path | None:
+    """The evidence page of a rerun, in servers mode: nothing to run here, so the parameters checks.evidence_page
+    needs are unused (the signature is kept so that team._rerun can call either one). mcp/build publishes the page
+    itself after a ``run_check release`` that passed, and the release round above has already read it back into
+    *results*; ``_cmd`` (the team file's ``evidence_page``) is the build server's to run. The page once it is there,
+    else None: always None after a release that did not pass, since the server publishes none then (direct mode
+    still writes one), and None when the app would not keep the page it read back (``_evidence``)."""
+    page = Path(results) / EVIDENCE
+    return page if page.is_file() else None
+
+
+async def _evidence(s: "Session", out: dict[str, Any], results: Path, team: dict[str, Any]) -> str:
+    """The page mcp/build publishes itself after a ``run_check release`` that passed (#45): read it back with
+    ``read_result release`` and keep it beside the release result, where direct mode's evidence-page.sh leaves it.
+    Nothing is read back when the team file asks for no page (``evidence_page``, which team._rerun then ignores too).
+    A page the server did not publish is left out: the release verdict stands, the sign-off dialog shows no page and
+    a person decides. A page the server says it published but the app cannot have whole and checked is not kept, and
+    what is wrong is returned ("" otherwise): the release is then BLOCKED for a person (D7), with the release's own
+    PASS named in the reason, since the release check itself did pass. That is a ``read_result`` the server refuses
+    or exits during, no page read back, a ``run_check`` answer with no SHA-256, and a page whose own SHA-256 is not
+    the one ``run_check`` reported (another call published over it in between, or bytes the server could only read
+    with ``errors="replace"``). The digest judged is of the text read back, so it is of the bytes kept here."""
+    if not team.get("evidence_page") or str(out.get("evidence_page") or "") != "published":
+        return ""
+    passed = "release 检查本身判的是 PASS"
+    try:
+        got = await s.call("read_result", {"check": "release"})
+    except (mcpclient.ToolRefused, mcpclient.McpError) as exc:
+        return f"读回证据页的 read_result release 没成功（{passed}）：{exc}"
+    page, digest = got.get("evidence_page"), out.get("evidence_sha256")
+    if not isinstance(page, str) or not page:
+        return f"build 服务器说证据页已发布，但 read_result release 没读回页（{passed}）"
+    if not isinstance(digest, str) or not digest:
+        return f"build 服务器说证据页已发布，但 run_check release 没报它的摘要（{passed}）"
+    mine = hashlib.sha256(page.encode()).hexdigest()
+    if mine != digest:
+        return (f"build 服务器的证据页摘要核对不上：run_check 报 {digest[:12]}，"
+                f"读回的页算出来是 {mine[:12]}（{passed}）")
+    (results / EVIDENCE).write_text(page, encoding="utf-8")
+    return ""
 
 
 async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path, phase: str = "before_bench",
@@ -423,7 +457,7 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
     results = Path(results)
     results.mkdir(parents=True, exist_ok=True)
     root = run_wt.parents[1]
-    which = "build" if phase == "before_bench" else "bench"
+    which = "bench" if phase == "after_bench" else "build"
     items = [c for c in team.get("checks") or [] if c["when"] == phase]
     try:
         st = setup(team)
@@ -455,6 +489,9 @@ async def _round(run_wt: Path, team: dict[str, Any], *, head: str, results: Path
                                            timeout_s=float(c["timeout_s"]) + MARGIN_S)
                         res, server = _result(out, c["name"], which, head if which == "build" else None, results)
                         repair = repair_count(out) if which == "build" and c["name"] == "build" else repair
+                        if phase == "release" and not server and res["verdict"] == "PASS":
+                            bad = await _evidence(s, out, results, team)
+                            res, server = (_blocked(bad), True) if bad else (res, server)
                         if which == "bench" and run is not None and out.get("run") != Path(run).name:
                             # another session replayed between this run's steps (D17): not this step's replay
                             res, server = _blocked(f"bench 服务器判的是回放 {out.get('run')}，不是这一步的 "
