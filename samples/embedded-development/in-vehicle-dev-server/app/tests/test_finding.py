@@ -186,6 +186,119 @@ def test_the_app_proposes_the_files_the_role_said_it_cannot_change_and_the_test_
     assert [s["extend"] for s in held["suggest"]] == ["F-032", "F-034"]
 
 
+def unit_held(tmp_path, monkeypatch, files, reply=None):
+    """A run held with a unit-test finding added for unit and no test naming it, as r11219de1 was: 测试 (dev2 here)
+    owns tests/** and docs/aidlc/triage.json, *files* are in the run work tree and *reply* is the developer's last."""
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+    wt = Path(run.s["run_wt"])
+    run.roles["dev2"].update({"title": "测试", "writable": ["src/b.*", "tests/**", "docs/aidlc/triage.json"]})
+    for p in files:
+        (wt / p).parent.mkdir(parents=True, exist_ok=True)
+        (wt / p).write_text("x\n")
+    asyncio.run(svc.finding(run.rid, handlers.finding_body({**F033, "paths": ["src/a.*"], "continue": False})))
+    unit = next(r for r in run.s["tests"]["checks"] if r["name"] == "unit")
+    unit["reasons"] = ["F-032: triaged as fix with evidence unit-test, but no test that is new or changed in the "
+                       "batch and runs names it (TR §4.1)"]
+    if reply:
+        run.lane("dev")["attempts"].append({**run.lane("dev")["attempts"][-1], "reply": reply})
+    return run
+
+
+def test_the_test_file_of_a_unit_test_finding_is_proposed_to_the_role_that_owns_the_tests(tmp_path, monkeypatch):
+    reply = ("**unit，F-032**\n- 根因在 `docs/aidlc/triage.json`，这个文件不归我改。\n"
+             "- `cmake/tc.cmake` 也不归我。")
+    run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp", "docs/aidlc/triage.json", "cmake/tc.cmake"), reply)
+    mine, tests = run.path_suggestions()
+    assert (mine["extend"], mine["check"], mine["role"], mine["paths"]) == ("F-032", "unit", "dev", ["cmake/tc.cmake"])
+    assert (tests["extend"], tests["check"], tests["role"]) == ("F-032", "unit", "dev2")
+    assert tests["paths"] == ["tests/test_a.cpp"]
+    assert tests["note"].endswith("在 tests/test_a.cpp 里加。这个文件本来就在测试的可改范围里，交给它一轮来写")
+    # the developer is never proposed tests/** (#54): not the test file, not what it said is 测试's
+    assert [p for s in run.path_suggestions() if s["role"] == "dev" for p in s["paths"]] == ["cmake/tc.cmake"]
+
+
+def test_agreeing_to_the_test_file_gives_the_tester_a_round_and_the_developer_nothing(tmp_path, monkeypatch):
+    run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp",))
+    mgr = run.d.manager()
+    svc = svc_of(tmp_path, run, mgr)
+    [s] = run.path_suggestions()
+    before = len(mgr.continued)
+
+    async def go():
+        out = await svc.finding(run.rid, handlers.finding_body(
+            {"extend": s["extend"], "role": s["role"], "paths": s["paths"], "note": s["note"], "by": "alice"}))
+        assert out["id"] == "F-032" and out["held"] is False
+    asyncio.run(go())
+    rounds = {mgr.role_of(mgr.agents[a]): task for _, a, task, *_ in mgr.continued[before:]}
+    assert sorted(rounds) == ["dev", "dev2"]  # dev for the finding it was given in unit_held, 测试 for the test
+    task = rounds["dev2"]
+    assert "你是开发团队里的「测试」" in task and "F-032（unit 发现" in task and "F-032 的证据是单元测试" in task
+    assert run.roles["dev"]["writable"] == ["src/a.*"]  # the developer got no test file
+    assert run.test_writers == ["dev2"]
+
+
+def test_no_test_file_is_proposed_when_the_project_has_none(tmp_path, monkeypatch):
+    run = unit_held(tmp_path, monkeypatch, ("docs/aidlc/triage.json",))
+    assert run.path_suggestions() == []
+
+
+def test_the_test_file_is_proposed_apart_from_the_ten_files_the_role_named(tmp_path, monkeypatch):
+    """PROPOSED_MAX bounds what the role named; the test file is a proposal of its own, so it cannot drop it."""
+    many = [f"cmake/f{i}.cmake" for i in range(11)]
+    reply = "unit，F-032 的根因在 " + "、".join(f"`{p}`" for p in many) + "，都不归我改。"
+    run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp", *many), reply)
+    mine, tests = run.path_suggestions()
+    assert mine["role"] == "dev" and mine["paths"] == many[:10] and "tests/" not in mine["note"]
+    assert tests["role"] == "dev2" and tests["paths"] == ["tests/test_a.cpp"]
+    assert "在 tests/test_a.cpp 里加" in tests["note"]
+
+
+def test_a_test_file_that_is_a_symlink_to_a_fenced_file_is_not_proposed(tmp_path, monkeypatch):
+    """Passes on main too, where a path in another role's scope is never proposed. It matters here: the test file
+    goes to the role whose scope has it, and only the fence on what the path resolves to keeps this one out."""
+    run = unit_held(tmp_path, monkeypatch, ("mcp/build/core.py",))
+    wt = Path(run.s["run_wt"])
+    (wt / "tests").mkdir(parents=True, exist_ok=True)
+    (wt / "tests" / "test_a.cpp").symlink_to(wt / "mcp" / "build" / "core.py")
+    assert run.path_suggestions() == []  # FENCED by what the path resolves to, not only by what it says
+
+
+def test_a_person_may_not_give_a_role_a_symlink_that_resolves_to_a_fenced_file(tmp_path, monkeypatch):
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    wt = Path(run.s["run_wt"])
+    (wt / "mcp" / "build").mkdir(parents=True, exist_ok=True)
+    (wt / "mcp" / "build" / "core.py").write_text("x\n")
+    (wt / "tests").mkdir(parents=True, exist_ok=True)
+    (wt / "tests" / "test_a.cpp").symlink_to(wt / "mcp" / "build" / "core.py")
+
+    async def go():
+        with pytest.raises(httpkit.AppError) as e:
+            await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["tests/test_a.cpp"]}))
+        assert e.value.status == 400 and "不能交给角色" in str(e.value)
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
+def test_a_person_may_not_give_a_role_a_symlink_that_resolves_outside_the_work_tree(tmp_path, monkeypatch):
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    outside = tmp_path / "source-repo" / "checks" / "unit.sh"  # the source repo's own checks, say
+    outside.parent.mkdir(parents=True)
+    outside.write_text("x\n")
+    (Path(run.s["run_wt"]) / "src" / "link.sh").symlink_to(outside)
+
+    async def go():
+        with pytest.raises(httpkit.AppError) as e:
+            await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["src/link.sh"]}))
+        assert e.value.status == 400 and "src/link.sh" in str(e.value)
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
 # As a role wrote it in r1117e6af: the finding in the paragraph's heading, the file in other sentences of it, and
 # "不在我能改的文件里" / "加进我的可改范围" rather than 不归我.
 SAID_1117 = ("我修了 `SignalTable::get()` 的数据竞争，build 仍然没有修好。\n\n"

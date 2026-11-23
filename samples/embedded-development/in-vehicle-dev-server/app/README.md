@@ -50,8 +50,16 @@ steps and what comes next (`ui/src/board/flow.ts`), and the 人机分工 grid un
 `POST /runs/{rid}/finding` is 补登发现 (D15): on a run held for a person after the checks, a person registers what a check found under TR §4.4 with the next free ID (body: `check, tool, location, decision, evidence, behaviour, facts, cites, reason, pick_up_when, role, paths, note, by, continue`); the app appends it to the approved triage (`triage.problems()` must pass, else 400 with `problems`), rewrites `triage.json` and its `.sha256`, adds `paths` to the role's write scope, and with `continue` (the default) ends the hold and sends the role a fix round; 409 when the run is not held. It answers `{id, triage_sha256, held, status}`. [backend/team/team.py](backend/team/team.py) `register_finding`. With `extend` (an ID a check added already; body: `extend, role, paths, note, by, continue`) it adds no finding and leaves the triage as it is: the role gets the paths and that check one more round. On a held run the board's `tests.held.suggest` proposes such paths (from what the role said it cannot change, and the test file a unit-test finding still needs, TR §4.1), for a person to agree to; `team.path_suggestions`.
 `tests.held.prefill` fills in 再加路径 and the note of a new finding for a held check the same way, from the role's
 paragraphs naming the check, for the person to check and send; `team.finding_prefill`.
-Neither proposes a path under `checks/`, `mcp/`, `bench/` or `.kiro/`, `docs/aidlc/decisions.md` or another role's
-file, and `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five (400, `invalid_finding`).
+Neither proposes a path under `checks/`, `mcp/`, `bench/` or `.kiro/`, `docs/aidlc/decisions.md` (by what the path
+says and by what it resolves to, so a symlink committed at another path is refused as well) or another role's
+file. The test file a unit-test finding still needs is a `tests.held.suggest` entry of its own, with `role` the
+role whose scope has it (the tester, so the developer is never given `tests/**`), or the finding's role when no
+role's scope has it. It is proposed only when that test file exists in the project already: `reference-project`
+names its test sources one by one in `tests/CMakeLists.txt`, so a file the project does not have yet would not be
+compiled or run and nothing is proposed for a module without a test file. Any other path in another role's scope
+stays the person's to type. `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five, or
+that resolves outside the run's work tree (400, `invalid_finding`); with `extend` it also takes a role that writes
+tests, not only an implementing one.
 
 `POST /runs/{rid}/retry` takes `note` and `by` (who decides, named in the audit). On a run that ended on a 要改 review after its rounds (the board's `review_redo`), it sends that review back once more with the person's decision (按评审意见再改一轮); on a held bench step it carries on from that step.
 

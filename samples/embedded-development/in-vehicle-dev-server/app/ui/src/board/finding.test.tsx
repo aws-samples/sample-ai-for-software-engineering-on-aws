@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import type { Board } from '../types'
 import { apiCalls, apiError, setApiRoutes } from '../test/stubs/app-sdk'
 import { clone, vstatdBoard } from '../test/fixtures'
@@ -195,6 +195,42 @@ describe('补登发现并交给角色', () => {
       [`${API}/runs/r1006a/finding`, { extend: 'F-032', role: 'dev-fix', paths: ['cmake/cc1-aarch64.cmake'], note: '同意 app 的建议：开发 · 修复说根因在 cmake/cc1-aarch64.cmake', by: '王工', continue: false }],
       [`${API}/runs/r1006a/finding`, { extend: 'F-035', role: 'dev-fix', paths: ['tests/test_signal_table.cpp'], note: '同意 app 的建议：还没有测试写 F-035', by: '王工', continue: true }],
     ]))
+  })
+
+  test('one finding proposed to the developer and the tester: both listed, the form follows 交给', async () => {
+    const user = userEvent.setup()
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const b = heldBoard()
+    const row = (id: string, check: string, location: string) => ({
+      id, decision: 'fix', added: true, found_by: `checks/${check}.sh`, location, cites: [], facts: [],
+      evidence: 'unit-test', behaviour: false, answer: null, static: null, trace: null })
+    b.run!.backlog!.triage!.findings.push(row('F-032', 'build', 'src/main.cpp:12'),
+      row('F-035', 'unit', 'src/signal_table.cpp:90'))
+    const test = 'tests/test_signal_table.cpp'
+    b.run!.tests.held!.suggest = [
+      { extend: 'F-035', check: 'unit', role: 'dev-fix', paths: ['src/signal_table.hpp'], note: '根因在 .hpp' },
+      { extend: 'F-035', check: 'unit', role: 'tester', paths: [test], note: `在 ${test} 里加` },
+    ]
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    try {
+      render(<TeamPage pollMs={60_000} />)
+      const box = await screen.findByTestId('kt-suggest')
+      expect(within(box).getAllByRole('listitem')).toHaveLength(2)
+      expect(box).toHaveTextContent('交给测试，加可写 tests/test_signal_table.cpp')
+      expect(errors.mock.calls.filter((c) => String(c[0]).includes('same key'))).toEqual([])
+      await user.click(within(screen.getByTestId('kt-flow-held')).getByRole('button', { name: '自己填' }))
+      const q = within(await screen.findByTestId('kt-finding-dialog'))
+      await user.selectOptions(q.getByLabelText('发现'), 'F-035')
+      expect(q.getByLabelText('交给')).toHaveValue('dev-fix') // the first proposal for the finding
+      expect(q.getByLabelText('加可写路径')).toHaveValue('src/signal_table.hpp')
+      await user.selectOptions(q.getByLabelText('交给'), 'tester')
+      expect(q.getByLabelText('加可写路径')).toHaveValue('tests/test_signal_table.cpp')
+      expect(q.getByLabelText('备注')).toHaveValue('在 tests/test_signal_table.cpp 里加')
+      await user.selectOptions(q.getByLabelText('交给'), 'dev-fix')
+      expect(q.getByLabelText('加可写路径')).toHaveValue('src/signal_table.hpp')
+    } finally {
+      errors.mockRestore()
+    }
   })
 
   test('a refused finding says why and the dialog stays', async () => {

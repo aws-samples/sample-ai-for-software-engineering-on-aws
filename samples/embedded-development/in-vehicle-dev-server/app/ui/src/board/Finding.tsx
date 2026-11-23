@@ -127,7 +127,11 @@ export function SuggestAgree({ run, onConfirm }: { run: RunDetail; onConfirm: Co
       <b>{tr('board.Finding.3')}</b>
       <ul>
         {items.map((s) => (
-          <li key={s.extend}>{s.extend}{tr('board.Finding.4')}{s.check}{tr('board.Finding.5')}{title(s.role)}{tr('board.Finding.6')} <code className="kt-mono">{s.paths.join(' ')}</code>{tr('board.Finding.7')}<span className="kt-dim">{s.note}</span></li>
+          <li key={`${s.extend}:${s.role}`}>
+            {s.extend}{tr('board.Finding.4')}{s.check}{tr('board.Finding.5')}{title(s.role)}{tr('board.Finding.6')}{' '}
+            <code className="kt-mono">{s.paths.join(' ')}</code>{tr('board.Finding.7')}
+            <span className="kt-dim">{s.note}</span>
+          </li>
         ))}
       </ul>
       <span className="kt-start-actions">
@@ -159,10 +163,14 @@ export function FindingDialog({ run, onConfirm, onCancel }: { run: RunDetail; on
 
 function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onConfirm: Confirm; onCancel: () => void; onMode: (x: boolean) => void }) {
   const held = run.tests.held!
-  const roles = implementers(run)
+  // a finding added already may also go to the role a proposal names (the tester, for a unit-test finding's test file)
+  const impl = implementers(run)
+  const roles = run.roles.filter((l) => impl.includes(l) || held.suggest?.some((s) => s.role === l.key))
   const ids = extendable(run)
   const first = held.checks.map((c) => ids.find((f) => CHECK_OF.exec(f.found_by ?? '')?.[1] === c)).find(Boolean) ?? ids[0]
-  const proposed = (id: string) => held.suggest?.find((s) => s.extend === id)
+  // one finding may have a proposal per role: without a role, its first
+  const proposed = (id: string, role?: string) =>
+    held.suggest?.find((s) => s.extend === id && (role === undefined || s.role === role))
   const [b, setB] = useState<ExtendBody>(() => ({ extend: first?.id ?? '', role: proposed(first?.id ?? '')?.role ?? roles[0]?.key ?? '', paths: [],
     note: proposed(first?.id ?? '')?.note ?? '', by: (typeof localStorage !== 'undefined' && localStorage.getItem(SIGNER_KEY)) || '', continue: true }))
   const [paths, setPaths] = useState(() => proposed(first?.id ?? '')?.paths.join(' ') ?? '')
@@ -199,7 +207,13 @@ function ExtendForm({ run, onConfirm, onCancel, onMode }: { run: RunDetail; onCo
           </select>
         </label>
         <label className="kt-start-field is-narrow"><span>{tr('board.Finding.20')}</span>
-          <select aria-label={tr('board.Finding.20')} value={b.role} onChange={(e) => set({ role: e.target.value })}>
+          <select aria-label={tr('board.Finding.20')} value={b.role} onChange={(e) => {
+            const s = proposed(b.extend, e.target.value)
+            if (s || proposed(b.extend)) { // the finding has proposals: show this role's, or none
+              set({ role: e.target.value, note: s?.note ?? '' })
+              setPaths(s?.paths.join(' ') ?? '')
+            } else set({ role: e.target.value })
+          }}>
             {roles.map((l) => <option key={l.key} value={l.key}>{l.title}</option>)}
           </select>
         </label>
