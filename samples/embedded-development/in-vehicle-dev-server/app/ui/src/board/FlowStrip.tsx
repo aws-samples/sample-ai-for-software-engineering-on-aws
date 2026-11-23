@@ -56,7 +56,13 @@ export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail;
               {onAgree && <SuggestAgree run={run} onConfirm={onAgree} />}
               <span className="kt-dim">{tr('board.FlowStrip.9')}</span>
               <span className="kt-start-actions">
-                <button type="button" className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`} onClick={onFinding}>{run.tests.held.suggest?.length ? tr('board.FlowStrip.10') : tr('board.FlowStrip.11')}</button>
+                <button
+                  type="button"
+                  className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`}
+                  onClick={onFinding}
+                >
+                  {run.tests.held.suggest?.length ? tr('board.FlowStrip.10') : tr('board.FlowStrip.11')}
+                </button>
               </span>
             </>
           )}
