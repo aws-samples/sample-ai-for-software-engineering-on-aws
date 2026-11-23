@@ -260,11 +260,43 @@ describe('一个已经不报的发现卡住了运行', () => {
     expect(box.getByText(/F-022 已经不再被报出来/)).toBeInTheDocument()
     expect(box.getByText(/findings-backlog\.md 里改标 fix/)).toBeInTheDocument()
     expect(box.getByText(/static 过不去/)).toBeInTheDocument()
+    expect(box.getByText(/除非它在原来的函数里又被报出来/)).toBeInTheDocument() // putting it back would pass
     expect(box.getByText(/「停止」/)).toBeInTheDocument()
     expect(screen.queryAllByRole('button', { name: '补登发现并交给角色' })).toHaveLength(0)
     expect(screen.queryByTestId('kt-suggest')).not.toBeInTheDocument()
     expect(screen.queryByTestId('kt-finding-dialog')).not.toBeInTheDocument()
     expect(await screen.findByTestId('kt-wall-held')).toHaveTextContent('F-022: no longer reported')
+  })
+
+  test('triaged as defer: the way out is the triage gate of a new run, not the backlog', async () => {
+    const b = heldBoard()
+    const reason = 'F-025: no longer reported, but triaged as defer; a change outside the batch removed it'
+    b.run!.tests.held = { checks: ['static'], why: `static 没过，负责的角色没法再改：${reason}`, reasons: [reason] }
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    render(<TeamPage pollMs={60_000} />)
+    const box = within(await screen.findByTestId('kt-flow-held-gone'))
+    expect(box.getByText(/F-025 已经不再被报出来/)).toBeInTheDocument()
+    expect(box.getByText(/新运行的分诊关卡上把它判成 fix/)).toBeInTheDocument()
+    expect(box.queryByText(/findings-backlog\.md 里改标 fix/)).not.toBeInTheDocument() // it is fix there already
+    expect(screen.queryAllByRole('button', { name: '补登发现并交给角色' })).toHaveLength(0)
+  })
+
+  test('the same holds on trace: a pushed commit cites a finding the triage does not fix or justify', async () => {
+    // what checks/lib/check_trace.py says of a commit citing a later finding (not in the triage at all)
+    const reason = '0123456789ab: cites F-022, which the approved triage does not fix or justify (not in the batch)'
+    expect(goneFinding({ why: reason })).toEqual({ id: 'F-022', decision: 'not in the batch', commit: '0123456789ab' })
+    expect(goneFinding({ why: '0123456789ab \'[dev] x\': cites no finding' })).toBeNull()
+    const b = heldBoard()
+    b.run!.tests.held = { checks: ['trace'], why: `trace 没过，负责的角色没法再改：${reason}`, reasons: [reason] }
+    setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
+    render(<TeamPage pollMs={60_000} />)
+    const box = within(await screen.findByTestId('kt-flow-held-gone'))
+    expect(box.getByText(/提交 0123456789ab 引用了 F-022/)).toBeInTheDocument()
+    expect(box.getByText(/历史不能改写/)).toBeInTheDocument()
+    expect(box.getByText(/新运行的分诊里把它判成 fix 或 justify/)).toBeInTheDocument()
+    expect(box.getByText(/trace 过不去/)).toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: '补登发现并交给角色' })).toHaveLength(0)
+    expect(screen.queryByTestId('kt-finding-dialog')).not.toBeInTheDocument()
   })
 
   test('the generic hold is unchanged: the forms are still offered', async () => {

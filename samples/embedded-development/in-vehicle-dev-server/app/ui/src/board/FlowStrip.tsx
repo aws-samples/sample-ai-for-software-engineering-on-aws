@@ -47,7 +47,9 @@ export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail;
           )}
           {gone ? (
             <p className="kt-warn" data-testid="kt-flow-held-gone">
-              {tr('board.FlowStrip.43', { p0: gone.id, p1: gone.decision })}
+              {gone.commit ? tr('board.FlowStrip.45', { p0: gone.id, p1: gone.commit })
+                : gone.decision === 'defer' ? tr('board.FlowStrip.44', { p0: gone.id }) // fix in the backlog already
+                  : tr('board.FlowStrip.43', { p0: gone.id, p1: gone.decision })}
             </p>
           ) : (
             <>
