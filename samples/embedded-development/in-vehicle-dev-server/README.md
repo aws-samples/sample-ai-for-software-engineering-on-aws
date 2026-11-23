@@ -1,8 +1,9 @@
 # In-vehicle software on a development server next to the bench
 
-> **Status: in development.** This page defines the scenario: the work, the knowledge, the gates, the tools and the
-> definition of done that the runnable sample must meet. The runnable parts are being built against it (see
-> [Build plan](#build-plan)). It follows the [embedded framework](../README.md) and its five building blocks.
+> **Status: usable; the rehearsal guide is a draft.** This page defines the scenario: the work, the knowledge, the
+> gates, the tools and the definition of done that the runnable sample meets. Build plan items 1 to 6 and 8 are merged;
+> the rehearsal guide and scorecard (item 7) have not been dry-run with people, and the optional item 9 is not built
+> (see [Build plan](#build-plan)). It follows the [embedded framework](../README.md) and its five building blocks.
 
 ## Business measures
 
@@ -263,6 +264,25 @@ It leaves out the tool calls by permission class (they come from the MCP servers
 were real changes of behaviour and the defects found later (the app records neither). The decisions behind this are in
 [docs/kiro-crew-app.md](docs/kiro-crew-app.md).
 
+### Using it for your own project
+
+`vstatd`, its backlog, CC-1 and the seeded difficulties are the teaching case. What a team keeps for its own work is
+the rest: the AI-DLC phases and the people's gates, the six roles, the checks' contract (exit status PASS, FAIL,
+usage error or BLOCKED, with a JSON result; BLOCKED goes to a person), bench actions that wait for a person at
+the operator console, the independent rerun before sign-off and the scorecard. The team file declares most of the
+parts a team replaces ([D11](docs/kiro-crew-app.md#d11-a-teams-own-project-plugs-in-through-the-team-file)):
+
+| Replace | With | Where |
+| --- | --- | --- |
+| `reference-project/` | The team's repository | `source` in the team file |
+| `knowledge/` | The team's documents, with the citations its checks look for | `knowledge` in the team file |
+| The checks | The team's own, keeping the checks' contract | `checks` in the team file |
+| `reference-project/tools/Dockerfile` | The team's build image | `check_runner` in the team file |
+| `bench/cc1.sh` | The team's deploy, restart and replay commands, which then carry the physical gate, the approval and the action record | `bench` in the team file |
+| The work item and the backlog | The team's own batch | `work_item` in the team file, or 新需求 on the board |
+
+No project other than `vstatd` has been run through the app yet.
+
 ### Quick start
 
 On a Mac or a Linux host with Kiro Crew running, Docker, Node.js 22, git and Python 3:
@@ -386,8 +406,11 @@ measured.
 
 ## Build plan
 
-Each item is a pull request. The sample becomes available when all of them are merged and the rehearsal guide has
-been dry-run once.
+Each item is a pull request. Items 1 to 6 and 8 are merged. The Kiro Crew app ran from the triage gate to a signed-off
+evidence page twice on a Mac (2026-11-03, and 2026-11-17 in servers mode), and from `setup.sh` to `cleanup.sh` twice on
+an Ubuntu 24.04 x86_64 host (2026-11-19 and 2026-11-20); each Linux run caught the seeded cross build and data race at
+the checks before the bench and was held there for a person, with the person's answers scripted. The rehearsal guide
+(item 7) stays a draft until a team's first rehearsal, which is its dry run. Item 9 is optional and not built.
 
 1. Synthetic interface specification and platform notes (Markdown and rendered PDF), CAN database and VSS mapping,
    fact entries, team rules and the findings backlog, with a consistency check; facilitator notes on the seeded
@@ -413,24 +436,32 @@ been dry-run once.
    console, five runs each of a deploy, a restart refused and then approved, and a replay behaved as expected, with
    a build carrying a seeded wrong fix and again with a correct one; with the correct build `logdiff` passed every
    time, and the wrong-fix build failed against the correct baseline on the wrong fix's timeouts. The open items are
-   under its [Not yet verified](mcp/bench/README.md#not-yet-verified). The Kiro Crew app (item 8) does not use the
-   servers yet, which leaves the bypasses listed under [Guardrails](#guardrails); connecting it to them is open.
+   under its [Not yet verified](mcp/bench/README.md#not-yet-verified). Since 2026-11-17 the Kiro Crew app (item 8)
+   can run the checks and the bench actions through both servers, and since 2026-11-22 the rerun's release check and
+   evidence page through the build server ([servers mode](app/README.md#servers-mode-trial), a trial). One delivery
+   reached sign-off in that mode on a Mac (run `r11170658`, 2026-11-17), before the release check moved to the
+   server; the release check and evidence page on the server have not been through a real run. Both servers run as
+   the current user there, so the bypasses listed under [Guardrails](#guardrails) still apply.
 6. Kiro and Kiro Crew configurations with the bypass hook; the permission probe test; optional AI-DLC plugin. The
    Kiro Crew app (item 8) does not need this item's configurations. *Done in part (2026-11-16):* the bypass hook in
    the roles' templates, its tests and the permission probe, run with kiro-cli 2.34.0 ([agents/](agents/README.md)).
    The templates load in both of kiro-cli's engines (V2 and V3), and the developer role's template ran as expected in
    a Kiro Crew 0.12.2 chat session (2026-11-17); the app's roles booted from them on a Mac (Kiro Crew 0.13.0-rc.1).
-   Open: a first install without a gateway restart, the whole app on Kiro Crew 0.12, the Kiro IDE.
+   On Kiro Crew 0.12.2 on a Linux host the app ran from `setup.sh` to the checks before the bench, then
+   `cleanup.sh` (2026-11-19 and 2026-11-20); the bench actions and sign-off have not run on 0.12.2. Not done: a first
+   install without a gateway restart (`setup.sh` asks for one), and the Kiro IDE, where the bypass hook has not been
+   checked.
 7. Rehearsal guide and scorecard. One dry run in which, after the triage is approved, nobody answers in the agent
    session and a person answers only at the board's gates and the operator console, followed by an independent rerun
    of the checks.
    Record the time and credits it used. *Draft (2026-11-16):* the [rehearsal guide](rehearsal/README.md) and the
-   [scorecard](rehearsal/scorecard.md) with its sheet; the dry run is open.
+   [scorecard](rehearsal/scorecard.md) with its sheet. They have not been dry-run with people, so both stay drafts
+   until a team's first rehearsal corrects them.
 8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its roles' templates, `setup.sh` and `cleanup.sh`. *Done:* steps
    1 to 12 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan), with one delivery end to end
    (2026-11-03).
 9. Optional model-based profile: the `soc_display_filter` model, its generated code, recorded model results and
-   `checks/backtoback.sh`.
+   `checks/backtoback.sh`. *Not built.*
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page; `cleanup.sh` removes everything it created, apart from the chat folder and the
@@ -479,8 +510,10 @@ Linux desktop app needs glibc 2.34 or newer, the CLI is for older hosts: see
 [Kiro Crew's installation page](https://kiro.dev/docs/crew/installation)),
 Docker, git, Python 3 and Node.js 22 or newer to build the board. `setup.sh` finds the `kirocrew` program in the macOS
 desktop app, else on `PATH`; set `VSTATD_KIROCREW_BIN` to it when it is elsewhere. Its manifest
-asks for Kiro Crew 0.8.0 or newer. It ran one delivery end to end on Kiro Crew 0.12.0-rc.4 (run `r11032637`,
-2026-11-03); that is the only version tested.
+asks for Kiro Crew 0.8.0 or newer. It ran one delivery end to end on Kiro Crew 0.12.0-rc.4 (run `r11032637`, 2026-11-03,
+Mac), and from `setup.sh` to `cleanup.sh` on Kiro Crew 0.12.2 on an Ubuntu 24.04 x86_64 host (2026-11-19 and 2026-11-20,
+each run to the checks before the bench); those are the versions it has run on (the roles' templates also booted on
+0.13.0-rc.1, build plan item 6).
 
 The reference project builds in the container of `reference-project/tools/Dockerfile`, based on the `ubuntu:24.04`
 image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own licence, recorded in
