@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import bench as bench_mod
-from . import gitwork, library, messages, roster
+from . import commits, gitwork, library, messages, roster
 from . import servers as servers_mod
 from .constants import APP_NAME
 from .sessions import agent_fields, find_agent
@@ -110,6 +110,9 @@ def detail(run: TeamRun, *, mgr: Any, scrub: Callable[[str], str], now: float,
         "bench": bench_view(run, scrub),
         "release": release_view(run, scrub),
         "backlog": backlog_view(run),
+        # D18: what the run measured (its tick when it ended, or the scorecard); read only here, the board polls often
+        "commit_sizes": (commits.load(Path(s["repo"]).parent / "results")
+                         if s.get("repo") and not s.get("imported") else None),
     }
 
 

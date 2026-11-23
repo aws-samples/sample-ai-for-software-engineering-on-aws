@@ -79,6 +79,12 @@ function RunRow({ r, onDetail }: { r: ScoreRun; onDetail?: (rid: string) => void
       <td>{r.logdiff ? tr('scorecard.ScorecardView.8', { p0: r.logdiff.differences, p1: r.logdiff.unexplained }) : EMPTY}</td>
       <td>{r.bench ? `${r.bench.approved} / ${r.bench.refused} / ${r.bench.reconciled}` : EMPTY}</td>
       <td>{r.rerun_differs ? (r.rerun_differs.length ? r.rerun_differs.join(tr('scorecard.ScorecardView.2')) : '0') : EMPTY}</td>
+      <td data-testid="sc-commits"
+        title={r.commit_sizes
+          ? tr('scorecard.ScorecardView.commitsOf', { p0: r.commit_sizes.commits, p1: r.commit_sizes.max_sha })
+          : undefined}>
+        {r.commit_sizes ? `${r.commit_sizes.max_not_moved} / ${r.commit_sizes.median_not_moved}` : EMPTY}
+      </td>
     </tr>
   )
 }
@@ -155,6 +161,7 @@ export function ScorecardView({ pollMs = SCORE_POLL_MS, onDetail }: { pollMs?: n
                     <tr>
                       <th>{tr('scorecard.ScorecardView.28')}</th><th>{tr('scorecard.ScorecardView.29')}</th><th>{tr('scorecard.ScorecardView.17')}</th><th>{tr('scorecard.ScorecardView.30')}</th><th>{tr('scorecard.ScorecardView.31')}</th><th>{tr('scorecard.ScorecardView.32')}</th>
                       <th>{tr('scorecard.ScorecardView.18')}</th><th>{tr('scorecard.ScorecardView.33')}</th><th>{tr('scorecard.ScorecardView.19')}</th><th>{tr('scorecard.ScorecardView.34')}</th><th>{tr('scorecard.ScorecardView.35')}</th>
+                      <th>{tr('scorecard.ScorecardView.commits')}</th>
                     </tr>
                   </thead>
                   <tbody>{data.runs.map((r) => <RunRow key={r.id} r={r} onDetail={onDetail} />)}</tbody>
@@ -175,6 +182,7 @@ export function ScorecardView({ pollMs = SCORE_POLL_MS, onDetail }: { pollMs?: n
           <li>{tr('scorecard.ScorecardView.43')}</li>
           <li>{tr('scorecard.ScorecardView.44')}</li>
           <li>{tr('scorecard.ScorecardView.45')}</li>
+          <li>{tr('scorecard.ScorecardView.commitsNote')}</li>
         </ul>
       </details>
     </div>

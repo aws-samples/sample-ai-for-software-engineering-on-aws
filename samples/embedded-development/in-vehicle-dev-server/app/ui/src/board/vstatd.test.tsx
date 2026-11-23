@@ -246,6 +246,32 @@ describe('the vstatd board', () => {
     expect(sign).toBeEnabled()
   })
 
+  test('sign-off lists the commits, most not-moved lines first; signing does not depend on them', async () => {
+    const user = userEvent.setup()
+    serve(vstatdBoard('release'))
+    render(<TeamPage pollMs={60_000} />)
+    const card = await screen.findByTestId('kt-sign')
+    const list = within(card).getByTestId('kt-sign-commits')
+    expect(list.querySelector('summary')).toHaveTextContent('每个提交的改动规模（10 个提交）')
+    const rows = within(list).getAllByTestId('kt-sign-commit')
+      .map((r) => [...r.querySelectorAll('td')].map((c) => c.textContent))
+    expect(rows[0]).toEqual(['4b7e1d2', '分诊', 'F-001、F-030、F-031', '598', '0', '598'])
+    expect(rows.find((r) => r[0] === '5f6b2e9')).toEqual(['5f6b2e9', '开发 · 重构', 'F-031', '571', '448', '123'])
+    expect(rows.map((r) => Number(r[5]))).toEqual([...rows.map((r) => Number(r[5]))].sort((a, b) => b - a))
+    expect(list).toHaveTextContent('另有 1 个 app 自己的提交（关卡决定、合入、代提交）没有计入。')
+    await user.type(within(card).getByLabelText('签字人'), '王经理')
+    expect(within(card).getByRole('button', { name: '签字放行' })).toBeEnabled()
+  })
+
+  test('a run with no measured commits (an imported one) has no commit list on its sign-off card', async () => {
+    const b = vstatdBoard('release')
+    b.run!.commit_sizes = null
+    serve(b)
+    render(<TeamPage pollMs={60_000} />)
+    const card = await screen.findByTestId('kt-sign')
+    expect(within(card).queryByTestId('kt-sign-commits')).toBeNull()
+  })
+
   test('until release.sh passes on the rerun the sign-off button stays off and says why', async () => {
     const b = vstatdBoard('release')
     const r = b.run!

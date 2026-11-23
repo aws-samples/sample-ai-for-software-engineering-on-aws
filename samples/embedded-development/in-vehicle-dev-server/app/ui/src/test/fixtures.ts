@@ -752,6 +752,20 @@ export function vstatdBoard(stage: 'triage' | 'bench' | 'release' = 'bench'): Bo
     differs: [{ name: 'unit', was: 'FAIL', now: 'PASS' }],
     evidence: '# Evidence page: vstatd 本批\n\n| Check | Verdict | Tier |\n| --- | --- | --- |\n| build | PASS | n/a |\n| logdiff | PASS | emulation |\n\nA commit message an agent wrote: <script>alert(1)</script>\n',
   } : null
+  // D18: each commit's files, lines and moved lines as commits.py counts them (made-up figures of the right shape)
+  const SIZE: Record<string, [number, number, number]> = {
+    '4b7e1d2': [2, 598, 0], '9d02c6e': [1, 138, 0], c41a8f3: [3, 128, 0], e5f9b20: [1, 71, 0], '3c9a1f0': [1, 9, 0],
+    '7a1e44b': [2, 14, 0], b20d9c5: [1, 11, 0], d8e3a71: [1, 19, 4], '5f6b2e9': [3, 571, 448], a93c07d: [1, 38, 0],
+  }
+  run.commit_sizes = stage === 'release' ? {
+    base: run.base, head: '7c3e9a1f2b',
+    commits: Object.entries(WORK).flatMap(([role, w]) => (w.commits ?? []).map((c) => {
+      const [files, lines, moved] = SIZE[c.sha] ?? [1, 1, 0]
+      const findings = c.subject.match(/F-\d{3}/g) ?? []
+      return { sha: c.sha, subject: c.subject, role, findings, files, lines, moved, not_moved: lines - moved }
+    })),
+    app: [{ sha: 'e2a7c90', subject: '[run] 人在关卡上的决定' }],
+  } : null
   if (stage === 'release') {
     Object.assign(run, { status: 'done', ended_at: t + 7300, sign_block: '', signoff: null })
   } else {
@@ -829,7 +843,14 @@ export function scorecardOf(b: Board): Scorecard {
     times: { triage_s: 1800, first_pass_s: 5400, signoff_s: r.signoff ? r.signoff.at - r.started_at : null },
     build_rounds: 1, caught: { build: 1, static: 1, unit: 1, size: 0, trace: 0 }, logdiff: { differences: 2, unexplained: 0 },
     bench: { approved: 2, refused: 0, reconciled: 0 }, rerun_differs: r.release ? r.release.differs.map((d) => d.name) : null,
-    tool_calls: null,
+    tool_calls: null, commit_sizes: null,
+  }
+  const sizes = r.commit_sizes?.commits ?? []
+  if (sizes.length) {
+    const nm = sizes.map((c) => c.not_moved).sort((a, b) => a - b)
+    const big = sizes.reduce((a, c) => (c.not_moved > a.not_moved ? c : a))
+    const mid = nm.length % 2 ? nm[(nm.length - 1) / 2] : (nm[nm.length / 2 - 1] + nm[nm.length / 2]) / 2
+    row.commit_sizes = { commits: sizes.length, max_not_moved: big.not_moved, median_not_moved: mid, max_sha: big.sha }
   }
   return { runs: [row], total: { runs: 1, findings: row.findings, overturned: 1, build_rounds: 1, caught: row.caught, logdiff: row.logdiff,
     bench: row.bench, rerun_differs: row.rerun_differs?.length ?? null, tool_calls: null } }

@@ -163,6 +163,9 @@ ${toneVars}
 .kt-gate-cites code { color: var(--text); }
 .kt-sign-evidence { margin: 4px 0 10px; }
 .kt-sign-evidence summary { cursor: pointer; font-weight: 700; }
+.kt-sign-commits table { margin-top: 6px; border-collapse: collapse; font-size: .88em; }
+.kt-sign-commits td { font-variant-numeric: tabular-nums; }
+.kt-sign-commits th, .kt-sign-commits td { text-align: left; padding: 2px 14px 2px 0; }
 .kt-evidence { margin: 8px 0 0; max-height: 28em; overflow: auto; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
   background: color-mix(in srgb, var(--text) 3%, transparent); font-family: var(--mono, ui-monospace, monospace); font-size: .86em; white-space: pre-wrap; overflow-wrap: anywhere; }
 .kt-lane-doing, .kt-node-task { }

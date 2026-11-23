@@ -30,6 +30,7 @@ from typing import Any, Awaitable, Callable
 
 from . import bench as bench_mod
 from . import checks, gitwork, messages
+from . import commits as commits_mod
 from . import delivery as delivery_mod
 from . import servers as servers_mod
 from . import triage as triage_mod
@@ -634,6 +635,8 @@ class TeamRun:
         async with self._lock:
             try:
                 await self._advance()
+                if self.ended:  # the batch's commits as they stay (D18), for the sign-off card
+                    await self.commit_sizes()
                 self.errors = 0
             except Exception as exc:
                 self.errors += 1
@@ -817,7 +820,8 @@ class TeamRun:
             caught_up = await self._catch_up(key) if role["writable"] and lane.get("merged_sha") else False
             task, label = self._discuss_task(key, n, review, caught_up), self.msg("label.discuss")
         else:
-            task, label = self._work_task(key, n), (self.msg("label.again") if n > 1 else "")
+            sizes = await self.commit_sizes() if not role["writable"] else None  # the reviewer's table (D18)
+            task, label = self._work_task(key, n, sizes), (self.msg("label.again") if n > 1 else "")
         lane["attempts"].append({"n": n, "kind": kind, "label": label, "agent": None, "conv": None, "task": task,
                                  "requested_at": now, "started": None, "ended": None, "error": None, "summary": None,
                                  "credits": None, "tries": 0})
@@ -2422,6 +2426,19 @@ class TeamRun:
                 "removed": sum(int((ln.get("lines") or {}).get("removed") or 0) for ln in lanes),
                 "checks": f"{t['passed']}/{t['total']}", "review": str(s.get("verdict") or "")}
 
+    async def commit_sizes(self) -> dict[str, Any] | None:
+        """The batch's commits and how big each is (D18, commits.py), kept in the run's results directory; None for an
+        imported run (no repository here) or when git cannot say. A report only: nothing is judged on it."""
+        s = self.s
+        if s.get("imported") or not s.get("base") or not s.get("run_wt") or not Path(s["run_wt"]).is_dir():
+            return None
+        try:
+            return await commits_mod.ensure(Path(s["repo"]).parent / "results", s["run_wt"], s["base"],
+                                            moving=not self.ended)
+        except Exception:  # noqa: BLE001 - the run goes on without the figures
+            self.d.log.warning("vstatd-team: %s cannot measure its commits", self.rid, exc_info=True)
+            return None
+
     async def merge_pr(self) -> str:
         """签字放行合并 PR: the run branch goes into main of the run's repository (a fast-forward: main has not moved
         since the run branched off). Returns main's new commit, or "" when there is no repository here (a run imported
@@ -2690,13 +2707,15 @@ class TeamRun:
     def _writable(self, key: str) -> str:
         return "、".join(f"`{g}`" for g in self.roles[key]["writable"]) or "无（只读，不改任何文件）"
 
-    def _work_task(self, key: str, n: int = 1) -> str:
+    def _work_task(self, key: str, n: int = 1, sizes: dict[str, Any] | None = None) -> str:
         s, lane, role = self.s, self.lane(key), self.roles[key]
         brief = role.get("brief", "")
         if (s.get("plan") or {}).get(key):  # the split a person approved at the gate
             brief = f"这次分给你的任务（{self._planner()}提议、人在关卡上批准的分工）：{s['plan'][key]}。\n\n" + brief
         if not role["writable"] and s.get("base"):
             brief += f"（需求提交是 {s['base'][:12]}，`git diff {s['base'][:12]} HEAD` 就是全部改动。）"
+            if commits_mod.table(sizes):
+                brief += "\n\n" + commits_mod.table(sizes) + "\n\n"
             t = s.get("tests") or {}
             if t.get("total"):
                 red = [c["name"] for c in t.get("cases", []) if c.get("status") == "fail"]

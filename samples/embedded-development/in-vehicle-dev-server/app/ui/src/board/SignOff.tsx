@@ -5,11 +5,11 @@
  * text: it quotes what agents wrote), what the independent review concluded, and what the agents did. Then the one
  * step no agent takes: a person signs (签字放行), and the board keeps who, when and what the checks said then. The
  * button stays off while the run cannot be signed (release.sh has not passed on the rerun). The signature merges the
- * run's PR (its run branch) into main.
+ * run's PR (its run branch) into main. Under it, the batch's commits and how big each is (D18), shown only.
  */
 import { evText, signBlock } from '../i18n/events'
 import { useState, type FormEvent } from 'react'
-import type { ReleaseView, RunDetail } from '../types'
+import type { CommitSizes, ReleaseView, RunDetail } from '../types'
 import { CASE_GROUPS, caseGroup, fmtCredits, fmtSpan } from './format'
 import { RoleIcon } from './RoleIcon'
 import { locale, lang, t as tr } from '../i18n'
@@ -156,6 +156,7 @@ export function SignOff({ run, onSign }: { run: RunDetail; onSign?: (by: string,
           {rel.evidence ? <pre className="kt-evidence">{rel.evidence}</pre> : <p className="kt-dim">{tr('board.SignOff.noEvidence', { results: rel.results })}</p>}
         </details>
       )}
+      {run.commit_sizes && run.commit_sizes.commits.length > 0 && <Commits run={run} sizes={run.commit_sizes} />}
       {run.signoff ? (
         <p className="kt-sign-done" role="status">
           <RoleIcon role="sign" size={16} /> <b>{run.signoff.by}</b> {tr('board.SignOff.signed', { at: new Date(run.signoff.at * 1000).toLocaleString(locale(), { hour12: false }),
@@ -183,6 +184,38 @@ export function SignOff({ run, onSign }: { run: RunDetail; onSign?: (by: string,
         </>
       ) : null}
     </section>
+  )
+}
+
+/** The batch's commits, most not-moved lines first (D18): shown only, nothing here decides the signature. */
+function Commits({ run, sizes }: { run: RunDetail; sizes: CommitSizes }) {
+  const rows = [...sizes.commits].sort((a, b) => b.not_moved - a.not_moved)
+  const role = (key: string | null) => (key ? run.roles.find((l) => l.key === key)?.title ?? key : '')
+  return (
+    <details className="kt-sign-evidence kt-sign-commits" open={!run.signoff} data-testid="kt-sign-commits">
+      <summary>{tr('board.SignOff.commits', { p0: rows.length })}</summary>
+      <table>
+        <thead>
+          <tr>
+            {[tr('board.SignOff.commitSha'), tr('board.SignOff.commitRole'), tr('board.SignOff.commitFindings'),
+              tr('board.SignOff.commitLines'), tr('board.SignOff.commitMoved'), tr('board.SignOff.commitNotMoved')]
+              .map((h) => <th key={h}>{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => (
+            <tr key={c.sha} data-testid="kt-sign-commit" title={c.subject}>
+              <td><code>{c.sha}</code></td><td>{role(c.role)}</td><td>{c.findings.join(tr('common.sep'))}</td>
+              <td>{c.lines}</td><td>{c.moved}</td><td><b>{c.not_moved}</b></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="kt-dim">
+        {tr('board.SignOff.commitsNote')}
+        {sizes.app.length ? tr('board.SignOff.commitsApp', { p0: sizes.app.length }) : ''}
+      </p>
+    </details>
   )
 }
 

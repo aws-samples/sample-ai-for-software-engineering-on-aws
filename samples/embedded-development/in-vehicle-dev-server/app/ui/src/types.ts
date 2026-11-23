@@ -79,6 +79,27 @@ export type RunDetail = {
   bench: BenchView | null // the bench actions of a team with a bench (D3, D10); null for a team without one
   release: ReleaseView | null // the independent rerun and release.sh (D9); null before it ran
   backlog: BacklogView | null // 需求清单: the findings backlog and the triage's findings; null for a team without a triage
+  commit_sizes: CommitSizes | null // D18: how big each commit of the batch is, reported only; null: not measured
+}
+
+/** D18 (backend/team/commits.py): the non-merge commits of base..head, oldest first; the app's own ones apart. */
+export type CommitSizes = {
+  base: string
+  head: string // the run branch's commit they were measured at
+  commits: CommitSize[]
+  app: { sha: string; subject: string }[] // [run] … and （app 代提交）: not counted
+}
+
+/** One commit: lines = added + removed; moved: the lines git's moved detection marks; not_moved = lines - moved. */
+export type CommitSize = {
+  sha: string
+  subject: string
+  role: string | null // the [role] its subject starts with
+  findings: string[] // the F-nnn its subject starts with
+  files: number
+  lines: number
+  moved: number
+  not_moved: number
 }
 
 /** The independent rerun of every check on the final commit (D9): release.sh's verdict (sign-off needs PASS), the
@@ -653,7 +674,10 @@ export type ScoreRun = {
   bench: ScoreBench | null // the console's decisions on the run's requests, and reconciles after them
   rerun_differs: string[] | null // checks whose verdict differed on the independent rerun
   tool_calls: ScoreToolCalls | null // servers mode (D17): the app's calls in the build and bench servers' audit logs
+  commit_sizes: ScoreCommitSizes | null // D18: the batch's commits, reported only; null: not measured, or imported
 }
+
+export type ScoreCommitSizes = { commits: number; max_not_moved: number; median_not_moved: number; max_sha: string }
 
 export type ScoreFindings = { fixed: number; justified: number; deferred: number }
 export type ScoreOverturned = { ids: string[]; by_person: string[]; by_reviewer: string[] }
