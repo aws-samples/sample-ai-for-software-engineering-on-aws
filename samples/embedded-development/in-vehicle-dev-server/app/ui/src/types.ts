@@ -88,6 +88,7 @@ export type CommitSizes = {
   head: string // the run branch's commit they were measured at
   commits: CommitSize[]
   app: { sha: string; subject: string }[] // [run] … and （app 代提交）: not counted
+  final?: boolean // measured after the run ended: read as it is from then on
 }
 
 /** One commit: lines = added + removed; moved: the lines git's moved detection marks; not_moved = lines - moved. */

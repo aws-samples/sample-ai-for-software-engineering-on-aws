@@ -2,8 +2,10 @@
 
 import asyncio
 import json
+from pathlib import Path
 
-from teamkit import FakeManager, make_run, mini_team, mod, sh
+import pytest
+from teamkit import OUTPUTS, FakeManager, act, drive, finish, make_run, mini_team, mod, sh
 
 commits, scorecard = mod("commits"), mod("scorecard")
 
@@ -78,7 +80,8 @@ def test_kept_until_head_moves_and_the_summary(tmp_path):
     commit(wt, "[dev-fix] F-005 more")
     again = asyncio.run(commits.ensure(results, wt, base))
     assert len(again["commits"]) == 4 and again["head"] != first["head"]
-    assert asyncio.run(commits.ensure(results, wt, base, moving=False)) == again  # an ended run keeps what it has
+    # the run ended at the HEAD it was measured at: the same figures, from now on marked final
+    assert asyncio.run(commits.ensure(results, wt, base, moving=False)) == {**again, "final": True}
     big = max(again["commits"], key=lambda c: c["not_moved"])
     v = sorted(c["not_moved"] for c in again["commits"])
     assert commits.summary(again) == {"commits": 4, "max_not_moved": big["not_moved"],
@@ -104,3 +107,63 @@ def test_the_run_measures_its_commits_the_reviewer_gets_the_table_and_an_importe
     run.s["imported"] = {"from": "alice"}
     assert asyncio.run(run.commit_sizes()) is None
     assert scorecard.run_figures(run.s, [], [])["commit_sizes"] is None
+
+
+def test_an_ended_run_compares_head_once_more_then_reads_its_final_file(tmp_path):
+    wt, base, *_ = repo(tmp_path)
+    results = tmp_path / "results"
+    mid = asyncio.run(commits.ensure(results, wt, base))  # measured mid-run (a reviewer's round, the scorecard)
+    write(wt, "src/late.cpp", "int late;\n")
+    late = commit(wt, "[dev-fix] F-007 late")  # merged after, and the run ends with no measurement in between
+    ended = asyncio.run(commits.ensure(results, wt, base, moving=False))
+    assert ended["head"] != mid["head"] and late in [c["sha"] for c in ended["commits"]]
+    assert ended["final"] is True and commits.load(results) == ended
+    write(wt, "src/after.cpp", "int after;\n")
+    commit(wt, "[dev-fix] F-008 after")  # a final file is read as it is, without git
+    assert asyncio.run(commits.ensure(results, wt, base, moving=False)) == ended
+
+
+def test_a_failed_measurement_is_not_tried_again_until_head_moves(tmp_path, monkeypatch):
+    wt, *_ = repo(tmp_path)
+    results, calls, real = tmp_path / "results", [], commits.measure
+
+    async def counted(*a, **kw):
+        calls.append(1)
+        return await real(*a, **kw)
+
+    monkeypatch.setattr(commits, "measure", counted)
+    unreachable = "0" * 40
+    with pytest.raises(Exception):
+        asyncio.run(commits.ensure(results, wt, unreachable))
+    assert asyncio.run(commits.ensure(results, wt, unreachable)) is None and len(calls) == 1
+    write(wt, "src/more.cpp", "int z;\n")
+    commit(wt, "[dev-fix] F-005 more")
+    with pytest.raises(Exception):  # HEAD moved: tried once more
+        asyncio.run(commits.ensure(results, wt, unreachable))
+    assert len(calls) == 2
+
+
+def test_finding_ids_and_the_app_commit_subject():
+    assert commits.parse_subject("[dev-fix] F-005/F-006 slash")["findings"] == ["F-005", "F-006"]
+    assert commits.parse_subject("[dev-fix] （app 代提交）") == {"app": True, "role": None, "findings": []}
+    # an agent's own subject carrying the mark is still counted as its own commit
+    own = commits.parse_subject("[dev-refactor] F-031 修改：大改（app 代提交）")
+    assert own == {"app": False, "role": "dev-refactor", "findings": ["F-031"]}
+
+
+def test_the_reviewer_round_gets_the_table_of_the_batch(tmp_path):
+    mgr = FakeManager()
+    run = make_run(tmp_path, mgr, team=mini_team())
+
+    def behave(a, role):
+        if role == "reviewer":
+            finish(a, "可以交付")
+            return
+        act(a, OUTPUTS[role], msg="[backend] F-001 v2" if role == "backend" else "")
+        finish(a)
+
+    asyncio.run(drive(run, mgr, behave))
+    sha = sh(Path(run.s["run_wt"]), "log", "--no-merges", "--format=%H", "-1", "--grep=F-001").strip()[:7]
+    task = mgr.by_role("reviewer").task
+    assert "| 提交 | 角色 | 发现 | 文件 | 行数 | 搬移 | 非搬移 | 提交说明原文 |" in task
+    assert f"| {sha} | backend | F-001 | 1 | 1 | 0 | 1 | [backend] F-001 v2 |" in task

@@ -2,7 +2,7 @@
 on the scorecard, the sign-off card and in the reviewer's task; nothing is judged on it (no check, no send-back).
 
 Commits: the non-merge commits of ``base..HEAD`` on the run branch, oldest first. The app's own commits are listed
-apart and not counted: ``[run] …`` (a gate decision, a merge) and any whose subject has ``（app 代提交）``
+apart and not counted: ``[run] …`` (a gate decision, a merge) and the subject ``[role] （app 代提交）`` exactly
 (gitwork.commit_leftovers: it starts with the role's tag too, so it is recognised before the role is read).
 
 Moved lines, a fixed algorithm (same git, same numbers)::
@@ -17,7 +17,9 @@ marks a block as moved when it has at least 20 letters or digits (its own minimu
 moved: the figure errs on the side of more not-moved lines, never fewer.
 
 Each run is measured once, into ``results/commit-sizes.json`` beside its repository with the HEAD it was taken at, and
-again when HEAD moves. An imported run has no repository here: None.
+again when HEAD moves. Once the run has ended, HEAD is compared one last time and the file marked ``final``; after that
+it is read without git. A measurement that fails is not tried again until HEAD moves. An imported run has no
+repository here: None.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from typing import Any
 from . import gitwork
 
 FILE = "commit-sizes.json"  # in the run's results directory
-APP_MARK = "（app 代提交）"
+APP_SUBJECT = re.compile(r"^\[[\w.-]+\] （app 代提交）$")  # gitwork.commit_leftovers' subject, exactly
 SHOWN = 60  # commits the reviewer's table lists
 COLOURS = ("-c", "color.diff.old=red", "-c", "color.diff.new=green", "-c", "color.diff.meta=bold",
            "-c", "color.diff.oldMoved=blue", "-c", "color.diff.newMoved=yellow",
@@ -43,7 +45,8 @@ MOVED_SHOW = ("show", "--format=", "--color=always", "--color-moved=zebra", "--c
 _LINE = re.compile(r"\x1b\[(3[1-4])m[+-]")  # a diff line's first colour: 31 red, 32 green, 33 yellow, 34 blue
 _FILE = re.compile(r"^(?:\x1b\[[0-9;]*m)*diff --git ", re.M)
 _TAG = re.compile(r"^\[([\w.-]+)\]\s*")
-_IDS = re.compile(r"^(?:F-\d{3}[\s、,，]*)+")  # the finding IDs the subject starts with, after its tag
+_IDS = re.compile(r"^(?:F-\d{3}[\s、,，/]*)+")  # the finding IDs the subject starts with, after its tag
+_FAILED: dict[str, str] = {}  # results directory → the HEAD its measurement failed at (not tried again there)
 
 
 def count(colored: str) -> dict[str, int]:
@@ -59,7 +62,7 @@ def count(colored: str) -> dict[str, int]:
 
 def parse_subject(subject: str) -> dict[str, Any]:
     """{app, role, findings} of a commit subject: ``[dev-fix] F-018、F-016 parse_interval …`` → dev-fix, both IDs."""
-    if subject.startswith("[run]") or APP_MARK in subject:
+    if subject.startswith("[run]") or APP_SUBJECT.match(subject):
         return {"app": True, "role": None, "findings": []}
     tag = _TAG.match(subject)
     rest = subject[tag.end():] if tag else subject
@@ -105,16 +108,29 @@ def _write(results: Path, data: dict[str, Any]) -> None:
 
 
 async def ensure(results: Path, cwd: Path | str, base: str, *, moving: bool = True) -> dict[str, Any] | None:
-    """The run's commit sizes, measured again only when HEAD has moved since they were kept (*moving* False: a run that
-    has ended, whose branch no longer moves, keeps what it has)."""
+    """The run's commit sizes, measured again only when HEAD has moved since they were kept. *moving* False (a run that
+    has ended, whose branch no longer moves): a file marked ``final`` is read as it is; one kept while the run was still
+    going is compared with HEAD once more, then marked ``final``. None, without git trying again, while HEAD stays where
+    a measurement failed (the error is raised the first time only)."""
     kept = load(results)
-    if kept is not None and not moving:
+    if kept is not None and not moving and kept.get("final"):
         return kept
     head = await gitwork.head(cwd)
+    if _FAILED.get(str(results)) == head:
+        return None
     if kept is not None and kept.get("head") == head:
-        return kept
-    data = await measure(cwd, base, head)
-    await asyncio.to_thread(_write, Path(results), data)
+        data = kept
+    else:
+        try:
+            data = await measure(cwd, base, head)
+        except Exception:
+            _FAILED[str(results)] = head
+            raise
+        _FAILED.pop(str(results), None)
+    if not moving:
+        data = {**data, "final": True}
+    if data is not kept:
+        await asyncio.to_thread(_write, Path(results), data)
     return data
 
 
@@ -135,7 +151,7 @@ def table(data: dict[str, Any] | None) -> str:
     if not rows:
         return ""
     out = ["本批的提交（app 统计；搬移行按 git 的 moved 检测，见 D18）：", "",
-           "| 提交 | 角色 | 发现 | 文件 | 行数 | 搬移 | 非搬移 | 说明 |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+           "| 提交 | 角色 | 发现 | 文件 | 行数 | 搬移 | 非搬移 | 提交说明原文 |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for c in rows[:SHOWN]:
         subject = str(c.get("subject") or "").replace("|", "\\|")
         out.append(f"| {c['sha']} | {c.get('role') or ''} | {'、'.join(c.get('findings') or [])} | {c['files']} | "
