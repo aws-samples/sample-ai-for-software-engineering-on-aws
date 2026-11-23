@@ -52,13 +52,14 @@ steps and what comes next (`ui/src/board/flow.ts`), and the 人机分工 grid un
 paragraphs naming the check, for the person to check and send; `team.finding_prefill`.
 Neither proposes a path under `checks/`, `mcp/`, `bench/` or `.kiro/`, `docs/aidlc/decisions.md` (by what the path
 says and by what it resolves to, so a symlink committed at another path is refused as well) or another role's
-file. `tests.held.suggest` alone has one exception: the one path the app names itself, the test file a unit-test
-finding still needs, is proposed although `tests/**` is the tester's, with a note saying whose scope it is and that
-adding it hands that file over for a round; `tests.held.prefill` has no exception and never proposes another role's
-file. The exception needs that test file to exist in the project already: `reference-project` names its test sources
-one by one in `tests/CMakeLists.txt`, so a file the project does not have yet would not be compiled or run and
-nothing is proposed for a module without a test file. Any other path in another role's scope stays the person's to
-type. `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five (400, `invalid_finding`).
+file. The test file a unit-test finding still needs is a `tests.held.suggest` entry of its own, with `role` the
+role whose scope has it (the tester, so the developer is never given `tests/**`), or the finding's role when no
+role's scope has it. It is proposed only when that test file exists in the project already: `reference-project`
+names its test sources one by one in `tests/CMakeLists.txt`, so a file the project does not have yet would not be
+compiled or run and nothing is proposed for a module without a test file. Any other path in another role's scope
+stays the person's to type. `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five, or
+that resolves outside the run's work tree (400, `invalid_finding`); with `extend` it also takes a role that writes
+tests, not only an implementing one.
 
 `POST /runs/{rid}/retry` takes `note` and `by` (who decides, named in the audit). On a run that ended on a 要改 review after its rounds (the board's `review_redo`), it sends that review back once more with the person's decision (按评审意见再改一轮); on a held bench step it carries on from that step.
 

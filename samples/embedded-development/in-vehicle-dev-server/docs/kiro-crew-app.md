@@ -335,7 +335,9 @@ person's decision, checks the whole triage by the checks' rules (400 with the pr
 `triage.json` and its `.sha256` again, `base` unchanged: the person is the one approving it. The role named may write
 the paths given from then on (kept in the run's team, so the merge and the attribution of failures see them; a test
 file given this way does not make the role the test writer), and the audit shows the registration as the person's
-action. With 「接着运行」 the hold ends, the check gets one more round (`granted` in `repair-rounds.json`), the role
+action. A finding added already may also go to the tester (再加路径): the test a unit-test finding still lacks
+(TR §4.1) is the tester's to write, so the developer is never given `tests/**`. With 「接着运行」 the hold ends, the
+check gets one more round (`granted` in `repair-rounds.json`), the role
 one more attempt, and its session continues with the check's reasons, the findings registered since the hold, the
 paths added and the rule to cite them. Without it the run stays held, so several findings can be registered before
 the run goes on.
@@ -705,13 +707,12 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   (`tests.held.prefill`), at most 10 paths. A path is filled in only when it is a file of the project outside the
   role's scope, not under `checks/`, `mcp/`, `bench/` or `.kiro/`, not `docs/aidlc/decisions.md` (by what the path
   says and by what it resolves to, so a committed symlink cannot stand in for one of them), and not in
-  another role's scope, with one exception, `tests.held.suggest`'s only: the test file a unit-test finding still
-  needs is proposed even though `tests/**` is the tester's, and its note says whose scope it is and that adding it
-  hands that file to the developer for a round. That one path is proposed ahead of the paths the role named, so the
-  limit of 10 cannot drop it, and only when the project has that test file already: `reference-project` names its
-  test sources one by one in `tests/CMakeLists.txt`, so a new file would not be compiled or run, and a module
-  without a test file still gets nothing proposed. Every other path in another role's scope is still the person's
-  to type.
+  another role's scope. The test file a unit-test finding still needs (`tests.held.suggest` only) is proposed on
+  its own, to the role whose scope has it, the tester: one click gives the tester a round to write it, and the
+  developer is never given `tests/**`. It is proposed only when the project has that test file already:
+  `reference-project` names its test sources one by one in `tests/CMakeLists.txt`, so a new file would not be
+  compiled or run, and a module without a test file still gets nothing proposed. Every other path in another
+  role's scope is still the person's to type.
   The person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
   can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
   since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
