@@ -306,8 +306,10 @@ def test_a_connection_a_tool_refused_is_not_continued_but_goes_to_a_person_right
 
 def test_a_turn_that_said_done_before_the_error_row_still_counts_as_finished(tmp_path):
     """It handed the work over and only then did a row fail: failing that turn would send a second agent to a
-    worktree where the work is already committed, with nothing to do but report it again."""
-    _, info = _cut_by_error(tmp_path, nudges=sessions.NUDGES, error=NETWORK, reply=DELIVERED)
+    worktree where the work is already committed, with nothing to do but report it again. Nor is it carried on:
+    the row after its DONE: is no reason to tell it to go on."""
+    gw, info = _cut_by_error(tmp_path, nudges=0, error=NETWORK, reply=DELIVERED)
+    assert info.nudges == 0 and "你上一轮被中断了" not in str(gw.msgs[info.slot][-1].get("content") or "")
     f = sessions.agent_fields(info)
     assert f["done"] and f["outcome"] == "completed" and f["error"] is None
     assert mod("team").parse_done(f["result"]) == "区间解析的用例写完了"

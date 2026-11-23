@@ -506,6 +506,7 @@ class SessionManager:
             return
         last = after[-1] if after else None
         if (not busy and last is not None and last.get("role") == "error" and (calls or replies) and info.nudges < NUDGES
+                and not delivered(replies)
                 and TRANSIENT.search(f"{last.get('content') or ''} {(last.get('meta') or {}).get('code') or ''}")):
             await self._nudge(info, "模型后端临时出错")  # mid-way: the first-turn refusal below sends the task again
             return

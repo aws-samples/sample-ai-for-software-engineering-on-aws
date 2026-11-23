@@ -2559,6 +2559,13 @@ class TeamRun:
 
     def _fail_lane(self, key: str, why: str, *, keep_merged: bool = False) -> None:
         lane, now = self.lane(key), self.d.now()
+        first = lane.get("first") or {}
+        if first.get("status") == "sent_back":
+            # a round after a send-back failed (an error, a lost agent): tests first gives up on it as on a round with
+            # no change, else the developers wait for it with the run still going; 重试 sends it back (failed only)
+            first["status"] = "failed"
+            self._fail_first(key, why)
+            return
         why = " ".join(str(why).split())[:200]
         if lane["attempts"]:
             att = lane["attempts"][-1]
