@@ -702,6 +702,55 @@ Alternatives considered: the agents calling the servers themselves (the open tru
 `mcp/bench/README.md`, for after this); keeping tests first in `direct` mode (no temporary commit, but one check
 outside the servers); a `git worktree` as the server's work tree (its `.git` lies outside the mounted folder).
 
+### D18. The app reports how big each commit is; the refactor commits a move and a change separately
+
+In `r11170658` (D17) the fix commits had 1 to 49 changed lines, but the refactor's first commit, `c6579f9`, had 796:
+448 moved and 348 not, and `754eaaa` had 156: 73 moved and 83 not. The reviewer got `git diff base HEAD` as plain
+text and had to find the 348 lines that really changed among the 796.
+
+Decided on 2026-11-23:
+
+- **The prompts** (`app/team/team-vstatd.json`). The architect writes each step of `refactor-plan.md` as two commits:
+  a move (code moved, the new function's signature and its call added, its body unchanged), then a change, and names
+  the findings the change fixes. The refactor developer commits them in that order, `[dev-refactor] F-031 搬移：…`
+  citing only the work item, then `[dev-refactor] F-031、F-023 修改：…` citing every finding it fixes: each of
+  F-022 to F-026 has to be cited by some change commit, or `trace` fails (D13). The fix developer makes one commit
+  per finding, an inline suppression for a justification included. The reviewer also gets the table below and reads
+  commit by commit (`git show <sha>`): a move only for whether its content stayed the same, the changes and fixes
+  closely. TR §7.2 and the task template are unchanged.
+- **The figures** (`app/backend/team/commits.py`). For each non-merge commit of `base..HEAD` on the run branch: its
+  role and findings (from the `[role] F-nnn …` its subject starts with), files, lines (added + removed), moved and
+  not moved. The app's own commits are listed apart and not counted: `[run] …` (gate decisions, merges) and any
+  subject with `（app 代提交）`, which also starts with a role's tag and so is recognised first. Each run is measured
+  once into `results/commit-sizes.json` with the HEAD it was taken at, and again when HEAD moves: before a
+  reviewer's round, in the tick that ends the run, and before the scorecard is read. An imported run has none.
+- **Where they show.** The reviewer's task (a table, oldest first), the scorecard (each run's not-moved lines per
+  commit, the most and the median, and which commit was the biggest: measured figures only, D8) and the sign-off
+  card (every commit, most not-moved lines first).
+
+How moved lines are counted, fixed so that the same git gives the same numbers:
+
+```
+git -c color.diff.oldMoved=blue -c color.diff.newMoved=yellow -c color.diff.oldMovedAlternative=blue \
+    -c color.diff.newMovedAlternative=yellow show --format= --color=always --color-moved=zebra \
+    --color-moved-ws=allow-indentation-change <sha>
+```
+
+Each `+` or `-` line is counted by the colour it starts with: blue or yellow is moved, red or green is not. The app
+also sets those two colours and the bold of the headers, so no colour setting in a repository changes the count.
+git marks a block as moved only when it has at least 20 letters or digits, so a shorter move counts as not moved:
+the not-moved figure errs high, never low. Read only on the `r11170658` work tree, this gives `c6579f9`
+796 / 448 / 348 and `754eaaa` 156 / 73 / 83.
+
+Why reported only: nothing has measured yet what size a reviewer can read well, so no check fails on it, nothing is
+sent back, and the merge is unchanged. No limit goes into `checks/limits.json` for now either: every value there
+cites its source in the knowledge, and none states one. Once rehearsals have produced figures, TR or CC1-PN can
+state a limit and a check can cite it.
+
+Alternatives considered: a size limit that fails a commit (no source for the number); the reviewer computing the
+moves itself (each review would do it differently); counting moves with a diff of our own (git's is already there
+and its minimum block is documented).
+
 ## Implementation plan
 
 Each step ends with its verification; a step is done when that verification passes. Steps 1 to 11 run without the
