@@ -1,7 +1,10 @@
 """What a reply shows of this Mac and of the people on it, decided when it is sent (nothing recorded changes).
 
 - **The home folder** is always written ``~``: every string of every JSON reply and of a downloaded trail
-  (``/Users/<name>/workplace/…`` → ``~/workplace/…``).
+  (``/Users/<name>/workplace/…`` → ``~/workplace/…``). The one exception is :data:`AS_WRITTEN`: the lines 设置
+  gives to paste into an MCP server's own TOML, which that server reads without expanding ``~``
+  (settings.py release_inputs). In presentation mode the user's name is still taken out of them, by the rule
+  below — so a line shown in a demo is not one to paste.
 - **Presentation mode** (``?present=zh|en``, set by the board's 演示模式 / Presentation mode switch): the people's
   names are their role, 负责人 or Release owner: the signer, who registered a finding, who decided at a gate or the
   console, the audit trail's 谁 column, a name inside a text, and this Mac's user name; ``user@host (tty)`` and the
@@ -27,6 +30,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 OWNER = {"zh": "负责人", "en": "Release owner"}
+# the keys whose strings keep the home folder as it is (a path another program reads, not a path a person reads)
+AS_WRITTEN = ("paste_lines",)
 PRESENT: contextvars.ContextVar[str] = contextvars.ContextVar("vstatd_present", default="")
 # Words a record's "by" holds that are no person's name
 _NOT_NAMES = {"负责人", "release", "owner", "bench", "tools", "app", "台架", "操作台", "kiro", "crew", "看板", "vstatd-team",
@@ -123,8 +128,8 @@ class View:
             return False
         return bool(re.search(r"[A-Za-z] $", before) and re.match(r" [A-Za-z]", s[m.end():]))
 
-    def text(self, s: str) -> str:
-        for h in self.homes:
+    def text(self, s: str, *, home: bool = True) -> str:
+        for h in self.homes if home else ():
             if h in s:
                 # a command shows it quoted when the path has a space ('/Users/x/a b'): ~/'a b' still expands
                 s = re.sub(rf"'{re.escape(h)}/", "~/'", s)
@@ -135,14 +140,16 @@ class View:
             s = self._host.sub("this-mac", s)
         return s
 
-    def __call__(self, data: Any) -> Any:
-        """A copy of *data* with every string (keys too) shown this way; *data* is not changed."""
+    def __call__(self, data: Any, *, home: bool = True) -> Any:
+        """A copy of *data* with every string (keys too) shown this way; *data* is not changed. *home*: False under
+        an AS_WRITTEN key, where the home folder stays as it is."""
         if isinstance(data, str):
-            return self.text(data)
+            return self.text(data, home=home)
         if isinstance(data, dict):
-            return {(self.text(k) if isinstance(k, str) else k): self(v) for k, v in data.items()}
+            return {(self.text(k) if isinstance(k, str) else k): self(v, home=home and k not in AS_WRITTEN)
+                    for k, v in data.items()}
         if isinstance(data, (list, tuple)):
-            return [self(v) for v in data]
+            return [self(v, home=home) for v in data]
         return data
 
 

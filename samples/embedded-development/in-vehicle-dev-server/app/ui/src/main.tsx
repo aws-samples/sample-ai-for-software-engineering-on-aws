@@ -53,6 +53,7 @@ import { AppBar, APP_CSS } from './AppBar'
 import { KIT_CSS } from './kit'
 import { parseView, searchOf, type BoardEntry, type View } from './nav'
 import { ScorecardView } from './scorecard/ScorecardView'
+import { SettingsView } from './settings/SettingsView'
 import { ItemView } from './item/ItemView'
 import { t as tr } from './i18n'
 import { assignmentText } from './i18n/events'
@@ -657,6 +658,7 @@ export default function VstatdTeamApp({ pollMs }: { pollMs?: number } = {}) {
       <style>{APP_CSS}</style>
       <AppBar view={view.kind} projection={projection} onView={(k) => go({ kind: k })} onProjection={() => onProjection(!projection)} needs={view.kind === 'board' ? needs : 0} />
       {view.kind === 'score' ? <ScorecardView key={n} onDetail={onDetail} />
+        : view.kind === 'settings' ? <SettingsView key={n} />
         : view.kind === 'item' ? <ItemView key={n} run={view.run} onBoard={(e) => go({ kind: 'board', ...e })} />
         : <TeamPage key={n} pollMs={pollMs} entry={entryOf(view)} returning={returning} onPick={onPick} onDetail={onDetail} projection={projection} onProjection={onProjection} onNeeds={setNeeds} />}
     </div>

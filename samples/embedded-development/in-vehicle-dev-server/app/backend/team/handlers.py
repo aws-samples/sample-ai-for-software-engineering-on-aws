@@ -104,6 +104,12 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
     async def ready_doctor(request: Any) -> Any:
         return kit.json(await svc.readiness(doctor=True))
 
+    async def settings(request: Any) -> Any:
+        return kit.json(await svc.settings())
+
+    async def save_settings(request: Any) -> Any:
+        return kit.json(await svc.save_settings(await kit.body(request)))
+
     async def bench_decide(request: Any) -> Any:
         body = await kit.body(request)
         return kit.json(await svc.bench_decide(body.get("id"), body.get("verdict"), body.get("digest"), body.get("reason")))
@@ -255,6 +261,8 @@ def build_routes(svc: Any, AppRoute: Any, *, web: Any = None, is_owner: Any = No
         AppRoute("GET", "/scorecard", kit.guarded(score)),
         AppRoute("GET", "/readiness", kit.guarded(ready)),
         AppRoute("POST", "/readiness/doctor", kit.guarded(ready_doctor)),
+        AppRoute("GET", "/settings", kit.guarded(settings)),
+        AppRoute("POST", "/settings", kit.guarded(save_settings)),
         AppRoute("POST", "/bench/decide", kit.guarded(bench_decide)),
         AppRoute("GET", "/knowledge", kit.guarded(knowledge)),
         AppRoute("GET", "/knowledge/file", kit.guarded(knowledge_file)),

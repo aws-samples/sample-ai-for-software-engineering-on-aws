@@ -401,7 +401,8 @@ on 2026-11-17 (run `r11170658`, at the end of this section). The release check a
 independent rerun went through the build server afterwards (#42 and #45, merged on main); that part has run on
 stand-in servers only, never on a real server or a real run.
 
-**Two modes, one switch.** The team file's `"connectors"` picks one, `"direct"` by default:
+**Two modes, one switch.** The team file's `"connectors"` picks one, `"direct"` by default, and 设置
+(`GET` / `POST /settings`, `backend/team/settings.py`) overrides it without an edit of the team file or a reinstall:
 
 - `direct` is what D7, D9 and D10 describe: the app runs the checks in its own containers and calls `bench/cc1.sh`.
 - `servers` makes the same steps tool calls of the [`build`](../mcp/build/README.md) and
@@ -411,6 +412,26 @@ stand-in servers only, never on a real server or a real run.
   `--config` and `--role developer`; the app reads the work tree, the triage file, the state folders and the bench
   timeouts from those configuration files. The same command lines with `sudo -n -u buildsrv` and `-u benchsrv` are
   the separate-user set-up. Set-up steps are in `app/README.md` (Servers mode).
+
+**设置 holds the app's own settings, never a server's.** `settings.json` in the app's data directory carries the
+mode, each server's `--config` path, the direct-mode baseline, the Docker the direct-mode checks run
+(`check_runner.docker`'s first word and a `-H <host>`) and `board_decides`. Every default is read from the team file,
+so an install with no settings file behaves exactly as this section describes; a save is validated first and written
+in one step, and both routes are the dashboard owner's alone (`httpkit.Kit.deny`). That guard covers the routes
+only: an agent's shell runs as the same user and can edit `settings.json` directly (turn `board_decides` on, swap
+`docker.runner`), as it can the bench state
+([D2](#d2-kiro-crew-runs-on-the-users-own-machine-agents-have-a-shell-sessions-auto-approve)); the boundary against
+that is running Kiro Crew as another user or in a container. The two servers' configuration
+files stay the servers': the app keeps their paths, reads them, and writes neither. In servers mode 设置 and
+`GET /readiness` both report whether the build server's `[paths]` has `bench_results`, `bench_runs` and
+`bench_baseline` — the inputs `run_check release` needs, all three or none in `mcp/build/config.example.toml` — and,
+when they are missing, 设置 gives the three lines to paste, derived from the bench server's own `state` and
+`baseline`. A person pastes them in the server's own file; the app cannot, and the server would refuse a file it does
+not own (`check_trusted()`). Those lines spell the home folder out rather than `~` — the one exception to `display.py`
+— because that server expands no `~`. The baseline is the one path the checks' container sees (bind-mounted
+read-only), so it is kept below `${sample}/`, `~/workplace/vstatd-team/` or the app's data directory, resolved with
+`realpath`, never the home folder and with no dot folder below that root. A run in progress keeps who approves its
+bench requests: `POST /bench/decide` reads that run's own team, and a restart does not rewrite it from 设置.
 
 The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
 and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A
@@ -542,9 +563,11 @@ as their own users the board could not approve anyway. It approves by writing th
 own user and to be writable by no other user (`check_trusted()`). If the app's user could write it, so could the
 agents, who run as the same user. In the trial the buttons would still work, so they are turned off by design and not
 by permissions. `POST /bench/decide` answers 409 (`decide_off`) in this mode. For a trial where a person presents
-from the board, `servers.board_decides: true` in the team file turns the buttons on again, as in direct mode: it
+from the board, `servers.board_decides: true` in the team file — or `board_decides` on 设置, which overrides it —
+turns the buttons on again for the next run (a run in progress keeps its own), as in direct mode: it
 takes no protection away while the servers run as the current user, and does nothing once they run as their own
-users (the board cannot write the bench state then). Added on 2026-11-17 at the user's request.
+users (the board cannot write the bench state then). Added on 2026-11-17 at the user's request. It is the dashboard
+owner's switch either way: 设置 refuses a request that is not theirs, as every route of this app but `/health` does.
 
 **Scorecard.** "Tool calls by permission class" (D8) comes from both servers' `audit.jsonl`: the lines each of the
 run's sessions wrote (`servers.jsonl` keeps the file's size when the session started and ended). Each call

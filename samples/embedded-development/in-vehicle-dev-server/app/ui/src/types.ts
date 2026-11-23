@@ -139,7 +139,7 @@ export type PendingRequest = {
 }
 
 export type ReadinessItem = {
-  key: string // knowledge | image | doctor | target | baseline | console
+  key: string // knowledge | image | doctor | target | baseline | console | release_inputs
   label: string
   ok: boolean | null
   detail: string
@@ -147,6 +147,35 @@ export type ReadinessItem = {
   needed: 'start' | 'checks' | 'bench'
   age_s: number | null // how old the cached probe is
   running: boolean // its probe is running now
+}
+
+/** `GET /settings` / `POST /settings`: the app's own settings (设置), the dashboard owner's to edit
+ * (backend/team/settings.py). Without a settings file these are the shipped team file's values. */
+export type Settings = {
+  mode: 'direct' | 'servers' // the team file's connectors (D17)
+  server_configs: { build: string; bench: string } // each MCP server's --config file
+  baseline: string // the baseline directory direct mode uses (servers mode reads the bench server's own)
+  docker: { runner: string; host: string } // direct mode's checks: '' is this machine's docker and the local daemon
+  board_decides: boolean // security-relevant: 批准 / 拒绝 on the board in servers mode too (D17)
+}
+
+/** What the build server's own configuration says about the three `bench_*` paths its release check needs
+ * (mcp/build/config.example.toml: all three or none). Read only: the app never writes a server's configuration. */
+export type ReleaseInputs = {
+  ok: boolean | null // null: the configuration could not be read at all
+  detail: string
+  missing: string[] // the bench_* keys that are not set
+  // the TOML lines to paste into the build server's [paths], derived from the bench server's; the home folder is
+  // written out in them, because that server takes absolute paths only and expands no ~ (display.py AS_WRITTEN)
+  paste_lines: string[]
+  config: string // the build server's configuration file
+}
+
+export type SettingsPage = {
+  ok?: boolean // a save went through
+  settings: Settings
+  defaults: Settings // what the team file says, for 恢复默认
+  release: ReleaseInputs | null // servers mode only
 }
 
 export type BenchRequest = { id: string; action: string; digest: string; detail: string; requested_at: string; requested_by: string; expired: boolean }
