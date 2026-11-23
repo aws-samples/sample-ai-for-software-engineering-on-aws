@@ -451,6 +451,13 @@ def _ms(rows: list[dict[str, Any]]) -> int | None:
     return sum(ms) if ms and all(isinstance(m, int) for m in ms) else None
 
 
+def _held_reasons(rows: Any) -> list[str]:
+    """Every reason of the held checks, oldest first. The hold's ``why`` and its params carry only the first one of
+    each, and a check names what a person must act on in any of them (checks/lib/check_static.py writes the new
+    findings before the ones the batch removed), so the board needs the whole list."""
+    return [str(x)[:300] for r in rows for x in (r.get("reasons") or [r.get("summary") or ""]) if str(x).strip()][:40]
+
+
 def title_of(requirement: str, template: Path) -> str:
     """The first line of the requirement, else the template README's title."""
     for line in (requirement or "").splitlines():
@@ -1651,7 +1658,7 @@ class TeamRun:
                   "reason": (r["reasons"] or [r["summary"]])[0]} for r in rows]
         reason = messages.clean({"items": items}) or {}
         t["held"] = {"checks": [r["name"] for r in rows], "why": self.msg("checks.held", reason)[:300],
-                     "code": "checks.held", "params": reason}
+                     "code": "checks.held", "params": reason, "reasons": _held_reasons(rows)}
         self.say("failed", "failed.checks", {"why": {"code": "checks.held", "params": reason}},
                  data={"checks": t["held"]["checks"]})
         return True
@@ -1903,7 +1910,8 @@ class TeamRun:
             reason = messages.clean({"items": [{"check": r["name"], "what": what, "reason": (r["reasons"] or [r["summary"]])[0]}
                                                for r, what in held]}) or {}
             why = self.msg("checks.held", reason)[:300]
-            t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason}
+            t["held"] = {"checks": [r["name"] for r, _ in held], "why": why, "code": "checks.held", "params": reason,
+                         "reasons": _held_reasons(r for r, _ in held)}
             server = wall is None and self._servers_round_held()
             self.s["servers_held"] = "checks" if server else None  # the servers' problem: 重试 runs the round again
             reset = self._reset_command() if server else None
@@ -2228,6 +2236,16 @@ class TeamRun:
         self.s["triage_listed"] = triage_mod.listed(data, rows)
         self.say("plan", "plan.triage", {"r_role": key, "n": len(out), "listed": len(self.s["triage_listed"])},
                  role=key, data={"questions": len(out)})
+        # the gate warns about what a refactored function leaves stranded, while a person can still act on it
+        work_item = str(self.s.get("requirement") or self.team.get("work_item") or "")  # this run's, if edited
+        later = triage_mod.later_in_refactor(data, rows, work_item)
+        if later:  # only the backlog, before a run, can change these
+            self.say("plan", "plan.triage_refactor", {"items": later, "backlog": triage_mod.BACKLOG_FILE}, role=key,
+                     data={"later_in_refactor": [x["id"] for x in later]})
+        deferred = triage_mod.defer_in_refactor(data, rows, work_item)
+        if deferred:  # these the person can change here, at this gate, on each finding's own question
+            self.say("plan", "plan.triage_refactor_defer", {"items": deferred}, role=key,
+                     data={"defer_in_refactor": [x["id"] for x in deferred]})
 
     async def _approve_triage(self, key: str, picked: list[dict[str, Any]], by: str) -> list[dict[str, Any]]:
         """The person's answers at the triage gate: those that take a proposal as it is (A) leave it; the others

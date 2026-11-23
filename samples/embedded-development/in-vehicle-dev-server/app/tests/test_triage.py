@@ -217,3 +217,123 @@ def test_the_triage_role_that_runs_out_of_rounds_on_a_malformed_file_fails(tmp_p
         assert "分诊文件 docs/aidlc/triage.json 不合格式" in run.events[-2]["text"] + run.events[-1]["text"]
 
     asyncio.run(go())
+
+
+# The gate's warning about a refactored function is tested on a backlog of its own, not on the scenario's: the
+# labels there are the scenario's data to change, and these cases must hold whatever they are.
+FIXTURE_ROWS = {
+    "F-101": {"tool": "cppcheck", "check": "shadowVariable", "location": "src/service.cpp › Service::run",
+              "message": "Local variable 'status' shadows outer variable", "label": "later"},
+    "F-102": {"tool": "clang-tidy", "check": "bugprone-empty-catch", "location": "src/service.cpp › Service::run",
+              "message": "empty catch statements hide issues", "label": "fix"},
+    "F-103": {"tool": "clang-tidy", "check": "missingOverride", "location": "src/service.cpp › Service::stop",
+              "message": "not marked with an 'override' specifier", "label": "later"},
+    "F-104": {"tool": "clang-tidy", "check": "performance-inefficient-string-concatenation",
+              "location": "src/log_writer.cpp › LogWriter::format", "message": "unnecessary temporaries",
+              "label": "later"},
+}
+REFACTOR_ITEM = "把信号表的处理从 750 行的 Service::run() 里拆出去，行为不变"
+
+
+def fixture_triage(**decisions: str) -> dict:
+    """A triage over FIXTURE_ROWS: the refactor added under TR §4.4, plus a decision for each fix-labelled row."""
+    findings = [{"id": i, "decision": decisions.get(i, "fix"), "evidence": "static-analysis", "behaviour": False}
+                for i, r in FIXTURE_ROWS.items() if r["label"] == "fix"]
+    findings.append({"id": "F-105", "decision": "fix", "evidence": "build", "behaviour": False,
+                     "added": {"found_by": "工作项：拆分 Service::run()", "tool": "work item",
+                               "location": "src/service.cpp › Service::run"}})
+    return {"findings": findings}
+
+
+def test_the_refactor_scope_is_the_functions_named_by_the_tr_44_entry_and_the_work_items_words():
+    assert triage.refactor_scope(fixture_triage()) == ["Service::run"]
+    assert triage.refactor_scope({}, REFACTOR_ITEM) == ["Service::run"]
+    # a check's own addition is not the work item's, and its location names no function anyway
+    by_check = {"findings": [{"id": "F-106", "decision": "fix",
+                              "added": {"found_by": "checks/build.sh", "location": "src/main.cpp:12"}}]}
+    assert triage.refactor_scope(by_check, "") == []
+    # a work item that names a file but no function gives no scope: file paths are not scraped for scope
+    assert triage.refactor_scope({}, "不要改 src/log_writer.cpp 的行为") == []
+    assert triage.in_refactor("src/service.cpp › Service::run", ["Service::run"]) is True
+    # the same file, an untouched function: not at risk
+    assert triage.in_refactor("src/service.cpp › Service::stop", ["Service::run"]) is False
+    assert triage.in_refactor("src/service.cpp:412", ["Service::run"]) is False
+
+
+def test_the_gate_names_the_later_findings_in_a_function_this_batch_refactors():
+    out = triage.later_in_refactor(fixture_triage(), FIXTURE_ROWS, REFACTOR_ITEM)
+    assert out == [{"id": "F-101", "label": "later", "where": "src/service.cpp › Service::run"}]
+    # F-103 is later in the same file but another function; F-104 is later in a file this batch does not touch
+    assert {"F-103", "F-104"} & {x["id"] for x in out} == set()
+    # no function named anywhere: nothing is reported as sitting in the refactor
+    assert triage.later_in_refactor({"findings": []}, FIXTURE_ROWS, "行为不变，内存不超限额") == []
+
+
+def test_the_gate_also_names_a_defer_the_triage_itself_proposes_in_that_function():
+    """check_static.py reads the triage's decision before the backlog's label, so a defer there is the same dead
+    end — but this one the person can change at the gate, on the finding's own question."""
+    t = fixture_triage(**{"F-102": "defer"})
+    assert triage.defer_in_refactor(t, FIXTURE_ROWS, REFACTOR_ITEM) == [
+        {"id": "F-102", "where": "src/service.cpp › Service::run"}]
+    # fixed, not deferred: nothing to warn about; and a later finding is the other warning's, not this one
+    assert triage.defer_in_refactor(fixture_triage(), FIXTURE_ROWS, REFACTOR_ITEM) == []
+    assert "F-101" not in {x["id"] for x in triage.defer_in_refactor(t, FIXTURE_ROWS, REFACTOR_ITEM)}
+
+
+def test_both_warnings_say_where_the_way_out_is():
+    render = mod("messages").render
+    later = triage.later_in_refactor(fixture_triage(), FIXTURE_ROWS, REFACTOR_ITEM)
+    text = render("plan.triage_refactor", {"items": later, "backlog": triage.BACKLOG_FILE})
+    assert "F-101（标 later，src/service.cpp › Service::run）" in text
+    assert triage.BACKLOG_FILE in text and "运行开始之前" in text
+    deferred = triage.defer_in_refactor(fixture_triage(**{"F-102": "defer"}), FIXTURE_ROWS, REFACTOR_ITEM)
+    text = render("plan.triage_refactor_defer", {"items": deferred})
+    assert "F-102（src/service.cpp › Service::run）" in text
+    assert "这个关卡" in text and triage.BACKLOG_FILE not in text  # this one is fixed here, not in the backlog
+
+
+def test_a_held_check_keeps_every_reason_not_only_the_first():
+    """checks/lib/check_static.py writes the new findings before the ones the batch removed, so the sentence the
+    board needs is not always reasons[0]."""
+    rows = [{"name": "static", "verdict": "FAIL", "summary": "static FAIL",
+             "reasons": ["new finding, not in the backlog: cppcheck nullPointer src/service.cpp:88 (Service::run): x",
+                         "F-101: no longer reported, but triaged as later; a change outside the batch removed it"]},
+            {"name": "size", "verdict": "BLOCKED", "summary": "no build to measure", "reasons": []}]
+    out = team_mod._held_reasons(rows)
+    assert out[0].startswith("new finding") and "F-101: no longer reported" in out[1]
+    assert out[2] == "no build to measure"  # a row with no reasons falls back to its summary
+
+
+def test_only_the_work_items_entry_widens_the_scope_not_a_check_found_finding_the_triage_added():
+    """check-examples/run.py and build-server-run/run.py write found_by as ``checks/unit.sh (ThreadSanitizer)``: a
+    TR §4.4 entry like that is a finding a check reported, not the refactor, so its function is not in the scope."""
+    t = fixture_triage()
+    t["findings"].append({"id": "F-106", "decision": "fix", "evidence": "unit-test", "behaviour": False,
+                          "added": {"found_by": "checks/unit.sh (ThreadSanitizer)", "tool": "ThreadSanitizer",
+                                    "location": "src/supervisor.cpp › Supervisor::check"}})
+    rows = {**FIXTURE_ROWS, "F-107": {"tool": "cppcheck", "check": "knownConditionTrueFalse",
+                                      "location": "src/supervisor.cpp › Supervisor::check", "message": "x",
+                                      "label": "later"}}
+    assert triage.refactor_scope(t) == ["Service::run"]
+    assert [x["id"] for x in triage.later_in_refactor(t, rows)] == ["F-101"]
+
+
+def test_the_gate_reads_this_runs_requirement_not_the_team_files_default_work_item(tmp_path):
+    """A run started with an edited requirement is judged by what it was started with."""
+    run, _ = mini(tmp_path)
+    knowledge = tmp_path / "knowledge"
+    knowledge.mkdir()
+    lines = [f"| {i} | {r['tool']} | {r['check']} | {r['location']} | {r['message']} | {r['label']} |"
+             for i, r in FIXTURE_ROWS.items()]
+    (knowledge / triage.BACKLOG_FILE).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    run.roles["triage"]["triage"]["knowledge"] = str(knowledge)
+    wt = tmp_path / "run-wt"
+    (wt / "docs" / "aidlc").mkdir(parents=True)
+    t = {"findings": [f for f in fixture_triage()["findings"] if "added" not in f]}  # no TR §4.4 entry: words only
+    (wt / "docs" / "aidlc" / "triage.json").write_text(json.dumps(t), encoding="utf-8")
+    run.s["run_wt"] = str(wt)
+    run.team["work_item"] = "把格式化从 LogWriter::format() 里拆出去"
+    run.s["requirement"] = REFACTOR_ITEM
+    run._triage_questions("triage")
+    warned = [e["data"]["later_in_refactor"] for e in run.events if (e.get("data") or {}).get("later_in_refactor")]
+    assert warned == [["F-101"]]

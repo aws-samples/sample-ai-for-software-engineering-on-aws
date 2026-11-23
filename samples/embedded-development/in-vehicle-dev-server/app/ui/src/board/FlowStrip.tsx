@@ -11,7 +11,7 @@ import { Cmd, DecideRequest, Digest } from './Bench'
 import { BASE, fmtAgo } from './format'
 import { WHO_LABEL, flowOf, type StepState } from './flow'
 import { errorText } from './useBoard'
-import { SuggestAgree, type Confirm } from './Finding'
+import { goneFinding, SuggestAgree, type Confirm } from './Finding'
 import { ReviewRedoBox } from './ReviewRedo'
 import { t as tr } from '../i18n'
 
@@ -21,6 +21,7 @@ const STATE_LABEL: Record<StepState, string> = { todo: tr('board.FlowStrip.1'), 
 /** During a run: the steps in one row, and 现在：… */
 export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail; onFinding?: () => void; onAgree?: Confirm; onRedo?: (b: { note: string; by: string }) => Promise<void> }) {
   const f = flowOf(run)
+  const gone = goneFinding(run.tests.held) // nothing a person fills in here can clear it: the panel says so instead
   return (
     <section className="kt-flow" aria-label={tr('board.FlowStrip.6')} data-testid="kt-flow">
       <ol className="kt-flow-row">
@@ -44,11 +45,27 @@ export function FlowStrip({ run, onFinding, onAgree, onRedo }: { run: RunDetail;
               <ul>{run.tests.held.commands.map((c) => <li key={c}><code>{c}</code></li>)}</ul>
             </div>
           )}
-          {onAgree && <SuggestAgree run={run} onConfirm={onAgree} />}
-          <span className="kt-dim">{tr('board.FlowStrip.9')}</span>
-          <span className="kt-start-actions">
-            <button type="button" className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`} onClick={onFinding}>{run.tests.held.suggest?.length ? tr('board.FlowStrip.10') : tr('board.FlowStrip.11')}</button>
-          </span>
+          {gone ? (
+            <p className="kt-warn" data-testid="kt-flow-held-gone">
+              {gone.commit ? tr('board.FlowStrip.45', { p0: gone.id, p1: gone.commit })
+                : gone.decision === 'defer' ? tr('board.FlowStrip.44', { p0: gone.id }) // fix in the backlog already
+                  : tr('board.FlowStrip.43', { p0: gone.id, p1: gone.decision })}
+            </p>
+          ) : (
+            <>
+              {onAgree && <SuggestAgree run={run} onConfirm={onAgree} />}
+              <span className="kt-dim">{tr('board.FlowStrip.9')}</span>
+              <span className="kt-start-actions">
+                <button
+                  type="button"
+                  className={`kt-btn${run.tests.held.suggest?.length ? '' : ' is-solid is-primary'}`}
+                  onClick={onFinding}
+                >
+                  {run.tests.held.suggest?.length ? tr('board.FlowStrip.10') : tr('board.FlowStrip.11')}
+                </button>
+              </span>
+            </>
+          )}
         </div>
       ) : onRedo && run.review_redo ? (
         <ReviewRedoBox key={run.id} run={run} onConfirm={onRedo} />

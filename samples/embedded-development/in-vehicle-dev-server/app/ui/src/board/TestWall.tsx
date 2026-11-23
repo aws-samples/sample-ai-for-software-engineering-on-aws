@@ -11,6 +11,7 @@
  */
 import { useState } from 'react'
 import type { Lane, TestCase, TestWall as Wall } from '../types'
+import { goneFinding } from './Finding'
 import { acNumber, caseGroup, caseMeta, CASE_GROUPS, fmtAgo } from './format'
 import { useServerNow } from './hooks'
 import { RoleIcon } from './RoleIcon'
@@ -92,7 +93,7 @@ export function TestWall({ tests, roles, focus, onRole, flips, onFinding }: Test
       {tests.held && (
         <div className="kt-bench-held" role="status" data-testid="kt-wall-held">
           <b>{tr('board.TestWall.11')}</b>{tests.held.why}
-          {onFinding && (
+          {onFinding && !goneFinding(tests.held) && (
             <span><button type="button" className="kt-btn" onClick={onFinding}>{tr('board.TestWall.12')}</button></span>
           )}
         </div>
