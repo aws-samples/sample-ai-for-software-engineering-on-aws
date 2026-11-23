@@ -733,3 +733,67 @@ def test_with_the_switch_the_board_decides_a_request_made_outside_a_run_while_th
          "expires": time.time() + 200, "timeout_s": 300, "requested_by": "bench tools"}), encoding="utf-8")
     res = asyncio.run(svc.bench_decide(rid, "approve", "e5b2a7", ""))
     assert res["decision"]["verdict"] == "approved" and (state / "decisions" / f"{rid}.json").exists()
+
+
+# --- from the review of #57: a run keeps who approves its bench requests ---------------------------------------- #
+
+def _service_for(rig, tmp_path, name):
+    """A Service whose team file is the rig's servers-mode team (console-only approval) and its data directory."""
+    service = mod("service")
+    team_file = tmp_path / f"team-{name}.json"
+    team_file.write_text(json.dumps({k: v for k, v in rig.run.team.items() if k != "skip_owners"}), encoding="utf-8")
+    data = tmp_path / f"svc-{name}"
+    data.mkdir()
+    (data / "sample.json").write_text(json.dumps({"sample": str(Path(team_mod.__file__).parents[3])}))
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(data))
+    return service.Service(ctx, manager=rig.mgr, work_root=tmp_path / f"work-{name}", tick_s=60, team_file=team_file)
+
+
+def test_a_run_in_progress_keeps_console_only_approval_whatever_is_saved_on_settings(tmp_path, monkeypatch):
+    """A servers-mode run that started with console-only approval: switching 设置 to direct mode, or turning
+    board_decides on, while it is in progress must not let 批准 on the board decide its pending request. Once the
+    run is over the saved settings are what counts."""
+    httpkit = mod("httpkit")
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    assert not rig.run.ended and servers.board_decides(rig.run.team) is False
+    before = {k: rig.run.s.get(k) for k in ("status", "ended_at")}
+    state, digest = Path(rig.state), "e5b2a7" + "0" * 58
+    (state / "requests").mkdir(parents=True, exist_ok=True)
+    (state / "decisions").mkdir(exist_ok=True)
+    for n, patch in enumerate(({"mode": "direct"}, {"board_decides": True})):
+        svc = _service_for(rig, tmp_path, f"s{n}")
+        svc.runs[rig.run.s["id"]] = rig.run
+        assert asyncio.run(svc.save_settings({"settings": patch}))["ok"] is True
+        team, _ = svc._default_team()
+        assert servers.board_decides(team) is True, patch  # the next run would be approved on the board
+        rid = f"20261118T21280{n}-deploy-6bb0"
+        (state / "requests" / f"{rid}.json").write_text(json.dumps(
+            {"id": rid, "action": "deploy", "digest": digest, "detail": "", "requested_at": "2026-11-18T13:28:00Z",
+             "expires": time.time() + 200, "timeout_s": 300, "requested_by": "vstatd-team r1116servers"}),
+            encoding="utf-8")
+        with pytest.raises(httpkit.AppError) as off:
+            asyncio.run(svc.bench_decide(rid, "approve", "e5b2a7", ""))
+        assert (off.value.code, off.value.status) == ("decide_off", 409), patch
+        assert not (state / "decisions" / f"{rid}.json").exists(), patch
+        rig.run.s.update(status="done", ended_at=time.time())  # the run is over: the saved settings decide
+        assert asyncio.run(svc.bench_decide(rid, "approve", "e5b2a7", ""))["decision"]["verdict"] == "approved"
+        rig.run.s.update(before)
+
+
+def test_a_restart_leaves_a_loaded_runs_approval_rules_as_the_run_started(tmp_path, monkeypatch):
+    """Service.start loads every run as it was saved: board_decides turned on in 设置 since does not reach a run that
+    started with console-only approval."""
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    svc = _service_for(rig, tmp_path, "restart")
+    assert asyncio.run(svc.save_settings({"settings": {"board_decides": True}}))["ok"] is True
+    rid = rig.run.s["id"]
+    svc._deps.store.write(rid, json.dumps(rig.run.s, ensure_ascii=False), [])
+
+    async def restart():
+        await svc.start()
+        await svc.stop()
+    asyncio.run(restart())
+    loaded = svc.runs[rid].team
+    assert loaded["servers"].get("board_decides", False) is False and servers.board_decides(loaded) is False
+    team, _ = svc._default_team()
+    assert servers.board_decides(team) is True  # the next run gets the setting

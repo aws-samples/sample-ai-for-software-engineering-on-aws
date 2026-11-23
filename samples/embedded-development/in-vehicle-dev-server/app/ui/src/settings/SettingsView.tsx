@@ -25,7 +25,8 @@ const SET_CSS = `
 .st-root section.kt-card > p.st-why { margin: 0 0 12px; color: var(--muted); font-size: .9em; }
 .st-field { display: grid; gap: 4px; margin-bottom: 14px; }
 .st-field:last-child { margin-bottom: 0; }
-.st-field > label { font-weight: 650; color: var(--text-strong); }
+.st-field > label, .st-label > label { font-weight: 650; color: var(--text-strong); }
+.st-label { display: flex; align-items: baseline; gap: 8px; }
 .st-field > small { color: var(--muted); }
 .st-field input[type="text"], .st-field select { font: inherit; font-size: .95em; padding: 6px 9px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--bg-elevated, var(--card)); color: var(--text); min-width: 0; }
@@ -48,11 +49,16 @@ const SET_CSS = `
  * `id` is the field's own, written out here (as `st-board-decides` is) and the same in every language: a label's
  * text is for a person to read, not an HTML id — the translations hold spaces and an apostrophe.
  */
-function PathField({ id, label, help, value, dflt, onChange }:
-  { id: string; label: string; help: string; value: string; dflt: string; onChange: (v: string) => void }) {
+function PathField({ id, label, help, value, dflt, onChange, guard = false }:
+  { id: string; label: string; help: string; value: string; dflt: string; onChange: (v: string) => void;
+    guard?: boolean }) {
   return (
     <div className="st-field">
-      <label htmlFor={id}>{label}</label>
+      {/* the mark sits beside the label, not in it: the label is the field's name */}
+      <div className="st-label">
+        <label htmlFor={id}>{label}</label>
+        {guard && <span className="st-guard" data-testid={`${id}-guard`}>{tr('settings.approve.guard')}</span>}
+      </div>
       <div className="st-row">
         <input id={id} type="text" value={value} spellCheck={false}
           onChange={(e) => onChange(e.target.value)} />
@@ -164,7 +170,7 @@ export function SettingsView() {
         <PathField id="st-baseline" label={tr('settings.direct.baseline')} help={tr('settings.direct.baseline.hint')}
           value={draft.baseline} dflt={d.baseline} onChange={(v) => set({ baseline: v })} />
         <PathField id="st-docker-runner" label={tr('settings.direct.runner')} help={tr('settings.direct.runner.hint')}
-          value={draft.docker.runner} dflt={d.docker.runner}
+          value={draft.docker.runner} dflt={d.docker.runner} guard
           onChange={(v) => set({ docker: { ...draft.docker, runner: v } })} />
         <PathField id="st-docker-host" label={tr('settings.direct.host')} help={tr('settings.direct.host.hint')}
           value={draft.docker.host} dflt={d.docker.host}

@@ -9,10 +9,12 @@ Without the file the app behaves exactly as the shipped team file says: every de
   baseline        the baseline directory the direct-mode bench uses (the team file's ``bench.baseline``); in servers
                   mode the bench server's own ``baseline`` is read from its configuration and this one is not used.
                   Security-relevant: the folder is bind-mounted ``:ro`` into the container the checks run in
-                  (checks.py), so it is kept inside the scenario folder or this user's home (see :func:`_abs`)
+                  (checks.py), so it is kept inside the scenario folder, ``~/workplace/vstatd-team`` or the app's
+                  data directory (see :func:`_baseline`)
   docker          the direct-mode checks' Docker: ``runner`` an executable that speaks Docker's command line ("": the
                   one found on this machine, constants.DOCKER_BIN), ``host`` a daemon as ``docker -H`` takes it
-                  ("": the local one)
+                  ("": the local one). Security-relevant: the runner is run with every check, and a ``tcp://`` host
+                  gets the checks and their mounts over the network unencrypted
   board_decides   who may approve a bench request: with it on, 批准 / 拒绝 are on the board in servers mode too
                   (D17). Security-relevant: it is the dashboard owner's switch, as this whole page is.
 
@@ -31,6 +33,9 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from . import paths as paths_mod
+from .httpkit import AppError
+
 MODES = ("direct", "servers")
 SERVERS = ("build", "bench")
 # mcp/build/config.example.toml: optional, all three or none, for `run_check release`
@@ -38,6 +43,7 @@ RELEASE_PATHS = ("bench_results", "bench_runs", "bench_baseline")
 DOCKER_SCHEMES = ("unix://", "tcp://", "ssh://", "npipe://", "fd://")
 MAX_PATH = 500  # a path longer than this is the page sending something wrong, not a setting
 SAMPLE = "${sample}"  # the scenario folder as the team file writes it; paths.py fills it in after apply()
+TEAM_DIR = "~/workplace/vstatd-team"  # the bench owner's own folder (bench.OWN_BASELINE is in it)
 # a NUL or a newline is the page sending something wrong: a newline inside a path would be read back as a second
 # line of the server's own TOML, and a NUL cannot be opened at all
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -70,17 +76,24 @@ def load(path: Path | str, team: dict[str, Any]) -> dict[str, Any]:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return defaults(team)
-    return check(data, team)[0]
+    return check(data, team, Path(path).parent)[0]
 
 
 def save(path: Path | str, settings: dict[str, Any]) -> None:
-    """*settings* into *path*, replaced in one step (a half-written file would be read as none)."""
+    """*settings* into *path*, replaced in one step (a half-written file would be read as none): on disk before the
+    rename, and no temporary file left behind when anything fails."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".settings.")
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(settings, fh, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(settings, fh, ensure_ascii=False, indent=2)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
 
 
 def _path(v: Any) -> str:
@@ -95,45 +108,110 @@ def _home() -> str:
     return os.path.realpath(os.path.expanduser("~"))
 
 
-def _inside(p: str, root: str) -> bool:
-    return bool(root) and (p == root or p.startswith(root.rstrip(os.sep) + os.sep))
+def _under(p: str, root: str) -> bool:
+    """*p* is below *root* (the root itself is not)."""
+    return bool(root) and p.startswith(root.rstrip(os.sep) + os.sep)
 
 
-def _abs(value: Any, key: str, probs: list[str], *, rooted: bool = False) -> str:
-    """The path as it was written (``~`` and ``${sample}`` kept: the modules that use it expand them), or "" with
-    what is wrong about it in *probs*. Checked on the expanded form, because that is what is opened.
-
-    *rooted*: the path must stay inside the scenario folder or this user's home, resolved with ``realpath`` so no
-    ``..`` and no symbolic link leads out. It is for the baseline, which is bind-mounted ``:ro`` into the container
-    the checks run in (checks.py docker_command): a text field there decides which folder of this machine the
-    checks see. The scenario folder is only known after paths.py fills ``${sample}`` in, so a path written that way
-    is taken as inside it (without ``..``) and the rest is resolved here."""
-    p = _path(value)
+def _text(p: str, key: str, probs: list[str]) -> bool:
+    """Whether *p* can be a path at all: not empty, not too long, no control character."""
     if not p:
         probs.append(f"「{FIELD[key]}」不能留空")
     elif len(p) > MAX_PATH:
         probs.append(f"「{FIELD[key]}」太长了（最多 {MAX_PATH} 个字符）")
     elif CONTROL.search(p):
         probs.append(_bad_chars(key))
-    elif rooted and p.startswith(SAMPLE + "/"):
-        if ".." in PurePosixPath(p).parts:
-            probs.append(f"「{FIELD[key]}」不能用 .. 跳出 {SAMPLE}")
-        else:
-            return p
-    elif not os.path.isabs(os.path.expanduser(p)):
+    else:
+        return True
+    return False
+
+
+def _abs(value: Any, key: str, probs: list[str]) -> str:
+    """The path as it was written (``~`` kept: the modules that use it expand it), or "" with what is wrong about it
+    in *probs*. Checked on the expanded form, because that is what is opened."""
+    p = _path(value)
+    if not _text(p, key, probs):
+        return ""
+    if not os.path.isabs(os.path.expanduser(p)):
         probs.append(f"「{FIELD[key]}」要写绝对路径，或以 ~ 开头")
-    elif rooted and not _inside(os.path.realpath(os.path.expanduser(p)), _home()):
-        probs.append(f"「{FIELD[key]}」要在 {SAMPLE} 或 ~ 下面（它会被只读挂进跑检查的容器）")
+        return ""
+    return p
+
+
+def _roots(data_dir: Path | str | None) -> list[str]:
+    """Where a baseline may be, resolved: the scenario folder (when it is known), the bench owner's folder, and the
+    app's data directory."""
+    out = [os.path.realpath(os.path.expanduser(TEAM_DIR))]
+    if data_dir:
+        out.append(os.path.realpath(data_dir))
+    try:
+        out.append(os.path.realpath(paths_mod.sample_dir(data_dir)))
+    except AppError:  # setup.sh has not run: a ${sample} path is refused below
+        pass
+    return out
+
+
+def _baseline(value: Any, probs: list[str], data_dir: Path | str | None) -> str:
+    """The baseline as it was written (``~`` and ``${sample}`` kept: paths.py and the checks expand them), or "".
+
+    It is bind-mounted ``:ro`` into the container the checks run in (checks.py docker_command), which runs the
+    agents' code with network access, so a text field here decides which folder of this machine that code reads.
+    It must resolve (``realpath``, after ``${sample}`` and ``~`` are filled in, so no ``..`` and no symbolic link
+    leads out) below one of :func:`_roots`, never to the home folder itself, and with no part below that root
+    starting with a dot (``.aws``, ``.ssh``). The data directory itself sits under ``~/.kiro``, so the dot rule is
+    for the part below the root."""
+    p = _path(value)
+    if not _text(p, "baseline", probs):
+        return ""
+    if p.startswith(SAMPLE + "/"):
+        try:
+            full = str(paths_mod.sample_dir(data_dir)) + p[len(SAMPLE):]
+        except AppError as exc:
+            probs.append(f"「{FIELD['baseline']}」写的是 {SAMPLE}/…，可是{exc}")
+            return ""
+    elif os.path.isabs(os.path.expanduser(p)):
+        full = os.path.expanduser(p)
+    else:
+        probs.append(f"「{FIELD['baseline']}」要写绝对路径，或以 ~ 或 {SAMPLE}/ 开头")
+        return ""
+    real = os.path.realpath(full)
+    root = next((r for r in _roots(data_dir) if _under(real, r)), None)
+    if ".." in PurePosixPath(full).parts:
+        probs.append(f"「{FIELD['baseline']}」不能用 .. 跳到别处")
+    elif root is None or real == _home():
+        probs.append(f"「{FIELD['baseline']}」要在 {SAMPLE}/…、{TEAM_DIR}/… 或 app 的数据目录下面"
+                     "（它会被只读挂进跑检查的容器）")
+    elif any(part.startswith(".") for part in PurePosixPath(os.path.relpath(real, root)).parts):
+        probs.append(f"「{FIELD['baseline']}」里不能有以 . 开头的一段（比如 .aws、.ssh）")
     else:
         return p
     return ""
 
 
-def check(data: Any, team: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def _runner(value: Any, probs: list[str]) -> str | None:
+    """The Docker command as it was written ("": the one found on this machine), or None with what is wrong in
+    *probs*. Security-relevant: it is run with every check, so it must be an executable file."""
+    runner = _path(value)
+    if not runner:
+        return ""
+    if not _text(runner, "runner", probs):
+        return None
+    full = os.path.expanduser(runner)
+    if not os.path.isabs(full):
+        probs.append(f"「{FIELD['runner']}」要写绝对路径（留空用本机找到的 docker）")
+    elif not (os.path.isfile(full) and os.access(full, os.X_OK)):
+        probs.append(f"「{FIELD['runner']}」不是一个能执行的文件：{runner}")
+    else:
+        return runner
+    return None
+
+
+def check(data: Any, team: dict[str, Any], data_dir: Path | str | None = None) -> tuple[dict[str, Any], list[str]]:
     """(the settings that hold, what is wrong with the rest). Keys this version does not know are dropped, and a
     field that does not hold up keeps *team*'s default: a saved file can never leave the app without settings. A
     field sent back exactly as the team file has it is that default and is not checked again (the team file may
-    write ``${sample}/…``, which paths.py fills in later)."""
+    write ``${sample}/…``, which paths.py fills in later). *data_dir*: the app's, where a baseline may be and where
+    ``sample.json`` says which the scenario folder is."""
     probs: list[str] = []
     out = defaults(team)
     if not isinstance(data, dict):
@@ -151,20 +229,14 @@ def check(data: Any, team: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
             if k in confs and _path(confs[k]) != out["server_configs"][k]:
                 out["server_configs"][k] = _abs(confs[k], k, probs) or out["server_configs"][k]
     if "baseline" in data and _path(data["baseline"]) != out["baseline"]:
-        out["baseline"] = _abs(data["baseline"], "baseline", probs, rooted=True) or out["baseline"]
+        out["baseline"] = _baseline(data["baseline"], probs, data_dir) or out["baseline"]
     docker = data.get("docker")
     if docker is not None and not isinstance(docker, dict):
         probs.append("Docker 的设置格式不对" + AGAIN)
     elif docker:
         if "runner" in docker:
-            runner = _path(docker["runner"])
-            if len(runner) > MAX_PATH:
-                probs.append(f"「{FIELD['runner']}」太长了（最多 {MAX_PATH} 个字符）")
-            elif CONTROL.search(runner):
-                probs.append(_bad_chars("runner"))
-            elif runner and not os.path.isabs(os.path.expanduser(runner)):
-                probs.append(f"「{FIELD['runner']}」要写绝对路径（留空用本机找到的 docker）")
-            else:
+            runner = _runner(docker["runner"], probs)
+            if runner is not None:
                 out["docker"]["runner"] = runner
         if "host" in docker:
             host = _path(docker["host"])

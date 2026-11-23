@@ -70,15 +70,16 @@ data directory ([backend/team/settings.py](backend/team/settings.py), [ui/src/se
 default is read from the team file, so an install that never opens the page behaves exactly as before; a saved file
 is validated first (types, absolute or `~` paths, unknown keys dropped) and written in one step, and a field that
 does not hold up is refused with every problem named and nothing written. A save takes effect for the next run; a
-run in progress keeps the team it started with.
+run in progress keeps the team it started with, who approves its bench requests too: while it runs, 批准 on the
+board follows that run's own `mode` and `board_decides`, and restarting the app leaves a loaded run's team as saved.
 
 | Field | Default (team file) | What it changes |
 | --- | --- | --- |
 | `mode` | `connectors` (`direct`) | `direct` or `servers` (D17), without editing the team file or reinstalling |
 | `server_configs.build` / `.bench` | the `--config` in `servers.build` / `servers.bench` | which configuration file each MCP server is started with |
 | `baseline` | `bench.baseline` | direct mode's baseline directory (servers mode reads the bench server's own `baseline`) |
-| `docker.runner` | `""`: the docker found on this machine | an executable that speaks Docker's command line, for the direct-mode checks (`check_runner.docker`'s first word) |
-| `docker.host` | `""`: the local daemon | a daemon address (`unix://`, `tcp://`, `ssh://`, `npipe://`, `fd://`), passed as `docker -H` |
+| `docker.runner` | `""`: the docker found on this machine | security-relevant: an executable file that speaks Docker's command line, for the direct-mode checks (`check_runner.docker`'s first word) |
+| `docker.host` | `""`: the local daemon | a daemon address (`unix://`, `tcp://`, `ssh://`, `npipe://`, `fd://`), passed as `docker -H`; `tcp://` sends the checks and their mounts unencrypted |
 | `board_decides` | `servers.board_decides` (`false`) | security-relevant: 批准 / 拒绝 on the board in servers mode too (D17) |
 
 Both routes are the dashboard owner's alone, as every route of this app is but `/health`: the guard refuses a request
@@ -92,8 +93,11 @@ writes them (each server checks that it owns its configuration and its folders).
 lines to paste, derived from the bench server's own `state` and `baseline`. Pasting them is a person's job, in the
 server's own file. Those lines are the one thing a reply writes with the home folder spelled out instead of `~`
 ([backend/team/display.py](backend/team/display.py)), because the build server takes absolute paths only and expands
-no `~`. The baseline folder is a setting the checks' container sees — it is bind-mounted read-only — so 设置 keeps it
-inside the scenario folder or this user's home, resolved with `realpath`, and refuses a control character in any path.
+no `~`. The baseline folder is a setting the checks' container sees — it is bind-mounted read-only into a container
+that runs the agents' code with network access — so 设置 keeps it below `${sample}/`, `~/workplace/vstatd-team/` or
+the app's data directory, resolved with `realpath` after `${sample}` and `~` are filled in, never the home folder
+itself and with no part below that folder starting with a dot (`.aws`, `.ssh`). It refuses a control character in
+any path.
 
 ## Code map
 

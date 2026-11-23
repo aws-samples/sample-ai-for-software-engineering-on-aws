@@ -152,17 +152,15 @@ class Service:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         try:  # a run made before the image was per architecture or the sysroot a setting takes the team file's
             current = await asyncio.to_thread(load_team, self.team_file)
-            current = settings_mod.apply(current, settings_mod.load(self.settings_file, current))
         except (OSError, ValueError):
             current = {}
         runner = current.get("check_runner")
-        decides = (current.get("servers") or {}).get("board_decides") is True
+        # a loaded run keeps the rest of its team as it started, who approves its bench requests too (README): 设置 and
+        # the team file as they are now are for the next run
         for state, events in await asyncio.to_thread(self._deps.store.load_all):
             try:
                 if isinstance(state.get("team"), dict) and state["team"].get("check_runner") is not None:
                     state["team"]["check_runner"] = checks.adopt_runner(state["team"]["check_runner"], runner)
-                if isinstance((state.get("team") or {}).get("servers"), dict):  # who approves follows the team file,
-                    state["team"]["servers"]["board_decides"] = decides  # as POST /bench/decide does (D17)
                 self.runs[state["id"]] = TeamRun(state, self._deps, events)
             except Exception:  # noqa: BLE001
                 self.log.exception("vstatd-team: run %s cannot be loaded", state.get("id"))
@@ -617,7 +615,7 @@ class Service:
             _, team = await asyncio.to_thread(self._settings)
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
-        got, problems = settings_mod.check(body.get("settings"), team)
+        got, problems = await asyncio.to_thread(settings_mod.check, body.get("settings"), team, self.data_dir)
         if problems:
             raise AppError("设置没存：" + "；".join(problems), "invalid_settings", 400, {"problems": problems})
         try:
@@ -626,14 +624,22 @@ class Service:
             raise AppError(f"设置写不进去：{exc}", "settings_write_failed", 500, detail=exc)
         return {"ok": True, **await asyncio.to_thread(self._settings_view, got, team)}
 
+    def _approving_team(self, default: dict[str, Any]) -> dict[str, Any]:
+        """The team whose rules say who approves a bench request now: the run in progress's own (one run uses the
+        bench at a time), else *default*, the team the next run gets."""
+        return next((r.team for r in self.runs.values() if not r.ended), default)
+
     async def bench_decide(self, rid: Any, verdict: Any, digest: Any, reason: Any) -> dict[str, Any]:
         """批准 / 拒绝 a bench request on the board (D3): the bench's own decide() does it, with its rules (the digest
-        prefix a person typed, once, not after the timeout), recording the dashboard owner as who decided."""
+        prefix a person typed, once, not after the timeout), recording the dashboard owner as who decided. While a run
+        is in progress its own team says who approves (one run uses the bench at a time): 设置 saved since, or the
+        team file edited since, are for the next run."""
         try:
             team, sample = await asyncio.to_thread(self._default_team)
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
-        if not servers_mod.board_decides(team):  # D17: in servers mode a person decides at the console by default
+        # D17: in servers mode a person decides at the console by default
+        if not servers_mod.board_decides(self._approving_team(team)):
             raise AppError("servers 模式下台架请求只在操作台 bench/console.py 上批", "decide_off", 409)
         return await bench_mod.decide(sample / "bench" / "lib", rid, verdict, digest, reason)
 
@@ -654,7 +660,8 @@ class Service:
         release = await asyncio.to_thread(self._release_inputs) if servers_mod.on(team) else None
         return {"at": now, "team": str(team.get("name") or ""), "error": "",
                 "items": readiness.items(team, self.probes, kb, state, sample, now, release),
-                "pending": readiness.pending(team, state, now), "board_decides": servers_mod.board_decides(team)}
+                "pending": readiness.pending(team, state, now),
+                "board_decides": servers_mod.board_decides(self._approving_team(team))}
 
     async def knowledge(self) -> dict[str, Any]:
         """知识库 (home page): the scenario's knowledge documents with figures counted now, and Crew's source state."""

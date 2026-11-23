@@ -147,6 +147,18 @@ describe('设置', () => {
     }
   })
 
+  test('the Docker command is marked security-relevant and the host says tcp:// is not encrypted', async () => {
+    // from the review of #57: the runner runs with every check, and a tcp:// daemon gets the checks and the mounts
+    setApiRoutes({ [`GET ${API}/settings`]: () => clone(DIRECT) })
+    render(<SettingsView />)
+    const runner = (await screen.findByLabelText('Docker 命令')) as HTMLInputElement
+    expect(runner.closest('.st-field')!.querySelector('[data-testid="st-docker-runner-guard"]'))
+      .toHaveTextContent('涉及安全')
+    const host = screen.getByLabelText('Docker 主机').closest('.st-field') as HTMLElement
+    expect(host).toHaveTextContent('tcp:// 不加密')
+    expect(host.querySelector('.st-guard')).toBeNull()
+  })
+
   test('a read that fails says so instead of an empty form', async () => {
     setApiRoutes({
       [`GET ${API}/settings`]: () => {

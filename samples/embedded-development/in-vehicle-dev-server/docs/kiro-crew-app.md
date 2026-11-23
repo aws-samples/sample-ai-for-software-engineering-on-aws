@@ -411,7 +411,9 @@ when they are missing, 设置 gives the three lines to paste, derived from the b
 `baseline`. A person pastes them in the server's own file; the app cannot, and the server would refuse a file it does
 not own (`check_trusted()`). Those lines spell the home folder out rather than `~` — the one exception to `display.py`
 — because that server expands no `~`. The baseline is the one path the checks' container sees (bind-mounted
-read-only), so it is kept inside the scenario folder or this user's home, resolved with `realpath`.
+read-only), so it is kept below `${sample}/`, `~/workplace/vstatd-team/` or the app's data directory, resolved with
+`realpath`, never the home folder and with no dot folder below that root. A run in progress keeps who approves its
+bench requests: `POST /bench/decide` reads that run's own team, and a restart does not rewrite it from 设置.
 
 The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
 and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A
@@ -537,7 +539,7 @@ own user and to be writable by no other user (`check_trusted()`). If the app's u
 agents, who run as the same user. In the trial the buttons would still work, so they are turned off by design and not
 by permissions. `POST /bench/decide` answers 409 (`decide_off`) in this mode. For a trial where a person presents
 from the board, `servers.board_decides: true` in the team file — or `board_decides` on 设置, which overrides it —
-turns the buttons on again, as in direct mode: it
+turns the buttons on again for the next run (a run in progress keeps its own), as in direct mode: it
 takes no protection away while the servers run as the current user, and does nothing once they run as their own
 users (the board cannot write the bench state then). Added on 2026-11-17 at the user's request. It is the dashboard
 owner's switch either way: 设置 refuses a request that is not theirs, as every route of this app but `/health` does.

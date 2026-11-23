@@ -65,6 +65,14 @@ def post(routes, body, **kw):
     return call(routes, "POST", "/settings", json_body=body, **kw)
 
 
+def executable(path: Path) -> str:
+    """A stand-in Docker command: an executable file at *path*."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\n", encoding="utf-8")
+    path.chmod(0o755)
+    return str(path)
+
+
 def test_settings_are_the_dashboard_owners_alone(tmp_path, monkeypatch):
     svc, routes, _ = scenario(tmp_path, monkeypatch)
 
@@ -104,13 +112,14 @@ def test_with_no_settings_file_the_defaults_are_the_team_files(tmp_path, monkeyp
 def test_saving_changes_what_the_next_run_gets_and_leaves_the_server_configs_alone(tmp_path, monkeypatch):
     svc, routes, server = scenario(tmp_path, monkeypatch)
     before = {p.name: p.read_bytes() for p in server.glob("*.toml")}
+    podman = executable(tmp_path / "opt" / "podman" / "bin" / "docker")
 
     async def go():
         confs = {"build": str(server / "build.toml"), "bench": str(server / "bench.toml")}
         body = {"settings": {"mode": "servers",
                              "server_configs": confs,
                              "baseline": "${sample}/bench/own-baseline",
-                             "docker": {"runner": "/opt/podman/bin/docker", "host": "tcp://bench.example:2375"},
+                             "docker": {"runner": podman, "host": "tcp://bench.example:2375"},
                              "board_decides": True,
                              "a_key_this_version_does_not_know": 1}}
         r = await post(routes, body)
@@ -118,7 +127,7 @@ def test_saving_changes_what_the_next_run_gets_and_leaves_the_server_configs_alo
         got = r.body["settings"]
         assert "a_key_this_version_does_not_know" not in got  # an unknown key is dropped
         assert got["mode"] == "servers" and got["board_decides"] is True
-        assert got["docker"] == {"runner": "/opt/podman/bin/docker", "host": "tcp://bench.example:2375"}
+        assert got["docker"] == {"runner": shown(podman), "host": "tcp://bench.example:2375"}
         # written as one JSON object in the app's data directory; the reply writes the home folder as ~ (display.py)
         kept = json.loads((svc.data_dir / "settings.json").read_text(encoding="utf-8"))
         assert set(kept) == set(got) and kept["mode"] == "servers" and kept["board_decides"] is True
@@ -132,7 +141,7 @@ def test_saving_changes_what_the_next_run_gets_and_leaves_the_server_configs_alo
         assert team["servers"]["bench"][team["servers"]["bench"].index("--config") + 1] == str(server / "bench.toml")
         assert team["bench"]["baseline"] == str(tmp_path / "sample" / "bench" / "own-baseline")
         words = team["check_runner"]["docker"]
-        assert words[:4] == ["/opt/podman/bin/docker", "-H", "tcp://bench.example:2375", "run"]
+        assert words[:4] == [podman, "-H", "tcp://bench.example:2375", "run"]
         # GET says the same, with the team file's values still beside them as the defaults
         r = await call(routes, "GET", "/settings")
         assert r.body["settings"] == got and r.body["defaults"]["mode"] == "direct"
@@ -248,16 +257,19 @@ def test_direct_mode_reads_no_server_configuration_and_shows_no_release_item(tmp
     asyncio.run(go())
 
 
-def test_a_path_out_of_the_scenario_folder_or_the_home_is_refused_and_so_is_a_control_character(tmp_path, monkeypatch):
+def test_a_path_out_of_the_allowed_folders_is_refused_and_so_is_a_control_character(tmp_path, monkeypatch):
     """The baseline is bind-mounted ``:ro`` into the container the checks run in (checks.py), so a text field on 设置
-    cannot point it at any folder of this machine: it is resolved with realpath and kept inside the scenario folder
-    or this user's home. A control character is refused in every path (a newline would be read back as a second
-    line of a server's TOML, a NUL cannot be opened at all)."""
+    cannot point it at any folder of this machine: it is resolved with realpath and kept inside the scenario folder,
+    ~/workplace/vstatd-team or the app's data directory. A control character is refused in every path (a newline
+    would be read back as a second line of a server's TOML, a NUL cannot be opened at all)."""
     svc, routes, server = scenario(tmp_path, monkeypatch)
+    home = tmp_path / "home"
+    (home / "workplace" / "vstatd-team").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
 
     async def go():
         for patch, said in (({"baseline": "/etc/vstatd-baseline"}, "只读挂进"),
-                            ({"baseline": "~/../../etc/passwd"}, "只读挂进"),  # realpath leads out of the home
+                            ({"baseline": "~/../../etc/passwd"}, "不能用 .."),
                             ({"baseline": "${sample}/../../etc"}, "不能用 .."),
                             ({"baseline": "/tmp/base\x00line"}, "不能用的字符"),
                             ({"server_configs": {"build": '/tmp/a.toml\nbench_runs = "/x"'}}, "不能用的字符"),
@@ -267,16 +279,79 @@ def test_a_path_out_of_the_scenario_folder_or_the_home_is_refused_and_so_is_a_co
             assert (r.status, r.code) == (400, "invalid_settings"), patch
             assert any(said in p for p in r.body["problems"]), (patch, r.body["problems"])
             assert not (svc.data_dir / "settings.json").exists(), patch
-        # inside the scenario folder it holds, and so does a folder of this user's home
-        home = tmp_path / "home"
-        (home / "workplace").mkdir(parents=True)
-        monkeypatch.setenv("HOME", str(home))
-        for value in ("${sample}/bench/own-baseline", str(home / "workplace" / "own-baseline")):
+        # inside the scenario folder it holds, and so does the bench owner's folder and the app's data directory
+        for value in ("${sample}/bench/own-baseline", "~/workplace/vstatd-team/baseline-final",
+                      str(home / "workplace" / "vstatd-team" / "baseline"), str(svc.data_dir / "baseline")):
             r = await post(routes, {"settings": {"baseline": value}})
             assert r.status == 200, (value, r.body)
             assert json.loads((svc.data_dir / "settings.json").read_text(encoding="utf-8"))["baseline"] == value
 
     asyncio.run(go())
+
+
+def test_the_baseline_cannot_be_the_home_folder_a_dot_folder_or_a_link_out_of_the_scenario(tmp_path, monkeypatch):
+    """From the review of #57: ``~`` would hand the checks' container (the agents' code, network access,
+    ``seccomp=unconfined``) the AWS and SSH credentials. The home folder itself, a dot folder (also below an allowed
+    root) and a symbolic link in the scenario folder that leads out are all refused, and nothing is written."""
+    svc, routes, server = scenario(tmp_path, monkeypatch)
+    home = tmp_path / "home"
+    for d in (".aws", ".ssh", "workplace/vstatd-team/.ssh", "workplace/other"):
+        (home / d).mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "sample" / "bench" / "link-out").symlink_to(outside)
+    (tmp_path / "sample" / "bench" / "link-ssh").symlink_to(home / ".ssh")
+
+    async def go():
+        for value in ("~", str(home), "~/", "~/.aws", "~/.ssh", "~/workplace/other",
+                      "~/workplace/vstatd-team", "~/workplace/vstatd-team/.ssh", str(svc.data_dir),
+                      "${sample}/bench/link-out", "${sample}/bench/link-out/baseline", "${sample}/bench/link-ssh"):
+            r = await post(routes, {"settings": {"baseline": value}})
+            assert (r.status, r.code) == (400, "invalid_settings"), value
+            assert any("基线目录" in p for p in r.body["problems"]), (value, r.body["problems"])
+            assert not (svc.data_dir / "settings.json").exists(), value
+        # a saved file that names one of them is not used either: the run gets the team file's baseline
+        settings_mod.save(svc.settings_file, {**settings_mod.defaults(json.loads(svc.team_file.read_text())),
+                                              "baseline": "~/.aws"})
+        team, _ = await asyncio.to_thread(svc._default_team)
+        assert team["bench"]["baseline"] == str(tmp_path / "sample" / "bench" / "baseline")
+
+    asyncio.run(go())
+
+
+def test_the_docker_command_must_be_an_executable_file(tmp_path, monkeypatch):
+    """From the review of #57: the runner is run with every check, so a directory or a file that cannot be executed
+    is refused; an executable file holds."""
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    plain = tmp_path / "bin" / "docker-plain"
+    plain.parent.mkdir()
+    plain.write_text("", encoding="utf-8")
+
+    async def go():
+        for value in (str(tmp_path / "bin"), str(plain), str(tmp_path / "bin" / "missing")):
+            r = await post(routes, {"settings": {"docker": {"runner": value}}})
+            assert (r.status, r.code) == (400, "invalid_settings"), value
+            assert any("不是一个能执行的文件" in p for p in r.body["problems"]), (value, r.body["problems"])
+        good = executable(tmp_path / "bin" / "docker")
+        r = await post(routes, {"settings": {"docker": {"runner": good}}})
+        assert r.status == 200 and r.body["settings"]["docker"]["runner"] == shown(good)
+
+    asyncio.run(go())
+
+
+def test_a_save_that_fails_leaves_the_old_file_and_no_temporary_one(tmp_path):
+    """settings.save: written to a temporary file, synced, then renamed; one that fails half-way is removed."""
+    path = tmp_path / "settings.json"
+    settings_mod.save(path, {"mode": "direct"})
+    try:
+        settings_mod.save(path, {"mode": object()})  # json cannot write it
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("save wrote what json cannot")
+    assert json.loads(path.read_text(encoding="utf-8")) == {"mode": "direct"}
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["settings.json"]
 
 
 def test_readiness_reads_the_settings_that_are_loaded_not_what_the_team_dict_gives_back(tmp_path, monkeypatch):
