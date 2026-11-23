@@ -302,3 +302,38 @@ def test_a_held_check_keeps_every_reason_not_only_the_first():
     out = team_mod._held_reasons(rows)
     assert out[0].startswith("new finding") and "F-101: no longer reported" in out[1]
     assert out[2] == "no build to measure"  # a row with no reasons falls back to its summary
+
+
+def test_only_the_work_items_entry_widens_the_scope_not_a_check_found_finding_the_triage_added():
+    """check-examples/run.py and build-server-run/run.py write found_by as ``checks/unit.sh (ThreadSanitizer)``: a
+    TR §4.4 entry like that is a finding a check reported, not the refactor, so its function is not in the scope."""
+    t = fixture_triage()
+    t["findings"].append({"id": "F-106", "decision": "fix", "evidence": "unit-test", "behaviour": False,
+                          "added": {"found_by": "checks/unit.sh (ThreadSanitizer)", "tool": "ThreadSanitizer",
+                                    "location": "src/supervisor.cpp › Supervisor::check"}})
+    rows = {**FIXTURE_ROWS, "F-107": {"tool": "cppcheck", "check": "knownConditionTrueFalse",
+                                      "location": "src/supervisor.cpp › Supervisor::check", "message": "x",
+                                      "label": "later"}}
+    assert triage.refactor_scope(t) == ["Service::run"]
+    assert [x["id"] for x in triage.later_in_refactor(t, rows)] == ["F-101"]
+
+
+def test_the_gate_reads_this_runs_requirement_not_the_team_files_default_work_item(tmp_path):
+    """A run started with an edited requirement is judged by what it was started with."""
+    run, _ = mini(tmp_path)
+    knowledge = tmp_path / "knowledge"
+    knowledge.mkdir()
+    lines = [f"| {i} | {r['tool']} | {r['check']} | {r['location']} | {r['message']} | {r['label']} |"
+             for i, r in FIXTURE_ROWS.items()]
+    (knowledge / triage.BACKLOG_FILE).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    run.roles["triage"]["triage"]["knowledge"] = str(knowledge)
+    wt = tmp_path / "run-wt"
+    (wt / "docs" / "aidlc").mkdir(parents=True)
+    t = {"findings": [f for f in fixture_triage()["findings"] if "added" not in f]}  # no TR §4.4 entry: words only
+    (wt / "docs" / "aidlc" / "triage.json").write_text(json.dumps(t), encoding="utf-8")
+    run.s["run_wt"] = str(wt)
+    run.team["work_item"] = "把格式化从 LogWriter::format() 里拆出去"
+    run.s["requirement"] = REFACTOR_ITEM
+    run._triage_questions("triage")
+    warned = [e["data"]["later_in_refactor"] for e in run.events if (e.get("data") or {}).get("later_in_refactor")]
+    assert warned == [["F-101"]]

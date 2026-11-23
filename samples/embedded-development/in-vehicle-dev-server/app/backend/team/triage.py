@@ -24,7 +24,7 @@ from typing import Any
 from . import messages
 
 FINDING_ID = re.compile(r"\bF-\d{3}\b")
-CHECK_FOUND_BY = re.compile(r"^checks/[\w-]+\.sh$")  # an added finding a check found; anything else is the work item's
+WORK_ITEM_TOOL = "work item"  # added.tool of the TR §4.4 entry for the refactor (the triage role's brief)
 DECISIONS = ("fix", "justify", "defer")
 EVIDENCE = ("unit-test", "static-analysis", "build")
 SPEC = ("VSTATD-IF", "CC1-PN")
@@ -188,8 +188,10 @@ def place(location: Any) -> tuple[str, str]:
 
 def refactor_scope(t: Any, work_item: str = "") -> list[str]:
     """The functions this batch refactors, from the two sources the run has at the triage gate: the entries the triage
-    added for the work item (TR §4.4, ``added.found_by`` not a check's) and the work item's own words (a
-    ``Class::method()``). Only functions: a finding in an untouched function of a refactored file is not at risk.
+    added for the work item (TR §4.4, ``added.tool`` is ``work item``) and the work item's own words (a
+    ``Class::method()``). An entry for a finding a check reported (``found_by`` such as ``checks/unit.sh
+    (ThreadSanitizer)``) is not a refactor and adds nothing. Only functions: a finding in an untouched function of a
+    refactored file is not at risk.
 
     What makes the match work is the ``file › function`` form the backlog gives every location (findings-backlog.md)
     and the triage role is told to give ``added.location``; a location written any other way (``src/service.cpp:412``)
@@ -197,7 +199,7 @@ def refactor_scope(t: Any, work_item: str = "") -> list[str]:
     out = [place(f["added"].get("location"))[1]
            for f in ((t.get("findings") or []) if isinstance(t, dict) else [])
            if isinstance(f, dict) and isinstance(f.get("added"), dict)
-           and not CHECK_FOUND_BY.match(str(f["added"].get("found_by") or ""))]
+           and f["added"].get("tool") == WORK_ITEM_TOOL]
     return [fn for fn in dict.fromkeys(out + QUALIFIED.findall(work_item or "")) if fn]
 
 

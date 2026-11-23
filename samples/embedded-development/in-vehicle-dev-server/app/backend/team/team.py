@@ -2169,7 +2169,7 @@ class TeamRun:
         self.say("plan", "plan.triage", {"r_role": key, "n": len(out), "listed": len(self.s["triage_listed"])},
                  role=key, data={"questions": len(out)})
         # the gate warns about what a refactored function leaves stranded, while a person can still act on it
-        work_item = str(self.team.get("work_item") or "")
+        work_item = str(self.s.get("requirement") or self.team.get("work_item") or "")  # this run's, if edited
         later = triage_mod.later_in_refactor(data, rows, work_item)
         if later:  # only the backlog, before a run, can change these
             self.say("plan", "plan.triage_refactor", {"items": later, "backlog": triage_mod.BACKLOG_FILE}, role=key,
