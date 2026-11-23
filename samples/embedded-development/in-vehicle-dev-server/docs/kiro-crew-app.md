@@ -403,7 +403,11 @@ through the build server they are a follow-up (#42 and #45, merged on main).
 mode, each server's `--config` path, the direct-mode baseline, the Docker the direct-mode checks run
 (`check_runner.docker`'s first word and a `-H <host>`) and `board_decides`. Every default is read from the team file,
 so an install with no settings file behaves exactly as this section describes; a save is validated first and written
-in one step, and both routes are the dashboard owner's alone (`httpkit.Kit.deny`). The two servers' configuration
+in one step, and both routes are the dashboard owner's alone (`httpkit.Kit.deny`). That guard covers the routes
+only: an agent's shell runs as the same user and can edit `settings.json` directly (turn `board_decides` on, swap
+`docker.runner`), as it can the bench state
+([D2](#d2-kiro-crew-runs-on-the-users-own-machine-agents-have-a-shell-sessions-auto-approve)); the boundary against
+that is running Kiro Crew as another user or in a container. The two servers' configuration
 files stay the servers': the app keeps their paths, reads them, and writes neither. In servers mode 设置 and
 `GET /readiness` both report whether the build server's `[paths]` has `bench_results`, `bench_runs` and
 `bench_baseline` — the inputs `run_check release` needs, all three or none in `mcp/build/config.example.toml` — and,

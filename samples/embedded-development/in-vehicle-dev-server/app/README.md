@@ -84,7 +84,11 @@ board follows that run's own `mode` and `board_decides`, and restarting the app 
 
 Both routes are the dashboard owner's alone, as every route of this app is but `/health`: the guard refuses a request
 with no signed-in user (401), one made with an app token, and one that is not the owner's (403, `owner_only`;
-[backend/team/httpkit.py](backend/team/httpkit.py)).
+[backend/team/httpkit.py](backend/team/httpkit.py)). The guard covers the routes only: `settings.json` is a file in
+the app's data directory and an agent's shell runs as the same user, so it can edit the file directly (turn
+`board_decides` on, swap `docker.runner`), as it can the bench state
+([D2](../docs/kiro-crew-app.md#d2-kiro-crew-runs-on-the-users-own-machine-agents-have-a-shell-sessions-auto-approve)).
+The boundary against that is running Kiro Crew as another user or in a container.
 
 The two servers' configuration files belong to the servers: the app keeps their paths here, reads them, and never
 writes them (each server checks that it owns its configuration and its folders). In servers mode the page and
