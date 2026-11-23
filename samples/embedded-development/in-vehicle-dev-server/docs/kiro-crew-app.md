@@ -255,8 +255,9 @@ code:
 
 Writing `work_item`: a work item that refactors a function must not leave findings labelled `later` (or triaged
 `defer`) in that function, because the refactor removes them and `static` then fails on a decision nothing can
-reach — relabel them `fix` in `findings-backlog.md` before the run starts. The triage gate warns about the ones it
-can see (`plan.triage_refactor`).
+reach. Relabel the `later` ones `fix` in `findings-backlog.md` before the run starts, and decide the deferred ones
+`fix` at the triage gate. The gate warns about the ones it can see in the run's requirement and the triage's TR §4.4
+entry for the work item (`plan.triage_refactor`, `plan.triage_refactor_defer`).
 
 Alternatives considered: documentation only, with the team changing the app's code; loadable adapter modules with a
 plugin API.
