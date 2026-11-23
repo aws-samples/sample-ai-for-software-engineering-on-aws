@@ -104,7 +104,7 @@
       "gate_label": "开工",
       "gate_label_en": "Start",
       "plan": "docs/aidlc/plan.json",
-      "brief": "读批准的 `docs/aidlc/triage.json`（人在关卡上的意见以人为准）和 `src/service.cpp` 的 `Service::run()`。写 `docs/aidlc/refactor-plan.md`：把信号表的处理从 `Service::run()` 拆出去的方案（新的函数或类、放在哪个文件、每一步怎么保证行为不变：同样的信号、值、超时和错误，按 VSTATD-IF 的哪几节）。每一步写成两个提交：先「搬移」（只挪代码，加新函数的签名和调用处，函数体不改），再「修改」（要改的内容）；每一步写明它的修改提交会修掉哪几条发现。整份计划一页以内。再写分工文件 `docs/aidlc/work-split.json`，格式：`{\"roles\": {\"dev-fix\": [\"src/gateway_client.*\", \"src/frame_decoder.*\"], \"dev-refactor\": [\"src/service.*\"]}}`：只用 dev-fix 和 dev-refactor 这两个 key，值是它能改的文件：源文件，也可以是 `cmake/**` 和 `CMakeLists.txt`，这两个可以分给 dev-fix（不能给 `tests/`，不能给整个仓库）；每个文件只分给一个人，`Service::run()` 所在文件里的修复归重构开发；分诊里要修的每个发现所在的文件都要分出去。最后写 `docs/aidlc/plan.json`：`{\"tester\": \"…\", \"dev-fix\": \"…\", \"dev-refactor\": \"…\", \"reviewer\": \"…\"}`，每人一句话（40 字以内）这次做什么。只写文档，不改代码。"
+      "brief": "读批准的 `docs/aidlc/triage.json`（人在关卡上的意见以人为准）和 `src/service.cpp` 的 `Service::run()`。写 `docs/aidlc/refactor-plan.md`：把信号表的处理从 `Service::run()` 拆出去的方案（新的函数或类、放在哪个文件、每一步怎么保证行为不变：同样的信号、值、超时和错误，按 VSTATD-IF 的哪几节）。每一步写成两个提交：先「搬移」（只挪代码，加新函数的签名和调用处，函数体不改），再「修改」（要改的内容）；每一步写明它的修改提交会修掉哪几条发现，只写分诊里定为 fix 的；分诊没定 fix 或 justify 的不写。搬移本身就消掉的发现，写明它由那一步的搬移提交消掉（写在搬移提交的说明里，F-031 之后）。整份计划一页以内。再写分工文件 `docs/aidlc/work-split.json`，格式：`{\"roles\": {\"dev-fix\": [\"src/gateway_client.*\", \"src/frame_decoder.*\"], \"dev-refactor\": [\"src/service.*\"]}}`：只用 dev-fix 和 dev-refactor 这两个 key，值是它能改的文件：源文件，也可以是 `cmake/**` 和 `CMakeLists.txt`，这两个可以分给 dev-fix（不能给 `tests/`，不能给整个仓库）；每个文件只分给一个人，`Service::run()` 所在文件里的修复归重构开发；分诊里要修的每个发现所在的文件都要分出去。最后写 `docs/aidlc/plan.json`：`{\"tester\": \"…\", \"dev-fix\": \"…\", \"dev-refactor\": \"…\", \"reviewer\": \"…\"}`，每人一句话（40 字以内）这次做什么。只写文档，不改代码。"
     },
     {
       "key": "tester",
@@ -155,7 +155,7 @@
       "depends_on": ["tester"],
       "writable_from": "ownership",
       "outputs": [],
-      "brief": "按 `docs/aidlc/refactor-plan.md` 把信号表的处理从 `Service::run()` 拆出去，行为不变：同样的信号、值、超时和错误，日志一条不多一条不少。分诊里分给你的文件里的发现，按分诊的决定一起处理（同修复开发的规则）。计划的每一步先提交纯搬移，再提交修改：搬移提交的说明写成 `[dev-refactor] F-031 搬移：…`，只引用工作项 F-031，里面不顺手改任何一行；修改提交的说明列出它修掉的每一条发现，写成 `[dev-refactor] F-031、F-023 修改：…`。分给你的 F-022 到 F-026，每一条都必须出现在某个修改提交的说明里：trace 检查要求每条 fix 至少有一个提交引用它，漏写会判失败。"
+      "brief": "按 `docs/aidlc/refactor-plan.md` 把信号表的处理从 `Service::run()` 拆出去，行为不变：同样的信号、值、超时和错误，日志一条不多一条不少。分诊里分给你的文件里的发现，按分诊的决定一起处理（同修复开发的规则）。计划的每一步先提交纯搬移，再提交修改：搬移提交的说明写成 `[dev-refactor] F-031 搬移：…`，只引用工作项 F-031（搬移本身就消掉的发现除外，见下），里面不顺手改任何一行；修改提交的说明列出它修掉的每一条发现，写成 `[dev-refactor] F-031、F-023 修改：…`。分诊里定为 fix 的（F-022、F-024、F-026 一定是，F-023、F-025 看分诊的决定），每条都要出现在某个修改提交的说明里：trace 检查要求每条 fix 至少有一个提交引用它，漏写会判失败。分诊没定 fix 或 justify 的不要引用，引用了 trace 会失败。搬移本身就消掉的发现，写在搬移提交的说明里（F-031 之后），并写明是搬移消掉的，例如 `[dev-refactor] F-031、F-022 搬移：…（F-022 随搬移消掉）`。"
     },
     {
       "key": "reviewer",
@@ -173,7 +173,7 @@
       "depends_on": ["dev-fix", "dev-refactor"],
       "writable": [],
       "outputs": [],
-      "brief": "你没有参与开发，只看结果：读 `docs/aidlc/triage.json`、`docs/aidlc/refactor-plan.md` 和 `git diff`（命令见下）。app 在下面附了本批提交的表（每个提交的角色、发现、行数、搬移行和非搬移行）：按提交逐个看（`git show <sha>`），搬移提交只确认内容没变，重点看修改提交和修复提交。最仔细看两件事：每个 justify 引的 VSTATD-IF 或 CC1-PN 那一页是否真的说明它是误报或无害（不成立就推翻它）；重构是否保住了 VSTATD-IF 规定的行为（超时、宽限期、错误、日志）。回复第一行写 `DONE: 可以交付` 或 `DONE: 要改：<一句话>`。下面每个要改的问题单独编号 F-1、F-2……（这是评审的编号，不是发现编号）：违反哪条（引用页和节）、文件和行、证据、怎么改、归谁（写一行 `打回：开发 · 修复` 这样的）；推翻一条说明时单独写一行 `推翻说明：F-007`（几条就写几个编号）；确认成立的说明不要写进这一行。"
+      "brief": "你没有参与开发，只看结果：读 `docs/aidlc/triage.json`、`docs/aidlc/refactor-plan.md` 和 `git diff`（命令见下）。如果 app 在下面附了本批提交的表（每个提交的角色、发现、行数、搬移行和非搬移行），就按提交逐个看（`git show <sha>`）：搬移提交只确认内容没变，重点看修改提交和修复提交。最仔细看两件事：每个 justify 引的 VSTATD-IF 或 CC1-PN 那一页是否真的说明它是误报或无害（不成立就推翻它）；重构是否保住了 VSTATD-IF 规定的行为（超时、宽限期、错误、日志）。回复第一行写 `DONE: 可以交付` 或 `DONE: 要改：<一句话>`。下面每个要改的问题单独编号 F-1、F-2……（这是评审的编号，不是发现编号）：违反哪条（引用页和节）、文件和行、证据、怎么改、归谁（写一行 `打回：开发 · 修复` 这样的）；推翻一条说明时单独写一行 `推翻说明：F-007`（几条就写几个编号）；确认成立的说明不要写进这一行。"
     }
   ]
 }
