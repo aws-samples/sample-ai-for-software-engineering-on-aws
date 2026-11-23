@@ -8,9 +8,10 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 from teamkit import FakeManager, FakeTests, act, finish, make_deps, mod
 
-checks, team_mod = mod("checks"), mod("team")
+checks, team_mod, servers_mod = mod("checks"), mod("team"), mod("servers")
 
 FAKE_DOCKER = """#!{python}
 import json, os, re, sys
@@ -41,10 +42,12 @@ TRIAGE = [{"id": "F-013", "decision": "fix", "evidence": "unit-test", "behaviour
           {"id": "F-003", "decision": "fix", "evidence": "static-analysis", "behaviour": False}]
 NEW_TESTS = ("#include <gtest/gtest.h>\nTEST(Fixes, F013_PassByConstRef) { EXPECT_TRUE(false); }\n"
              "TEST(Fixes, IntervalRejectsJunk) {\n  // F-018\n  EXPECT_TRUE(false);\n}\n")
+# a check of the team file: the tester's merge is then tested only once the developer's is in
+BUILD = {"name": "build", "command": ["checks/build.sh"], "when": "before_bench", "owner": "dev"}
 
 
 class Setup:
-    def __init__(self, tmp: Path, monkeypatch) -> None:
+    def __init__(self, tmp: Path, monkeypatch, team_checks=()) -> None:
         docker = tmp / "docker"
         docker.write_text(FAKE_DOCKER.format(python=sys.executable), encoding="utf-8")
         docker.chmod(0o755)
@@ -61,7 +64,7 @@ class Setup:
         team = team_mod.check_team({
             "roles": [role("tester", [], ["tests/**"]), role("dev", ["tester"], ["src/**"]), role("reviewer", ["dev"], [])],
             "defaults": {"max_fix_rounds": 2}, "check_runner": {"docker": [str(docker), "run", "--rm"], "image": "img"},
-            "checks": []})
+            "checks": list(team_checks)})
         self.mgr = FakeManager()
         state = team_mod.new_state("r1102first", "", team, "{run}", tmp / "work", src, time.time(), source=src)
         self.run = team_mod.TeamRun(state, make_deps(tmp, self.mgr, FakeTests([])))
@@ -141,8 +144,10 @@ def test_when_every_new_test_fails_on_the_base_the_developers_start(tmp_path, mo
     asyncio.run(go())
 
 
-def test_a_missing_test_or_one_that_does_not_build_on_the_base_goes_back_and_the_rounds_run_out(tmp_path, monkeypatch):
-    t = Setup(tmp_path, monkeypatch)
+@pytest.mark.parametrize("team_checks", [(), [BUILD]], ids=["no-checks", "team-checks"])
+def test_a_missing_test_or_one_that_does_not_build_on_the_base_goes_back_and_the_rounds_run_out(tmp_path, monkeypatch,
+                                                                                                team_checks):
+    t = Setup(tmp_path, monkeypatch, team_checks=team_checks)
     run, mgr = t.run, t.mgr
     t.ran([], build_fails=True)
 
@@ -160,5 +165,72 @@ def test_a_missing_test_or_one_that_does_not_build_on_the_base_goes_back_and_the
         assert "在需求提交 " in first["reasons"][1] and "没有跑起来（退出码 1）" in first["reasons"][1]
         assert run.lane("tester")["status"] == "failed" and run.lane("dev")["status"] == "waiting"
         assert run.ended and run.s["status"] == "failed"
+        assert not servers_mod.holds(run.s)
+
+    asyncio.run(go())
+
+
+@pytest.mark.parametrize("team_checks", [(), [BUILD]], ids=["no-checks", "team-checks"])
+def test_a_send_back_round_with_no_change_fails_the_tester_and_the_run_ends(tmp_path, monkeypatch, team_checks):
+    """Tests first sends the tester back, and its round after that commits nothing (r1119826c): the tester fails and
+    the run ends for a person, instead of running on with nothing left to move; 重试 gives it that round again."""
+    t = Setup(tmp_path, monkeypatch, team_checks=team_checks)
+    run, mgr = t.run, t.mgr
+    t.ran(["Old.Works", "Fixes.F013_PassByConstRef", "Fixes.IntervalRejectsJunk"],
+          failing=["Fixes.F013_PassByConstRef"])
+
+    async def go():
+        await run.tick()
+        t.approve_triage()
+        tester = mgr.by_role("tester")
+        act(tester, {"tests/test_new.cpp": NEW_TESTS}, msg="[tester] F-013 F-018 tests")
+        finish(tester)
+        await until(run, lambda: len(run.lane("tester")["attempts"]) == 2)
+        assert run.lane("tester")["first"]["status"] == "sent_back"
+        finish(mgr.by_role("tester"), "Nothing committed yet. Reading the sources I need.")
+        await until(run, lambda: run.ended, timeout=10.0)
+        lane = run.lane("tester")
+        assert lane["status"] == "failed" and lane["first"]["status"] == "failed"
+        assert run.s["status"] == "failed" and run.events[-1]["code"] == "run.failed_roles"
+        assert [e["code"] for e in run.events if e["kind"] == "failed"] == ["failed.nochange", "failed.role"]
+        assert run.lane("dev")["status"] == "waiting"
+        assert not servers_mod.holds(run.s)
+
+        assert await run.retry(by="alice") == ["tester"]
+        assert not run.ended and lane["first"]["status"] == "sent_back"
+        assert len(lane["attempts"]) == 3 and lane["attempts"][-1]["kind"] == "revise"
+        assert "Fixes.IntervalRejectsJunk 在需求提交" in lane["attempts"][-1]["task"]
+
+    asyncio.run(go())
+
+
+@pytest.mark.parametrize("team_checks", [(), [BUILD]], ids=["no-checks", "team-checks"])
+def test_a_send_back_round_that_fails_fails_the_tester_and_retry_sends_it_back(tmp_path, monkeypatch, team_checks):
+    """The tester's round after a send-back ends on an error, not with no change: tests first gives up on it as well,
+    so the run ends for a person instead of waiting on it, and 重试 sends it back once more."""
+    t = Setup(tmp_path, monkeypatch, team_checks=team_checks)
+    run, mgr = t.run, t.mgr
+    t.ran(["Old.Works", "Fixes.F013_PassByConstRef", "Fixes.IntervalRejectsJunk"],
+          failing=["Fixes.F013_PassByConstRef"])
+
+    async def go():
+        await run.tick()
+        t.approve_triage()
+        tester = mgr.by_role("tester")
+        act(tester, {"tests/test_new.cpp": NEW_TESTS}, msg="[tester] F-013 F-018 tests")
+        finish(tester)
+        await until(run, lambda: len(run.lane("tester")["attempts"]) == 2)
+        assert run.lane("tester")["first"]["status"] == "sent_back"
+        finish(mgr.by_role("tester"), None, error="Tool error: permission denied")
+        await until(run, lambda: run.ended, timeout=10.0)
+        lane = run.lane("tester")
+        assert lane["status"] == "failed" and lane["first"]["status"] == "failed" and not run.s["needs_test"]
+        assert run.s["status"] == "failed" and run.events[-1]["code"] == "run.failed_roles"
+        assert run.lane("dev")["status"] == "waiting"
+        assert not servers_mod.holds(run.s)
+
+        assert await run.retry(by="alice") == ["tester"]
+        assert not run.ended and lane["first"]["status"] == "sent_back"
+        assert len(lane["attempts"]) == 3 and lane["attempts"][-1]["kind"] == "revise"
 
     asyncio.run(go())
