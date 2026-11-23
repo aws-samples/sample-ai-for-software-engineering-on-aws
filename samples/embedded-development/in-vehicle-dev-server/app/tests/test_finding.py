@@ -205,17 +205,37 @@ def unit_held(tmp_path, monkeypatch, files, reply=None):
     return run
 
 
-def test_the_test_file_of_a_unit_test_finding_is_proposed_though_the_tests_are_another_roles(tmp_path, monkeypatch):
+def test_the_test_file_of_a_unit_test_finding_is_proposed_to_the_role_that_owns_the_tests(tmp_path, monkeypatch):
     reply = ("**unit，F-032**\n- 根因在 `docs/aidlc/triage.json`，这个文件不归我改。\n"
              "- `cmake/tc.cmake` 也不归我。")
     run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp", "docs/aidlc/triage.json", "cmake/tc.cmake"), reply)
+    mine, tests = run.path_suggestions()
+    assert (mine["extend"], mine["check"], mine["role"], mine["paths"]) == ("F-032", "unit", "dev", ["cmake/tc.cmake"])
+    assert (tests["extend"], tests["check"], tests["role"]) == ("F-032", "unit", "dev2")
+    assert tests["paths"] == ["tests/test_a.cpp"]
+    assert tests["note"].endswith("在 tests/test_a.cpp 里加。这个文件本来就在测试的可改范围里，交给它一轮来写")
+    # the developer is never proposed tests/** (#54): not the test file, not what it said is 测试's
+    assert [p for s in run.path_suggestions() if s["role"] == "dev" for p in s["paths"]] == ["cmake/tc.cmake"]
+
+
+def test_agreeing_to_the_test_file_gives_the_tester_a_round_and_the_developer_nothing(tmp_path, monkeypatch):
+    run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp",))
+    mgr = run.d.manager()
+    svc = svc_of(tmp_path, run, mgr)
     [s] = run.path_suggestions()
-    assert (s["extend"], s["check"], s["role"]) == ("F-032", "unit", "dev")
-    assert "tests/test_a.cpp" in s["paths"]  # the app's own path for this case, across roles
-    assert "docs/aidlc/triage.json" not in s["paths"]  # what the role said, still 测试's to write (#54)
-    assert "cmake/tc.cmake" in s["paths"]  # what the role said, no role's to write
-    assert s["note"].endswith("在 tests/test_a.cpp 里加。tests/test_a.cpp 属于测试的可改范围，"
-                              "加上它等于把这个文件交给dev一轮，由你批准")
+    before = len(mgr.continued)
+
+    async def go():
+        out = await svc.finding(run.rid, handlers.finding_body(
+            {"extend": s["extend"], "role": s["role"], "paths": s["paths"], "note": s["note"], "by": "alice"}))
+        assert out["id"] == "F-032" and out["held"] is False
+    asyncio.run(go())
+    rounds = {mgr.role_of(mgr.agents[a]): task for _, a, task, *_ in mgr.continued[before:]}
+    assert sorted(rounds) == ["dev", "dev2"]  # dev for the finding it was given in unit_held, 测试 for the test
+    task = rounds["dev2"]
+    assert "你是开发团队里的「测试」" in task and "F-032（unit 发现" in task and "F-032 的证据是单元测试" in task
+    assert run.roles["dev"]["writable"] == ["src/a.*"]  # the developer got no test file
+    assert run.test_writers == ["dev2"]
 
 
 def test_no_test_file_is_proposed_when_the_project_has_none(tmp_path, monkeypatch):
@@ -223,21 +243,20 @@ def test_no_test_file_is_proposed_when_the_project_has_none(tmp_path, monkeypatc
     assert run.path_suggestions() == []
 
 
-def test_the_apps_own_test_file_is_proposed_even_when_the_role_named_ten_files_of_its_own(tmp_path, monkeypatch):
-    """PROPOSED_MAX must not drop the one path this proposal exists for: ten free files the role named plus the
-    app's own test file is eleven, and the note tells the person to add that test file."""
-    many = [f"cmake/f{i}.cmake" for i in range(10)]
+def test_the_test_file_is_proposed_apart_from_the_ten_files_the_role_named(tmp_path, monkeypatch):
+    """PROPOSED_MAX bounds what the role named; the test file is a proposal of its own, so it cannot drop it."""
+    many = [f"cmake/f{i}.cmake" for i in range(11)]
     reply = "unit，F-032 的根因在 " + "、".join(f"`{p}`" for p in many) + "，都不归我改。"
     run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp", *many), reply)
-    [s] = run.path_suggestions()
-    assert s["paths"][0] == "tests/test_a.cpp"  # the app's own path, ahead of what the role named
-    assert len(s["paths"]) == 10 and s["paths"][1:] == many[:9]  # at most ten, the role's last one dropped
-    assert "在 tests/test_a.cpp 里加" in s["note"]
-    # the note never names an app path that truncation dropped
-    assert [p for p in s["paths"] + many if p.startswith("tests/") and p in s["note"]] == ["tests/test_a.cpp"]
+    mine, tests = run.path_suggestions()
+    assert mine["role"] == "dev" and mine["paths"] == many[:10] and "tests/" not in mine["note"]
+    assert tests["role"] == "dev2" and tests["paths"] == ["tests/test_a.cpp"]
+    assert "在 tests/test_a.cpp 里加" in tests["note"]
 
 
 def test_a_test_file_that_is_a_symlink_to_a_fenced_file_is_not_proposed(tmp_path, monkeypatch):
+    """Passes on main too, where a path in another role's scope is never proposed. It matters here: the test file
+    goes to the role whose scope has it, and only the fence on what the path resolves to keeps this one out."""
     run = unit_held(tmp_path, monkeypatch, ("mcp/build/core.py",))
     wt = Path(run.s["run_wt"])
     (wt / "tests").mkdir(parents=True, exist_ok=True)
@@ -258,6 +277,23 @@ def test_a_person_may_not_give_a_role_a_symlink_that_resolves_to_a_fenced_file(t
         with pytest.raises(httpkit.AppError) as e:
             await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["tests/test_a.cpp"]}))
         assert e.value.status == 400 and "不能交给角色" in str(e.value)
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
+def test_a_person_may_not_give_a_role_a_symlink_that_resolves_outside_the_work_tree(tmp_path, monkeypatch):
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    outside = tmp_path / "source-repo" / "checks" / "unit.sh"  # the source repo's own checks, say
+    outside.parent.mkdir(parents=True)
+    outside.write_text("x\n")
+    (Path(run.s["run_wt"]) / "src" / "link.sh").symlink_to(outside)
+
+    async def go():
+        with pytest.raises(httpkit.AppError) as e:
+            await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["src/link.sh"]}))
+        assert e.value.status == 400 and "src/link.sh" in str(e.value)
         assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
 
     asyncio.run(go())
