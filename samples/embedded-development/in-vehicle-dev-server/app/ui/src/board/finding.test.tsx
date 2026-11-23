@@ -208,7 +208,7 @@ describe('补登发现并交给角色', () => {
       row('F-035', 'unit', 'src/signal_table.cpp:90'))
     const test = 'tests/test_signal_table.cpp'
     b.run!.tests.held!.suggest = [
-      { extend: 'F-035', check: 'unit', role: 'dev-fix', paths: ['src/signal_table.hpp'], note: '根因在 signal_table.hpp' },
+      { extend: 'F-035', check: 'unit', role: 'dev-fix', paths: ['src/signal_table.hpp'], note: '根因在 .hpp' },
       { extend: 'F-035', check: 'unit', role: 'tester', paths: [test], note: `在 ${test} 里加` },
     ]
     setApiRoutes({ [`GET ${API}/board*`]: () => clone(b) })
