@@ -80,28 +80,30 @@ All names, code and data in this scenario are synthetic.
   gives the same verdict. The set is used only to measure the twin's error, never to tune its parameters: with the
   push estimated from the same trace, tuning to it would hide the error. The verification plan states the error the
   twin may have on these pushes.
-- **Bench:** an emulated controller board, QEMU's `mps2-an385` (Cortex-M3), for the flash path. Here "flash" writes
-  the emulated board's flash image file, and a test move is the firmware's boot and self-test over the emulated
-  serial port, since the board has no sensors or motors. The board's flash has a bootloader, two application slots
-  and a calibration area. The bootloader starts a new image only if its signature verifies, and only as a trial. If the
-  image does not confirm itself after its self-test, the next reset (from the failed self-test, a watchdog or the
-  gate's time-out) takes the board back to the previous image. This is MCUboot's test swap with revert
-  ([design](https://docs.mcuboot.com/design.html)). A simulated robot state reports battery level, "moving",
-  "flashing", "on its stand" and "a person present".
+- **Bench:** an emulated controller board, QEMU's `mps2-an385` (Cortex-M3), for the flash path. Here "flash" writes the
+  emulated board's flash image file, and a test move is the firmware's boot and self-test over the emulated serial port,
+  since the board has no sensors or motors. The board's flash has a bootloader, a primary and a secondary application
+  slot, a scratch area and a calibration area. A new image is written to the secondary slot; the bootloader swaps it
+  into the primary slot only if its signature verifies, and only as a trial. If the image does not confirm itself after
+  its self-test, the next reset (from the failed self-test, a watchdog or the gate's time-out) takes the board back to
+  the previous image. This is MCUboot's test swap with revert ([design](https://docs.mcuboot.com/design.html)). A
+  simulated robot state reports battery level, "moving", "flashing", "on its stand" and "a person present".
 - **Operator console:** a separate terminal process, outside the agents' tools. A person sees each requested flash or
   test move with its manifest (the image's build digest, the SHA-256 of the exact image, its sequence number and
   target device) and approves or refuses it there. The robot state
   inputs and the motion switch are set only at this console or by a scripted scenario; the agents' tools can read them
   but not change them.
-- **Change request:** *Add a recovery limit to the actuator guard. After a push, wheel speed must stay within the
-  guard's limit, and the robot must not travel more than 0.15 m before it is stable again. It must still not fall for
-  pushes up to the rated impulse.* The requirement, the push points, the seeds and the pass thresholds are frozen and
-  versioned before any code is written.
+- **Change request:** *Add a recovery limit to the actuator guard. After a push, the commanded wheel speed must stay
+  within the guard's limit, and the robot must not travel more than 0.15 m before it is stable again. It must still not
+  fall for pushes up to the rated impulse.* The requirement, the push points, the seeds and the pass thresholds are
+  frozen and versioned before any code is written.
 - **Seeded difficulties** for the rehearsal, each caught by a check or a gate named below rather than by luck:
   - a rewrite of the controller in another language "passes" in a simple simulator, but the design fails when the
     real firmware runs in the twin;
-  - the firmware's balance point is not zero, which only its own code shows;
-  - the first candidate meets the travel limit by cutting torque, and falls at the rated impulse;
+  - the robot's balance angle is not zero; the notes give no value, and only the calibration data the firmware reads
+    holds it;
+  - the first candidate meets the travel limit by capping wheel speed or torque hard during recovery, and falls at
+    the rated impulse;
   - "fall" means different angles in the requirement, the twin and the firmware, and the mismatch has to be resolved
     in the requirement, not in the test;
   - a candidate passes every test in the twin, which runs the host build, but its Cortex-M build fails the self-test
@@ -117,12 +119,12 @@ All names, code and data in this scenario are synthetic.
 ### 1. Knowledge with citations
 
 - `knowledge/rb1-robot-notes.md` (with a rendered PDF): the synthetic robot documents with numbered pages. They cover
-  geometry and mass, motor and IMU characteristics, the controller's command and telemetry interface, the safe
-  operating limits, the physical gate's settings and the flash layout (bootloader, two application slots,
-  calibration area). A fact extraction step turns them into `knowledge/facts/`, one
-  entry per limit, register and parameter, each with its page, for example `[RB1-NOTES p.9 §4.1]`.
-- `knowledge/team-rules.md`: firmware rules, build flags for both targets, flash and RAM limits, the evidence tiers,
-  and the definition of done.
+  geometry and mass, motor and IMU characteristics, the controller's command and telemetry interface, the safe operating
+  limits, the physical gate's settings and the flash layout (bootloader, primary and secondary application slots,
+  scratch area, calibration area). A fact extraction step turns them into `knowledge/facts/`, one entry per limit,
+  register and parameter, each with its page, for example `[RB1-NOTES p.5 §4.1]`.
+- `knowledge/team-rules.md`: firmware rules, build flags and static analysis for both targets, flash and RAM limits,
+  the rule that results are never reported above their evidence tier, and the definition of done.
 - `knowledge/hazard-log.md`: the robot's hazards, each with its protective measure and the check or gate that
   verifies it, following the risk assessment that [ISO 13482:2014](https://www.iso.org/standard/53820.html) takes from
   ISO 12100 (hazard identification, risk estimation and evaluation, then risk reduction). The standard is under
@@ -141,7 +143,7 @@ The five phases of AI-DLC Workflows 2.0, with the hardware steps of the
 | Ideation | Decide whether the behaviour change is worth doing and whether it touches safety functions; the hazards in the hazard log it affects | The change approved for work |
 | Inception | Detect the toolchains for both computers, the twin, the emulated board and, if present, a real robot; requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; the verification plan: the evidence tier each requirement needs, what the twin is used to decide and what a wrong verdict would cost, the error the twin may have on the recorded pushes and, in the model-based profile, the back-to-back tolerances; design of the guard change | Requirements and test definition approved; build start approved |
 | Construction | Firmware change, or a change to the control-law model, with unit tests; builds for the controller and for the twin; static checks; the twin is checked against the recorded pushes, then runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure, and a BLOCKED check goes to a person |
-| Operation | Flash the emulated board through the gate, or a real robot in the device profile: a signed image into the other slot, a trial start with the self-test, the image confirms itself or the bootloader goes back; update the main computer's software through its own path; one evidence page with every result labelled by tier | Each flash and test move, approved for its build digest at the operator console; each software release to the robot; the release owner signs off |
+| Operation | Flash the emulated board through the gate, or a real robot in the device profile: a signed image into the secondary slot, a trial start with the self-test, the image confirms itself or the bootloader goes back; update the main computer's software through its own path; one evidence page with every result labelled by tier | Each flash and test move, approved for its build digest at the operator console; each software release to the robot; the release owner signs off |
 
 ### 3. Checks and gates before the robot
 
@@ -184,15 +186,15 @@ The three gates of the framework apply:
 - **Quality gate:** nothing is flashed until every check passes; a BLOCKED check is not a pass. The twin, not the
   agent, decides whether a design meets the requirement, and only once its error on the recorded pushes is within the
   verification plan.
-- **Action gate:** the flash gate writes only the application slot that is not running (the bootloader and the
-  calibration data are never written; the layout is in the robot notes), and only the image whose manifest a person
-  approved at the operator console, not in the agent's chat. The manifest carries the image digest and size, a sequence
-  number that only increases, the IDs of the device class it is for, and a signature over it. These fields are a subset
-  of the information model of [RFC 9124](https://www.rfc-editor.org/info/rfc9124/); the manifest is a plain file, not
-  the SUIT encoding. The gate refuses a sequence number lower than the one on the board. The gate backs up the whole
-  flash first, reads back and verifies, and never retries by itself. The bootloader then checks the signature, starts
-  the image as a trial, and keeps it only if it confirmed itself after its self-test; otherwise the next reset takes it
-  back to the previous image. This follows the protect, detect and recover principles of [NIST SP
+- **Action gate:** the flash gate writes only the secondary application slot (the bootloader and the calibration data
+  are never written; the layout is in the robot notes), and only the image whose manifest a person approved at the
+  operator console, not in the agent's chat. The manifest carries the image digest and size, a sequence number that only
+  increases, the IDs of the device class it is for, and a signature over it. These fields are a subset of the
+  information model of [RFC 9124](https://www.rfc-editor.org/info/rfc9124/); the manifest is a plain file, not the SUIT
+  encoding. The gate refuses a sequence number lower than the one on the board. The gate backs up the whole flash first,
+  reads back and verifies, and never retries by itself. The bootloader then checks the signature, starts the image as a
+  trial, and keeps it only if it confirmed itself after its self-test; otherwise the next reset takes it back to the
+  previous image. This follows the protect, detect and recover principles of [NIST SP
   800-193](https://csrc.nist.gov/pubs/sp/800/193/final) in a reduced form: the signature check before the swap protects,
   the check at every start detects, and the return to the previous image and the backup recover. The emulated board has
   no hardware root of trust, so this is not an SP 800-193 implementation. The signing key is held by the signing step of
@@ -313,8 +315,8 @@ people.
 Each item is a pull request. The sample becomes available when all of them are merged and the rehearsal guide has
 been dry-run once.
 
-1. Synthetic RB-1 documents (Markdown and rendered PDF), fact entries, team rules, the hazard log, the frozen
-   requirement and tests.
+1. Synthetic RB-1 documents (Markdown and rendered PDF), fact entries, team rules, the hazard log, the requirement
+   and the push tests; the rated push impulse and the travel limit are frozen after item 3's sweep.
 2. Firmware reference project with its hardware abstraction layer, builds for the controller and the host, unit
    tests; the self-test and the confirmation of a trial start; the main computer's app with its motion switch, and the
    update client; the image's software bill of materials.
