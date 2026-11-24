@@ -1,8 +1,9 @@
 # Demos: the embedded samples running
 
 Three short recordings of the embedded samples on their synthetic data. Each has burned-in English captions, an
-[`.srt` file](captions/) beside it and a synthetic narration (Amazon Polly). Waits are shortened by speeding up or
-cutting; nothing is reordered or staged. No people and no customer data appear in them.
+[`.srt` file](captions/) beside it and a synthetic narration (Amazon Polly). Waits are shortened by speeding up,
+cutting or holding a frame; nothing is reordered. Where a person's part was typed or scripted, the section says so. No
+people and no customer data appear in them.
 
 | Recording | What it shows | Length |
 | --- | --- | --- |
@@ -16,11 +17,13 @@ cutting; nothing is reordered or staged. No people and no customer data appear i
 
 VIDEO_HW_PLUGIN
 
-Kiro CLI 2.34.0 runs AI-DLC Workflows 2.11.2 as shipped, with the `hw` plugin, on the in-vehicle scenario's
-reference project. It shows the plugin's step in Requirements Analysis, a reviewer's gaps answered by a person, and the
-plugin's Hardware Verification Planning stage, where every requirement gets an evidence tier and the check that judges
-it. The run stops at that stage's approval gate, which was not approved. Recorded 2026-11-05: 78 minutes and
-88.73 credits, shortened to under two minutes. Construction and Operation have not run with the plugin.
+Kiro CLI 2.34.0 runs AI-DLC Workflows 2.11.2 as shipped, with the `hw` plugin, on a copy of the in-vehicle reference
+project with its hardware sources. It shows the plugin's step in Requirements Analysis, the core reviewer's gaps and
+the team's answers, and the plugin's Hardware Verification Planning stage, where every requirement gets an evidence tier
+and the check that judges it. The run stops at that stage's approval gate, which was not approved. The answers at the
+gates were typed by the sample's authors from the facilitator notes, and only read-only shell commands were approved;
+the names of other projects' container images on the machine are masked. Recorded 2026-11-05: 78 minutes in all (77 to
+the gate) and 88.73 credits, shortened to under two minutes. Construction and Operation have not run with the plugin.
 
 ## One delivery on the Kiro Crew board
 
@@ -30,9 +33,9 @@ VIDEO_BOARD
 
 A replay of run `r11032637` (2026-11-03, a Mac with Apple Silicon) on the board of the
 [in-vehicle Kiro Crew app](../in-vehicle-dev-server/README.md#the-kiro-crew-app): six AI roles, people only at the
-gates and the operator console, the checks sending failures back to the role that owns them, the bench, the independent
+gates and on the bench, the checks sending failures back to the role that owns them, the bench, the independent
 rerun and the release owner's sign-off. The board is in presentation mode, so people are shown by role. The agents'
-notes are in Chinese. The 3:38 screen recording is cut to 1:25 by speed changes and holds only. Two things differ from
+notes are in Chinese. The 3:38 screen recording is shortened to 1:25 by speed changes only, with holds while the narration plays. Two things differ from
 the sample today: the memory limit on the screen is the 8,192 KiB of that day, later set to 6,400 KiB from 70 replays
 ([facilitator notes](../in-vehicle-dev-server/rehearsal/facilitator-notes.md)), and the scorecard's top row adds two
 runs (the per-run row is this delivery). The figures of this run are in the scenario's
@@ -45,7 +48,7 @@ runs (the per-run row is this delivery). The figures of this run are in the scen
 VIDEO_BUILD_SERVER
 
 [`rehearsal/build-server-run/run.py`](../in-vehicle-dev-server/rehearsal/build-server-run/README.md) on an Ubuntu
-build host: a script plays the agent, calling the `build` MCP server's tools, and the people. Calls outside the agent's
+build host: a script plays both sides: the agent, which calls the `build` MCP server's tools, and the people. Calls outside the agent's
 grant are refused, wrong repairs of the cross build count until the server refuses the next attempt, a person resets
 the count, ThreadSanitizer finds the seeded data race, and the release check fails with its reasons because there are
-no bench results in this walk. 35 of 35 rows as expected; the real run took about six minutes.
+no bench results in this walk. 35 of 35 rows as expected; the recorded run took about six minutes.
