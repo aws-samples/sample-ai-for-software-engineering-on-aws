@@ -1,7 +1,7 @@
 # Demos: the embedded samples running
 
-Three short recordings of the embedded samples on their synthetic data. Each has burned-in English captions, an
-[`.srt` file](captions/) beside it and a synthetic narration (Amazon Polly). Waits are shortened by speeding up,
+Three short recordings of the embedded samples on their synthetic data. They play here as silent animations with
+burned-in English captions; the caption text is also in [`.srt` files](captions/). Waits are shortened by speeding up,
 cutting or holding a frame; nothing is reordered. Where a person's part was typed or scripted, the section says so. No
 people and no customer data appear in them.
 
@@ -13,9 +13,7 @@ people and no customer data appear in them.
 
 ## The hw plugin in Kiro CLI
 
-[![The hw plugin in Kiro CLI](images/hw-plugin-in-kiro-cli.jpg)](VIDEO_HW_PLUGIN)
-
-VIDEO_HW_PLUGIN
+![The hw plugin in Kiro CLI](images/hw-plugin-in-kiro-cli.webp)
 
 Kiro CLI 2.34.0 runs AI-DLC Workflows 2.11.2 as shipped, with the `hw` plugin, on a copy of the in-vehicle reference
 project with its hardware sources. It shows the plugin's step in Requirements Analysis, the core reviewer's gaps and
@@ -27,9 +25,7 @@ the gate) and 88.73 credits, shortened to under two minutes. Construction and Op
 
 ## One delivery on the Kiro Crew board
 
-[![One delivery on the Kiro Crew board](images/board-delivery-replay.jpg)](VIDEO_BOARD)
-
-VIDEO_BOARD
+![One delivery on the Kiro Crew board](images/board-delivery-replay.webp)
 
 A replay of run `r11032637` (2026-11-03, a Mac with Apple Silicon) on the board of the [in-vehicle Kiro Crew
 app](../in-vehicle-dev-server/README.md#the-kiro-crew-app): six AI roles, people only at the gates and on the bench, the
@@ -43,9 +39,7 @@ two runs (the per-run row is this delivery). The figures of this run are in the 
 
 ## The build server's guardrails
 
-[![The build server's guardrails](images/build-server-guardrails.jpg)](VIDEO_BUILD_SERVER)
-
-VIDEO_BUILD_SERVER
+![The build server's guardrails](images/build-server-guardrails.webp)
 
 [`rehearsal/build-server-run/run.py`](../in-vehicle-dev-server/rehearsal/build-server-run/README.md) on an Ubuntu build
 host: a script plays both sides: the agent, which calls the `build` MCP server's tools, and the people. Calls outside
