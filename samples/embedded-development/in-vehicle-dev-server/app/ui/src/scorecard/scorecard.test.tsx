@@ -23,6 +23,7 @@ const ONE: Scorecard = {
     times: { triage_s: 1800, first_pass_s: 5400, signoff_s: null },
     build_rounds: 1, caught: { build: 1, static: 0, unit: 2 }, logdiff: { differences: 4, unexplained: 2 },
     bench: { approved: 3, refused: 1, reconciled: 0 }, rerun_differs: [], tool_calls: null,
+    commit_sizes: { commits: 34, max_not_moved: 348, median_not_moved: 3, max_sha: 'c6579f9' },
   }],
   total: { runs: 1, findings: { fixed: 17, justified: 2, deferred: 3 }, overturned: 1, build_rounds: 1,
     caught: { build: 1, static: 0, unit: 2 }, logdiff: { differences: 4, unexplained: 2 },
@@ -63,8 +64,22 @@ describe('评分卡', () => {
       日志差异: '4', '台架动作：批准 / 拒绝 / 核对': '3 / 1 / 0', 独立重跑结果不同的检查: '0' })
     const cells = within(screen.getByTestId('sc-run')).getAllByRole('cell').map((c) => c.textContent)
     expect(cells.slice(1)).toEqual(['17 / 2 / 3', '1（F-008）', '30 分钟', '1 小时 30 分', '—', '1', 'build 1、unit 2',
-      '4（未解释 2）', '3 / 1 / 0', '0'])
+      '4（未解释 2）', '3 / 1 / 0', '0', '348 / 3'])
+    expect(within(screen.getByTestId('sc-run')).getByTestId('sc-commits'))
+      .toHaveAttribute('title', '34 个提交，非搬移行最多的是 c6579f9')
     expect(within(screen.getByTestId('sc-caught')).getAllByRole('row').map((r) => r.textContent)).toEqual(['检查失败的轮数', 'build1', 'static0', 'unit2'])
+  })
+
+  test('a median of whole numbers shows whole, or with the one decimal of a half', async () => {
+    // statistics.median of an even count is a float: 3.0 is 3 once parsed, 2.5 stays 2.5; nothing else can occur
+    for (const [median, shown] of [[JSON.parse('3.0'), '348 / 3'], [2.5, '348 / 2.5']] as const) {
+      const one = clone(ONE)
+      one.runs[0].commit_sizes!.median_not_moved = median
+      setApiRoutes({ [`GET ${API}/scorecard`]: () => one })
+      const { unmount } = render(<ScorecardView pollMs={60_000} />)
+      expect((await screen.findByTestId('sc-commits')).textContent).toBe(shown)
+      unmount()
+    }
   })
 
   test('in servers mode the tool calls by permission class have a card of their own', async () => {
