@@ -1067,7 +1067,7 @@
  "scorecard.ScorecardView.47": "{p0} refused by the servers",
  "scorecard.ScorecardView.commits": "Not-moved lines per commit (max / median)",
  "scorecard.ScorecardView.commitsOf": "{p0} commits; the most not-moved lines in {p1}",
- "scorecard.ScorecardView.commitsNote": "Not-moved lines per commit: over the batch's non-merge commits, the added and removed lines git's moved detection does not mark as moved; a moved block with fewer than 20 letters or digits counts as not moved, so the figure errs high, never low. The app's own commits (gate decisions, merges, leftovers it committed) are left out. Reported only, never a failure (D18).",
+ "scorecard.ScorecardView.commitsNote": "Not-moved lines per commit: over the batch's non-merge commits, the added and removed lines git's moved detection does not mark as moved; a moved block with fewer than 20 letters or digits counts as not moved, so the figure is usually high; a block copied to several places counts every copy as moved. The app's own commits (gate decisions, merges, leftovers it committed) are left out. Reported only, never a failure (D18).",
  "preview.main.1": "Event sign-up site",
  "preview.main.2": "Run stopped",
  "preview.main.3": "SubagentManager (preview: fake data)",

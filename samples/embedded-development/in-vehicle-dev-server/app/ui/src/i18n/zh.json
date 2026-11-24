@@ -1067,7 +1067,7 @@
  "scorecard.ScorecardView.47": "服务器拒绝 {p0}",
  "scorecard.ScorecardView.commits": "每个提交的非搬移行（最大 / 中位数）",
  "scorecard.ScorecardView.commitsOf": "{p0} 个提交，非搬移行最多的是 {p1}",
- "scorecard.ScorecardView.commitsNote": "每个提交的非搬移行：本批的非合并提交里，git 的 moved 检测没有标成搬移的加行和删行；不足 20 个字母或数字的搬移块算作非搬移，所以数字偏大不偏小。app 自己的提交（关卡决定、合入、代提交）不算。只报告，不判失败（D18）。",
+ "scorecard.ScorecardView.commitsNote": "每个提交的非搬移行：本批的非合并提交里，git 的 moved 检测没有标成搬移的加行和删行；不足 20 个字母或数字的搬移块算作非搬移，所以数字通常偏大；一个块复制到多处时，每一份都算搬移。app 自己的提交（关卡决定、合入、代提交）不算。只报告，不判失败（D18）。",
  "preview.main.1": "活动报名小站",
  "preview.main.2": "运行被停止",
  "preview.main.3": "SubagentManager（预览：假数据）",

@@ -109,7 +109,7 @@ def test_the_run_measures_its_commits_the_reviewer_gets_the_table_and_an_importe
     assert scorecard.run_figures(run.s, [], [])["commit_sizes"] is None
 
 
-def test_an_ended_run_compares_head_once_more_then_reads_its_final_file(tmp_path):
+def test_an_ended_run_compares_head_once_more_then_reads_its_final_file(tmp_path, monkeypatch):
     wt, base, *_ = repo(tmp_path)
     results = tmp_path / "results"
     mid = asyncio.run(commits.ensure(results, wt, base))  # measured mid-run (a reviewer's round, the scorecard)
@@ -118,9 +118,41 @@ def test_an_ended_run_compares_head_once_more_then_reads_its_final_file(tmp_path
     ended = asyncio.run(commits.ensure(results, wt, base, moving=False))
     assert ended["head"] != mid["head"] and late in [c["sha"] for c in ended["commits"]]
     assert ended["final"] is True and commits.load(results) == ended
-    write(wt, "src/after.cpp", "int after;\n")
-    commit(wt, "[dev-fix] F-008 after")  # a final file is read as it is, without git
+    monkeypatch.setattr(commits, "measure", None)  # while HEAD stays, a final file is read as it is: nothing measured
     assert asyncio.run(commits.ensure(results, wt, base, moving=False)) == ended
+
+
+def test_a_resumed_run_that_merges_more_is_measured_again_when_it_ends_again(tmp_path):
+    run = make_run(tmp_path, FakeManager(), team=mini_team())
+    asyncio.run(run._setup())
+    wt = Path(run.s["run_wt"])
+    write(wt, "backend/server.js", "// v2\n")
+    first = commit(wt, "[backend] F-001 v2")
+    run.s["status"] = "failed"  # the run ends: measured, marked final
+    ended = asyncio.run(run.commit_sizes())
+    assert ended["final"] is True and [c["sha"] for c in ended["commits"]] == [first]
+    run._resume()  # a person retries a developer; its work merges and the run ends again before a reviewer's round
+    write(wt, "backend/server.js", "// v3\n")
+    second = commit(wt, "[backend] F-002 v3")
+    run.s["status"] = "failed"
+    again = asyncio.run(run.commit_sizes())
+    assert [c["sha"] for c in again["commits"]] == [first, second] and again["final"] is True
+
+
+def test_a_block_copied_to_two_places_counts_every_copy_as_moved(tmp_path):
+    # the not-moved figure is usually high (short moves count as not moved), but a copy counts as moved: 6 of these
+    # 18 lines are new code, and none is counted as not moved
+    wt = tmp_path / "repo"
+    wt.mkdir()
+    sh(wt, "init", "-q", "-b", "main")
+    write(wt, "src/a.cpp", "int keep_this_line_in_a;\n" + BLOCK_A)
+    base = commit(wt, "需求")
+    write(wt, "src/a.cpp", "int keep_this_line_in_a;\n")
+    write(wt, "src/b.cpp", BLOCK_A)
+    write(wt, "src/c.cpp", BLOCK_A)
+    commit(wt, "[dev-refactor] F-031 复制")
+    row = asyncio.run(commits.measure(wt, base, "HEAD"))["commits"][0]
+    assert (row["files"], row["lines"], row["moved"], row["not_moved"]) == (3, 18, 18, 0)
 
 
 def test_a_failed_measurement_is_not_tried_again_until_head_moves(tmp_path, monkeypatch):

@@ -70,6 +70,18 @@ describe('评分卡', () => {
     expect(within(screen.getByTestId('sc-caught')).getAllByRole('row').map((r) => r.textContent)).toEqual(['检查失败的轮数', 'build1', 'static0', 'unit2'])
   })
 
+  test('a median of whole numbers shows whole, or with the one decimal of a half', async () => {
+    // statistics.median of an even count is a float: 3.0 is 3 once parsed, 2.5 stays 2.5; nothing else can occur
+    for (const [median, shown] of [[JSON.parse('3.0'), '348 / 3'], [2.5, '348 / 2.5']] as const) {
+      const one = clone(ONE)
+      one.runs[0].commit_sizes!.median_not_moved = median
+      setApiRoutes({ [`GET ${API}/scorecard`]: () => one })
+      const { unmount } = render(<ScorecardView pollMs={60_000} />)
+      expect((await screen.findByTestId('sc-commits')).textContent).toBe(shown)
+      unmount()
+    }
+  })
+
   test('in servers mode the tool calls by permission class have a card of their own', async () => {
     const one = clone(ONE)
     one.total.tool_calls = { 'read-only': 4, 'controlled-write': 31, physical: 2, refused: 3 }

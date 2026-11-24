@@ -14,12 +14,13 @@ Moved lines, a fixed algorithm (same git, same numbers)::
 then each ``+``/``-`` line is counted by the colour it starts with: blue or yellow is moved, red or green is not
 (headers are bold, so they are neither). ``lines`` = added + removed, ``not_moved`` = ``lines`` - ``moved``. git only
 marks a block as moved when it has at least 20 letters or digits (its own minimum), so a shorter move counts as not
-moved: the figure errs on the side of more not-moved lines, never fewer.
+moved and the not-moved figure is usually high. A block copied to several places counts every copy as moved, though: a
+6-line block removed from one file and added to two others is 18 lines, 18 moved, 0 not moved.
 
 Each run is measured once, into ``results/commit-sizes.json`` beside its repository with the HEAD it was taken at, and
 again when HEAD moves. Once the run has ended, HEAD is compared one last time and the file marked ``final``; after that
-it is read without git. A measurement that fails is not tried again until HEAD moves. An imported run has no
-repository here: None.
+it is read as it is while HEAD stays where it was measured (a run resumed after it ended may merge more). A measurement
+that fails is not tried again until HEAD moves. An imported run has no repository here: None.
 """
 
 from __future__ import annotations
@@ -109,13 +110,13 @@ def _write(results: Path, data: dict[str, Any]) -> None:
 
 async def ensure(results: Path, cwd: Path | str, base: str, *, moving: bool = True) -> dict[str, Any] | None:
     """The run's commit sizes, measured again only when HEAD has moved since they were kept. *moving* False (a run that
-    has ended, whose branch no longer moves): a file marked ``final`` is read as it is; one kept while the run was still
-    going is compared with HEAD once more, then marked ``final``. None, without git trying again, while HEAD stays where
-    a measurement failed (the error is raised the first time only)."""
+    has ended): a file marked ``final`` is read as it is while HEAD is still the one it was taken at (a resumed run may
+    have merged more since); otherwise it is measured again if HEAD moved, then marked ``final``. None, without git
+    trying again, while HEAD stays where a measurement failed (the error is raised the first time only)."""
     kept = load(results)
-    if kept is not None and not moving and kept.get("final"):
-        return kept
     head = await gitwork.head(cwd)
+    if kept is not None and not moving and kept.get("final") and kept.get("head") == head:
+        return kept
     if _FAILED.get(str(results)) == head:
         return None
     if kept is not None and kept.get("head") == head:

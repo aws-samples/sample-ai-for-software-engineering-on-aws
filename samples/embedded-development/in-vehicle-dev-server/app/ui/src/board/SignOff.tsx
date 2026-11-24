@@ -213,6 +213,7 @@ function Commits({ run, sizes }: { run: RunDetail; sizes: CommitSizes }) {
       </table>
       <p className="kt-dim">
         {tr('board.SignOff.commitsNote')}
+        {/* en commitsApp starts with a space on purpose: it is appended to commitsNote (zh needs none) */}
         {sizes.app.length ? tr('board.SignOff.commitsApp', { p0: sizes.app.length }) : ''}
       </p>
     </details>
