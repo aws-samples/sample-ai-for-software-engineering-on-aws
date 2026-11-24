@@ -4,11 +4,13 @@ drops its options and runs the command."""
 
 import asyncio
 import json
+import logging
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
-from teamkit import FakeManager, act, finish, make_run, mod, sh
+from teamkit import TARGET_TEMPLATE, TEAM_FILE, FakeManager, act, finish, make_run, mod, sh
 
 checks, team_mod, gitwork = mod("checks"), mod("team"), mod("gitwork")
 
@@ -143,10 +145,10 @@ def test_a_check_gets_its_arguments_its_results_dir_and_a_snapshot_at_the_head(t
     after = run_round(bench, team, wt, head, n=5, phase="after_bench", triage=triage)
     assert after["checks"][0]["verdict"] == "USAGE" and after["checks"][0]["reasons"] == ["没有 --run（logdiff 要它）"]
     # release.sh reads again every input the checks recorded, the baseline outside the run too (r11032637)
-    base = tmp_path / "baseline"
-    base.mkdir()
+    base = tmp_path / "data" / "baseline"  # the app's data directory's baseline/
+    base.mkdir(parents=True)
     rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage"], when="release"))
-    run_round(bench, rel, wt, head, n=6, phase="release", triage=triage, baseline=base)
+    run_round(bench, rel, wt, head, n=6, phase="release", triage=triage, baseline=base, data_dir=tmp_path / "data")
     assert f"-v {base}:{base}:ro " in bench.log.read_text().splitlines()[-1]
 
 
@@ -158,10 +160,11 @@ def test_the_baseline_is_mounted_and_given_as_it_resolves(tmp_path, monkeypatch)
     rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
     wt, head = repo(tmp_path)
     triage = tmp_path / "runs" / "r1" / "triage.json"
-    data = tmp_path  # runs/r1 is in the data directory's runs/
+    data = tmp_path / "data"  # the app's data directory; the run's work tree is outside it, as in WORK_ROOT
     (data / "baseline" / "rec-1").mkdir(parents=True)
     (data / "baseline" / "current").symlink_to(data / "baseline" / "rec-1")
-    run_round(bench, rel, wt, head, n=1, phase="release", triage=triage, baseline=data / "baseline" / "current")
+    run_round(bench, rel, wt, head, n=1, phase="release", triage=triage, baseline=data / "baseline" / "current",
+              data_dir=data)
     real = data / "baseline" / "rec-1"
     line = bench.log.read_text().splitlines()[-1]
     assert f"-v {real}:{real}:ro " in line and f"--baseline {real}" in line and "current" not in line
@@ -175,17 +178,45 @@ def test_a_baseline_that_no_longer_holds_right_before_docker_run_is_not_run(tmp_
     rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
     wt, head = repo(tmp_path)
     triage = tmp_path / "runs" / "r1" / "triage.json"
-    data = tmp_path
-    (data / "baseline").mkdir()
+    data = tmp_path / "data"
+    (data / "baseline").mkdir(parents=True)
     outside = tmp_path / "home" / ".ssh"
     outside.mkdir(parents=True)
     (data / "baseline" / "swapped").symlink_to(outside)  # a link swapped to lead out, after 设置 saved it
     for n, base in enumerate((data / "baseline" / "swapped", tmp_path / "elsewhere"), start=1):
-        wall = run_round(bench, rel, wt, head, n=n, phase="release", triage=triage, baseline=base)
+        wall = run_round(bench, rel, wt, head, n=n, phase="release", triage=triage, baseline=base, data_dir=data)
         row = wall["checks"][0]
         assert row["verdict"] == "BLOCKED" and "只读挂进" in row["reasons"][0], row
         assert not bench.log.exists()  # no container was started
         assert wall["cases"][0]["owner"] is None  # a person's
+
+
+def test_in_the_installed_layout_the_shipped_and_the_data_directory_baselines_run(tmp_path, monkeypatch):
+    """From the review of #67: the check before docker run took runs/<run>/../.. for the data directory, but the
+    work tree is under WORK_ROOT (~/workplace/vstatd-team), not in the data directory, and an installed app has no
+    checks/ beside it, so ${sample}/bench/baseline and <data>/baseline/… were BLOCKED. The service gives the checks
+    its own data directory."""
+    home, app = tmp_path / "home", tmp_path / "apps" / "vstatd-team"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("VSTATD_SAMPLE", raising=False)
+    monkeypatch.setattr(mod("paths"), "APP_ROOT", app)  # installed: no checks/ beside it
+    bench = Bench(tmp_path, monkeypatch)
+    for d in ("reference-project", "bench/baseline"):
+        (bench.dir / d).mkdir(parents=True)
+    data = app / "data"
+    (data / "baseline" / "own").mkdir(parents=True)
+    (data / "sample.json").write_text(json.dumps({"sample": str(bench.dir)}), encoding="utf-8")
+    work_root = home / "workplace" / "vstatd-team"
+    rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
+    wt, head = repo(work_root)
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(data))
+    svc = mod("service").Service(ctx, manager=FakeManager(), work_root=work_root, team_file=TEAM_FILE,
+                                 template=TARGET_TEMPLATE)
+    for n, base in enumerate((bench.dir / "bench" / "baseline", data / "baseline" / "own"), start=1):
+        wall = asyncio.run(svc._deps.run_tests(wt, rel, head=head, results=wt.parents[1] / "results" / str(n),
+                                               phase="release", triage=wt.parents[1] / "triage.json", baseline=base))
+        assert wall["checks"][0]["verdict"] == "PASS", wall["checks"][0]
+        assert f"-v {base}:{base}:ro " in bench.log.read_text().splitlines()[-1]
 
 
 def test_a_failure_goes_to_the_owner_of_the_file_it_names_else_to_the_checks_default_owner(tmp_path, monkeypatch):

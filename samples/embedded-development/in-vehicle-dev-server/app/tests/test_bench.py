@@ -3,6 +3,7 @@ stand-in plays the bench (it writes requests and the action record), the test pl
 QEMU."""
 
 import asyncio
+import functools
 import json
 import sys
 import time
@@ -93,7 +94,7 @@ class Rig:
         self.state.mkdir()
         if target:
             (self.state / "target.json").write_text(json.dumps({"state": target, "why": "booted"}), encoding="utf-8")
-        self.baseline = tmp / "work" / "baseline"  # the data directory's baseline/: the checks mount nothing else
+        self.baseline = tmp / "data" / "baseline"  # the data directory's baseline/ (make_deps: tmp/data/runs)
         if baseline:
             self.baseline.mkdir(parents=True)
             (self.baseline / "baseline-result.json").write_text("{}", encoding="utf-8")
@@ -128,7 +129,8 @@ class Rig:
         (src / "src").mkdir(parents=True)
         (src / "src" / "a.cpp").write_text("int a;\n", encoding="utf-8")
         state = team_mod.new_state("r1102bench", "", team, "{run}", tmp / "work", src, time.time(), source=src)
-        self.run = team_mod.TeamRun(state, make_deps(tmp, self.mgr, checks.run_checks))
+        tests = functools.partial(checks.run_checks, data_dir=tmp / "data")  # as service.py binds it
+        self.run = team_mod.TeamRun(state, make_deps(tmp, self.mgr, tests))
 
     def set(self, **spec) -> None:
         self.spec.write_text(json.dumps(spec), encoding="utf-8")

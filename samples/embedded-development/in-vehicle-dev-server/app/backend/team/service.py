@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -65,7 +66,8 @@ class Service:
                                                    scrub=self.scrub)
         self._agents = manager if manager is not None else self.sessions
         self._deps = Deps(store=Store(self.data_dir / "runs"), manager=self.manager,
-                          run_tests=run_tests or servers_mod.run_tests, template=Path(template) if template else None,
+                          run_tests=run_tests or functools.partial(servers_mod.run_tests, data_dir=self.data_dir),
+                          template=Path(template) if template else None,
                           scrub=self.scrub, now=now, log=self.log, members=self.member_names)
         self._loop: asyncio.Task[None] | None = None
         self._ticks: dict[str, asyncio.Task[None]] = {}

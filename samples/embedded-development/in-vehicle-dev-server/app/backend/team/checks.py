@@ -365,8 +365,10 @@ def wall(names: list[str], rows: list[dict[str, Any]], cases: list[dict[str, Any
 
 async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: Path, phase: str = "before_bench",
                      triage: Path | None = None, run: Path | None = None,
-                     baseline: Path | None = None) -> dict[str, Any]:
-    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall."""
+                     baseline: Path | None = None, data_dir: Path | None = None) -> dict[str, Any]:
+    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall.
+    *data_dir*: the app's data directory (service.py binds it), where 设置 allows a ``baseline/``; the run's work
+    tree is under WORK_ROOT, not in it. Without it a baseline holds only below ``${sample}/`` or the team folder."""
     runner = team["check_runner"]
     results = Path(results)
     results.mkdir(parents=True, exist_ok=True)
@@ -387,12 +389,13 @@ async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: 
             sample = Path(check["command"][0]).resolve().parents[1]  # the scenario folder: the checks and the knowledge
             # a release check reads again every input the other checks recorded (the baseline too): it sees them all.
             # Each is mounted (and given) as it resolves now, so a symbolic link swapped after 设置 checked it
-            # changes nothing; the baseline is checked again on that path right here, by the rules 设置 saves it by
+            # changes nothing; the baseline is checked again on that path right here, by the rules 设置 saves it by.
+            # The window left between here and Docker's own bind is accepted: a swap needs write access above the
+            # baseline, and a check container has only runs/<run> mounted read-write
             extra = {k: Path(os.path.realpath(v)) for k, v in values.items()
                      if (k in check["args"] or check["when"] == "release") and v is not None
                      and not Path(v).resolve().is_relative_to(root.resolve()) and k != "project"}
-            # runs/<run>/ is in the runs/ folder of the app's data directory (service.py Store)
-            why = settings_mod.baseline_refused(str(extra["baseline"]), root.parents[1]) if "baseline" in extra else ""
+            why = settings_mod.baseline_refused(str(extra["baseline"]), data_dir) if "baseline" in extra else ""
             if why:
                 res = {"verdict": "BLOCKED", "reasons": [f"没跑：{why}，现在它指向 {extra['baseline']}"], "tier": None,
                        "summary": "基线目录不能挂进容器"}
