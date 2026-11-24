@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from http_fakes import AppRoute, FakeWeb, call, owner_check
 from test_checks import make, work
 from teamkit import act, finish, mod, reload, sh
 
@@ -294,6 +295,26 @@ def test_a_person_may_not_give_a_role_a_symlink_that_resolves_outside_the_work_t
         with pytest.raises(httpkit.AppError) as e:
             await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["src/link.sh"]}))
         assert e.value.status == 400 and "src/link.sh" in str(e.value)
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
+def test_a_symlink_loop_is_refused_by_the_route_not_answered_with_a_500(tmp_path, monkeypatch):
+    """From #64: a symbolic link loop raised RuntimeError in Path.resolve() on Python 3.12 and before, which
+    resolves_fenced did not catch, so POST /runs/{rid}/finding answered 500; Python 3.13 leaves the loop unresolved
+    and the path was given to the role. Either way it leads nowhere a role may be given: refused, nothing changed."""
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    routes = handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check)
+    src = Path(run.s["run_wt"]) / "src"
+    (src / "loop-a.sh").symlink_to(src / "loop-b.sh")
+    (src / "loop-b.sh").symlink_to(src / "loop-a.sh")
+
+    async def go():
+        r = await call(routes, "POST", f"/runs/{run.rid}/finding", json_body={**F032, "paths": ["src/loop-a.sh"]})
+        assert (r.status, r.body.get("code")) == (400, "invalid_finding"), r.body
+        assert "src/loop-a.sh" in r.body["error"]
         assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
 
     asyncio.run(go())

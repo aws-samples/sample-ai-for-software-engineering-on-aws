@@ -116,15 +116,20 @@ def fenced(globs: list[str], root: Path | None = None) -> list[str]:
 
 def resolves_fenced(p: str, root: Path | None) -> bool:
     """Whether a path of the work tree *root* resolves, through a symlink, to what a role is never given: FENCED, or
-    anything outside the work tree. False without a *root*."""
+    anything outside the work tree, or nothing at all (a symbolic link loop). False without a *root*."""
     if root is None:
         return False
     try:
-        rel = (root / p).resolve().relative_to(root.resolve())
+        real = (root / p).resolve()
+        rel = real.relative_to(root.resolve())
     except ValueError:  # outside the work tree: no role's to be given
+        return True
+    except RuntimeError:  # a symbolic link loop on Python 3.12 and before: it leads nowhere a role may be given
         return True
     except OSError:
         return False
+    if real.is_symlink():  # the same loop on Python 3.13 and later, which leaves it unresolved
+        return True
     return gitwork.matches(str(rel), list(FENCED))
 
 
