@@ -431,10 +431,14 @@ not own (`check_trusted()`). Those lines spell the home folder out rather than `
 — because that server expands no `~`. The baseline is the one path the checks' container sees (bind-mounted
 read-only), so it is kept below `${sample}/` or `~/workplace/vstatd-team/`, or in a folder that is there at or below
 the app's data directory's `baseline/` (not its `runs/` or `sample.json`), resolved with `realpath`, never the home
-folder and with no dot folder below that root; a root that itself resolves to the home folder or above it (a
-`~/workplace/vstatd-team` that links to `~`) allows nothing. The checks mount and give the baseline as it resolves
-when the container starts, and check it again on that path by the same rules: one that no longer holds (a link
-swapped since 设置 saved it) starts no container and is BLOCKED for a person with the reason. A run in progress
+folder and with no dot folder below that root; a root that a symbolic link leads out of where it is written (a
+`~/workplace/vstatd-team` that links to `~`, to `~/.ssh` or to another user's home), or a `baseline/` that links out
+of the data directory, allows nothing. A baseline saved in 设置 before these rules that is outside them is dropped
+when the settings are loaded, and runs use the team file's value instead. The checks mount and give the baseline as
+it resolves when the container starts, and check it again on that path by the same rules, with the app's data
+directory (the service hands it to the checks; a run's work tree is under `~/workplace/vstatd-team/runs/`, not in
+it): one that no longer holds (a link swapped since 设置 saved it) starts no container and is BLOCKED for a person
+with the reason. A run in progress
 keeps who approves its bench requests: `POST /bench/decide` reads that run's own team, and a restart does not
 rewrite it from 设置.
 
