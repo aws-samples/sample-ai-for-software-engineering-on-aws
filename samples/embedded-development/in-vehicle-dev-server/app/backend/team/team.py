@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import errno
 import json
 import logging
+import os
 import re
 import secrets
 import shutil
@@ -119,17 +121,17 @@ def resolves_fenced(p: str, root: Path | None) -> bool:
     anything outside the work tree, or nothing at all (a symbolic link loop). False without a *root*."""
     if root is None:
         return False
+    try:  # strict: a loop in any part (src/a/x.cpp with src/a one) is ELOOP on every Python version
+        os.path.realpath(root / p, strict=True)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:  # it leads nowhere a role may be given
+            return True
     try:
-        real = (root / p).resolve()
-        rel = real.relative_to(root.resolve())
+        rel = (root / p).resolve().relative_to(root.resolve())
     except ValueError:  # outside the work tree: no role's to be given
-        return True
-    except RuntimeError:  # a symbolic link loop on Python 3.12 and before: it leads nowhere a role may be given
         return True
     except OSError:
         return False
-    if real.is_symlink():  # the same loop on Python 3.13 and later, which leaves it unresolved
-        return True
     return gitwork.matches(str(rel), list(FENCED))
 
 

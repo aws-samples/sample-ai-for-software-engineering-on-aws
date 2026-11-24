@@ -320,6 +320,26 @@ def test_a_symlink_loop_is_refused_by_the_route_not_answered_with_a_500(tmp_path
     asyncio.run(go())
 
 
+def test_a_symlink_loop_in_a_middle_part_of_a_path_or_glob_is_refused_too(tmp_path, monkeypatch):
+    """From the review of #67: Python 3.13 left a loop unresolved only at the last part, so src/la/x.cpp and
+    src/la/*.cpp (src/la a loop) were given to the role. A loop in any part is refused on every Python version."""
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    routes = handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check)
+    src = Path(run.s["run_wt"]) / "src"
+    (src / "la").symlink_to(src / "lb")
+    (src / "lb").symlink_to(src / "la")
+
+    async def go():
+        for p in ("src/la/x.cpp", "src/la/*.cpp"):
+            r = await call(routes, "POST", f"/runs/{run.rid}/finding", json_body={**F032, "paths": [p]})
+            assert (r.status, r.body.get("code")) == (400, "invalid_finding"), (p, r.body)
+            assert p in r.body["error"]
+            assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
 # As a role wrote it in r1117e6af: the finding in the paragraph's heading, the file in other sentences of it, and
 # "不在我能改的文件里" / "加进我的可改范围" rather than 不归我.
 SAID_1117 = ("我修了 `SignalTable::get()` 的数据竞争，build 仍然没有修好。\n\n"
