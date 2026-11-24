@@ -93,9 +93,9 @@ class Rig:
         self.state.mkdir()
         if target:
             (self.state / "target.json").write_text(json.dumps({"state": target, "why": "booted"}), encoding="utf-8")
-        self.baseline = tmp / "baseline"
+        self.baseline = tmp / "work" / "baseline"  # the data directory's baseline/: the checks mount nothing else
         if baseline:
-            self.baseline.mkdir()
+            self.baseline.mkdir(parents=True)
             (self.baseline / "baseline-result.json").write_text("{}", encoding="utf-8")
         self.spec, self.log = tmp / "cc1.json", tmp / "cc1.log"
         self.set(doctor=doctor, **(cc1 or {}))
