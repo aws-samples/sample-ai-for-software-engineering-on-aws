@@ -150,6 +150,44 @@ def test_a_check_gets_its_arguments_its_results_dir_and_a_snapshot_at_the_head(t
     assert f"-v {base}:{base}:ro " in bench.log.read_text().splitlines()[-1]
 
 
+def test_the_baseline_is_mounted_and_given_as_it_resolves(tmp_path, monkeypatch):
+    """From #64: the baseline was mounted as written, so a symbolic link swapped after 设置 checked it would hand
+    the checks' container another folder. It is mounted, and given to the check, as it resolves right then."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    bench = Bench(tmp_path, monkeypatch)
+    rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
+    wt, head = repo(tmp_path)
+    triage = tmp_path / "runs" / "r1" / "triage.json"
+    data = tmp_path  # runs/r1 is in the data directory's runs/
+    (data / "baseline" / "rec-1").mkdir(parents=True)
+    (data / "baseline" / "current").symlink_to(data / "baseline" / "rec-1")
+    run_round(bench, rel, wt, head, n=1, phase="release", triage=triage, baseline=data / "baseline" / "current")
+    real = data / "baseline" / "rec-1"
+    line = bench.log.read_text().splitlines()[-1]
+    assert f"-v {real}:{real}:ro " in line and f"--baseline {real}" in line and "current" not in line
+
+
+def test_a_baseline_that_no_longer_holds_right_before_docker_run_is_not_run(tmp_path, monkeypatch):
+    """The same check again, on the path that would be mounted: a link in the data directory's baseline/ swapped to
+    lead out, or a folder 设置 would never have taken (a hand-edited team file), starts no container."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    bench = Bench(tmp_path, monkeypatch)
+    rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
+    wt, head = repo(tmp_path)
+    triage = tmp_path / "runs" / "r1" / "triage.json"
+    data = tmp_path
+    (data / "baseline").mkdir()
+    outside = tmp_path / "home" / ".ssh"
+    outside.mkdir(parents=True)
+    (data / "baseline" / "swapped").symlink_to(outside)  # a link swapped to lead out, after 设置 saved it
+    for n, base in enumerate((data / "baseline" / "swapped", tmp_path / "elsewhere"), start=1):
+        wall = run_round(bench, rel, wt, head, n=n, phase="release", triage=triage, baseline=base)
+        row = wall["checks"][0]
+        assert row["verdict"] == "BLOCKED" and "只读挂进" in row["reasons"][0], row
+        assert not bench.log.exists()  # no container was started
+        assert wall["cases"][0]["owner"] is None  # a person's
+
+
 def test_a_failure_goes_to_the_owner_of_the_file_it_names_else_to_the_checks_default_owner(tmp_path, monkeypatch):
     bench = Bench(tmp_path, monkeypatch)
     team = team_of(bench, bench.check("build", owner="dev2"))
