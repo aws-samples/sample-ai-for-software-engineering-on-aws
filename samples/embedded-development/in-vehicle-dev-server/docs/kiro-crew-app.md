@@ -429,9 +429,14 @@ when they are missing, 设置 gives the three lines to paste, derived from the b
 `baseline`. A person pastes them in the server's own file; the app cannot, and the server would refuse a file it does
 not own (`check_trusted()`). Those lines spell the home folder out rather than `~` — the one exception to `display.py`
 — because that server expands no `~`. The baseline is the one path the checks' container sees (bind-mounted
-read-only), so it is kept below `${sample}/`, `~/workplace/vstatd-team/` or the app's data directory, resolved with
-`realpath`, never the home folder and with no dot folder below that root. A run in progress keeps who approves its
-bench requests: `POST /bench/decide` reads that run's own team, and a restart does not rewrite it from 设置.
+read-only), so it is kept below `${sample}/` or `~/workplace/vstatd-team/`, or in a folder that is there at or below
+the app's data directory's `baseline/` (not its `runs/` or `sample.json`), resolved with `realpath`, never the home
+folder and with no dot folder below that root; a root that itself resolves to the home folder or above it (a
+`~/workplace/vstatd-team` that links to `~`) allows nothing. The checks mount and give the baseline as it resolves
+when the container starts, and check it again on that path by the same rules: one that no longer holds (a link
+swapped since 设置 saved it) starts no container and is BLOCKED for a person with the reason. A run in progress
+keeps who approves its bench requests: `POST /bench/decide` reads that run's own team, and a restart does not
+rewrite it from 设置.
 
 The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
 and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A
