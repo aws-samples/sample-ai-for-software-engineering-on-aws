@@ -350,6 +350,31 @@ def test_a_root_that_is_a_link_to_the_home_folder_or_above_it_allows_nothing(tmp
     asyncio.run(go())
 
 
+def test_a_root_that_is_a_link_into_a_dot_folder_or_another_users_home_allows_nothing(tmp_path, monkeypatch):
+    """From the review of #67: a root linked to ~/.ssh had nothing below it starting with a dot, and one linked to
+    another user's home is not above this one, so both still let a folder in. A root a link leads out of where it is
+    written allows nothing."""
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    home, other = tmp_path / "home", tmp_path / "users" / "bob"
+    for d in (home / ".ssh" / "sub", home / "workplace", other / "sub"):
+        d.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    team_dir, data_base = home / "workplace" / "vstatd-team", svc.data_dir / "baseline"
+
+    async def go():
+        for target in (home / ".ssh", other):
+            for link in (team_dir, data_base):
+                link.unlink(missing_ok=True)
+                link.symlink_to(target)
+            for value in ("~/workplace/vstatd-team/sub", str(data_base), str(data_base / "sub")):
+                r = await post(routes, {"settings": {"baseline": value}})
+                assert (r.status, r.code) == (400, "invalid_settings"), (target, value)
+                assert any("只读挂进" in p for p in r.body["problems"]), (value, r.body["problems"])
+                assert not (svc.data_dir / "settings.json").exists(), value
+
+    asyncio.run(go())
+
+
 def test_only_the_baseline_folder_of_the_data_directory_holds_and_it_must_be_a_folder(tmp_path, monkeypatch):
     """From #64: the whole data directory was a root, so its runs/ and even sample.json were accepted. Only its
     baseline/ folder (or a folder below it) holds, and it must be a folder that is there."""

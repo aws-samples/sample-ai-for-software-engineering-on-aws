@@ -141,25 +141,26 @@ def _abs(value: Any, key: str, probs: list[str]) -> str:
 
 def _roots(data_dir: Path | str | None) -> list[str]:
     """Where a baseline may be below, resolved: the bench owner's folder and the scenario folder (when it is known).
-    A root that resolves to the home folder or above it is left out: ``~/workplace/vstatd-team`` as a symbolic link
-    to ``~`` would otherwise let the whole home folder in."""
-    out = [os.path.realpath(os.path.expanduser(TEAM_DIR))]
+    A root is left out when a symbolic link on its way leads it out of where it is written (``~/workplace/vstatd-team``
+    as a link to ``~``, to ``~/.ssh`` or to another user's home would let that folder in), or when it is the home
+    folder or above it."""
+    out = [os.path.abspath(os.path.expanduser(TEAM_DIR))]
     try:
-        out.append(os.path.realpath(paths_mod.sample_dir(data_dir)))
+        out.append(os.path.abspath(paths_mod.sample_dir(data_dir)))
     except AppError:  # setup.sh has not run: a ${sample} path is refused below
         pass
-    home = _home()
-    return [r for r in out if r != home and not _under(home, r)]
+    home, real = _home(), [(os.path.realpath(p), p) for p in out]
+    return [r for r, p in real if (r == p or _under(r, p)) and r != home and not _under(home, r)]
 
 
 def _data_baseline(data_dir: Path | str | None) -> str:
     """The one folder of the app's data directory a baseline may be (it or below it), resolved; "" without a data
-    directory or when it resolves to the home folder or above it. The rest of the data directory (runs/,
+    directory or when ``baseline/`` is a link out of the data directory. The rest of the data directory (runs/,
     settings.json, sample.json) is the app's own."""
     if not data_dir:
         return ""
-    real, home = os.path.realpath(os.path.join(data_dir, DATA_BASELINE)), _home()
-    return "" if real == home or _under(home, real) else real
+    real = os.path.realpath(os.path.join(data_dir, DATA_BASELINE))
+    return real if real == os.path.join(os.path.realpath(data_dir), DATA_BASELINE) else ""
 
 
 def baseline_refused(real: str, data_dir: Path | str | None) -> str:
