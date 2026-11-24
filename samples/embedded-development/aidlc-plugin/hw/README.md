@@ -5,6 +5,8 @@ that adds the hardware steps of the [embedded framework](../../README.md#2-ai-dl
 to AI-DLC Workflows 2.0, without changing its five phases. Install it in a project whose work runs on embedded
 hardware. Written and tested against AI-DLC Workflows 2.11.2 (commit `9863ec8`); the plugin mechanism is still
 evolving, so check the plugin guide of the version you run.
+A [recording](../../demos/README.md#the-hw-plugin-in-kiro-cli) shows it in Kiro CLI, up to its first hardware approval
+gate.
 
 ## What it adds, and how each step relates to the core stages
 

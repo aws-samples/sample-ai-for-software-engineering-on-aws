@@ -234,7 +234,8 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 > the [implementation plan](docs/kiro-crew-app.md#implementation-plan)). The app was fixed during that run where it
 > held the run with no way on for the person; [what that run showed](docs/kiro-crew-app.md#seen-in-the-first-delivery);
 > its audit trail and evidence page, for facilitators, in [rehearsal/first-delivery/](rehearsal/first-delivery/README.md).
-> One run is not a benchmark: the figures below are that run's.
+> One run is not a benchmark: the figures below are that run's. A recording of it is in
+> [demos/](../demos/README.md#one-delivery-on-the-kiro-crew-board).
 
 [`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (AIDLC-Embedded团队), modelled on the
 [agent-team sample](../../agent-team-on-kiro-crew/). It takes the work item through AI-DLC with six roles, each a Kiro

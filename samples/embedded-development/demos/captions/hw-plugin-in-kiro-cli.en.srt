@@ -1,0 +1,31 @@
+1
+00:00:01,744 --> 00:00:11,534
+Kiro CLI runs AI-DLC 2.11.2 as shipped, with the hw plugin, on the synthetic vstatd reference project.
+
+2
+00:00:11,584 --> 00:00:17,990
+Reverse Engineering: the developer persona scans the repository. About thirty minutes, shortened.
+
+3
+00:00:18,040 --> 00:00:30,974
+A refactor workflow with eleven stages and eleven approval gates. The plugin's stage is one of them.
+
+4
+00:00:31,024 --> 00:00:40,684
+The plugin's step in Requirements Analysis records what this machine can verify, and what only the target can.
+
+5
+00:00:40,734 --> 00:00:57,696
+Our answers: bench evidence goes in at the emulation tier, reported as blocked until the bench has run it.
+
+6
+00:00:57,746 --> 00:01:26,262
+The reviewer reports three major gaps. We ask for two fixes, and reject one with the reason.
+
+7
+00:01:26,312 --> 00:01:39,205
+Hardware Verification Planning, the plugin's stage 2.10: every requirement gets a tier and a check.
+
+8
+00:01:39,255 --> 00:01:45,471
+The run stops at its approval gate. Seventy-eight minutes and 88.7 credits, shortened here.
