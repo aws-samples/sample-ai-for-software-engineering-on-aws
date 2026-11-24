@@ -1,0 +1,48 @@
+1
+00:00:00,000 --> 00:00:06,073
+The agent reaches the build server only through MCP tools. Every call goes to the audit log.
+
+2
+00:00:06,123 --> 00:00:12,381
+Calls outside the agent's grant are refused: a check it may not run, an extra compiler flag.
+
+3
+00:00:12,431 --> 00:00:16,961
+The release as it is fails the cross build: a target header is missing.
+
+4
+00:00:17,011 --> 00:00:23,005
+The agent tries wrong repairs, like the unit tests' stub header. Each failed attempt counts.
+
+5
+00:00:23,055 --> 00:00:27,609
+After the first attempt and three retries, the server refuses the next one.
+
+6
+00:00:27,659 --> 00:00:30,701
+A person reads the audit log and resets the count.
+
+7
+00:00:30,751 --> 00:00:34,849
+The right repair, the target sysroot, passes the build check.
+
+8
+00:00:34,899 --> 00:00:40,101
+ThreadSanitizer in the unit check finds a data race that no analyser reported.
+
+9
+00:00:40,151 --> 00:00:45,113
+With the race fixed, the plain, thread and address sanitizer runs pass.
+
+10
+00:00:45,163 --> 00:00:52,313
+A fix with no test that names its finding fails the unit check.
+
+11
+00:00:52,363 --> 00:00:57,685
+The release check fails and says why: unit failed, and there are no bench results yet.
+
+12
+00:00:57,735 --> 00:01:03,347
+Every call behaved as expected. Waits are shortened; the real run took about 6 minutes.
+

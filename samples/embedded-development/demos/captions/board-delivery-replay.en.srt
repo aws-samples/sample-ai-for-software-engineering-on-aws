@@ -1,0 +1,47 @@
+1
+00:00:00,000 --> 00:00:09,025
+A replay of one real delivery on the Kiro Crew board: six AI roles in the five AI-DLC phases. The agents' notes are in Chinese.
+
+2
+00:00:09,075 --> 00:00:15,437
+Triage gate: a person decides each finding, and every option cites the interface specification.
+
+3
+00:00:15,488 --> 00:00:24,042
+Who did what, built from the audit trail: people appear only at the gates and on the bench.
+
+4
+00:00:24,092 --> 00:00:29,134
+Tests first: the tester's seven new tests fail on the old code.
+
+5
+00:00:29,184 --> 00:00:33,434
+The checks before the bench send each failure back to the role that owns it.
+
+6
+00:00:33,484 --> 00:00:40,434
+Fix rounds: the agents change the code, and the checks keep sending it back until it passes.
+
+7
+00:00:40,484 --> 00:00:46,767
+When a role can no longer fix what failed, the run stops and hands over to a person.
+
+8
+00:00:46,817 --> 00:00:56,149
+The reviewer reads only the changes. Its open point also goes to a person to decide.
+
+9
+00:00:56,199 --> 00:01:02,369
+On the bench, a person approves the deploy and then the replay. Both post-bench checks pass.
+
+10
+00:01:02,419 --> 00:01:09,045
+The first independent rerun failed on an app defect, fixed since. The owner resumed it, and it passed.
+
+11
+00:01:09,095 --> 00:01:16,712
+All seven checks pass on the rerun, and the release owner signs off on the evidence page, at the emulation tier.
+
+12
+00:01:16,762 --> 00:01:24,628
+The scorecard holds only measured numbers. Its top row adds two runs; the per-run row is this delivery.
