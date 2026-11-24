@@ -41,7 +41,7 @@ triage = "{root}/server/triage/triage.json"
 def scenario(tmp_path, monkeypatch):
     """The app with the shipped team file, a stand-in scenario folder and both servers' configuration files."""
     sample = tmp_path / "sample"
-    for d in ("checks", "reference-project", "bench"):
+    for d in ("checks", "reference-project", "bench/own-baseline"):
         (sample / d).mkdir(parents=True)
     (sample / "bench" / "console.py").write_text("", encoding="utf-8")
     team = json.loads(constants.TEAM_FILE.read_text(encoding="utf-8"))
@@ -281,6 +281,8 @@ def test_a_path_out_of_the_allowed_folders_is_refused_and_so_is_a_control_charac
             assert not (svc.data_dir / "settings.json").exists(), patch
         # inside the scenario folder it holds, and so does the bench owner's folder and the app's data directory
         (svc.data_dir / "baseline").mkdir()
+        for d in ("baseline-final", "baseline"):  # a baseline is an existing folder wherever it is
+            (home / "workplace" / "vstatd-team" / d).mkdir(parents=True, exist_ok=True)
         for value in ("${sample}/bench/own-baseline", "~/workplace/vstatd-team/baseline-final",
                       str(home / "workplace" / "vstatd-team" / "baseline"), str(svc.data_dir / "baseline")):
             r = await post(routes, {"settings": {"baseline": value}})
@@ -353,16 +355,17 @@ def test_a_root_that_is_a_link_to_the_home_folder_or_above_it_allows_nothing(tmp
 def test_a_root_that_is_a_link_into_a_dot_folder_or_another_users_home_allows_nothing(tmp_path, monkeypatch):
     """From the review of #67: a root linked to ~/.ssh had nothing below it starting with a dot, and one linked to
     another user's home is not above this one, so both still let a folder in. A root a link leads out of where it is
-    written allows nothing."""
+    written allows nothing. glayyiyi's review of #67 adds ~/.aws and a folder outside the home folder (as /etc)."""
     svc, routes, _ = scenario(tmp_path, monkeypatch)
-    home, other = tmp_path / "home", tmp_path / "users" / "bob"
-    for d in (home / ".ssh" / "sub", home / "workplace", other / "sub"):
+    home, other, etc = tmp_path / "home", tmp_path / "users" / "bob", tmp_path / "etc"
+    targets = (home / ".ssh", home / ".aws", other, etc)
+    for d in (home / "workplace", *(t / "sub" for t in targets)):
         d.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
     team_dir, data_base = home / "workplace" / "vstatd-team", svc.data_dir / "baseline"
 
     async def go():
-        for target in (home / ".ssh", other):
+        for target in targets:
             for link in (team_dir, data_base):
                 link.unlink(missing_ok=True)
                 link.symlink_to(target)
@@ -371,6 +374,32 @@ def test_a_root_that_is_a_link_into_a_dot_folder_or_another_users_home_allows_no
                 assert (r.status, r.code) == (400, "invalid_settings"), (target, value)
                 assert any("只读挂进" in p for p in r.body["problems"]), (value, r.body["problems"])
                 assert not (svc.data_dir / "settings.json").exists(), value
+
+    asyncio.run(go())
+
+
+def test_a_baseline_in_the_scenario_or_the_team_folder_must_be_an_existing_folder_too(tmp_path, monkeypatch):
+    """From glayyiyi's review of #67: only the data directory's baseline/ had to be a folder, so a file or a missing
+    path below ${sample}/ or the team folder was saved. Each is refused; an existing folder holds."""
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    home = tmp_path / "home"
+    team_dir = home / "workplace" / "vstatd-team"
+    team_dir.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    (tmp_path / "sample" / "bench" / "a-file").write_text("", encoding="utf-8")
+    (team_dir / "a-file").write_text("", encoding="utf-8")
+
+    async def go():
+        for value in ("${sample}/bench/a-file", "${sample}/bench/not-there", "~/workplace/vstatd-team/a-file",
+                      "~/workplace/vstatd-team/not-there"):
+            r = await post(routes, {"settings": {"baseline": value}})
+            assert (r.status, r.code) == (400, "invalid_settings"), value
+            assert any("已有的文件夹" in p for p in r.body["problems"]), (value, r.body["problems"])
+            assert not (svc.data_dir / "settings.json").exists(), value
+        (team_dir / "own").mkdir()
+        for value in ("${sample}/bench/own-baseline", "~/workplace/vstatd-team/own"):
+            r = await post(routes, {"settings": {"baseline": value}})
+            assert r.status == 200, (value, r.body)
 
     asyncio.run(go())
 

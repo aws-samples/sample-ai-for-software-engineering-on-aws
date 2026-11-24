@@ -165,8 +165,8 @@ def _data_baseline(data_dir: Path | str | None) -> str:
 
 def baseline_refused(real: str, data_dir: Path | str | None) -> str:
     """Why the baseline that resolves to *real* may not be mounted into the checks' container ("" when it may): it
-    must be below one of :func:`_roots` or be (or be below) the data directory's ``baseline/`` folder, which must
-    then be a folder, never the home folder itself, and with no part below its root starting with a dot (``.aws``,
+    must be below one of :func:`_roots` or be (or be below) the data directory's ``baseline/`` folder, an existing
+    folder in every case, never the home folder itself, and with no part below its root starting with a dot (``.aws``,
     ``.ssh``). Read when 设置 saves it and again by checks.py right before ``docker run``, on the path it mounts."""
     data = _data_baseline(data_dir)
     in_data = bool(data) and (real == data or _under(real, data))
@@ -176,8 +176,8 @@ def baseline_refused(real: str, data_dir: Path | str | None) -> str:
                 "（它会被只读挂进跑检查的容器）")
     if any(part.startswith(".") for part in PurePosixPath(os.path.relpath(real, root)).parts):
         return f"「{FIELD['baseline']}」里不能有以 . 开头的一段（比如 .aws、.ssh）"
-    if in_data and not os.path.isdir(real):
-        return f"「{FIELD['baseline']}」在 app 的数据目录里时要是一个已有的文件夹"
+    if not os.path.isdir(real):
+        return f"「{FIELD['baseline']}」要是一个已有的文件夹"
     return ""
 
 
