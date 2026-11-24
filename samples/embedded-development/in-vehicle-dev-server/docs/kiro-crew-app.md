@@ -727,11 +727,14 @@ Decided on 2026-11-23:
   subject `[role] （app 代提交）` exactly, which also starts with a role's tag and so is recognised first. Each run is
   measured once into `results/commit-sizes.json` with the HEAD it was taken at, and again when HEAD has moved since:
   it is looked at before a reviewer's round, in the tick that ends the run, and before the scorecard is read. Once the
-  run has ended, HEAD is compared one last time and the file is marked `final`; from then on it is read without git.
+  run has ended, HEAD is compared one last time and the file is marked `final`; from then on it is read as it is
+  while HEAD stays at the commit it was measured at, and measured again if a resumed run (a retry) has merged more.
   A measurement that fails is not tried again, and not warned about again, until HEAD moves. An imported run has none.
 - **Where they show.** The reviewer's task (a table, oldest first), the scorecard (each run's not-moved lines per
   commit, the most and the median, and which commit was the biggest: measured figures only, D8) and the sign-off
-  card (every commit, most not-moved lines first).
+  card (every commit, most not-moved lines first). The commits are counted from the run's base, the requirement
+  commit, so the triage's, the architect's and the tester's are listed too; trace counts from the triage's base, so
+  the two lists can differ by a few commits.
 
 How moved lines are counted, fixed so that the same git gives the same numbers:
 
@@ -743,8 +746,10 @@ git -c color.diff.oldMoved=blue -c color.diff.newMoved=yellow -c color.diff.oldM
 
 Each `+` or `-` line is counted by the colour it starts with: blue or yellow is moved, red or green is not. The app
 also sets those two colours and the bold of the headers, so no colour setting in a repository changes the count.
-git marks a block as moved only when it has at least 20 letters or digits, so a shorter move counts as not moved:
-the not-moved figure errs high, never low. The user's global and system git configuration is not read, but the
+git marks a block as moved only when it has at least 20 letters or digits, so a shorter move counts as not moved
+and the not-moved figure is usually high. A block copied to several places counts every copy as moved, though: a
+6-line block removed from one file and added to two others is 18 lines, 18 moved, 0 not moved, although 6 of them
+are new code. The user's global and system git configuration is not read, but the
 repository's own `.git/config` and `.gitattributes` still are, so a setting there (for example `diff.renames`, or a
 `textconv`) can change the count. A binary file and a pure rename count as 0 lines, as in `git diff --numstat`. Read only on the `r11170658` work tree, this gives `c6579f9`
 796 / 448 / 348 and `754eaaa` 156 / 73 / 83.
