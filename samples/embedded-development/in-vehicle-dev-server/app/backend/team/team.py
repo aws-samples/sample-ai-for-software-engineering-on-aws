@@ -110,10 +110,25 @@ def fenced(globs: list[str], root: Path | None = None) -> list[str]:
     """The paths or globs a person asked for that could reach what a role is never given (FENCED): by what the glob
     itself says and, with *root* (the work tree), by what a path of it resolves to, so a symlink committed at a path
     outside FENCED cannot stand in for a file inside it, nor for one outside the work tree (the source repo's own
-    checks/, say)."""
+    checks/, say). A link in the glob's own literal part counts too: ``src/lroot/**``, ``src/lroot -> ..``, reaches
+    checks/ though nothing of the work tree matches it."""
     return [g for g in globs
             if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED) or resolves_fenced(g, root)
-            or _matches_fenced(g, root)]
+            or _prefix_reaches_fenced(g, root) or _matches_fenced(g, root)]
+
+
+def _prefix_reaches_fenced(g: str, root: Path | None) -> bool:
+    """Whether path or glob *g*, its literal part resolved through the links of the work tree *root*, may meet FENCED
+    (glob against glob, a trailing ``/`` kept as everything below): ``src/lmcp/`` with ``src/lmcp -> ../mcp`` is
+    ``mcp/**``. Out of the work tree, unreadable, or a loop the resolving sees is refused. False without a *root*."""
+    if root is None:
+        return False
+    try:
+        rel = (root / g).resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError, RuntimeError):  # out of the tree, unreadable, or a loop (up to Python 3.12)
+        return True
+    parts = ([] if rel == "." else rel.split("/")) + (["**"] if g.endswith("/") else [])
+    return any(_globs_meet(parts, f.split("/")) for f in FENCED)
 
 
 def resolves_fenced(p: str, root: Path | None) -> bool:
@@ -163,13 +178,14 @@ def _matches_fenced(glob: str, root: Path | None) -> bool:
     """Whether a path of the work tree *root* that *glob* matches resolves to what a role is never given
     (resolves_fenced): ``src/*`` gives a role ``src/x``, a symlink to ``checks/``, by what it matches, which the
     glob's own text does not show. False without a *root* or for a plain path (resolves_fenced judges that one).
-    A symlinked folder is judged itself and not walked into; ``.git`` is not walked, no role is given it.
+    A symlinked folder is judged itself and not walked into, also when the glob may reach below it (``s*/lroot/**``);
+    ``.git`` is not walked, no role is given it.
 
     shortcut: a folder that cannot be listed is skipped; refuse instead if a work tree ever holds one a role can
     write below."""
     if root is None or not (any(c in glob for c in "*?") or glob.endswith("/")):
         return False
-    todo = [root]
+    todo, want = [root], glob.split("/")
     while todo:
         try:
             entries = list(todo.pop().iterdir())
@@ -177,7 +193,8 @@ def _matches_fenced(glob: str, root: Path | None) -> bool:
             continue
         for p in entries:
             rel = p.relative_to(root).as_posix()
-            if gitwork.matches(rel, [glob]) and _reaches_fenced(p, rel, root):
+            below = p.is_symlink() and _globs_meet(want, [*rel.split("/"), "**"])  # s*/lroot/**: below a link
+            if (gitwork.matches(rel, [glob]) or below) and _reaches_fenced(p, rel, root):
                 return True
             if p.is_dir() and not p.is_symlink() and p.name != ".git":
                 todo.append(p)
@@ -187,7 +204,8 @@ def _matches_fenced(glob: str, root: Path | None) -> bool:
 def _reaches_fenced(p: Path, rel: str, root: Path) -> bool:
     """Whether the work tree's path *p* (*rel*) leads to what a role is never given: it resolves there
     (resolves_fenced), or it is a link to a folder in which FENCED may match (what is below a link is below its
-    target), or it is a link loop."""
+    target), or it is a link loop that resolve() raises on (Python up to 3.12; 3.13 resolves a loop without raising,
+    so it is not refused here)."""
     try:
         if resolves_fenced(rel, root):
             return True

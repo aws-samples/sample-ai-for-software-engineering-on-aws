@@ -640,3 +640,21 @@ def test_a_glob_is_fenced_by_what_it_matches_in_the_work_tree_not_only_by_what_i
         assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
 
     asyncio.run(go())
+
+
+def test_a_link_in_the_literal_part_of_a_glob_is_fenced_by_where_it_leads(tmp_path, monkeypatch):
+    """cmake/up/** matched nothing of the work tree and src/deep/srv/ lost its / to resolve(), so a link in a glob's
+    own literal part (cmake/up -> the work tree, src/deep/srv -> mcp/) reached checks/ or mcp/ unrefused."""
+    _, _, run, _ = held_run(tmp_path, monkeypatch)
+    wt = Path(run.s["run_wt"])
+    (wt / "mcp" / "build").mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "deep").mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "deep" / "srv").symlink_to(wt / "mcp")
+    (wt / "cmake").mkdir(exist_ok=True)
+    (wt / "cmake" / "up").symlink_to(wt)
+    (wt / "tests").mkdir(exist_ok=True)
+    team = mod("team")
+    reach = ["src/deep/srv/", "src/deep/srv", "src/deep/srv/**", "cmake/up/**", "cmake/up/", "cmake/up/*",
+             "cmake/up/docs/aidlc/*", "c*/up/**", "src/*/srv/"]
+    assert team.fenced(reach, wt) == reach
+    assert team.fenced(["src/a.cpp", "src/a.*", "tests/**", "src/*", "docs/*.md"], wt) == []

@@ -850,7 +850,8 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   The person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
   can reach the first five (400): one click must not hand a role what judges it. A glob is judged by what it says
   and by what each path of the work tree it matches resolves to, so `src/*` cannot reach a committed link to
-  `mcp/`. Another role's file it accepts,
+  `mcp/`; a link in its own literal part counts by where it leads, so `src/lroot/**` with `src/lroot -> ..` is
+  refused too. Another role's file it accepts,
   since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
   justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the
