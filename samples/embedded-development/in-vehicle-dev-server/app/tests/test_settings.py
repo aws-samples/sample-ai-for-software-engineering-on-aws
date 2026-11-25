@@ -475,17 +475,18 @@ def test_settings_json_keeps_only_the_fields_that_differ_from_the_team_file(tmp_
                                                                                    "build": build}}})
         assert r.status == 200
         assert json.loads(file.read_text(encoding="utf-8")) == {"mode": "servers", "server_configs": {"build": build}}
+        # a file stored whole by the version before this one is still read as it was
+        file.write_text(json.dumps({**dflt, "board_decides": True}), encoding="utf-8")
+        got = (await call(routes, "GET", "/settings")).body
+        assert got["settings"] == {**dflt, "board_decides": True} and got["dropped"] == []
         # a default the team file changes later is followed, as it is not pinned in settings.json
+        file.write_text(json.dumps({"mode": "servers", "server_configs": {"build": build}}), encoding="utf-8")
         team = json.loads(svc.team_file.read_text(encoding="utf-8"))
         team["bench"]["baseline"] = "${sample}/bench/new-baseline"
         svc.team_file.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
         got = (await call(routes, "GET", "/settings")).body
         assert got["settings"]["baseline"] == "${sample}/bench/new-baseline" and got["dropped"] == []
         assert got["settings"]["mode"] == "servers" and got["settings"]["server_configs"]["build"] == shown(build)
-        # a file stored whole by the version before this one is still read as it was
-        file.write_text(json.dumps({**dflt, "board_decides": True}), encoding="utf-8")
-        got = (await call(routes, "GET", "/settings")).body
-        assert got["settings"] == {**dflt, "board_decides": True} and got["dropped"] == []
 
     asyncio.run(go())
 
