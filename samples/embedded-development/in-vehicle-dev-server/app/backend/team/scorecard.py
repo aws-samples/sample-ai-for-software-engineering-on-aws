@@ -24,6 +24,8 @@ How each figure is taken:
 
 - Tool calls by permission class, and how many were refused: in servers mode (D17), the app's calls in the
   ``build`` and ``bench`` MCP servers' audit logs (the agents use neither, D2, D3); none in direct mode.
+- Commit sizes (D18): the batch's commits, the most and the median of their not-moved lines and the biggest commit,
+  from ``results/commit-sizes.json`` (commits.py; the service measures it before the scorecard is read). Reported only.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from . import bench as bench_mod
+from . import commits as commits_mod
 from . import servers as servers_mod
 from .store import all_events
 from .team import review_verdict
@@ -173,6 +176,8 @@ def run_figures(s: dict[str, Any], events: list[dict[str, Any]], recs: list[dict
             "bench": bench_actions(s["id"], recs, s.get("repo")) if s.get("team", {}).get("bench") else None,
             # an imported run's sessions are another machine's: its audit logs are not here
             "tool_calls": servers_mod.tool_calls(root) if s.get("repo") and not s.get("imported") else None,
+            "commit_sizes": commits_mod.summary(commits_mod.load(results)) if s.get("repo") and not s.get("imported")
+            else None,
             "rerun_differs": [str(x.get("name")) for x in rerun.get("differs") or []] if rerun else None}
 
 

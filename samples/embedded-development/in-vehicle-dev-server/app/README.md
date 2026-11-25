@@ -37,7 +37,9 @@ Installing it, and what it does not enforce: [the scenario README](../README.md#
 
 The scorecard (`GET /scorecard`) is computed from each run's `run.json`, `events.jsonl`, approved triage, results
 directories and the bench's `actions.jsonl`; [backend/team/scorecard.py](backend/team/scorecard.py) says how each figure
-is taken (D8).
+is taken (D8). It also reports each run's commit sizes (D18, [backend/team/commits.py](backend/team/commits.py)): the
+changed, moved and not-moved lines of every commit the roles made, kept in `results/commit-sizes.json`; the reviewer's
+task and the sign-off card list them too. They are reported only: no check fails and nothing is sent back on them.
 
 With no run yet, the board shows the work item, the flow from triage to sign-off as a 人机分工 grid (steps × 人 / AI / app / 台架, what each is to do; `ui/src/board/division.ts`), and a
 checklist from `GET /readiness`: the knowledge source, the build container image, `bench/doctor.sh`, the target, the
@@ -121,7 +123,7 @@ baseline into one of them.
 | Path | What it is |
 | --- | --- |
 | `app.json` | Kiro Crew app manifest |
-| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/settings.py` (`GET` / `POST /settings`), `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
+| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/settings.py` (`GET` / `POST /settings`), `team/scorecard.py`, `team/commits.py` (commit sizes, D18), `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
 | `backend/team/servers.py`, `mcpclient.py` | Servers mode (D17): the steps as tool calls, and the stdio MCP client |
 | `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, audit trail (`Audit.tsx`), 人机分工 (`DivisionGrid.tsx`, `division.ts`), graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `settings/` (设置), `item/` (交付详情), `types.ts` (the contract with the backend) |
 | `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd` (the default), `vstatd-triage`, `vstatd-release`, `empty`, `?view=score`, `?view=item&run=<id>`) |

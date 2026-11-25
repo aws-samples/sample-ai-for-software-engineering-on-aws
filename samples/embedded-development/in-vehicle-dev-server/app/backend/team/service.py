@@ -576,6 +576,8 @@ class Service:
 
     async def scorecard(self) -> dict[str, Any]:
         """The rehearsal scorecard (D8), from the runs' records."""
+        # each run's commit sizes measured (again only when its HEAD moved, D18) before the records are read
+        await asyncio.gather(*(r.commit_sizes() for r in self.runs.values() if not r.s.get("hidden")))
         return await asyncio.to_thread(scorecard.build, [r.s for r in self.runs.values()], self.data_dir / "runs")
 
     def _default_team(self) -> tuple[dict[str, Any], Path]:
