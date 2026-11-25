@@ -211,8 +211,8 @@ export function SettingsView() {
       )}
 
       <div className="st-actions">
-        <button type="button" className="kt-btn is-on" onClick={() => void save()} disabled={saving || !changed}
-          data-testid="st-save">
+        <button type="button" className="kt-btn is-on" onClick={() => void save()}
+          disabled={saving || (!changed && !page.dropped?.length)} data-testid="st-save">
           {saving ? tr('settings.saving') : tr('settings.save')}
         </button>
         {changed && (

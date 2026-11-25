@@ -1388,7 +1388,7 @@
  "settings.cancel": "放弃改动",
  "settings.reset": "恢复默认",
  "settings.restart": "改完保存即生效，不用重启 Kiro Crew。",
- "settings.dropped": "存着的设置里有几项不再通过检查，现在用的是团队文件的默认值（再保存一次就会按现在的规则存下）：",
+ "settings.dropped": "存着的设置里有几项不再通过检查，现在用的是团队文件的默认值。保存后这几项会从 settings.json 里去掉、回到默认值：",
  "settings.mode": "模式",
  "settings.mode.why": "检查和台架动作由 app 自己跑（direct），还是作为 build / bench 两个 MCP 服务器的工具调用跑（servers，D17）。",
  "settings.mode.label": "连接方式",

@@ -1388,7 +1388,7 @@
  "settings.cancel": "Discard the changes",
  "settings.reset": "Back to the default",
  "settings.restart": "A save takes effect at once; Kiro Crew does not need a restart.",
- "settings.dropped": "Some saved settings no longer pass the checks, and the team file's defaults are used for them now (saving again stores them by today's rules):",
+ "settings.dropped": "Some saved settings no longer pass the checks, and the team file's defaults are used for them now. Saving removes them from settings.json, back to the defaults:",
  "settings.mode": "Mode",
  "settings.mode.why": "Whether the app runs the checks and the bench actions itself (direct) or as tool calls of the build and bench MCP servers (servers, D17).",
  "settings.mode.label": "Connectors",

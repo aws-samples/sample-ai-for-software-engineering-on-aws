@@ -189,4 +189,22 @@ describe('设置', () => {
     await userEvent.click(screen.getByTestId('st-save'))
     await waitFor(() => expect(screen.queryByTestId('st-dropped')).not.toBeInTheDocument())
   })
+
+  test('with a dropped setting the page may be saved untouched, which takes it out of settings.json', async () => {
+    // #68 review Y1: the dropped value comes back as the default, so the form is unchanged; the save must not be shut
+    setApiRoutes({
+      [`GET ${API}/settings`]: () => ({ ...clone(DIRECT), dropped: ['「基线目录」不再通过检查'] }),
+      [`POST ${API}/settings`]: (body) => {
+        const b = body as { settings: SettingsPage['settings'] }
+        return { ok: true, settings: b.settings, defaults: clone(DIRECT.defaults), release: null, dropped: [] }
+      },
+    })
+    render(<SettingsView />)
+    expect(await screen.findByTestId('st-dropped')).toHaveTextContent('保存后这几项会从 settings.json 里去掉、回到默认值')
+    expect(screen.getByTestId('st-save')).toBeEnabled()
+    await userEvent.click(screen.getByTestId('st-save'))
+    await waitFor(() => expect(screen.queryByTestId('st-dropped')).not.toBeInTheDocument())
+    expect(apiCalls.filter((c) => c.method === 'POST')).toHaveLength(1)
+    expect(screen.getByTestId('st-save')).toBeDisabled()
+  })
 })
