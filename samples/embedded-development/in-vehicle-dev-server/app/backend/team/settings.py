@@ -9,8 +9,8 @@ Without the file the app behaves exactly as the shipped team file says: every de
   baseline        the baseline directory the direct-mode bench uses (the team file's ``bench.baseline``); in servers
                   mode the bench server's own ``baseline`` is read from its configuration and this one is not used.
                   Security-relevant: the folder is bind-mounted ``:ro`` into the container the checks run in
-                  (checks.py), so it is kept inside the scenario folder, ``~/workplace/vstatd-team`` or the app's
-                  data directory (see :func:`_baseline`)
+                  (checks.py), so it is kept inside the scenario folder, ``~/workplace/vstatd-team`` or the
+                  ``baseline/`` folder of the app's data directory (see :func:`baseline_refused`)
   docker          the direct-mode checks' Docker: ``runner`` an executable that speaks Docker's command line ("": the
                   one found on this machine, constants.DOCKER_BIN), ``host`` a daemon as ``docker -H`` takes it
                   ("": the local one). Security-relevant: the runner is run with every check, and a ``tcp://`` host
@@ -44,6 +44,7 @@ DOCKER_SCHEMES = ("unix://", "tcp://", "ssh://", "npipe://", "fd://")
 MAX_PATH = 500  # a path longer than this is the page sending something wrong, not a setting
 SAMPLE = "${sample}"  # the scenario folder as the team file writes it; paths.py fills it in after apply()
 TEAM_DIR = "~/workplace/vstatd-team"  # the bench owner's own folder (bench.OWN_BASELINE is in it)
+DATA_BASELINE = "baseline"  # the one folder of the app's data directory a baseline may be in
 # a NUL or a newline is the page sending something wrong: a newline inside a path would be read back as a second
 # line of the server's own TOML, and a NUL cannot be opened at all
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -139,16 +140,45 @@ def _abs(value: Any, key: str, probs: list[str]) -> str:
 
 
 def _roots(data_dir: Path | str | None) -> list[str]:
-    """Where a baseline may be, resolved: the scenario folder (when it is known), the bench owner's folder, and the
-    app's data directory."""
-    out = [os.path.realpath(os.path.expanduser(TEAM_DIR))]
-    if data_dir:
-        out.append(os.path.realpath(data_dir))
+    """Where a baseline may be below, resolved: the bench owner's folder and the scenario folder (when it is known).
+    A root is left out when a symbolic link on its way leads it out of where it is written (``~/workplace/vstatd-team``
+    as a link to ``~``, to ``~/.ssh`` or to another user's home would let that folder in), or when it is the home
+    folder or above it."""
+    out = [os.path.abspath(os.path.expanduser(TEAM_DIR))]
     try:
-        out.append(os.path.realpath(paths_mod.sample_dir(data_dir)))
+        out.append(os.path.abspath(paths_mod.sample_dir(data_dir)))
     except AppError:  # setup.sh has not run: a ${sample} path is refused below
         pass
-    return out
+    home, real = _home(), [(os.path.realpath(p), p) for p in out]
+    return [r for r, p in real if (r == p or _under(r, p)) and r != home and not _under(home, r)]
+
+
+def _data_baseline(data_dir: Path | str | None) -> str:
+    """The one folder of the app's data directory a baseline may be (it or below it), resolved; "" without a data
+    directory or when ``baseline/`` is a link out of the data directory. The rest of the data directory (runs/,
+    settings.json, sample.json) is the app's own."""
+    if not data_dir:
+        return ""
+    real = os.path.realpath(os.path.join(data_dir, DATA_BASELINE))
+    return real if real == os.path.join(os.path.realpath(data_dir), DATA_BASELINE) else ""
+
+
+def baseline_refused(real: str, data_dir: Path | str | None) -> str:
+    """Why the baseline that resolves to *real* may not be mounted into the checks' container ("" when it may): it
+    must be below one of :func:`_roots` or be (or be below) the data directory's ``baseline/`` folder, an existing
+    folder in every case, never the home folder itself, and with no part below its root starting with a dot (``.aws``,
+    ``.ssh``). Read when 设置 saves it and again by checks.py right before ``docker run``, on the path it mounts."""
+    data = _data_baseline(data_dir)
+    in_data = bool(data) and (real == data or _under(real, data))
+    root = data if in_data else next((r for r in _roots(data_dir) if _under(real, r)), None)
+    if root is None or real == _home():
+        return (f"「{FIELD['baseline']}」要在 {SAMPLE}/…、{TEAM_DIR}/… 或 app 数据目录的 {DATA_BASELINE}/ 里"
+                "（它会被只读挂进跑检查的容器）")
+    if any(part.startswith(".") for part in PurePosixPath(os.path.relpath(real, root)).parts):
+        return f"「{FIELD['baseline']}」里不能有以 . 开头的一段（比如 .aws、.ssh）"
+    if not os.path.isdir(real):
+        return f"「{FIELD['baseline']}」要是一个已有的文件夹"
+    return ""
 
 
 def _baseline(value: Any, probs: list[str], data_dir: Path | str | None) -> str:
@@ -157,9 +187,8 @@ def _baseline(value: Any, probs: list[str], data_dir: Path | str | None) -> str:
     It is bind-mounted ``:ro`` into the container the checks run in (checks.py docker_command), which runs the
     agents' code with network access, so a text field here decides which folder of this machine that code reads.
     It must resolve (``realpath``, after ``${sample}`` and ``~`` are filled in, so no ``..`` and no symbolic link
-    leads out) below one of :func:`_roots`, never to the home folder itself, and with no part below that root
-    starting with a dot (``.aws``, ``.ssh``). The data directory itself sits under ``~/.kiro``, so the dot rule is
-    for the part below the root."""
+    leads out) to where :func:`baseline_refused` allows. The data directory itself sits under ``~/.kiro``, so the dot
+    rule is for the part below the root."""
     p = _path(value)
     if not _text(p, "baseline", probs):
         return ""
@@ -174,15 +203,11 @@ def _baseline(value: Any, probs: list[str], data_dir: Path | str | None) -> str:
     else:
         probs.append(f"「{FIELD['baseline']}」要写绝对路径，或以 ~ 或 {SAMPLE}/ 开头")
         return ""
-    real = os.path.realpath(full)
-    root = next((r for r in _roots(data_dir) if _under(real, r)), None)
+    why = baseline_refused(os.path.realpath(full), data_dir)
     if ".." in PurePosixPath(full).parts:
         probs.append(f"「{FIELD['baseline']}」不能用 .. 跳到别处")
-    elif root is None or real == _home():
-        probs.append(f"「{FIELD['baseline']}」要在 {SAMPLE}/…、{TEAM_DIR}/… 或 app 的数据目录下面"
-                     "（它会被只读挂进跑检查的容器）")
-    elif any(part.startswith(".") for part in PurePosixPath(os.path.relpath(real, root)).parts):
-        probs.append(f"「{FIELD['baseline']}」里不能有以 . 开头的一段（比如 .aws、.ssh）")
+    elif why:
+        probs.append(why)
     else:
         return p
     return ""
