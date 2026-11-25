@@ -344,7 +344,8 @@ check: the tool, `file:line` from its first reason, that file as a path, and the
 appends the finding to the approved triage with `added: {found_by: "checks/<check>.sh", tool, location}` and the
 person's decision, checks the whole triage by the checks' rules (400 with the problems; nothing changes), and writes
 `triage.json` and its `.sha256` again, `base` unchanged: the person is the one approving it. The role named may write
-the paths given from then on (kept in the run's team, so the merge and the attribution of failures see them; a test
+the paths given from then on (a path its scope covers already, such as `tests/test_a.cpp` under `tests/**`, is not
+added again; kept in the run's team, so the merge and the attribution of failures see them; a test
 file given this way does not make the role the test writer), and the audit shows the registration as the person's
 action. A finding added already may also go to the tester (再加路径): the test a unit-test finding still lacks
 (TR §4.1) is the tester's to write, so the developer is never given `tests/**`. With 「接着运行」 the hold ends, the
@@ -847,7 +848,9 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   compiled or run, and a module without a test file still gets nothing proposed. Every other path in another
   role's scope is still the person's to type.
   The person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
-  can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
+  can reach the first five (400): one click must not hand a role what judges it. A glob is judged by what it says
+  and by what each path of the work tree it matches resolves to, so `src/*` cannot reach a committed link to
+  `mcp/`. Another role's file it accepts,
   since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
   justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the

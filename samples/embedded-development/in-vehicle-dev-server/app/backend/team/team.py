@@ -112,7 +112,8 @@ def fenced(globs: list[str], root: Path | None = None) -> list[str]:
     outside FENCED cannot stand in for a file inside it, nor for one outside the work tree (the source repo's own
     checks/, say)."""
     return [g for g in globs
-            if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED) or resolves_fenced(g, root)]
+            if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED) or resolves_fenced(g, root)
+            or _matches_fenced(g, root)]
 
 
 def resolves_fenced(p: str, root: Path | None) -> bool:
@@ -156,6 +157,47 @@ def _globs_meet(a: list[str], b: list[str]) -> bool:
     else:
         meet = x == y
     return meet and _globs_meet(a[1:], b[1:])
+
+
+def _matches_fenced(glob: str, root: Path | None) -> bool:
+    """Whether a path of the work tree *root* that *glob* matches resolves to what a role is never given
+    (resolves_fenced): ``src/*`` gives a role ``src/x``, a symlink to ``checks/``, by what it matches, which the
+    glob's own text does not show. False without a *root* or for a plain path (resolves_fenced judges that one).
+    A symlinked folder is judged itself and not walked into; ``.git`` is not walked, no role is given it.
+
+    shortcut: a folder that cannot be listed is skipped; refuse instead if a work tree ever holds one a role can
+    write below."""
+    if root is None or not (any(c in glob for c in "*?") or glob.endswith("/")):
+        return False
+    todo = [root]
+    while todo:
+        try:
+            entries = list(todo.pop().iterdir())
+        except OSError:
+            continue
+        for p in entries:
+            rel = p.relative_to(root).as_posix()
+            if gitwork.matches(rel, [glob]) and _reaches_fenced(p, rel, root):
+                return True
+            if p.is_dir() and not p.is_symlink() and p.name != ".git":
+                todo.append(p)
+    return False
+
+
+def _reaches_fenced(p: Path, rel: str, root: Path) -> bool:
+    """Whether the work tree's path *p* (*rel*) leads to what a role is never given: it resolves there
+    (resolves_fenced), or it is a link to a folder in which FENCED may match (what is below a link is below its
+    target), or it is a link loop."""
+    try:
+        if resolves_fenced(rel, root):
+            return True
+        if not (p.is_symlink() and p.is_dir()):
+            return False
+        target = p.resolve().relative_to(root.resolve()).as_posix()
+    except (OSError, RuntimeError, ValueError):  # a loop (RuntimeError up to Python 3.12) or out of the tree
+        return True
+    parts = [] if target == "." else target.split("/")  # "." : a link to the work tree itself
+    return any(_globs_meet([*parts, "**"], f.split("/")) for f in FENCED)
 
 
 def _ids_in(text: str) -> set[str]:
@@ -1137,7 +1179,9 @@ class TeamRun:
             # a finding added already may also go to a test writer: the test a unit-test finding lacks is its to write
             if (role not in self.impl and not (ext and role in self.test_writers)) or not self.roles[role]["writable"]:
                 choices = "、".join(self.impl)
-                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}）", str(role))
+                tw = "、".join(self.test_writers)
+                also = f"；写测试的角色（{tw}）只能在给已补登的发现加路径（extend）时选" if tw else ""
+                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}{also}）", str(role))
             wt = self.s.get("run_wt")
             bad = fenced(body["paths"], Path(wt) if wt else None)
             if bad:  # what judges the role, the servers, the bench or the gates' record: never the role's to change
@@ -1176,7 +1220,10 @@ class TeamRun:
                 if isinstance(self.s.get("triage"), dict):
                     self.s["triage"]["sha256"] = digest
             r = self.roles[role]
-            added = [g for g in body["paths"] if g not in r["writable"]]
+            # a path its scope covers already is not added again (tests/test_a.cpp under tests/**): a glob is
+            # compared as written, since a narrower glob in the scope must not stand in for a wider one asked for
+            added = [g for g in body["paths"] if g not in r["writable"]
+                     and (any(c in g for c in "*?") or g.endswith("/") or not gitwork.matches(g, r["writable"]))]
             r["writable"] = [*r["writable"], *added]
             r["granted"] = [*(r.get("granted") or []), *added]
             reg = {"id": fid, "check": check, "role": role, "paths": list(body["paths"]), "added_paths": added,
