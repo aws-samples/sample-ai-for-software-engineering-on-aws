@@ -198,6 +198,7 @@ export type SettingsPage = {
   settings: Settings
   defaults: Settings // what the team file says, for 恢复默认
   release: ReleaseInputs | null // servers mode only
+  dropped?: string[] // what of settings.json no longer holds up: the team file's value is used instead
 }
 
 export type BenchRequest = { id: string; action: string; digest: string; detail: string; requested_at: string; requested_by: string; expired: boolean }

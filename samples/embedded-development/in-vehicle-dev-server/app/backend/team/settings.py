@@ -72,11 +72,35 @@ def defaults(team: dict[str, Any]) -> dict[str, Any]:
 def load(path: Path | str, team: dict[str, Any]) -> dict[str, Any]:
     """The settings in *path*, checked against *team*'s defaults; the defaults alone when there is no file, it
     cannot be read, or what it holds does not hold up (a problem is shown on 设置, it never stops a run)."""
+    return loaded(path, team)[0]
+
+
+def loaded(path: Path | str, team: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """(:func:`load`'s settings, what of the stored file was dropped for the team file's value and why): a file
+    that cannot be read, or a field that no longer passes :func:`check` (a rule added since it was saved, a folder
+    gone), is said on 设置 rather than dropped silently. No file is no problem: nothing was saved."""
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return defaults(team)
-    return check(data, team, Path(path).parent)[0]
+    except FileNotFoundError:
+        return defaults(team), []
+    except (OSError, ValueError) as exc:
+        return defaults(team), [f"settings.json 读不了（{exc}），全部用团队文件的默认值"]
+    return check(data, team, Path(path).parent)
+
+
+def stored(settings: dict[str, Any], team: dict[str, Any]) -> dict[str, Any]:
+    """What ``settings.json`` keeps of *settings*: only the fields (and the keys of ``server_configs`` and
+    ``docker``) that differ from *team*'s defaults, so a default the team file changes later is followed. A file
+    saved whole before this is still read: :func:`check` starts from the defaults and takes each key it finds."""
+    base, out = defaults(team), {}
+    for key, value in settings.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            diff = {k: v for k, v in value.items() if base[key].get(k) != v}
+            if diff:
+                out[key] = diff
+        elif base.get(key) != value:
+            out[key] = value
+    return out
 
 
 def save(path: Path | str, settings: dict[str, Any]) -> None:
@@ -227,7 +251,11 @@ def check(data: Any, team: dict[str, Any], data_dir: Path | str | None = None) -
     elif confs:
         for k in SERVERS:
             if k in confs and _path(confs[k]) != out["server_configs"][k]:
-                out["server_configs"][k] = _abs(confs[k], k, probs) or out["server_configs"][k]
+                conf = _abs(confs[k], k, probs)
+                if conf and PurePosixPath(conf).suffix != ".toml":  # both servers read --config as TOML
+                    probs.append(f"「{FIELD[k]}」要是 .toml 文件")
+                    conf = ""
+                out["server_configs"][k] = conf or out["server_configs"][k]
     if "baseline" in data and _path(data["baseline"]) != out["baseline"]:
         out["baseline"] = _baseline(data["baseline"], probs, data_dir) or out["baseline"]
     docker = data.get("docker")
