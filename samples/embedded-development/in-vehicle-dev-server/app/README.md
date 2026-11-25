@@ -80,8 +80,12 @@ data directory ([backend/team/settings.py](backend/team/settings.py), [ui/src/se
 default is read from the team file, so an install that never opens the page behaves exactly as before; a saved file
 is validated first (types, absolute or `~` paths, unknown keys dropped) and written in one step, and a field that
 does not hold up is refused with every problem named and nothing written. `settings.json` keeps only the fields that
-differ from the team file, so a default the team file changes later is followed; a file saved whole by an earlier
-version is still read. A stored field that no longer passes when the file is loaded (a rule added since, a folder
+differ from the team file, so a default the team file changes later is followed. That holds for a choice saved
+equal to the default too: it is not stored, so it follows the team file from then on. `board_decides` saved as false
+while the team file says false is not kept, and a team file that later says true lets the board approve bench
+requests with nobody choosing again; `docker.runner` and `docker.host` follow the team file the same way. A file
+saved whole by an earlier version is still read, and it keeps every value fixed (team file changes not followed)
+until the next save, which stores only what differs. A stored field that no longer passes when the file is loaded (a rule added since, a folder
 gone), or a file that cannot be read, gets the team file's value and is listed on the page (`dropped` in
 `GET /settings`) rather than dropped silently. A save takes effect for the next run; a
 run in progress keeps the team it started with, who approves its bench requests too: while it runs, 批准 on the
