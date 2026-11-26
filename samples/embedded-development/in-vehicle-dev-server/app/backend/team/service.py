@@ -616,8 +616,8 @@ class Service:
 
     async def save_settings(self, body: dict[str, Any]) -> dict[str, Any]:
         """设置 saved by the dashboard owner (every route of this app is theirs alone): checked first, then written
-        in one step, only what differs from the team file (settings_mod.stored). What does not hold up is refused
-        with every problem named, and nothing is written."""
+        in one step, as settings_mod.stored keeps it (the security switches always, the rest where it differs from
+        the team file). What does not hold up is refused with every problem named, and nothing is written."""
         try:
             _, team, _ = await asyncio.to_thread(self._settings)
         except (OSError, ValueError) as exc:

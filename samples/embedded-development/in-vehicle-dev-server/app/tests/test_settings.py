@@ -580,12 +580,14 @@ def test_settings_json_keeps_only_the_fields_that_differ_from_the_team_file(tmp_
         dflt = (await call(routes, "GET", "/settings")).body["defaults"]
         r = await post(routes, {"settings": {**dflt, "board_decides": True}})  # the page sends every field back
         assert r.status == 200 and r.body["settings"] == {**dflt, "board_decides": True}
-        assert json.loads(file.read_text(encoding="utf-8")) == {"board_decides": True}
+        kept = {"board_decides": True, "docker": {"runner": "", "host": ""}}  # stored every time (the next test)
+        assert json.loads(file.read_text(encoding="utf-8")) == kept
         build = str(server / "build.toml")
         r = await post(routes, {"settings": {"mode": "servers", "server_configs": {**dflt["server_configs"],
                                                                                    "build": build}}})
         assert r.status == 200
-        assert json.loads(file.read_text(encoding="utf-8")) == {"mode": "servers", "server_configs": {"build": build}}
+        assert json.loads(file.read_text(encoding="utf-8")) == {
+            "mode": "servers", "server_configs": {"build": build}, **kept, "board_decides": False}
         # a file stored whole by the version before this one is still read as it was
         file.write_text(json.dumps({**dflt, "board_decides": True}), encoding="utf-8")
         got = (await call(routes, "GET", "/settings")).body
@@ -598,6 +600,33 @@ def test_settings_json_keeps_only_the_fields_that_differ_from_the_team_file(tmp_
         got = (await call(routes, "GET", "/settings")).body
         assert got["settings"]["baseline"] == "${sample}/bench/new-baseline" and got["dropped"] == []
         assert got["settings"]["mode"] == "servers" and got["settings"]["server_configs"]["build"] == shown(build)
+
+    asyncio.run(go())
+
+
+def test_the_security_switches_saved_equal_to_the_default_stay_as_saved_when_the_default_changes(tmp_path,
+                                                                                               monkeypatch):
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    real = settings_mod.defaults
+
+    async def go():
+        dflt = (await call(routes, "GET", "/settings")).body["defaults"]
+        assert dflt["board_decides"] is False and dflt["docker"] == {"runner": "", "host": ""}
+        assert (await post(routes, {"settings": dflt})).status == 200  # saved as the defaults are
+        # a team file that later turns board_decides on does not turn it on for the owner who saved it off
+        team = json.loads(svc.team_file.read_text(encoding="utf-8"))
+        team["servers"]["board_decides"] = True
+        svc.team_file.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
+        # nor does a version whose Docker defaults are another runner and a remote host
+        runner = executable(tmp_path / "bin" / "other-docker")
+        monkeypatch.setattr(settings_mod, "defaults",
+                            lambda t: {**real(t), "docker": {"runner": runner, "host": "tcp://alice-box:2375"}})
+        got = (await call(routes, "GET", "/settings")).body
+        assert got["defaults"]["board_decides"] is True and got["defaults"]["docker"]["host"] == "tcp://alice-box:2375"
+        assert got["settings"]["board_decides"] is False
+        assert got["settings"]["docker"] == {"runner": "", "host": ""} and got["dropped"] == []
+        stored = json.loads((svc.data_dir / "settings.json").read_text(encoding="utf-8"))
+        assert stored == {"board_decides": False, "docker": {"runner": "", "host": ""}}
 
     asyncio.run(go())
 

@@ -41,6 +41,7 @@ SERVERS = ("build", "bench")
 # mcp/build/config.example.toml: optional, all three or none, for `run_check release`
 RELEASE_PATHS = ("bench_results", "bench_runs", "bench_baseline")
 DOCKER_SCHEMES = ("unix://", "tcp://", "ssh://", "npipe://", "fd://")
+KEPT = ("board_decides", "docker")  # security-relevant: stored once saved, even when equal to the default (stored)
 MAX_PATH = 500  # a path longer than this is the page sending something wrong, not a setting
 SAMPLE = "${sample}"  # the scenario folder as the team file writes it; paths.py fills it in after apply()
 TEAM_DIR = "~/workplace/vstatd-team"  # the bench owner's own folder (bench.OWN_BASELINE is in it)
@@ -90,12 +91,16 @@ def loaded(path: Path | str, team: dict[str, Any]) -> tuple[dict[str, Any], list
 
 
 def stored(settings: dict[str, Any], team: dict[str, Any]) -> dict[str, Any]:
-    """What ``settings.json`` keeps of *settings*: only the fields (and the keys of ``server_configs`` and
-    ``docker``) that differ from *team*'s defaults, so a default the team file changes later is followed. A file
-    saved whole before this is still read: :func:`check` starts from the defaults and takes each key it finds."""
+    """What ``settings.json`` keeps of *settings*: the security-relevant switches (``board_decides``, ``docker``'s
+    ``runner`` and ``host``) every time, so they stay as the owner saved them whatever a later team file or app
+    version says; of the other fields (and the keys of ``server_configs``) only what differs from *team*'s defaults,
+    so a default the team file changes later is followed. A file saved whole before this is still read:
+    :func:`check` starts from the defaults and takes each key it finds."""
     base, out = defaults(team), {}
     for key, value in settings.items():
-        if isinstance(value, dict) and isinstance(base.get(key), dict):
+        if key in KEPT:
+            out[key] = value
+        elif isinstance(value, dict) and isinstance(base.get(key), dict):
             diff = {k: v for k, v in value.items() if base[key].get(k) != v}
             if diff:
                 out[key] = diff

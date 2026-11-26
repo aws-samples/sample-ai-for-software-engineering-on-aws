@@ -418,7 +418,8 @@ stand-in servers only, never on a real server or a real run.
 mode, each server's `--config` path, the direct-mode baseline, the Docker the direct-mode checks run
 (`check_runner.docker`'s first word and a `-H <host>`) and `board_decides`. Every default is read from the team file,
 so an install with no settings file behaves exactly as this section describes; a save is validated first and written
-in one step, only the fields that differ from the team file, and both routes are the dashboard owner's alone
+in one step (`board_decides` and the Docker runner and host every time, the other fields only where they differ from
+the team file), and both routes are the dashboard owner's alone
 (`httpkit.Kit.deny`). A stored field that no longer passes when it is loaded is listed on 设置 and the team file's
 value is used. That guard covers the routes
 only: an agent's shell runs as the same user and can edit `settings.json` directly (turn `board_decides` on, swap
