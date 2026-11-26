@@ -62,8 +62,8 @@ role's scope has it. It is proposed only when that test file exists in the proje
 names its test sources one by one in `tests/CMakeLists.txt`, so a file the project does not have yet would not be
 compiled or run and nothing is proposed for a module without a test file. Any other path in another role's scope
 stays the person's to type. `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five, or
-that resolves outside the run's work tree (400, `invalid_finding`); with `extend` it also takes a role that writes
-tests, not only an implementing one.
+that resolves outside the run's work tree or through a symbolic link loop in any part of it (400, `invalid_finding`);
+with `extend` it also takes a role that writes tests, not only an implementing one.
 
 `POST /runs/{rid}/retry` takes `note` and `by` (who decides, named in the audit). On a run that ended on a 要改 review after its rounds (the board's `review_redo`), it sends that review back once more with the person's decision (按评审意见再改一轮); on a held bench step it carries on from that step.
 
@@ -117,10 +117,15 @@ lines to paste, derived from the bench server's own `state` and `baseline`. Past
 server's own file. Those lines are the one thing a reply writes with the home folder spelled out instead of `~`
 ([backend/team/display.py](backend/team/display.py)), because the build server takes absolute paths only and expands
 no `~`. The baseline folder is a setting the checks' container sees — it is bind-mounted read-only into a container
-that runs the agents' code with network access — so 设置 keeps it below `${sample}/`, `~/workplace/vstatd-team/` or
-the app's data directory, resolved with `realpath` after `${sample}` and `~` are filled in, never the home folder
-itself and with no part below that folder starting with a dot (`.aws`, `.ssh`). It refuses a control character in
-any path.
+that runs the agents' code with network access — so 设置 keeps it an existing folder below `${sample}/` or
+`~/workplace/vstatd-team/`, or at or below the data directory's `baseline/`, resolved with `realpath` after `${sample}`
+and `~` are filled in, never the home folder itself and with no part below that folder starting with a dot (`.aws`,
+`.ssh`); a root that a symbolic link leads out of where it is written (into a dot folder, another user's home, the
+home folder or above it), or a `baseline/` that links out of the data directory, allows nothing. The checks mount
+it as it resolves and check it again right before `docker run`, with the app's own data directory. It refuses a
+control character in any path. When upgrading: a team file edited by hand to put `bench.baseline` outside these
+folders (for example `/srv/bench/…`) now stops its checks that read the baseline at BLOCKED in direct mode; move the
+baseline into one of them.
 
 ## Code map
 

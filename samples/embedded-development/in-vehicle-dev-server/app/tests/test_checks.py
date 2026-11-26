@@ -4,11 +4,14 @@ drops its options and runs the command."""
 
 import asyncio
 import json
+import logging
+import os
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
-from teamkit import FakeManager, act, finish, make_run, mod, sh
+from teamkit import TARGET_TEMPLATE, TEAM_FILE, FakeManager, act, finish, make_run, mod, sh
 
 checks, team_mod, gitwork = mod("checks"), mod("team"), mod("gitwork")
 
@@ -143,11 +146,114 @@ def test_a_check_gets_its_arguments_its_results_dir_and_a_snapshot_at_the_head(t
     after = run_round(bench, team, wt, head, n=5, phase="after_bench", triage=triage)
     assert after["checks"][0]["verdict"] == "USAGE" and after["checks"][0]["reasons"] == ["没有 --run（logdiff 要它）"]
     # release.sh reads again every input the checks recorded, the baseline outside the run too (r11032637)
-    base = tmp_path / "baseline"
-    base.mkdir()
+    base = tmp_path / "data" / "baseline"  # the app's data directory's baseline/
+    base.mkdir(parents=True)
     rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage"], when="release"))
-    run_round(bench, rel, wt, head, n=6, phase="release", triage=triage, baseline=base)
+    run_round(bench, rel, wt, head, n=6, phase="release", triage=triage, baseline=base, data_dir=tmp_path / "data")
     assert f"-v {base}:{base}:ro " in bench.log.read_text().splitlines()[-1]
+
+
+def test_the_baseline_is_mounted_and_given_as_it_resolves(tmp_path, monkeypatch):
+    """From #64: the baseline was mounted as written, so a symbolic link swapped after 设置 checked it would hand
+    the checks' container another folder. It is mounted, and given to the check, as it resolves right then."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    bench = Bench(tmp_path, monkeypatch)
+    rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
+    wt, head = repo(tmp_path)
+    triage = tmp_path / "runs" / "r1" / "triage.json"
+    data = tmp_path / "data"  # the app's data directory; the run's work tree is outside it, as in WORK_ROOT
+    (data / "baseline" / "rec-1").mkdir(parents=True)
+    (data / "baseline" / "current").symlink_to(data / "baseline" / "rec-1")
+    run_round(bench, rel, wt, head, n=1, phase="release", triage=triage, baseline=data / "baseline" / "current",
+              data_dir=data)
+    real = data / "baseline" / "rec-1"
+    line = bench.log.read_text().splitlines()[-1]
+    assert f"-v {real}:{real}:ro " in line and f"--baseline {real}" in line and "current" not in line
+
+
+def test_a_baseline_that_no_longer_holds_right_before_docker_run_is_not_run(tmp_path, monkeypatch):
+    """The same check again, on the path that would be mounted: a link in the data directory's baseline/ swapped to
+    lead out, or a folder 设置 would never have taken (a hand-edited team file), starts no container."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    bench = Bench(tmp_path, monkeypatch)
+    rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
+    wt, head = repo(tmp_path)
+    triage = tmp_path / "runs" / "r1" / "triage.json"
+    data = tmp_path / "data"
+    (data / "baseline").mkdir(parents=True)
+    outside = tmp_path / "home" / ".ssh"
+    outside.mkdir(parents=True)
+    (data / "baseline" / "swapped").symlink_to(outside)  # a link swapped to lead out, after 设置 saved it
+    for n, base in enumerate((data / "baseline" / "swapped", tmp_path / "elsewhere"), start=1):
+        wall = run_round(bench, rel, wt, head, n=n, phase="release", triage=triage, baseline=base, data_dir=data)
+        row = wall["checks"][0]
+        assert row["verdict"] == "BLOCKED" and "只读挂进" in row["reasons"][0], row
+        assert not bench.log.exists()  # no container was started
+        assert wall["cases"][0]["owner"] is None  # a person's
+
+
+def installed(tmp_path, monkeypatch, work_root=None):
+    """The installed layout: no checks/ beside APP_ROOT, the data directory beside the app with sample.json, the run
+    under WORK_ROOT (by default ~/workplace/vstatd-team), not in the data directory; and the service's own checks.
+    → (bench, data, a round with *baseline* through the service, the release check's team)."""
+    home, app = tmp_path / "home", tmp_path / "apps" / "vstatd-team"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("VSTATD_SAMPLE", raising=False)
+    monkeypatch.setattr(mod("paths"), "APP_ROOT", app)  # installed: no checks/ beside it
+    bench = Bench(tmp_path, monkeypatch)
+    for d in ("reference-project", "bench/baseline"):
+        (bench.dir / d).mkdir(parents=True)
+    data = app / "data"
+    (data / "baseline" / "own").mkdir(parents=True)
+    (data / "sample.json").write_text(json.dumps({"sample": str(bench.dir)}), encoding="utf-8")
+    work_root = work_root or home / "workplace" / "vstatd-team"
+    rel = team_of(bench, bench.check("release", owner=None, args=["project", "triage", "baseline"], when="release"))
+    wt, head = repo(work_root)
+    ctx = SimpleNamespace(name="vstatd-team", logger=logging.getLogger("kcteam-test"), data_dir=str(data))
+    svc = mod("service").Service(ctx, manager=FakeManager(), work_root=work_root, team_file=TEAM_FILE,
+                                 template=TARGET_TEMPLATE)
+
+    def round_(n, base):
+        return asyncio.run(svc._deps.run_tests(wt, rel, head=head, results=wt.parents[1] / "results" / str(n),
+                                               phase="release", triage=wt.parents[1] / "triage.json", baseline=base))
+    return bench, data, round_, rel
+
+
+def test_in_the_installed_layout_the_shipped_and_the_data_directory_baselines_run(tmp_path, monkeypatch):
+    """From the review of #67: the check before docker run took runs/<run>/../.. for the data directory, but the
+    work tree is under WORK_ROOT (~/workplace/vstatd-team), not in the data directory, and an installed app has no
+    checks/ beside it, so ${sample}/bench/baseline and <data>/baseline/… were BLOCKED. The service gives the checks
+    its own data directory."""
+    bench, data, round_, _ = installed(tmp_path, monkeypatch)
+    for n, base in enumerate((bench.dir / "bench" / "baseline", data / "baseline" / "own"), start=1):
+        wall = round_(n, base)
+        assert wall["checks"][0]["verdict"] == "PASS", wall["checks"][0]
+        assert f"-v {base}:{base}:ro " in bench.log.read_text().splitlines()[-1]
+
+
+def test_a_root_swapped_for_a_link_into_a_dot_folder_after_saving_starts_no_container(tmp_path, monkeypatch):
+    """From glayyiyi's review of #67: with <data>/baseline swapped for a link to ~/.ssh after 设置 saved it, the
+    check before docker run passed and the container had ~/.ssh mounted. The same for ~/workplace/vstatd-team
+    swapped for a link to ~/.aws. Both are BLOCKED for a person and start no container. (The run is under another
+    work root here, so swapping the team folder leaves it in place.)"""
+    home = tmp_path / "home"
+    bench, data, round_, _ = installed(tmp_path, monkeypatch, work_root=home / "work")
+    team_dir = home / "workplace" / "vstatd-team"
+    for d in (home / ".ssh", home / ".aws" / "sub", team_dir / "sub"):
+        d.mkdir(parents=True)
+    settings = mod("settings")
+    for n, (base, root, target) in enumerate(((data / "baseline", data / "baseline", home / ".ssh"),
+                                              (team_dir / "sub", team_dir, home / ".aws")), start=1):
+        assert settings.baseline_refused(os.path.realpath(base), data) == ""  # what 设置 saves by
+        assert round_(2 * n - 1, base)["checks"][0]["verdict"] == "PASS"
+        started = len(bench.log.read_text().splitlines())
+        root.rename(root.with_name(root.name + "-was"))
+        root.symlink_to(target)  # swapped after 设置 saved it
+        wall = round_(2 * n, base)
+        row = wall["checks"][0]
+        assert row["verdict"] == "BLOCKED" and "只读挂进" in row["reasons"][0], (base, row)
+        assert len(bench.log.read_text().splitlines()) == started  # no container was started
+        assert wall["cases"][0]["owner"] is None  # a person's
 
 
 def test_a_failure_goes_to_the_owner_of_the_file_it_names_else_to_the_checks_default_owner(tmp_path, monkeypatch):

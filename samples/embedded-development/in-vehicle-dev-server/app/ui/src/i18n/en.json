@@ -1405,7 +1405,7 @@
  "settings.direct.why": "Used in direct mode only: the bench baseline directory, and the Docker the checks run in.",
  "settings.direct.off": "Servers mode is on, so these are not used: the baseline comes from the bench server's own configuration and the servers start the containers.",
  "settings.direct.baseline": "Baseline directory",
- "settings.direct.baseline.hint": "The baseline a replay is compared with (the team file's bench.baseline). This folder is mounted read-only into the container the checks run in, so it has to be inside the scenario folder (${sample}/…), ~/workplace/vstatd-team/… or the app's data directory: not the home folder itself, and no part starting with a dot (such as .aws or .ssh).",
+ "settings.direct.baseline.hint": "The baseline a replay is compared with (the team file's bench.baseline). This folder is mounted read-only into the container the checks run in, so it has to be inside the scenario folder (${sample}/…) or ~/workplace/vstatd-team/…, or a folder that is there in the app's data directory's baseline/: not the home folder itself, and no part starting with a dot (such as .aws or .ssh).",
  "settings.direct.runner": "Docker command",
  "settings.direct.host": "Docker host",
  "settings.direct.runner.hint": "Empty: the docker found on this machine. Otherwise the absolute path of an executable that speaks Docker's command line. It runs with every check, so it must be an executable file; only the dashboard owner can change it.",

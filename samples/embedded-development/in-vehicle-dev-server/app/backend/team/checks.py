@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from . import gitwork
+from . import settings as settings_mod
 from .constants import DOCKER_BIN
 
 CHECK_NAME = re.compile(r"[a-z][a-z0-9-]{0,23}")
@@ -364,8 +365,10 @@ def wall(names: list[str], rows: list[dict[str, Any]], cases: list[dict[str, Any
 
 async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: Path, phase: str = "before_bench",
                      triage: Path | None = None, run: Path | None = None,
-                     baseline: Path | None = None) -> dict[str, Any]:
-    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall."""
+                     baseline: Path | None = None, data_dir: Path | None = None) -> dict[str, Any]:
+    """One round: the team's checks of *phase*, in order, one container at a time, on *head* → the test wall.
+    *data_dir*: the app's data directory (service.py binds it), where 设置 allows a ``baseline/``; the run's work
+    tree is under WORK_ROOT, not in it. Without it a baseline holds only below ``${sample}/`` or the team folder."""
     runner = team["check_runner"]
     results = Path(results)
     results.mkdir(parents=True, exist_ok=True)
@@ -384,15 +387,26 @@ async def run_checks(run_wt: Path, team: dict[str, Any], *, head: str, results: 
             res = {"verdict": "USAGE", "reasons": [argv], "tier": None, "summary": "检查配置错误"}
         else:
             sample = Path(check["command"][0]).resolve().parents[1]  # the scenario folder: the checks and the knowledge
-            mounts = [(str(sample), False), (str(root), True)]
-            # a release check reads again every input the other checks recorded (the baseline too): it sees them all
-            mounts += [(str(Path(v)), False) for k, v in values.items() if (k in check["args"] or check["when"] == "release")
-                       and v is not None and not Path(v).resolve().is_relative_to(root.resolve()) and k != "project"]
-            container = f"vstatd-check-{uuid.uuid4().hex[:12]}"
-            cmd = docker_command(runner, mounts, argv, name=container)
-            (results / f"{name}.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")
-            rc, why = await _exec(cmd, results / f"{name}.run.log", float(check["timeout_s"]), container, runner)
-            res = _read_result(results, name, rc, why)
+            # a release check reads again every input the other checks recorded (the baseline too): it sees them all.
+            # Each is mounted (and given) as it resolves now, so a symbolic link swapped after 设置 checked it
+            # changes nothing; the baseline is checked again on that path right here, by the rules 设置 saves it by.
+            # The window left between here and Docker's own bind is accepted: a swap needs write access above the
+            # baseline, and a check container has only runs/<run> mounted read-write
+            extra = {k: Path(os.path.realpath(v)) for k, v in values.items()
+                     if (k in check["args"] or check["when"] == "release") and v is not None
+                     and not Path(v).resolve().is_relative_to(root.resolve()) and k != "project"}
+            why = settings_mod.baseline_refused(str(extra["baseline"]), data_dir) if "baseline" in extra else ""
+            if why:
+                res = {"verdict": "BLOCKED", "reasons": [f"没跑：{why}，现在它指向 {extra['baseline']}"], "tier": None,
+                       "summary": "基线目录不能挂进容器"}
+            else:
+                argv = check_argv(check, results, {**values, **extra})
+                mounts = [(str(sample), False), (str(root), True)] + [(str(p), False) for p in extra.values()]
+                container = f"vstatd-check-{uuid.uuid4().hex[:12]}"
+                cmd = docker_command(runner, mounts, argv, name=container)
+                (results / f"{name}.cmd").write_text(shlex.join(cmd) + "\n", encoding="utf-8")
+                rc, why = await _exec(cmd, results / f"{name}.run.log", float(check["timeout_s"]), container, runner)
+                res = _read_result(results, name, rc, why)
         add_result(rows, cases, check, res, project, team, round((time.time() - started) * 1000))
     return wall(names, rows, cases, head, results)
 
