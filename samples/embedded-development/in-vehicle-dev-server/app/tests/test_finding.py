@@ -699,3 +699,25 @@ def test_a_link_in_the_literal_part_of_a_glob_is_fenced_by_where_it_leads(tmp_pa
              "cmake/up/docs/aidlc/*", "c*/up/**", "src/*/srv/"]
     assert team.fenced(reach, wt) == reach
     assert team.fenced(["src/a.cpp", "src/a.*", "tests/**", "src/*", "docs/*.md"], wt) == []
+
+
+def test_fenced_walks_only_the_folders_a_glob_may_reach(tmp_path, monkeypatch):
+    """fenced() walked the whole work tree for every glob: src/* listed each folder of build/ (2.4 s with 50k files
+    there, in the event loop). A folder the glob cannot reach below is not listed, and what it can still is."""
+    _, _, run, _ = held_run(tmp_path, monkeypatch)
+    wt = Path(run.s["run_wt"])
+    for d in ("build/out/obj", "src/deep/sub", "tests/unit", "checks"):
+        (wt / d).mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "deep" / "sub" / "lk").symlink_to(wt / "checks")
+    team, listed = mod("team"), []
+    real = Path.iterdir
+    monkeypatch.setattr(Path, "iterdir", lambda p: listed.append(p.relative_to(wt).as_posix()) or real(p))
+    assert team.fenced(["src/*", "src/a.*"], wt) == []
+    assert listed == [".", "src", ".", "src"]  # src/deep cannot hold what src/* matches; build/ is not below src/
+    listed.clear()
+    assert team.fenced(["tests/**"], wt) == []
+    assert "tests/unit" in listed and all(p in (".", "tests") or p.startswith("tests/") for p in listed), listed
+    listed.clear()
+    # still refused where the glob reaches: a link deep below src/, also through a part that crosses folders (d**)
+    assert team.fenced(["src/**", "src/d**/x", "s*/*/sub/**"], wt) == ["src/**", "src/d**/x", "s*/*/sub/**"]
+    assert not [p for p in listed if p.startswith("build")], listed

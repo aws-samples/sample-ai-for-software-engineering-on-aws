@@ -113,7 +113,12 @@ def fenced(globs: list[str], root: Path | None = None) -> list[str]:
     itself says and, with *root* (the work tree), by what a path of it resolves to, so a symlink committed at a path
     outside FENCED cannot stand in for a file inside it, nor for one outside the work tree (the source repo's own
     checks/, say). A link in the glob's own literal part counts too: ``src/lroot/**``, ``src/lroot -> ..``, reaches
-    checks/ though nothing of the work tree matches it."""
+    checks/ though nothing of the work tree matches it.
+
+    It checks the work tree as it is when the finding is registered: ``src/**`` on a tree with no links is accepted,
+    and a link ``src/evil -> ../checks`` that appears afterwards is not seen here. Writes through links that appear
+    later are for the gates and the checks made at write time to catch. Blocking (it walks the work tree): call it
+    off the event loop."""
     return [g for g in globs
             if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED) or resolves_fenced(g, root)
             or _prefix_reaches_fenced(g, root) or _matches_fenced(g, root)]
@@ -193,6 +198,9 @@ def _matches_fenced(glob: str, root: Path | None) -> bool:
     if root is None or not (any(c in glob for c in "*?") or glob.endswith("/")):
         return False
     todo, want = [root], glob.split("/")
+    # a folder is walked only when the glob may reach below it (build/ is not, for src/*); a part with ** in it
+    # (src/a**/x) crosses folders, so it is taken as ** here: never a folder skipped that the glob may reach
+    reach = ["**" if "**" in w else w for w in want]
     while todo:
         try:
             entries = list(todo.pop().iterdir())
@@ -200,10 +208,11 @@ def _matches_fenced(glob: str, root: Path | None) -> bool:
             continue
         for p in entries:
             rel = p.relative_to(root).as_posix()
-            below = p.is_symlink() and _globs_meet(want, [*rel.split("/"), "**"])  # s*/lroot/**: below a link
+            below = p.is_symlink() and _globs_meet(reach, [*rel.split("/"), "**"])  # s*/lroot/**: below a link
             if (gitwork.matches(rel, [glob]) or below) and _reaches_fenced(p, rel, root):
                 return True
-            if p.is_dir() and not p.is_symlink() and p.name != ".git":
+            if (p.is_dir() and not p.is_symlink() and p.name != ".git"
+                    and _globs_meet(reach, [*rel.split("/"), "*", "**"])):  # may meet something inside it
                 todo.append(p)
     return False
 
@@ -1208,7 +1217,7 @@ class TeamRun:
                 also = f"；写测试的角色（{tw}）只能在给已补登的发现加路径（extend）时选" if tw else ""
                 raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}{also}）", str(role))
             wt = self.s.get("run_wt")
-            bad = fenced(body["paths"], Path(wt) if wt else None)
+            bad = await asyncio.to_thread(fenced, body["paths"], Path(wt) if wt else None)
             if bad:  # what judges the role, the servers, the bench or the gates' record: never the role's to change
                 raise FindingRequestError(f"{'、'.join(bad)} 会碰到检查、服务器、台架或门禁决定的文件"
                                           f"（{'、'.join(FENCED)}），不能交给角色改", ", ".join(bad))
