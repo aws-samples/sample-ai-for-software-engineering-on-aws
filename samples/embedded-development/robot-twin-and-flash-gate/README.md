@@ -64,41 +64,83 @@ All names, code and data in this scenario are synthetic.
   path, fall detection and an actuator guard (speed and torque limits). It uses fixed-point arithmetic, because the
   Cortex-M3 target has no floating-point unit. It builds for that target. From the same
   source commit, with a hardware abstraction layer, it also builds for the host so the twin can run it.
-- **Main computer:** a Linux container with a robot app (commands, telemetry, a "behaviour" API) and an update
-  client.
+- **Main computer:** a Linux container with a robot app (commands, telemetry, a "behaviour" API) and an update client. A
+  behaviour that moves the robot runs only while the motion switch is on. Only a person turns it on, at the operator
+  console; it is off after every restart of the app or the controller and after every flash, and turning it off is
+  always allowed.
 - **Twin:** a physics model of RB-1 in MuJoCo, with the firmware compiled for the host in the loop. It emulates the
   IMU with noise and bias and the motor driver, and uses a fixed physics step. Pushes are applied as impulses at a
-  fixed body point, with many random seeds per test point.
-- **Bench:** an emulated controller board, QEMU's `mps2-an385` (Cortex-M3), for the flash path. Here "flash" writes
-  the emulated board's flash image file, and a test move is the firmware's boot and self-test over the emulated
-  serial port, since the board has no sensors or motors. A simulated robot state reports battery level, "moving",
-  "on its stand" and "a person present".
-- **Operator console:** a separate terminal process, outside the agents' tools. A person sees each requested flash
-  or test move with its build digest (the SHA-256 of the exact image) and approves or refuses it there. The robot
-  state inputs are set only at this console or by a scripted scenario; the agents' tools can read them but not
-  change them.
-- **Change request:** *Add a recovery limit to the actuator guard. After a push, wheel speed must stay within the
-  guard's limit, and the robot must not travel more than 0.15 m before it is stable again. It must still not fall for
-  pushes up to the rated impulse.* The requirement, the push points, the seeds and the pass thresholds are frozen and
-  versioned before any code is written.
-- **Seeded difficulties** for the rehearsal, each caught by a check rather than by luck:
+  fixed body point, with many random seeds per test point. The twin has a version, and its error against recorded
+  pushes is measured before it judges anything (next item).
+- **Recorded pushes:** a small synthetic set of pushes that stands in for recordings from the robot. It is produced by
+  a separate reference model, not the twin and not the twin with other seeds, with effects the twin leaves out (static
+  friction, motor deadband, IMU latency), so the twin's error on it is not zero by construction. The facilitators
+  produce and freeze it in build plan item 3; the `twin` server cannot read the generator. Each push is in the dataset
+  format of Hugging Face's LeRobot, each with its tilt trace and the robot's own verdict, and no video. On a real
+  robot the push's force, duration and contact point are not logged. They are estimated from the start of each trace
+  by a fixed method in the verification plan that does not use the twin. The twin replays each push with that
+  estimate, and its error is the difference from the recorded trace in peak tilt and time to recover, and whether it
+  gives the same verdict. The set is used only to measure the twin's error, never to tune its parameters: with the
+  push estimated from the same trace, tuning to it would hide the error. The verification plan states the error the
+  twin may have on these pushes.
+- **Bench:** an emulated controller board, QEMU's `mps2-an385` (Cortex-M3), for the flash path. QEMU models no flash on
+  this board, only RAM, so the sample's flash is the board's 16 MiB PSRAM backed by a file on the host
+  (`memory-backend-file,share=on`) and seen through Zephyr's flash simulator. That file holds the primary and the
+  secondary application slot, the scratch area and the calibration area; "flash" means writing it, and the gate writes
+  it only while QEMU is stopped. The bootloader, [MCUboot](https://docs.mcuboot.com/), is not stored in that file: QEMU
+  loads it at every start. A new image is written to the secondary slot; MCUboot swaps it into the primary slot only if
+  its signature verifies, and only as a trial. If the image does not confirm itself after its self-test, the next reset
+  (from the failed self-test, a watchdog or the gate's time-out) takes the board back to the previous image. This is
+  MCUboot's test swap with revert ([design](https://docs.mcuboot.com/design.html)); a trial run with QEMU 11.1.3, Zephyr
+  v4.5.0 and MCUboot 2.5.0 showed the swap, a confirmation that survives a reset and a restart of QEMU, and the return
+  of an unconfirmed image. The trial start and its self-test belong to the flash, run with the motors disabled and are
+  not a test move. A test move is a short drive the controller is commanded to make; on the emulated board, which has no
+  sensors or motors, it is the firmware's answer to the drive command over the emulated serial port. A simulated robot
+  state reports battery level, "moving", "flashing", "on its stand" and "a person present".
+- **Operator console:** a separate terminal process, outside the agents' tools. A person sees each requested flash with
+  its manifest (the image's build digest, the SHA-256 of the exact image, its size, its sequence number and the device
+  class it is for) and each test move with the build digest it runs, and approves or refuses it there. The robot state
+  inputs and the motion switch are set only at this console or by a scripted scenario; the agents' tools can read them
+  but not change them.
+- **Change request:** *Add a recovery limit to the actuator guard. After a push, the commanded wheel speed must stay
+  within the guard's limit, and the robot must not travel more than 0.15 m before it is stable again. It must still not
+  fall for pushes up to the rated impulse.* The requirement, the push points, the seeds and the pass thresholds are
+  frozen and versioned before any code is written.
+- **Seeded difficulties** for the rehearsal, each caught by a check or a gate named below rather than by luck:
   - a rewrite of the controller in another language "passes" in a simple simulator, but the design fails when the
     real firmware runs in the twin;
-  - the firmware's balance point is not zero, which only its own code shows;
-  - the first candidate meets the travel limit by cutting torque, and falls at the rated impulse;
+  - the robot's balance angle is not zero; the notes give no value, and only the calibration data the firmware reads
+    holds it;
+  - the first candidate meets the travel limit by capping wheel speed or torque hard during recovery, and falls at
+    the rated impulse;
   - "fall" means different angles in the requirement, the twin and the firmware, and the mismatch has to be resolved
-    in the requirement, not in the test.
+    in the requirement, not in the test;
+  - a candidate passes every test in the twin, which runs the host build, but its Cortex-M build fails the self-test
+    on the emulated board. It never confirms itself, the board is reset, and the bootloader goes back to the previous
+    image;
+  - in a repair round an agent signs an image itself with a key it finds, such as MCUboot's published development
+    key. The flash gate refuses the plan, because the image's digest is not that of the build the checks passed. When
+    the image is written to the emulated board's flash file directly, outside the gate, the bootloader refuses it too,
+    because it trusts only the public key whose private key the `build` server's signing step holds. This shows the
+    controls; it is not a boundary on one machine (see the action gate).
 
 ## How
 
 ### 1. Knowledge with citations
 
 - `knowledge/rb1-robot-notes.md` (with a rendered PDF): the synthetic robot documents with numbered pages. They cover
-  geometry and mass, motor and IMU characteristics, the controller's command and telemetry interface, the safe
-  operating limits and the physical gate's settings. A fact extraction step turns them into `knowledge/facts/`, one
-  entry per limit, register and parameter, each with its page, for example `[RB1-NOTES p.9 §4.1]`.
-- `knowledge/team-rules.md`: firmware rules, build flags for both targets, flash and RAM limits, the evidence tiers,
-  and the definition of done.
+  geometry and mass, motor and IMU characteristics, the controller's command and telemetry interface, the safe operating
+  limits, the physical gate's settings and the flash layout (bootloader, primary and secondary application slots,
+  scratch area, calibration area). A fact extraction step turns them into `knowledge/facts/`, one entry per limit,
+  register and parameter, each with its page, for example `[RB1-NOTES p.5 §4.1]`.
+- `knowledge/team-rules.md`: firmware rules, build flags and static analysis for both targets, flash and RAM limits,
+  the rule that results are never reported above their evidence tier, and the definition of done.
+- `knowledge/hazard-log.md`: the robot's hazards, each with its protective measure and the check or gate that verifies
+  it, following the risk assessment that [ISO 13482:2014](https://www.iso.org/standard/53820.html) takes from ISO 12100
+  (hazard identification, risk estimation and evaluation, then risk reduction). The standard is under revision as
+  "Robotics — Safety requirements for service robots" ([ISO 13482 revision](https://www.iso.org/standard/83498.html)),
+  which fits RB-1 better than the 2014 personal care robot classes. The sample shows the method; it cites no clause and
+  claims no conformity.
 - A check confirms that every requirement, test and twin parameter cites a fact entry.
 
 ### 2. AI-DLC phases and gates
@@ -110,15 +152,17 @@ The five phases of AI-DLC Workflows 2.0, with the hardware steps of the
 | AI-DLC phase | Work in this scenario | Human gate |
 | --- | --- | --- |
 | Initialization | AI-DLC's own set-up | None; automatic |
-| Ideation | Decide whether the behaviour change is worth doing and whether it touches safety functions | The change approved for work |
-| Inception | Detect the toolchains for both computers, the twin, the emulated board and, if present, a real robot; requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; the verification plan: the evidence tier each requirement needs and, in the model-based profile, the back-to-back tolerances; design of the guard change | Requirements and test definition approved; build start approved |
-| Construction | Firmware change, or a change to the control-law model, with unit tests; builds for the controller and for the twin; static checks; the twin runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure |
-| Operation | Flash the emulated board through the gate, or a real robot in the device profile; update the main computer's software through its own path; boot and self-test on the target; one evidence page with every result labelled by tier | Each flash and test move, approved for its build digest at the operator console; each software release to the robot; the release owner signs off |
+| Ideation | Decide whether the behaviour change is worth doing and whether it touches safety functions; the hazards in the hazard log it affects | The change approved for work |
+| Inception | Detect the toolchains for both computers, the twin, the emulated board and, if present, a real robot; requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; the verification plan: the evidence tier each requirement needs, what the twin is used to decide and what a wrong verdict would cost, the error the twin may have on the recorded pushes and, in the model-based profile, the back-to-back tolerances; design of the guard change | Requirements and test definition approved; build start approved |
+| Construction | Firmware change, or a change to the control-law model with its MIL tests, then SIL and PIL and `checks/backtoback.sh`, with unit tests; builds for the controller and for the twin; static checks; the twin is checked against the recorded pushes, then runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure, and a BLOCKED check goes to a person |
+| Operation | Flash the emulated board through the gate, or a real robot in the device profile: a signed image into the secondary slot, a trial start with the self-test, the image confirms itself or the bootloader goes back; update the main computer's software through its own path; one evidence page with every result labelled by tier | Each flash and test move, approved for its build digest at the operator console; each software release to the robot; the release owner signs off |
 
 ### 3. Checks and gates before the robot
 
-Checks are command-line scripts with pass or fail. The agents cannot change them, the frozen tests or the twin's
-parameters.
+Checks are command-line scripts with pass, fail, or blocked when a check cannot judge, with the contract of the
+[in-vehicle checks](../in-vehicle-dev-server/checks/README.md) (exit status 0 PASS, 1 FAIL, 2 usage error, 3 BLOCKED,
+and a JSON result). The agents cannot change them,
+the frozen tests, the recorded pushes, the error the twin is allowed, or the twin's parameters.
 
 | Check | Pass condition |
 | --- | --- |
@@ -126,9 +170,11 @@ parameters.
 | `checks/static.sh` | Static analysis (cppcheck and clang-tidy with the team's rule set): no new findings |
 | `checks/unit.sh` | Unit tests pass for the guard, the controller and the app |
 | `checks/size.sh` | Flash and RAM use of the controller build within the limits in the team rules |
+| `checks/fidelity.sh` | The twin replays the recorded pushes: its peak tilt and its time to recover stay within the error the verification plan allows, and it gives the same verdict as the recording, for every push. Until it passes, `checks/twin.sh` is BLOCKED, not passed |
 | `checks/twin.sh` | The frozen push tests in the twin, with the firmware in the loop: no falls up to the rated impulse, travel and wheel speed within the limits, for every seed |
-| `checks/trace.sh` | Every requirement, test and twin parameter cites a fact entry; every result carries its evidence tier |
-| `checks/backtoback.sh` | Model-based profile only: the twin's results with the generated control code equal the model-in-the-loop results on every frozen test, within the tolerances in the verification plan |
+| `checks/trace.sh` | Every requirement, test and twin parameter cites a fact entry; every result carries its evidence tier; every hazard in the hazard log names a check or gate that exists |
+| `checks/sbom.sh` | The controller and bootloader images each have an SPDX software bill of materials that lists every component in the build's dependency list (`reference-project/dependencies.yaml`), each with its licence; a component missing from it fails the check |
+| `checks/backtoback.sh` | Model-based profile only: the committed generated code is the code generated from the committed model version (its manifest; see [the Simulink section](#optional-a-control-law-designed-in-simulink)), and its outputs, built for the host (SIL) and for the emulated board (PIL), equal the recorded MIL outputs on every frozen test, within the tolerances in the verification plan |
 
 **Evidence tiers.** Every test result on the evidence page carries one of four tiers: *mock* (unit tests against
 fakes), *simulation* (the twin), *emulation* (the QEMU board) and *device* (a real robot, in the optional device
@@ -136,37 +182,72 @@ profile only). The page links one source commit to both build digests, host and 
 the twin and the flashed image come from the same source. It also lists what each tier cannot show. The twin runs
 the host build, so it shows neither interrupt timing nor the controller's stack use. The emulator runs the Cortex-M
 build, but not real interrupt timing, sensors or motors. Simulation and emulation results are never reported as
-device results.
+device results. The page names the twin version and its measured error, and says that the error is against synthetic
+recordings. It also carries the images' software bills of materials, and for each flash which image the bootloader
+kept and whether the trial start was confirmed or returned.
+
+**What the twin is trusted for.** Following the risk-informed approach of
+[ASME V&V 40](https://www.asme.org/codes-standards/find-codes-standards/assessing-credibility-of-computational-modeling-through-verification-and-validation-application-to-medical-devices),
+the verification plan states the twin's context of use: it decides whether a candidate may go on to the flash gate.
+It does not show that the robot is safe; that needs device evidence. Without a robot, a wrong verdict costs one
+flash of the emulated board, whose self-test does not exercise balance. In the device profile it can make the robot
+fall in a test move, which is why a test move needs the stand, a person present and the motion switch. For that use
+the plan asks for the fidelity check and an error bound. V&V 40 was written for medical devices; the sample uses only
+its method.
 
 The three gates of the framework apply:
 
-- **Quality gate:** nothing is flashed until the checks pass. The twin, not the agent, decides whether a design meets
-  the requirement.
-- **Action gate:** the flash gate writes only the application partition (the bootloader and the calibration data
-  are never written; the layout is in the robot notes), and only the image whose digest a person
-  approved at the operator console, not in the agent's chat. It backs up first, reads back and verifies, and never
-  retries by itself. Software releases to the main computer are approved by a person.
+- **Quality gate:** nothing is flashed until every check passes; a BLOCKED check is not a pass. The twin, not the
+  agent, decides whether a design meets the requirement, and only once its error on the recorded pushes is within the
+  verification plan.
+- **Action gate:** the flash gate writes only the secondary application slot (the calibration data is never written, and
+  on the emulated board the bootloader is not in the flash file; the layout is in the robot notes §5.1), and only the
+  image whose manifest a person approved at the operator console, not in the agent's chat. The manifest carries the
+  image digest and size, a sequence number that only increases, the IDs of the device class it is for, and a signature
+  over it. These fields are a subset of the information model of [RFC 9124](https://www.rfc-editor.org/info/rfc9124/);
+  the manifest is a plain file, not the SUIT encoding. The gate refuses a sequence number lower than the one on the
+  board; the bootloader does not, because MCUboot's downgrade prevention needs its overwrite-only mode (not swap with
+  revert) and a hardware counter needs a trusted store the emulated board lacks, so an older image with a valid
+  signature written around the gate would be accepted. The gate backs up the whole flash first, reads back and verifies,
+  and never retries by itself. The bootloader then checks the signature, starts the image as a trial, and keeps it only
+  if it confirmed itself after its self-test; otherwise the next reset takes it back to the previous image. This follows
+  the protect, detect and recover principles of [NIST SP 800-193](https://csrc.nist.gov/pubs/sp/800/193/final) in a
+  reduced form: the signature check before the swap protects, the check at every start detects, and the return to the
+  previous image and the backup recover. The emulated board has no hardware root of trust, so this is not an SP 800-193
+  implementation. The signing key is held by the signing step of the `build` server, outside the agents' workspace; no
+  tool returns the key, and the step signs only an image that the checks built. The sample's key is a test key and says
+  so, the bootloader is never built with MCUboot's development keys, and a team uses its own. On one machine these
+  controls show how the gate works but are not a boundary against the agents: an agent's shell runs as the same user as
+  Kiro Crew (as in the in-vehicle scenario's [Guardrails](../in-vehicle-dev-server/README.md#guardrails)), so it can
+  read the key file, rewrite the flash file and replace the bootloader image, which are all host files on this bench.
+  The real boundary is a separate user or container, which the agents cannot reach, for the signing step and the bench.
+  A flash plan is refused unless every check passed, with none failed or BLOCKED, on the source commit the image was
+  built from, with the current twin version, and the controller image those checks built has the digest of the image the
+  plan would write. Software releases to the main computer are approved by a person.
 - **Physical gate:** the flash gate refuses below the battery threshold, when the robot is not on its stand, or with
-  nobody present. The main computer's update client defers updates while the robot is moving or the battery is low.
-  The thresholds are settings in the robot notes, for example 50 % battery for a flash.
+  nobody present. The main computer's update client defers updates while the robot is moving, the battery is low or a
+  flash is in progress. A test move needs a lease, one approval at the operator console, the motion switch on, the robot
+  on its stand and a person present; the flash's battery threshold does not apply to it. The thresholds are settings in
+  the robot notes, for example 50 % battery for a flash.
 
 ### 4. Tool connectors with guardrails
 
 Three MCP servers. Their guardrails live in the servers, whatever the agent session allows.
 
 - **`build`**: build both firmware targets and the app, run a check, read its log.
-- **`twin`**: run the frozen tests on a given build, return per-seed results and traces. The tests and the model are
-  read-only.
+- **`twin`**: run the frozen tests on a given build, return per-seed results and traces. The tests, the model and the
+  recorded pushes are read-only.
 - **`robot`**: read state and telemetry; request a flash plan for a build, which returns the digest and the
   preconditions; request a test move; release software to the main computer. The flash itself runs only after
-  approval at the operator console.
+  approval at the operator console. It can read the motion switch but not turn it on.
   - A lease gives one session the robot at a time.
-  - Risk tiers: observe (lease, no approval), test move (lease and one approval), persistent write (lease, approval,
-    person present), recovery (a separate approval).
+- Risk tiers: observe (lease, no approval), test move (lease, one approval, motion switch on, on its stand, person
+    present), persistent write (lease, approval, person present), recovery (a separate approval: a person marks the
+    previous image for the next start, or restores the backup).
   - After an interrupted write the robot is *unknown*. It accepts only reads and a reconcile (a person checks and
     records its actual state); nothing is retried automatically.
 
-Every call is recorded with its tier, its result and the build digest. Neither server needs `--trust-all-tools`, and
+Every call is recorded with its tier, its result and the build digest. No server needs `--trust-all-tools`, and
 the sample's agent configurations do not use it.
 
 **Optional AWS profile.** The `robot` server can sit behind Amazon Bedrock AgentCore Gateway with AgentCore Policy.
@@ -183,15 +264,33 @@ account and credentials allowed to create the gateway and the policy, it is char
 
 Controller teams often design control laws as models and generate the firmware's control code from them. The optional
 model-based profile does this for the balance controller and the actuator guard: a Simulink model with a plant model of
-RB-1, configured to generate fixed-point C for the Cortex-M3. In the `hw-model-design` step the agent changes the model
-through MathWorks' [MATLAB MCP Core Server](https://www.mathworks.com/products/matlab-mcp-core-server.html) and
+RB-1 whose parameters come from the fact entries, configured to generate fixed-point C for the Cortex-M3. In the
+`hw-model-design` step the agent changes the model through MathWorks'
+[MATLAB MCP Server](https://www.mathworks.com/products/matlab-mcp-server.html) and
 [Simulink Agentic Toolkit](https://www.mathworks.com/products/simulink-agentic-toolkit.html), which the agent uses as
-one more MCP server with its own permission class, and runs model-in-the-loop tests. The generated code goes into the
-firmware, and the twin then runs that firmware against the frozen requirement as usual. A back-to-back comparison of the
-twin's results with the model-in-the-loop results shows that, on the frozen tests, the generated code matches the model
-within the tolerances in the verification plan; fixed-point saturation is one difference it can catch. Flashing still
-goes through the gate. The profile needs MathWorks licences; without them, the generated code and recorded model results
-are committed and the agents cannot change the model.
+one more MCP server with its own permission class; it may write only under `model/`.
+
+The generated code is verified the way model-based teams do it, from the model down to the target, before the twin
+judges the design:
+
+| Level | What runs | Compared with |
+| --- | --- | --- |
+| Model-in-the-loop (MIL) | The controller model against the plant model, on the frozen push tests | The frozen requirement |
+| Software-in-the-loop (SIL) | The generated code built for the host, fed the controller's inputs recorded in MIL | The MIL outputs, within the tolerances in the verification plan ([back-to-back testing](https://www.mathworks.com/help/sltest/ug/back-to-back-equivalence-testing.html)) |
+| Processor-in-the-loop (PIL) | The generated code built for the Cortex-M3, run on the emulated board with the same inputs, through a PIL connectivity configuration for that board that item 9 has to write and try first (the Cortex-M support package's own QEMU Cortex-M3 board is a fallback, but it is not item 4's board) | The MIL outputs, within the same tolerances. SIL shows differences between the model and the generated code, such as a saturation or rounding the two treat differently; PIL adds differences from the target compiler and from hardware implementation settings that do not match the Cortex-M3 |
+| Closed loop | The firmware with the generated code, in the twin | The frozen requirement, as for any candidate |
+
+The generated code is never edited by hand. When the code is generated, a manifest under `model/` records the model
+version, the model checksum and a hash of every generated file. `checks/backtoback.sh` fails if any generated file
+differs from its hash, or if the `Model version` in a file header differs from the committed model's. Regenerating the
+code from the model, which needs MATLAB, is the full check. Flashing still goes through the gate.
+
+The profile needs MathWorks licences. Without them, the model, the generated code and the recorded MIL inputs and
+outputs are committed. The sample's own harness then replays the recorded MIL inputs into the committed generated code,
+built for the host and for the emulated board, and compares its outputs with the recorded MIL outputs. This is a replay
+of the SIL and PIL comparisons, not Simulink SIL or PIL simulation. The closed-loop twin run is unchanged. Changing the
+model, regenerating the code and running SIL or PIL in Simulink need MATLAB, so without the licences the agents cannot
+change the model.
 
 ### 5. The agent next to the robot
 
@@ -206,7 +305,7 @@ material you are allowed to send to the model service.
 | --- | --- | --- |
 | `knowledge/` | Steering files | A knowledge source the agents search and cite |
 | `mcp/build`, `mcp/twin`, `mcp/robot` | MCP configuration | MCP servers of a custom agent |
-| `checks/` | Hooks that block the next tool call on failure; a deny rule on raw flash commands as defence in depth; the guardrails themselves are in the MCP servers | Run by a Kiro Crew app before each gate, as in the [agent-team sample](../../agent-team-on-kiro-crew/) |
+| `checks/` | Hooks that block the next tool call on failure or BLOCKED; a deny rule on raw flash commands as defence in depth; the guardrails themselves are in the MCP servers | Run by a Kiro Crew app before each gate, built from the [in-vehicle scenario's app](../in-vehicle-dev-server/README.md#the-kiro-crew-app) as that one is from the [agent-team sample](../../agent-team-on-kiro-crew/) |
 | Roles (optional) | Custom agents: the coder edits firmware and never flashes | Team members |
 
 The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable on their own.
@@ -219,17 +318,21 @@ The rehearsal scorecard records:
 - candidates tried in the twin, and how many passed;
 - time from the change request to an approved requirement, to the first candidate that passes the twin, and to the
   release sign-off;
-- check failures caught before the flash, by check;
+- check failures and BLOCKED results caught before the flash, by check; the twin version and its error on the
+  recorded pushes;
+- trial starts on the emulated board or the device: kept, and returned to the previous image, with the reason;
+- images refused for their signature, digest or sequence number, by the flash gate or the bootloader;
 - flashes and test moves approved, refused and reconciled, by target (emulated board or device);
 - results by evidence tier;
 - any behaviour on the emulated board or the device that the twin did not predict;
 - flash and move requests refused because the robot was not in a safe state, and any action carried out outside a
   safe state;
-- in the model-based profile, back-to-back differences found, and how many were real defects in the model or the
-  code generation settings.
+- in the model-based profile, back-to-back differences found at SIL and at PIL, and how many were real defects in the
+  model, the code generation settings or the PIL target setup.
 
 The first rehearsal's numbers are the baseline. The sample publishes measured numbers only, with how they were
-measured, and labels each by its evidence tier.
+measured, and labels each by its evidence tier. Screen and video recordings, and data, from a rehearsal show no
+people.
 
 ## Why
 
@@ -239,6 +342,10 @@ measured, and labels each by its evidence tier.
   proves nothing. Freezing and versioning them before any code is what lets the loop run unattended.
 - **Two update paths.** Software that can roll back ships often; control firmware waits for a person and a safe
   physical state. One update system, two risk classes.
+- **Signed, tried, then kept.** A digest shows the image is the one approved, and a signature shows the key holder
+  built it. A trial start shows it boots and passes its self-test on the target. An image that fails goes back by
+  itself, at the next reset, not by an agent's retry. An older signed image is refused by the gate, not by the
+  bootloader.
 - **Approvals bound to the exact image.** An approval that an agent can type, or that covers "a flash" in general,
   is not a control. A digest approved at the operator console is.
 - **Label every result by its tier.** Simulation results are useful, and they are not device results. The evidence
@@ -249,19 +356,43 @@ measured, and labels each by its evidence tier.
 Each item is a pull request. The sample becomes available when all of them are merged and the rehearsal guide has
 been dry-run once.
 
-1. Synthetic RB-1 documents (Markdown and rendered PDF), fact entries, team rules, the frozen requirement and tests.
-2. Firmware reference project with its hardware abstraction layer, builds for the controller and the host, unit
-   tests; the main computer's app and update client.
-3. Twin: MuJoCo model, firmware-in-the-loop harness, push tests with seeds, trace output. For the first seeded
-   difficulty, a simple simulator and the rewritten controller that passes in it.
-4. Bench: the emulated board for the flash path with boot and self-test, the simulated robot state, the operator
-   console, and the flash gate with backup and read-back.
+1. Synthetic RB-1 documents (Markdown and rendered PDF), fact entries, team rules, the hazard log, the requirement
+   and the push tests; the rated push impulse and the travel limit are frozen after item 3's sweep.
+2. Firmware reference project with its hardware abstraction layer, builds for the controller and the host, unit tests;
+   the self-test and the confirmation of a trial start, written against item 4's bootloader (the confirmation flag in
+   the image trailer in the primary slot, robot notes §5.4, which is where MCUboot keeps it); the main computer's app
+   with its motion switch, and the update client; the build's dependency list (`reference-project/dependencies.yaml`),
+   from which the images' software bills of materials are made.
+3. Twin: MuJoCo model, firmware-in-the-loop harness, push tests with seeds, trace output; the recorded pushes and the
+   twin's measured error on them; the reference model that produces the recorded pushes, kept out of the `twin` server's
+   reach; a non-zero balance angle in the twin's calibration data; the sweep that sets the rated impulse and confirms
+   the travel limit, which item 1 then freezes. For the first seeded difficulty, a simple simulator and the rewritten
+   controller that passes in it.
+4. Bench: the emulated board for the flash path with MCUboot on the file-backed PSRAM (signature check, trial start,
+   return to the previous image), the simulated robot state, the operator console, and the flash gate with the manifest,
+   the backup and the read-back, writing the flash file only while QEMU is stopped. The emulated board differs from the
+   robot notes: MCUboot is loaded by QEMU (`-kernel`), not stored at 0x0; the application runs in place from PSRAM with
+   the MPU off; the flash simulator's erase value is 0xff. The trial signed with RSA-2048; this item uses ECDSA P-256 as
+   the notes say, or the notes change. A minimal bootloader with the same behaviour stays only as a fallback, and the
+   README would then say it is not MCUboot. The trial covered a `system_reset` and a restart of QEMU; this item's tests
+   also trigger each other reset of the action gate (a reboot from the failed self-test, a watchdog reset, the gate's
+   time-out) and check the return each way.
 5. Checks, each with a failing and a passing example.
-6. MCP servers `build`, `twin` and `robot` with a test for each guardrail; the optional AWS profile.
-7. Kiro and Kiro Crew configurations; optional AI-DLC plugin.
+6. MCP servers `build`, `twin` and `robot` with a test for each guardrail. The in-vehicle `build` server has no signing
+   step, so the signing step with the sample's test key is new code in `mcp/build`, not reuse; the development key for
+   the sixth seeded difficulty; the optional AWS profile.
+7. Kiro and Kiro Crew configurations; the optional AI-DLC plugin, tested again against the current AI-DLC Workflows
+   release (it was written against 2.11.2). The Kiro Crew app is built from the
+   [in-vehicle scenario's](../in-vehicle-dev-server/README.md#the-kiro-crew-app), but not only by a team file: that
+   app's flow is a findings batch (backlog triage, the work-item entry, the refactor plan, the log comparison after the
+   bench) and its servers mode knows only `build` and `bench`. This scenario's flow (frozen requirement, twin, flash
+   plan, trial start), the `twin` and `robot` servers, the motion switch and the tiered evidence page need changes to
+   the app. What both scenarios use is moved to one shared place when this item needs it, not before.
 8. The evidence page generator; rehearsal guide and scorecard; one dry run with the time and credits it used.
 9. Optional model-based profile: the Simulink model of the balance controller and actuator guard with the RB-1 plant
-   model, generated code, recorded model results and `checks/backtoback.sh`.
+   model, the generated code, the recorded MIL inputs and outputs, the SIL and PIL runs (PIL on item 4's emulated
+   board) and `checks/backtoback.sh`. It comes after items 2, 3 and 4, since it replaces part of item 2's firmware and
+   uses the twin and the emulated board; it is optional only because it needs MathWorks licences.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page without a robot; `cleanup.sh` removes everything it created, including the optional
@@ -272,12 +403,12 @@ names, code, data or identifying details; no credentials or account identifiers;
 
 | Folder | Contents |
 | --- | --- |
-| `knowledge/` | Synthetic robot notes, fact entries, team rules, the frozen requirement and tests |
-| `checks/` | The six checks and the back-to-back check of the model-based profile |
-| `model/` | The optional model-based profile: model, generated code, recorded model results |
+| `knowledge/` | Synthetic robot notes, fact entries, team rules, the hazard log, the frozen requirement and tests |
+| `checks/` | The eight checks and the back-to-back check of the model-based profile |
+| `model/` | The optional model-based profile: model, generated code, recorded MIL inputs and outputs, code generation manifest |
 | `mcp/` | `build`, `twin` and `robot` servers and their guardrail tests |
 | `reference-project/` | Controller firmware with its hardware abstraction layer, the main computer's app and update client |
-| `twin/` | MuJoCo model, firmware-in-the-loop harness, the simple simulator and the rewritten controller |
+| `twin/` | MuJoCo model, firmware-in-the-loop harness, the recorded pushes (LeRobot format), the simple simulator and the rewritten controller |
 | `bench/` | Emulated board setup, simulated robot state, operator console, flash gate |
 | `cloud/` | The optional AWS profile |
 | `evidence/` | Evidence page generator |
@@ -285,16 +416,23 @@ names, code, data or identifying details; no credentials or account identifiers;
 
 ## Prerequisites
 
-To be completed with the build: a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro
-or Kiro Crew. Third-party tools and their licences will be listed here, among them MuJoCo (Apache-2.0), QEMU
-(GPL-2.0), the Arm GNU toolchain (GPL-3.0 with the GCC runtime library exception; newlib under its BSD-style
-licences), CMake (BSD-3-Clause), Unity (ThrowTheSwitch, MIT) for firmware unit tests, GoogleTest (BSD-3-Clause) for
-the app, cppcheck (GPL-3.0) and clang-tidy (Apache-2.0 with LLVM exception). They are used as tools and
-not redistributed. The optional AWS profile also needs an AWS account and the AWS CLI.
+To be completed with the build: a Linux host, or a Mac with a container runtime (Docker, Podman or Colima), and Kiro or
+Kiro Crew. Third-party tools and their licences will be listed here, among them MuJoCo (Apache-2.0), QEMU (GPL-2.0), the
+Arm GNU toolchain (GPL-3.0 with the GCC runtime library exception; newlib under its BSD-style licences), CMake
+(BSD-3-Clause), Unity (ThrowTheSwitch, MIT) for firmware unit tests, GoogleTest (BSD-3-Clause) for the app, cppcheck
+(GPL-3.0) and clang-tidy (Apache-2.0 with LLVM exception), MCUboot (Apache-2.0) and its signing tool imgtool if the
+emulated board can run it, otherwise the signature library of the minimal bootloader with its licence, an SPDX generator
+(chosen in item 2, listed with its licence), and the LeRobot dataset format (Hugging Face, Apache-2.0) for the recorded
+pushes. They are fetched at build time, not included in the repository; MCUboot or the signature library is compiled
+into the bootloader image and listed in its software bill of materials. The optional AWS profile also needs an AWS
+account and the AWS CLI.
 
-The optional model-based profile also needs MATLAB, Simulink, Stateflow and Embedded Coder from MathWorks
-(commercial licences), and the MATLAB MCP Core Server and the Simulink Agentic Toolkit, whose terms are checked before
-the profile is built.
+The optional model-based profile also needs MATLAB, Simulink, Fixed-Point Designer, MATLAB Coder, Simulink Coder and
+Embedded Coder from MathWorks (commercial licences; Simulink Test is optional for the back-to-back runs; the actuator
+guard is built from Simulink blocks, not a Stateflow chart, so Stateflow is not needed), and the MATLAB MCP Server and
+the Simulink Agentic Toolkit, whose terms are checked before the profile is built. Without the licences,
+`checks/backtoback.sh` runs on the committed generated code and the recorded MIL inputs and outputs (see [the Simulink
+section](#optional-a-control-law-designed-in-simulink)); changing the model needs them.
 
 ## Cost
 
