@@ -1,6 +1,6 @@
 # Bench: the emulated CC-1
 
-> **Status: in development.** Build plan item 3 of the [in-vehicle scenario](../README.md#build-plan). Built so far:
+> **Status: done.** Build plan item 3 of the [in-vehicle scenario](../README.md#build-plan). Built:
 > the target image and sysroot, the emulated CC-1, deployment with digest read-back, the recorded drive and its
 > player, the replay clients, the run directories for the checks, the simulated supply, the physical gate, the
 > operator console, the action record, reset and doctor, and the final baseline ([baseline/](baseline/README.md)).

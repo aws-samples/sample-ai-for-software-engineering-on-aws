@@ -1,9 +1,10 @@
 # In-vehicle software on a development server next to the bench
 
 > **Status: usable; the rehearsal guide is a draft.** This page defines the scenario: the work, the knowledge, the
-> gates, the tools and the definition of done that the runnable sample meets. Build plan items 1 to 6 and 8 are merged;
-> the rehearsal guide and scorecard (item 7) have not been dry-run with people, and the optional item 9 is not built
-> (see [Build plan](#build-plan)). It follows the [embedded framework](../README.md) and its five building blocks.
+> gates, the tools and the definition of done that the runnable sample meets on a Mac. Build plan items 1 to 5 and 8 are
+> done and item 6 in part; the rehearsal guide and scorecard (item 7) have not been dry-run with people, and the
+> optional item 9 is not built (see [Build plan](#build-plan)). It follows the [embedded framework](../README.md) and
+> its five building blocks.
 
 ## Business measures
 
@@ -230,13 +231,14 @@ The parts may also be packaged as an AI-DLC plugin; the plain parts stay usable 
 
 ## The Kiro Crew app
 
-> **Status: one delivery end to end (2026-11-03).** Run `r11032637` went from the triage gate through the bench to a
-> passing `release.sh` on the independent rerun and a signed-off evidence page, on a Mac with Apple Silicon (step 12 of
-> the [implementation plan](docs/kiro-crew-app.md#implementation-plan)). The app was fixed during that run where it
-> held the run with no way on for the person; [what that run showed](docs/kiro-crew-app.md#seen-in-the-first-delivery);
-> its audit trail and evidence page, for facilitators, in [rehearsal/first-delivery/](rehearsal/first-delivery/README.md).
-> One run is not a benchmark: the figures below are that run's. A recording of it is in
-> [demos/](../demos/README.md#one-delivery-on-the-kiro-crew-board).
+> **Status: two deliveries signed off on a Mac.** Run `r11032637` (2026-11-03) went from the triage gate through the
+> bench to a passing `release.sh` on the independent rerun and a signed-off evidence page, on a Mac with Apple Silicon
+> (step 12 of the [implementation plan](docs/kiro-crew-app.md#implementation-plan)); run `r11170658` (2026-11-17) did
+> the same in servers mode ([D17](docs/kiro-crew-app.md#d17-app-通过-build--bench-服务器跑检查和台架)). The app was fixed during
+> the first run where it held the run with no way on for the person; [what that run
+> showed](docs/kiro-crew-app.md#seen-in-the-first-delivery); its audit trail and evidence page, for facilitators, in
+> [rehearsal/first-delivery/](rehearsal/first-delivery/README.md). Two runs are not a benchmark: the figures below are
+> `r11032637`'s. A recording of it is in [demos/](../demos/README.md#one-delivery-on-the-kiro-crew-board).
 
 [`app/`](app/README.md) is a Kiro Crew app, `vstatd-team` (AIDLC-Embedded团队), modelled on the
 [agent-team sample](../../agent-team-on-kiro-crew/). It takes the work item through AI-DLC with six roles, each a Kiro
@@ -261,7 +263,8 @@ operator console, and runs the checks after the bench. Before sign-off it reruns
 new results directory and runs `release.sh`; the sign-off button is enabled only when `release.sh` passes, and the
 sign-off dialog shows the evidence page. The board's 评分卡 (scorecard) shows the figures of [How the sample is
 measured](#how-the-sample-is-measured) that the runs' records hold, and leaves a figure empty when no run is behind it.
-It leaves out the tool calls by permission class (they come from the MCP servers' audit log), how many log differences
+It also shows each commit's size, moved and not moved lines. In direct mode it leaves out the tool calls by permission
+class, which come from the MCP servers' audit log; a servers-mode run shows them. It leaves out how many log differences
 were real changes of behaviour and the defects found later (the app records neither). The decisions behind this are in
 [docs/kiro-crew-app.md](docs/kiro-crew-app.md).
 
@@ -279,10 +282,18 @@ parts a team replaces ([D11](docs/kiro-crew-app.md#d11-a-teams-own-project-plugs
 | `knowledge/` | The team's documents, with the citations its checks look for | `knowledge` in the team file |
 | The checks | The team's own, keeping the checks' contract | `checks` in the team file |
 | `reference-project/tools/Dockerfile` | The team's build image | `check_runner` in the team file |
-| `bench/cc1.sh` | The team's deploy, restart and replay commands, which then carry the physical gate, the approval and the action record | `bench` in the team file |
-| The work item and the backlog | The team's own batch | `work_item` in the team file, or 新需求 on the board |
+| `bench/cc1.sh` | The team's deploy, restart and replay commands, wrapped as `cc1.sh` wraps its own with `bench/lib/` (`gate.py`, `benchstate.py`), which keeps the physical gate, the approval and the action record | `bench` in the team file |
+| The bench baseline | The team's own recording; it must sit below `${sample}/`, `~/workplace/vstatd-team/` or the data directory's `baseline/`, or in direct mode the checks that read it are BLOCKED | `bench.baseline` in the team file, or 设置 on the board (which also switches direct and servers mode) |
+| The roles' tasks and the task template | Tasks that name the team's code, rules and findings; the shipped ones name `Service::run()`, TR sections, F-022 to F-026, F-031 and the move-then-change commits | `roles[].brief` and `task_template` (`app/team/task_template-vstatd.md`) in the team file |
+| Who owns which files | The team's split of its source and tests between the roles | `ownership` and `test_owners` in the team file |
+| The MCP servers | The team's own build and bench servers | `servers` in the team file |
+| The work item | The team's own batch | `work_item` in the team file, or 新需求 on the board |
+| The backlog | The team's own findings | `knowledge/findings-backlog.md` in the knowledge source |
 
-No project other than `vstatd` has been run through the app yet.
+The app's flow assumes the work is a batch of findings with a triage gate, and parts of the backend are still specific
+to `vstatd` (the backlog triage, the TR §4.4 work-item entry, the log comparison after the bench). Another kind of work
+item needs changes to the app, not only to the team file. No project other than `vstatd` has been run through the app
+yet.
 
 ### Quick start
 
@@ -407,11 +418,14 @@ measured.
 
 ## Build plan
 
-Each item is a pull request. Items 1 to 6 and 8 are merged. The Kiro Crew app ran from the triage gate to a signed-off
-evidence page twice on a Mac (2026-11-03, and 2026-11-17 in servers mode), and from `setup.sh` to `cleanup.sh` twice on
-an Ubuntu 24.04 x86_64 host (2026-11-19 and 2026-11-20); each Linux run caught the seeded cross build and data race at
-the checks before the bench and was held there for a person, with the person's answers scripted. The rehearsal guide
-(item 7) stays a draft until a team's first rehearsal, which is its dry run. Item 9 is optional and not built.
+Each item is a pull request. Items 1 to 5 and 8 are done, and item 6 in part. The Kiro Crew app ran from the triage gate
+to a signed-off evidence page twice on a Mac (2026-11-03, and 2026-11-17 in servers mode), and from `setup.sh` to
+`cleanup.sh` twice on an Ubuntu 24.04 x86_64 host (runs `r11196aaa` on 2026-11-19 and `r11206835` on 2026-11-20,
+recorded in [#52](https://github.com/aws-samples/sample-ai-for-software-engineering-on-aws/pull/52)); each Linux run
+caught the seeded cross build and data race at the checks before the bench and was held there for a person, with the
+person's answers scripted. The first run's `cleanup.sh` found two Linux problems, the app's uninstall call and
+root-owned check results, both fixed before #52 was merged; the second cleaned up without one. The rehearsal guide (item
+7) stays a draft until a team's first rehearsal, which is its dry run. Item 9 is optional and not built.
 
 1. Synthetic interface specification and platform notes (Markdown and rendered PDF), CAN database and VSS mapping,
    fact entries, team rules and the findings backlog, with a consistency check; facilitator notes on the seeded
@@ -447,7 +461,7 @@ the checks before the bench and was held there for a person, with the person's a
    Kiro Crew app (item 8) does not need this item's configurations. *Done in part (2026-11-16):* the bypass hook in
    the roles' templates, its tests and the permission probe, run with kiro-cli 2.34.0 ([agents/](agents/README.md)).
    The templates load in both of kiro-cli's engines (V2 and V3), and the developer role's template ran as expected in
-   a Kiro Crew 0.12.2 chat session (2026-11-17); the app's roles booted from them on a Mac (Kiro Crew 0.13.0-rc.1).
+   a Kiro Crew 0.12.2 chat session (2026-11-17); the app ran on them on a Mac up to tests first (Kiro Crew 0.13.0-rc.1).
    On Kiro Crew 0.12.2 on a Linux host the app ran from `setup.sh` to the checks before the bench, then
    `cleanup.sh` (2026-11-19 and 2026-11-20); the bench actions and sign-off have not run on 0.12.2. Not done: a first
    install without a gateway restart (`setup.sh` asks for one), and the Kiro IDE, where the bypass hook has not been
@@ -459,8 +473,8 @@ the checks before the bench and was held there for a person, with the person's a
    [scorecard](rehearsal/scorecard.md) with its sheet. They have not been dry-run with people, so both stay drafts
    until a team's first rehearsal corrects them.
 8. The [Kiro Crew app](#the-kiro-crew-app): `app/`, its roles' templates, `setup.sh` and `cleanup.sh`. *Done:* steps
-   1 to 12 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan), with one delivery end to end
-   (2026-11-03).
+   1 to 13 of its [implementation plan](docs/kiro-crew-app.md#implementation-plan), with two deliveries signed off on
+   a Mac (2026-11-03, and 2026-11-17 in servers mode).
 9. Optional model-based profile: the `soc_display_filter` model, its generated code, recorded model results and
    `checks/backtoback.sh`. *Not built.*
 
@@ -511,10 +525,10 @@ Linux desktop app needs glibc 2.34 or newer, the CLI is for older hosts: see
 [Kiro Crew's installation page](https://kiro.dev/docs/crew/installation)),
 Docker, git, Python 3 and Node.js 22 or newer to build the board. `setup.sh` finds the `kirocrew` program in the macOS
 desktop app, else on `PATH`; set `VSTATD_KIROCREW_BIN` to it when it is elsewhere. Its manifest
-asks for Kiro Crew 0.8.0 or newer. It ran one delivery end to end on Kiro Crew 0.12.0-rc.4 (run `r11032637`, 2026-11-03,
-Mac), and from `setup.sh` to `cleanup.sh` on Kiro Crew 0.12.2 on an Ubuntu 24.04 x86_64 host (2026-11-19 and 2026-11-20,
-each run to the checks before the bench); those are the versions it has run on (the roles' templates also booted on
-0.13.0-rc.1, build plan item 6).
+asks for Kiro Crew 0.8.0 or newer. The versions it has run on, by run: Kiro Crew 0.12.0-rc.4 for `r11032637`
+(2026-11-03, Mac, to sign-off); not recorded for `r11170658` (2026-11-17, Mac, servers mode, to sign-off); 0.13.0-rc.1
+for a run up to tests first on a Mac ([agents/README.md](agents/README.md)); and 0.12.2 for `r11196aaa` and
+`r11206835` (2026-11-19 and 2026-11-20, Ubuntu 24.04 x86_64, each to the checks before the bench).
 
 The reference project builds in the container of `reference-project/tools/Dockerfile`, based on the `ubuntu:24.04`
 image (Ubuntu 24.04 LTS from Docker Hub; each of its packages is under its own licence, recorded in
