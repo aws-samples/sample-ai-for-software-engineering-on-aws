@@ -1,7 +1,8 @@
 # Rehearsal scorecard
 
-> **Status: draft, not yet dry-run** (build plan item 7). Fill in one sheet per board. Copy
-> [scorecard-template.csv](scorecard-template.csv) for the hand-kept figures.
+> **Status: draft** (build plan item 7). A team's first rehearsal is its dry run ([rehearsal
+> guide](README.md#the-dry-run)). Fill in one sheet per board. Copy [scorecard-template.csv](scorecard-template.csv) for
+> the hand-kept figures.
 
 This is the scorecard of the scenario page ([How the sample is measured](../README.md#how-the-sample-is-measured)).
 Each figure comes from one of three sources, and keeps the definition its source uses:

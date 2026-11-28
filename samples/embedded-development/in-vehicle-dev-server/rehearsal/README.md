@@ -1,7 +1,8 @@
 # One-day rehearsal of the in-vehicle scenario
 
-> **Status: draft, not yet dry-run.** Build plan item 7 of the [scenario](../README.md#build-plan). This guide and the
-> [scorecard](scorecard.md) become final after one dry run, done as described under [The dry run](#the-dry-run).
+> **Status: draft.** Build plan item 7 of the [scenario](../README.md#build-plan). This guide and the
+> [scorecard](scorecard.md) have not been dry-run with people. A team's first rehearsal is their dry run: correct both
+> from it, as described under [The dry run](#the-dry-run).
 
 For facilitators. **Not part of the agents' workspace:** this folder holds the answers to the seeded difficulties
 ([facilitator-notes.md](facilitator-notes.md)). It follows the repository's [one-day guided
@@ -36,9 +37,11 @@ engineers.
 
 ## Preparation, one to two weeks before
 
-1. **Machines.** One per board: a Mac with Apple Silicon, the only host the app has run on, with Kiro Crew
-   0.12.0-rc.4 (the only version tested; the app's manifest asks for 0.8.0 or newer), Docker, Node.js 22, git and
-   Python 3.11 or later (the MCP servers need 3.11), and no production credentials or customer data on it
+1. **Machines.** One per board: a Mac with Apple Silicon, where the app has run to sign-off (Kiro Crew 0.12.0-rc.4).
+   Use a Linux host only once a delivery has reached sign-off on Linux: so far the app has run there (Ubuntu 24.04
+   x86_64, Kiro Crew 0.12.2) only to the checks before the bench. The app's manifest asks for Kiro Crew 0.8.0 or newer.
+   Each machine needs Docker, Node.js 22, git and Python 3.11 or later (the MCP servers need 3.11), and
+   no production credentials or customer data on it
    ([Prerequisites](../README.md#prerequisites), [Guardrails](../README.md#guardrails)).
 2. **Install and build once**, following the scenario's [Quick start](../README.md#quick-start): `bash setup.sh`, the
    build container, `bench/build-target.sh` (about 40 minutes on Apple Silicon,
@@ -120,7 +123,9 @@ redacted example of the audit trail and the evidence page is in [first-delivery/
 
 ## The dry run
 
-Before this guide is final, one dry run on one board, by the people who wrote the sample, as build plan item 7 says:
+Neither this guide nor the scorecard has been dry-run yet. Until they are, a team's first rehearsal serves as the dry
+run: run it on one board as below, then correct both from it, and send the corrections back as a pull request to this
+repository so the next team starts from them.
 
 1. Prepare as above, on a machine with the Kiro Crew version of the day.
 2. After the triage is approved, nobody answers in an agent's session; a person answers only at the operator console
