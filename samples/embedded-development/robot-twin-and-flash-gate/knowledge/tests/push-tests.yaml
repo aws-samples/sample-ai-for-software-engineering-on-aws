@@ -1,0 +1,24 @@
+# Frozen push tests for REQ-RB1-007. Synthetic, written for this sample.
+# Frozen (version and sha256 recorded by checks/trace.sh) before any code is written [TR §4.2]. The twin and
+# checks/twin.sh read this file; no agent and no MCP server may change it.
+version: 1.0
+requirement: REQ-RB1-007
+fall: {fact: FALL-DEF}            # 45 degrees for 0.3 s, not the firmware's 60 degrees
+stable: {fact: STABLE-DEF}
+push_point: {fact: PUSH-POINT}    # 0.060 m above the centre of mass, constant force over 50 ms
+seeds: {first: 1, count: 20}      # each seed draws IMU noise and bias (IMU-GYRO, IMU-ACCEL) and an initial tilt
+initial_tilt_deg: 0.5             # largest initial tilt from the balance angle a seed may draw
+observe_s: 4.0                    # each test runs this long after the push
+points:                           # impulse as a fraction of the rated push impulse (PUSH-RATED), front and back
+- {id: PT-01, direction: front, fraction: 0.50}
+- {id: PT-02, direction: back,  fraction: 0.50}
+- {id: PT-03, direction: front, fraction: 0.75}
+- {id: PT-04, direction: back,  fraction: 0.75}
+- {id: PT-05, direction: front, fraction: 1.00}
+- {id: PT-06, direction: back,  fraction: 1.00}
+pass:                             # every seed of every point
+  no_fall: {fact: FALL-DEF}                       # AC-1
+  max_travel_m: {fact: TRAVEL-LIMIT}              # AC-2
+  max_commanded_speed_m_s: {fact: GUARD-SPEED}    # AC-3
+  max_commanded_torque_n_m: {fact: GUARD-TORQUE}  # AC-4
+  stable: {fact: STABLE-DEF}                      # AC-5, within 2.0 s of the end of the push

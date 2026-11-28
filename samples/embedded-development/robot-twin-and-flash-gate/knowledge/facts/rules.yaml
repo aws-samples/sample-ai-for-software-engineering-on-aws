@@ -1,0 +1,81 @@
+# Rules and limits extracted from RB1-NOTES rev 1.0 and REQ-RB1-007. Synthetic, written for this sample.
+# Every entry cites its page and section, or the requirement; tools/check_knowledge.py checks that its numbers are
+# there.
+facts:
+- id: LOOP-PERIOD
+  statement: The balance loop runs every 5 ms.
+  values: {ms: 5}
+  source: '[RB1-NOTES p.4 §3.1]'
+- id: GUARD-SPEED
+  statement: The actuator guard limits the commanded wheel speed at the tyre.
+  values: {m_s: 0.80}
+  source: '[RB1-NOTES p.4 §3.3]'
+- id: GUARD-TORQUE
+  statement: The actuator guard limits the commanded torque per wheel to 70 % of the stall torque.
+  values: {n_m: 0.315, percent: 70}
+  source: '[RB1-NOTES p.4 §3.3]'
+- id: GUARD-TURN
+  statement: The actuator guard limits the turn rate commanded by the main computer.
+  values: {dps: 180}
+  source: '[RB1-NOTES p.4 §3.3]'
+- id: FALL-STOP
+  statement: The firmware stops both motors when the tilt stays beyond 60 degrees for 0.3 s.
+  values: {deg: 60, hold_s: 0.3}
+  source: '[RB1-NOTES p.4 §3.4]'
+- id: MEM-LIMITS
+  statement: The application image fits 184 KiB of flash and 64 KiB of RAM, stack included.
+  values: {flash_kib: 184, ram_kib: 64}
+  source: '[RB1-NOTES p.4 §3.5]'
+- id: LINK-TIMEOUT
+  statement: With motion enabled and no frame from the main computer for 500 ms, the controller stops and disables
+    motion.
+  values: {ms: 500}
+  source: '[RB1-NOTES p.5 §4.4]'
+- id: REGISTERS-RO
+  statement: All controller registers are read-only over the link.
+  source: '[RB1-NOTES p.5 §4.5]'
+- id: FLASH-SECONDARY
+  statement: An update writes a new image only into the secondary slot; the bootloader swaps it into the primary slot.
+  source: '[RB1-NOTES p.6 §5.1]'
+- id: CAL-DATA
+  statement: The calibration area holds the IMU's mounting offsets, the gyroscope bias and the balance angle; a full
+    erase destroys it.
+  source: '[RB1-NOTES p.6 §5.2]'
+- id: BOOT-TRIAL
+  statement: A new image is swapped in only with a valid signature, runs as a trial, confirms itself in its image
+    trailer in the primary slot, and is swapped back at the next reset unless it confirmed itself. The flash gate, not
+    the bootloader, refuses a lower sequence number.
+  source: '[RB1-NOTES p.6 §5.4]'
+- id: SELF-TEST
+  statement: Within 2 s of starting, the firmware checks the IMU, 10 loop periods with the motors disabled, the guard
+    limits and that motion is disabled, then confirms the image.
+  values: {within_s: 2, cycles: 10}
+  source: '[RB1-NOTES p.6 §5.5]'
+- id: FLASH-PRECOND
+  statement: Flash only with the battery at 50 % or more, on the stand, motion disabled and a person present.
+  values: {battery_percent: 50}
+  source: '[RB1-NOTES p.7 §6.1]'
+- id: MOTION-SWITCH
+  statement: Motion is enabled only by a person at the operator console and is disabled after every restart and flash.
+  source: '[RB1-NOTES p.7 §6.2]'
+- id: UPDATE-DEFER
+  statement: The update client defers while moving, with the battery below 30 %, or while a flash is in progress.
+  values: {battery_percent: 30}
+  source: '[RB1-NOTES p.7 §6.3]'
+- id: BATTERY-MAP
+  statement: The battery percentage is linear from 6.6 V (0 %) to 8.4 V (100 %).
+  values: {empty_v: 6.6, full_v: 8.4}
+  source: '[RB1-NOTES p.7 §6.4]'
+- id: FALL-DEF
+  statement: For REQ-RB1-007 a fall is a tilt beyond 45 degrees held for 0.3 s.
+  values: {deg: 45, hold_s: 0.3}
+  source: 'REQ-RB1-007'
+- id: TRAVEL-LIMIT
+  statement: Travel from a push to stable stays within the limit. To be confirmed after the twin's sweep.
+  values: {m: 0.15}
+  source: 'REQ-RB1-007 AC-2'
+- id: STABLE-DEF
+  statement: Stable is tilt within 3 degrees of the calibrated balance angle and wheel speed below 0.05 m/s, held for
+    0.5 s, reached within 2.0 s of the end of the push.
+  values: {deg: 3, m_s: 0.05, hold_s: 0.5, within_s: 2.0}
+  source: 'REQ-RB1-007 AC-5'

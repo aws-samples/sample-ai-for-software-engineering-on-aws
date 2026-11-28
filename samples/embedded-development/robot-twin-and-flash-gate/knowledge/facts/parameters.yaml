@@ -1,0 +1,109 @@
+# Physical and interface parameters extracted from RB1-NOTES rev 1.0. Synthetic, written for this sample.
+# Every entry cites its page and section; tools/check_knowledge.py checks that its numbers are on that page.
+# The twin reads its model parameters from these entries, not from numbers of its own [TR §4.3].
+facts:
+- id: MASS-TOTAL
+  statement: Total mass of RB-1.
+  values: {kg: 1.60}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: MASS-BODY
+  statement: Body mass without the wheels.
+  values: {kg: 1.40}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: MASS-WHEEL
+  statement: Mass of each wheel with its tyre.
+  values: {kg: 0.10}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: WHEEL-RADIUS
+  statement: Wheel radius.
+  values: {m: 0.040}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: TRACK-WIDTH
+  statement: Track width, wheel centre to wheel centre.
+  values: {m: 0.140}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: COM-HEIGHT
+  statement: Height of the body's centre of mass above the wheel axle.
+  values: {m: 0.090}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: BODY-INERTIA
+  statement: Body moment of inertia about the axle, pitch, its own inertia included.
+  values: {kg_m2: 0.0147}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: BODY-HEIGHT
+  statement: Height of the top of the body above the floor.
+  values: {m: 0.200}
+  source: '[RB1-NOTES p.2 §1.2]'
+- id: STAND-TILT
+  statement: On its stand the robot leans back by 30 to 35 degrees with its wheels off the floor.
+  values: {deg_min: 30, deg_max: 35}
+  source: '[RB1-NOTES p.2 §1.4]'
+- id: BATTERY-VOLTAGE
+  statement: Battery voltage, nominal, empty and full.
+  values: {nominal_v: 7.4, empty_v: 6.6, full_v: 8.4}
+  source: '[RB1-NOTES p.3 §2.1]'
+- id: MOTOR-STALL
+  statement: Stall torque at the wheel, each wheel, at 7.4 V.
+  values: {n_m: 0.45}
+  source: '[RB1-NOTES p.3 §2.1]'
+- id: MOTOR-NOLOAD
+  statement: No-load speed at the wheel at 7.4 V, and at the tyre.
+  values: {rpm: 300, m_s: 1.26}
+  source: '[RB1-NOTES p.3 §2.1]'
+- id: ENCODER-RES
+  statement: Encoder counts per wheel revolution.
+  values: {counts: 1320}
+  source: '[RB1-NOTES p.3 §2.1]'
+- id: PWM
+  statement: PWM frequency and driver dead time.
+  values: {khz: 20, dead_time_us: 1}
+  source: '[RB1-NOTES p.3 §2.1]'
+- id: MOTOR-CURVE
+  statement: Torque falls linearly with speed; the guard's torque limit is available up to 0.38 m/s, and at 0.80 m/s a
+    wheel gives at most 0.16 N·m, at 7.4 V.
+  values: {full_guard_up_to_m_s: 0.38, at_0_80_m_s_n_m: 0.16}
+  source: '[RB1-NOTES p.3 §2.2]'
+- id: IMU-MOUNT
+  statement: Height of the IMU above the axle.
+  values: {m: 0.050}
+  source: '[RB1-NOTES p.3 §2.3]'
+- id: IMU-GYRO
+  statement: Gyroscope range, scale, noise density and power-on bias.
+  values: {range_dps: 2000, lsb_per_dps: 16.4, noise_dps_rthz: 0.007, bias_dps: 0.5}
+  source: '[RB1-NOTES p.3 §2.3]'
+- id: IMU-ACCEL
+  statement: Accelerometer range, scale and noise density.
+  values: {range_g: 8, lsb_per_g: 4096, noise_ug_rthz: 150}
+  source: '[RB1-NOTES p.3 §2.3]'
+- id: IMU-RATE
+  statement: IMU output data rate.
+  values: {hz: 1000}
+  source: '[RB1-NOTES p.3 §2.3]'
+- id: LINK
+  statement: UART at 115,200 bit/s, 8N1; frames 0xA5 type length payload crc8, CRC-8/SMBUS.
+  values: {baud: 115200}
+  source: '[RB1-NOTES p.5 §4.1]'
+- id: TELEMETRY
+  statement: A telemetry frame every 20 ms with tilt, tilt rate, wheel speeds, travel, battery voltage and flags.
+  values: {period_ms: 20}
+  source: '[RB1-NOTES p.5 §4.3]'
+- id: FLASH-LAYOUT
+  statement: Bootloader 32 KiB at 0x00000000, calibration 4 KiB at 0x00008000, primary slot 256 KiB at 0x00010000,
+    secondary slot 256 KiB at 0x00050000, scratch 8 KiB at 0x00090000.
+  values: {bootloader: 0x00000000, calibration: 0x00008000, primary: 0x00010000, secondary: 0x00050000,
+           scratch: 0x00090000, slot_kib: 256}
+  source: '[RB1-NOTES p.6 §5.1]'
+- id: IMAGE-FORMAT
+  statement: A 512-byte header with size and sequence number; a trailer with the SHA-256 and an ECDSA P-256 signature
+    over header and image.
+  values: {header_bytes: 512}
+  source: '[RB1-NOTES p.6 §5.3]'
+- id: PUSH-POINT
+  statement: A push is a horizontal impulse 0.060 m above the body's centre of mass, a constant force over 50 ms, from
+    the front or the back.
+  values: {m_above_com: 0.060, duration_ms: 50}
+  source: '[RB1-NOTES p.7 §6.5]'
+- id: PUSH-RATED
+  statement: The rated push impulse RB-1 withstands without falling. To be set after the twin's sweep.
+  values: {n_s: null, range_n_s: [0.35, 0.60]}
+  source: '[RB1-NOTES p.7 §6.5]'
