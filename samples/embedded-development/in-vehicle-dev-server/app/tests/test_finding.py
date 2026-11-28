@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from http_fakes import AppRoute, FakeWeb, call, owner_check
 from test_checks import make, work
 from teamkit import act, finish, mod, reload, sh
 
@@ -149,7 +150,7 @@ def test_extending_a_finding_added_already_gives_its_role_paths_and_a_round_with
             {"extend": "F-032", "role": "dev", "paths": ["cmake/tc.cmake"], "note": "根因在工具链文件", "by": "王工"}))
         assert out["id"] == "F-032" and out["held"] is False
         assert path.read_bytes() == sha  # no new finding in the triage
-        assert run.roles["dev"]["writable"] == ["src/a.*", "src/a.cpp", "cmake/tc.cmake"]
+        assert run.roles["dev"]["writable"] == ["src/a.*", "cmake/tc.cmake"]  # src/a.cpp: under src/a.* (#64)
         assert run.s["tests"]["granted"] == {"build": 1}
         task = mgr.continued[-1][2]
         assert len(mgr.continued) == before + 1 and "F-032（build 发现" in task and "`cmake/tc.cmake`" in task and "根因在工具链文件" in task
@@ -295,6 +296,46 @@ def test_a_person_may_not_give_a_role_a_symlink_that_resolves_outside_the_work_t
             await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["src/link.sh"]}))
         assert e.value.status == 400 and "src/link.sh" in str(e.value)
         assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
+def test_a_symlink_loop_is_refused_by_the_route_not_answered_with_a_500(tmp_path, monkeypatch):
+    """From #64: a symbolic link loop raised RuntimeError in Path.resolve() on Python 3.12 and before, which
+    resolves_fenced did not catch, so POST /runs/{rid}/finding answered 500; Python 3.13 leaves the loop unresolved
+    and the path was given to the role. Either way it leads nowhere a role may be given: refused, nothing changed."""
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    routes = handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check)
+    src = Path(run.s["run_wt"]) / "src"
+    (src / "loop-a.sh").symlink_to(src / "loop-b.sh")
+    (src / "loop-b.sh").symlink_to(src / "loop-a.sh")
+
+    async def go():
+        r = await call(routes, "POST", f"/runs/{run.rid}/finding", json_body={**F032, "paths": ["src/loop-a.sh"]})
+        assert (r.status, r.body.get("code")) == (400, "invalid_finding"), r.body
+        assert "src/loop-a.sh" in r.body["error"]
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
+def test_a_symlink_loop_in_a_middle_part_of_a_path_or_glob_is_refused_too(tmp_path, monkeypatch):
+    """From the review of #67: Python 3.13 left a loop unresolved only at the last part, so src/la/x.cpp and
+    src/la/*.cpp (src/la a loop) were given to the role. A loop in any part is refused on every Python version."""
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    routes = handlers.build_routes(svc, AppRoute, web=FakeWeb, is_owner=owner_check)
+    src = Path(run.s["run_wt"]) / "src"
+    (src / "la").symlink_to(src / "lb")
+    (src / "lb").symlink_to(src / "la")
+
+    async def go():
+        for p in ("src/la/x.cpp", "src/la/*.cpp"):
+            r = await call(routes, "POST", f"/runs/{run.rid}/finding", json_body={**F032, "paths": [p]})
+            assert (r.status, r.body.get("code")) == (400, "invalid_finding"), (p, r.body)
+            assert p in r.body["error"]
+            assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
 
     asyncio.run(go())
 
@@ -561,3 +602,122 @@ def test_a_fix_that_cites_an_id_the_triage_lacks_is_held_for_a_person_not_sent_b
         assert "sysroot set" in sh(Path(run.s["run_wt"]), "show", "HEAD:src/a.cpp")
 
     asyncio.run(go())
+
+
+# --- #64: follow-ups from the review of #59 ---------------------------------------------------------------------- #
+
+def test_a_path_the_roles_scope_covers_already_is_not_added_again(tmp_path, monkeypatch):
+    """register_finding compared a path to the scope's globs literally: tests/test_a.cpp was added to a tester that
+    has tests/**, and its task said its scope had grown while the proposal said the file was its already."""
+    run = unit_held(tmp_path, monkeypatch, ("tests/test_a.cpp",))
+    mgr = run.d.manager()
+    svc = svc_of(tmp_path, run, mgr)
+    [s] = run.path_suggestions()
+    assert s["role"] == "dev2" and "本来就在测试的可改范围里" in s["note"]
+    before = len(mgr.continued)
+
+    async def go():
+        await svc.finding(run.rid, handlers.finding_body(
+            {"extend": s["extend"], "role": s["role"], "paths": s["paths"], "note": s["note"], "by": "alice"}))
+    asyncio.run(go())
+    assert run.roles["dev2"]["writable"] == ["src/b.*", "tests/**", "docs/aidlc/triage.json"]
+    assert run.s["tests"]["held"] is None
+    [task] = [t for _, a, t, *_ in mgr.continued[before:] if mgr.role_of(mgr.agents[a]) == "dev2"]
+    assert "你的可写范围加了" not in task
+
+
+def test_a_glob_asked_for_is_added_unless_the_scope_has_it_as_written(tmp_path, monkeypatch):
+    """A glob is compared as written: src/** is wider than the scope's src/a.*, so it is added; a file under src/a.*
+    is not."""
+    _, mgr, run, _ = held_run(tmp_path, monkeypatch)
+    svc = svc_of(tmp_path, run, mgr)
+
+    async def go():
+        await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["src/a.cpp", "src/**", "src/a.*"]}))
+    asyncio.run(go())
+    assert run.roles["dev"]["writable"] == ["src/a.*", "src/**"]
+    assert run.s["tests"]["held"]["registered"][-1]["added_paths"] == ["src/**"]
+
+
+def test_the_refusal_of_a_test_writer_says_it_is_accepted_when_adding_paths(tmp_path, monkeypatch):
+    run = unit_held(tmp_path, monkeypatch, ())
+    svc = svc_of(tmp_path, run, run.d.manager())
+
+    async def go():
+        with pytest.raises(httpkit.AppError) as e:  # a new finding: an implementing role only
+            await svc.finding(run.rid, handlers.finding_body({**F032, "role": "dev2"}))
+        assert e.value.status == 400 and "dev2 不是做实现的角色" in str(e.value)
+        assert "写测试的角色（dev2）只能在给已补登的发现加路径（extend）时选" in str(e.value)
+
+    asyncio.run(go())
+
+
+def test_a_glob_is_fenced_by_what_it_matches_in_the_work_tree_not_only_by_what_it_says(tmp_path, monkeypatch):
+    """fenced() judged a glob by its own text and a plain path by what it resolves to: src/* reached src/x, a
+    symlink to mcp/ or out of the work tree, unseen. It is a guard, so a glob is refused when anything it matches
+    resolves there."""
+    _, mgr, run, path = held_run(tmp_path, monkeypatch)
+    svc, sha = svc_of(tmp_path, run, mgr), path.read_bytes()
+    wt = Path(run.s["run_wt"])
+    (wt / "mcp" / "build").mkdir(parents=True, exist_ok=True)
+    (wt / "mcp" / "build" / "core.py").write_text("x\n")
+    (wt / "src" / "deep").mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "deep" / "srv").symlink_to(wt / "mcp")  # a folder link: judged itself, not walked into
+    outside = tmp_path / "source-repo" / "checks"
+    outside.mkdir(parents=True)
+    (wt / "docs" / "notes").mkdir(parents=True, exist_ok=True)
+    (wt / "docs" / "notes" / "c.sh").symlink_to(outside)
+    (wt / "cmake").mkdir(exist_ok=True)
+    (wt / "cmake" / "up").symlink_to(wt)  # the work tree itself: checks/ is below it
+    team = mod("team")
+    assert team.fenced(["src/**", "src/deep/*", "docs/notes/", "docs/*/c.?h", "cmake/u?"], wt) == [
+        "src/**", "src/deep/*", "docs/notes/", "docs/*/c.?h", "cmake/u?"]
+    assert team.fenced(["src/a.*", "src/*", "docs/*.md"], wt) == []  # nothing they match leads out
+
+    async def go():
+        with pytest.raises(httpkit.AppError) as e:
+            await svc.finding(run.rid, handlers.finding_body({**F032, "paths": ["src/deep/*"]}))
+        assert e.value.status == 400 and "不能交给角色" in str(e.value) and "src/deep/*" in str(e.value)
+        assert path.read_bytes() == sha and run.roles["dev"]["writable"] == ["src/a.*"] and run.s["tests"]["held"]
+
+    asyncio.run(go())
+
+
+def test_a_link_in_the_literal_part_of_a_glob_is_fenced_by_where_it_leads(tmp_path, monkeypatch):
+    """cmake/up/** matched nothing of the work tree and src/deep/srv/ lost its / to resolve(), so a link in a glob's
+    own literal part (cmake/up -> the work tree, src/deep/srv -> mcp/) reached checks/ or mcp/ unrefused."""
+    _, _, run, _ = held_run(tmp_path, monkeypatch)
+    wt = Path(run.s["run_wt"])
+    (wt / "mcp" / "build").mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "deep").mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "deep" / "srv").symlink_to(wt / "mcp")
+    (wt / "cmake").mkdir(exist_ok=True)
+    (wt / "cmake" / "up").symlink_to(wt)
+    (wt / "tests").mkdir(exist_ok=True)
+    team = mod("team")
+    reach = ["src/deep/srv/", "src/deep/srv", "src/deep/srv/**", "cmake/up/**", "cmake/up/", "cmake/up/*",
+             "cmake/up/docs/aidlc/*", "c*/up/**", "src/*/srv/"]
+    assert team.fenced(reach, wt) == reach
+    assert team.fenced(["src/a.cpp", "src/a.*", "tests/**", "src/*", "docs/*.md"], wt) == []
+
+
+def test_fenced_walks_only_the_folders_a_glob_may_reach(tmp_path, monkeypatch):
+    """fenced() walked the whole work tree for every glob: src/* listed each folder of build/ (2.4 s with 50k files
+    there, in the event loop). A folder the glob cannot reach below is not listed, and what it can still is."""
+    _, _, run, _ = held_run(tmp_path, monkeypatch)
+    wt = Path(run.s["run_wt"])
+    for d in ("build/out/obj", "src/deep/sub", "tests/unit", "checks"):
+        (wt / d).mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "deep" / "sub" / "lk").symlink_to(wt / "checks")
+    team, listed = mod("team"), []
+    real = Path.iterdir
+    monkeypatch.setattr(Path, "iterdir", lambda p: listed.append(p.relative_to(wt).as_posix()) or real(p))
+    assert team.fenced(["src/*", "src/a.*"], wt) == []
+    assert listed == [".", "src", ".", "src"]  # src/deep cannot hold what src/* matches; build/ is not below src/
+    listed.clear()
+    assert team.fenced(["tests/**"], wt) == []
+    assert "tests/unit" in listed and all(p in (".", "tests") or p.startswith("tests/") for p in listed), listed
+    listed.clear()
+    # still refused where the glob reaches: a link deep below src/, also through a part that crosses folders (d**)
+    assert team.fenced(["src/**", "src/d**/x", "s*/*/sub/**"], wt) == ["src/**", "src/d**/x", "s*/*/sub/**"]
+    assert not [p for p in listed if p.startswith("build")], listed

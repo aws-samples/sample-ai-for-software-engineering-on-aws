@@ -344,7 +344,8 @@ check: the tool, `file:line` from its first reason, that file as a path, and the
 appends the finding to the approved triage with `added: {found_by: "checks/<check>.sh", tool, location}` and the
 person's decision, checks the whole triage by the checks' rules (400 with the problems; nothing changes), and writes
 `triage.json` and its `.sha256` again, `base` unchanged: the person is the one approving it. The role named may write
-the paths given from then on (kept in the run's team, so the merge and the attribution of failures see them; a test
+the paths given from then on (a path its scope covers already, such as `tests/test_a.cpp` under `tests/**`, is not
+added again; kept in the run's team, so the merge and the attribution of failures see them; a test
 file given this way does not make the role the test writer), and the audit shows the registration as the person's
 action. A finding added already may also go to the tester (再加路径): the test a unit-test finding still lacks
 (TR §4.1) is the tester's to write, so the developer is never given `tests/**`. With 「接着运行」 the hold ends, the
@@ -417,7 +418,10 @@ stand-in servers only, never on a real server or a real run.
 mode, each server's `--config` path, the direct-mode baseline, the Docker the direct-mode checks run
 (`check_runner.docker`'s first word and a `-H <host>`) and `board_decides`. Every default is read from the team file,
 so an install with no settings file behaves exactly as this section describes; a save is validated first and written
-in one step, and both routes are the dashboard owner's alone (`httpkit.Kit.deny`). That guard covers the routes
+in one step (`board_decides` and the Docker runner and host every time, the other fields only where they differ from
+the team file), and both routes are the dashboard owner's alone
+(`httpkit.Kit.deny`). A stored field that no longer passes when it is loaded is listed on 设置 and the team file's
+value is used. That guard covers the routes
 only: an agent's shell runs as the same user and can edit `settings.json` directly (turn `board_decides` on, swap
 `docker.runner`), as it can the bench state
 ([D2](#d2-kiro-crew-runs-on-the-users-own-machine-agents-have-a-shell-sessions-auto-approve)); the boundary against
@@ -429,9 +433,20 @@ when they are missing, 设置 gives the three lines to paste, derived from the b
 `baseline`. A person pastes them in the server's own file; the app cannot, and the server would refuse a file it does
 not own (`check_trusted()`). Those lines spell the home folder out rather than `~` — the one exception to `display.py`
 — because that server expands no `~`. The baseline is the one path the checks' container sees (bind-mounted
-read-only), so it is kept below `${sample}/`, `~/workplace/vstatd-team/` or the app's data directory, resolved with
-`realpath`, never the home folder and with no dot folder below that root. A run in progress keeps who approves its
-bench requests: `POST /bench/decide` reads that run's own team, and a restart does not rewrite it from 设置.
+read-only), so it is kept an existing folder below `${sample}/` or `~/workplace/vstatd-team/`, or at or below
+the app's data directory's `baseline/` (not its `runs/` or `sample.json`), resolved with `realpath`, never the home
+folder and with no dot folder below that root; a root that a symbolic link leads out of where it is written (a
+`~/workplace/vstatd-team` that links to `~`, to `~/.ssh` or to another user's home), or a `baseline/` that links out
+of the data directory, allows nothing. A baseline saved in 设置 before these rules that is outside them is dropped
+when the settings are loaded, and runs use the team file's value instead. The checks mount and give the baseline as
+it resolves when the container starts, and check it again on that path by the same rules, with the app's data
+directory (the service hands it to the checks; a run's work tree is under `~/workplace/vstatd-team/runs/`, not in
+it): one that no longer holds (a link swapped since 设置 saved it) starts no container and is BLOCKED for a person
+with the reason. Between that check and Docker resolving the mount source itself there is a short window, which is
+accepted: swapping a folder on that path needs write access above the baseline, and a check container has only
+`runs/<run>` mounted read-write. A run in progress
+keeps who approves its bench requests: `POST /bench/decide` reads that run's own team, and a restart does not
+rewrite it from 设置.
 
 The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
 and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A
@@ -845,7 +860,10 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   compiled or run, and a module without a test file still gets nothing proposed. Every other path in another
   role's scope is still the person's to type.
   The person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
-  can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
+  can reach the first five (400): one click must not hand a role what judges it. A glob is judged by what it says
+  and by what each path of the work tree it matches resolves to, so `src/*` cannot reach a committed link to
+  `mcp/`; a link in its own literal part counts by where it leads, so `src/lroot/**` with `src/lroot -> ..` is
+  refused too. Another role's file it accepts,
   since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
   justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the
