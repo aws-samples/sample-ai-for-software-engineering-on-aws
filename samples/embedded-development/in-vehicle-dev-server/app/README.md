@@ -79,14 +79,24 @@ with `extend` it also takes a role that writes tests, not only an implementing o
 data directory ([backend/team/settings.py](backend/team/settings.py), [ui/src/settings/](ui/src/settings/)). Every
 default is read from the team file, so an install that never opens the page behaves exactly as before; a saved file
 is validated first (types, absolute or `~` paths, unknown keys dropped) and written in one step, and a field that
-does not hold up is refused with every problem named and nothing written. A save takes effect for the next run; a
+does not hold up is refused with every problem named and nothing written. Every save stores the security-relevant
+switches, `board_decides`, `docker.runner` and `docker.host`, even when they equal the default: `board_decides` saved
+as false stays false when a later team file says true, and the Docker runner and host stay as saved whatever a later
+version's defaults are. Of the other fields `settings.json` keeps only those that differ from the team file, so a
+default the team file changes later is followed; a choice saved equal to the default is not stored and follows the
+team file from then on. An install that never saved follows the team file for all of them. A file saved whole by an
+earlier version is still read, and it keeps every value fixed (team file changes not followed) until the next save.
+A stored field that no longer passes when the file is loaded (a rule added since, a folder
+gone), or a file that cannot be read, gets the team file's value and is listed on the page (`dropped` in
+`GET /settings`) rather than dropped silently. A save takes effect for the next run; a
 run in progress keeps the team it started with, who approves its bench requests too: while it runs, 批准 on the
-board follows that run's own `mode` and `board_decides`, and restarting the app leaves a loaded run's team as saved.
+board follows that run's own `mode` and `board_decides` (even when the team file cannot be read then), and
+restarting the app leaves a loaded run's team as saved.
 
 | Field | Default (team file) | What it changes |
 | --- | --- | --- |
 | `mode` | `connectors` (`direct`) | `direct` or `servers` (D17), without editing the team file or reinstalling |
-| `server_configs.build` / `.bench` | the `--config` in `servers.build` / `servers.bench` | which configuration file each MCP server is started with |
+| `server_configs.build` / `.bench` | the `--config` in `servers.build` / `servers.bench` | which configuration file each MCP server is started with (a `.toml` file) |
 | `baseline` | `bench.baseline` | direct mode's baseline directory (servers mode reads the bench server's own `baseline`) |
 | `docker.runner` | `""`: the docker found on this machine | security-relevant: an executable file that speaks Docker's command line, for the direct-mode checks (`check_runner.docker`'s first word) |
 | `docker.host` | `""`: the local daemon | a daemon address (`unix://`, `tcp://`, `ssh://`, `npipe://`, `fd://`), passed as `docker -H`; `tcp://` sends the checks and their mounts unencrypted |

@@ -586,47 +586,50 @@ class Service:
         team = settings_mod.apply(team, settings_mod.load(self.settings_file, team))
         return paths.expand(team, sample), sample
 
-    def _settings(self) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Blocking: (the settings now, the team file they are read against)."""
+    def _settings(self) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+        """Blocking: (the settings now, the team file they are read against, what of the stored file was dropped)."""
         team = load_team(self.team_file)
-        return settings_mod.load(self.settings_file, team), team
+        got, dropped = settings_mod.loaded(self.settings_file, team)
+        return got, team, dropped
 
     def _release_inputs(self) -> dict[str, Any]:
         """Blocking: the release check's inputs, read from the settings that are loaded — the same source 设置
         itself reads (_settings_view), so 准备情况 and the page can never say two different things."""
-        got, _ = self._settings()
+        got, _, _ = self._settings()
         return settings_mod.release_inputs(got)
 
-    def _settings_view(self, got: dict[str, Any], team: dict[str, Any]) -> dict[str, Any]:
+    def _settings_view(self, got: dict[str, Any], team: dict[str, Any], dropped: list[str]) -> dict[str, Any]:
         """Blocking: 设置 as the page shows it; ``release`` is read from the build server's own configuration in
-        servers mode only, and nothing of it is ever written."""
-        return {"settings": got, "defaults": settings_mod.defaults(team),
+        servers mode only, and nothing of it is ever written. ``dropped``: what of the stored file no longer holds
+        up and is the team file's value now (settings_mod.loaded)."""
+        return {"settings": got, "defaults": settings_mod.defaults(team), "dropped": dropped,
                 "release": settings_mod.release_inputs(got) if got["mode"] == "servers" else None}
 
     async def settings(self) -> dict[str, Any]:
         """设置: the app's own settings, the team file's defaults beside them, and — in servers mode — what the build
         server's configuration says about the three paths its release check needs."""
         try:
-            got, team = await asyncio.to_thread(self._settings)
+            got, team, dropped = await asyncio.to_thread(self._settings)
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
-        return await asyncio.to_thread(self._settings_view, got, team)
+        return await asyncio.to_thread(self._settings_view, got, team, dropped)
 
     async def save_settings(self, body: dict[str, Any]) -> dict[str, Any]:
         """设置 saved by the dashboard owner (every route of this app is theirs alone): checked first, then written
-        in one step. What does not hold up is refused with every problem named, and nothing is written."""
+        in one step, as settings_mod.stored keeps it (the security switches always, the rest where it differs from
+        the team file). What does not hold up is refused with every problem named, and nothing is written."""
         try:
-            _, team = await asyncio.to_thread(self._settings)
+            _, team, _ = await asyncio.to_thread(self._settings)
         except (OSError, ValueError) as exc:
             raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
         got, problems = await asyncio.to_thread(settings_mod.check, body.get("settings"), team, self.data_dir)
         if problems:
             raise AppError("设置没存：" + "；".join(problems), "invalid_settings", 400, {"problems": problems})
         try:
-            await asyncio.to_thread(settings_mod.save, self.settings_file, got)
+            await asyncio.to_thread(settings_mod.save, self.settings_file, settings_mod.stored(got, team))
         except OSError as exc:
             raise AppError(f"设置写不进去：{exc}", "settings_write_failed", 500, detail=exc)
-        return {"ok": True, **await asyncio.to_thread(self._settings_view, got, team)}
+        return {"ok": True, **await asyncio.to_thread(self._settings_view, got, team, [])}
 
     def _approving_team(self, default: dict[str, Any]) -> dict[str, Any]:
         """The team whose rules say who approves a bench request now: the run in progress's own (one run uses the
@@ -637,11 +640,15 @@ class Service:
         """批准 / 拒绝 a bench request on the board (D3): the bench's own decide() does it, with its rules (the digest
         prefix a person typed, once, not after the timeout), recording the dashboard owner as who decided. While a run
         is in progress its own team says who approves (one run uses the bench at a time): 设置 saved since, or the
-        team file edited since, are for the next run."""
+        team file edited since, are for the next run. So a team file or 设置 that cannot be read is no reason to refuse
+        while a run is in progress: its own team is used."""
+        active = next((r for r in self.runs.values() if not r.ended), None)
         try:
             team, sample = await asyncio.to_thread(self._default_team)
         except (OSError, ValueError) as exc:
-            raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
+            if active is None:
+                raise AppError(f"读不了团队配置：{exc}", "bad_team", 500, detail=exc)
+            team, sample = active.team, await asyncio.to_thread(paths.sample_dir, self.data_dir)
         # D17: in servers mode a person decides at the console by default
         if not servers_mod.board_decides(self._approving_team(team)):
             raise AppError("servers 模式下台架请求只在操作台 bench/console.py 上批", "decide_off", 409)

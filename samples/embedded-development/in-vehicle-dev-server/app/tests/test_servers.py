@@ -1051,3 +1051,26 @@ def test_a_restart_leaves_a_loaded_runs_approval_rules_as_the_run_started(tmp_pa
     assert loaded["servers"].get("board_decides", False) is False and servers.board_decides(loaded) is False
     team, _ = svc._default_team()
     assert servers.board_decides(team) is True  # the next run gets the setting
+
+
+def test_a_team_file_that_cannot_be_read_does_not_stop_a_run_in_progress_from_being_decided(tmp_path, monkeypatch):
+    """#64: bench_decide answered bad_team when the team file could not be read, although the run in progress's own
+    team says who approves. It is used then; with no run in progress the answer is still bad_team."""
+    httpkit = mod("httpkit")
+    rig, srv = servers_rig(tmp_path, monkeypatch, static=False)
+    rig.run.team["servers"] = {**rig.run.team["servers"], "board_decides": True}  # this run is approved on the board
+    svc = _service_for(rig, tmp_path, "broken")
+    svc.team_file.write_text("{ not json", encoding="utf-8")
+    state, rid, digest = Path(rig.state), "20261118T212800-deploy-6bb0", "e5b2a7" + "0" * 58
+    (state / "requests").mkdir(parents=True, exist_ok=True)
+    (state / "decisions").mkdir(exist_ok=True)
+    (state / "requests" / f"{rid}.json").write_text(json.dumps(
+        {"id": rid, "action": "deploy", "digest": digest, "detail": "", "requested_at": "2026-11-18T13:28:00Z",
+         "expires": time.time() + 200, "timeout_s": 300, "requested_by": "vstatd-team r1116servers"}), encoding="utf-8")
+    with pytest.raises(httpkit.AppError) as e:  # no run in progress: nothing else says who approves
+        asyncio.run(svc.bench_decide(rid, "approve", "e5b2a7", ""))
+    assert (e.value.code, e.value.status) == ("bad_team", 500)
+    svc.runs[rig.run.s["id"]] = rig.run
+    assert not rig.run.ended
+    res = asyncio.run(svc.bench_decide(rid, "approve", "e5b2a7", ""))
+    assert res["decision"]["verdict"] == "approved" and (state / "decisions" / f"{rid}.json").exists()
