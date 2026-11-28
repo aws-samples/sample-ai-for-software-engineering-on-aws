@@ -154,7 +154,7 @@ The five phases of AI-DLC Workflows 2.0, with the hardware steps of the
 | Initialization | AI-DLC's own set-up | None; automatic |
 | Ideation | Decide whether the behaviour change is worth doing and whether it touches safety functions; the hazards in the hazard log it affects | The change approved for work |
 | Inception | Detect the toolchains for both computers, the twin, the emulated board and, if present, a real robot; requirements and acceptance criteria from the fact entries; the push points, seeds and thresholds frozen and versioned; the verification plan: the evidence tier each requirement needs, what the twin is used to decide and what a wrong verdict would cost, the error the twin may have on the recorded pushes and, in the model-based profile, the back-to-back tolerances; design of the guard change | Requirements and test definition approved; build start approved |
-| Construction | Firmware change, or a change to the control-law model, with unit tests; builds for the controller and for the twin; static checks; the twin is checked against the recorded pushes, then runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure, and a BLOCKED check goes to a person |
+| Construction | Firmware change, or a change to the control-law model with its MIL tests, then SIL and PIL and `checks/backtoback.sh`, with unit tests; builds for the controller and for the twin; static checks; the twin is checked against the recorded pushes, then runs the frozen tests | The checks and the twin decide; a candidate returns to its owner on any failure, and a BLOCKED check goes to a person |
 | Operation | Flash the emulated board through the gate, or a real robot in the device profile: a signed image into the secondary slot, a trial start with the self-test, the image confirms itself or the bootloader goes back; update the main computer's software through its own path; one evidence page with every result labelled by tier | Each flash and test move, approved for its build digest at the operator console; each software release to the robot; the release owner signs off |
 
 ### 3. Checks and gates before the robot
@@ -174,7 +174,7 @@ the frozen tests, the recorded pushes, the error the twin is allowed, or the twi
 | `checks/twin.sh` | The frozen push tests in the twin, with the firmware in the loop: no falls up to the rated impulse, travel and wheel speed within the limits, for every seed |
 | `checks/trace.sh` | Every requirement, test and twin parameter cites a fact entry; every result carries its evidence tier; every hazard in the hazard log names a check or gate that exists |
 | `checks/sbom.sh` | The controller and bootloader images each have an SPDX software bill of materials that lists every component in the build's dependency list (`reference-project/dependencies.yaml`), each with its licence; a component missing from it fails the check |
-| `checks/backtoback.sh` | Model-based profile only: the twin's results with the generated control code equal the model-in-the-loop results on every frozen test, within the tolerances in the verification plan |
+| `checks/backtoback.sh` | Model-based profile only: the committed generated code is the code generated from the committed model version (its manifest; see [the Simulink section](#optional-a-control-law-designed-in-simulink)), and its outputs, built for the host (SIL) and for the emulated board (PIL), equal the recorded MIL outputs on every frozen test, within the tolerances in the verification plan |
 
 **Evidence tiers.** Every test result on the evidence page carries one of four tiers: *mock* (unit tests against
 fakes), *simulation* (the twin), *emulation* (the QEMU board) and *device* (a real robot, in the optional device
@@ -264,15 +264,33 @@ account and credentials allowed to create the gateway and the policy, it is char
 
 Controller teams often design control laws as models and generate the firmware's control code from them. The optional
 model-based profile does this for the balance controller and the actuator guard: a Simulink model with a plant model of
-RB-1, configured to generate fixed-point C for the Cortex-M3. In the `hw-model-design` step the agent changes the model
-through MathWorks' [MATLAB MCP Core Server](https://www.mathworks.com/products/matlab-mcp-core-server.html) and
+RB-1 whose parameters come from the fact entries, configured to generate fixed-point C for the Cortex-M3. In the
+`hw-model-design` step the agent changes the model through MathWorks'
+[MATLAB MCP Server](https://www.mathworks.com/products/matlab-mcp-server.html) and
 [Simulink Agentic Toolkit](https://www.mathworks.com/products/simulink-agentic-toolkit.html), which the agent uses as
-one more MCP server with its own permission class, and runs model-in-the-loop tests. The generated code goes into the
-firmware, and the twin then runs that firmware against the frozen requirement as usual. A back-to-back comparison of the
-twin's results with the model-in-the-loop results shows that, on the frozen tests, the generated code matches the model
-within the tolerances in the verification plan; fixed-point saturation is one difference it can catch. Flashing still
-goes through the gate. The profile needs MathWorks licences; without them, the generated code and recorded model results
-are committed and the agents cannot change the model.
+one more MCP server with its own permission class; it may write only under `model/`.
+
+The generated code is verified the way model-based teams do it, from the model down to the target, before the twin
+judges the design:
+
+| Level | What runs | Compared with |
+| --- | --- | --- |
+| Model-in-the-loop (MIL) | The controller model against the plant model, on the frozen push tests | The frozen requirement |
+| Software-in-the-loop (SIL) | The generated code built for the host, fed the controller's inputs recorded in MIL | The MIL outputs, within the tolerances in the verification plan ([back-to-back testing](https://www.mathworks.com/help/sltest/ug/back-to-back-equivalence-testing.html)) |
+| Processor-in-the-loop (PIL) | The generated code built for the Cortex-M3, run on the emulated board with the same inputs, through a PIL connectivity configuration for that board that item 9 has to write and try first (the Cortex-M support package's own QEMU Cortex-M3 board is a fallback, but it is not item 4's board) | The MIL outputs, within the same tolerances. SIL shows differences between the model and the generated code, such as a saturation or rounding the two treat differently; PIL adds differences from the target compiler and from hardware implementation settings that do not match the Cortex-M3 |
+| Closed loop | The firmware with the generated code, in the twin | The frozen requirement, as for any candidate |
+
+The generated code is never edited by hand. When the code is generated, a manifest under `model/` records the model
+version, the model checksum and a hash of every generated file. `checks/backtoback.sh` fails if any generated file
+differs from its hash, or if the `Model version` in a file header differs from the committed model's. Regenerating the
+code from the model, which needs MATLAB, is the full check. Flashing still goes through the gate.
+
+The profile needs MathWorks licences. Without them, the model, the generated code and the recorded MIL inputs and
+outputs are committed. The sample's own harness then replays the recorded MIL inputs into the committed generated code,
+built for the host and for the emulated board, and compares its outputs with the recorded MIL outputs. This is a replay
+of the SIL and PIL comparisons, not Simulink SIL or PIL simulation. The closed-loop twin run is unchanged. Changing the
+model, regenerating the code and running SIL or PIL in Simulink need MATLAB, so without the licences the agents cannot
+change the model.
 
 ### 5. The agent next to the robot
 
@@ -309,8 +327,8 @@ The rehearsal scorecard records:
 - any behaviour on the emulated board or the device that the twin did not predict;
 - flash and move requests refused because the robot was not in a safe state, and any action carried out outside a
   safe state;
-- in the model-based profile, back-to-back differences found, and how many were real defects in the model or the
-  code generation settings.
+- in the model-based profile, back-to-back differences found at SIL and at PIL, and how many were real defects in the
+  model, the code generation settings or the PIL target setup.
 
 The first rehearsal's numbers are the baseline. The sample publishes measured numbers only, with how they were
 measured, and labels each by its evidence tier. Screen and video recordings, and data, from a rehearsal show no
@@ -372,7 +390,9 @@ been dry-run once.
    the app. What both scenarios use is moved to one shared place when this item needs it, not before.
 8. The evidence page generator; rehearsal guide and scorecard; one dry run with the time and credits it used.
 9. Optional model-based profile: the Simulink model of the balance controller and actuator guard with the RB-1 plant
-   model, generated code, recorded model results and `checks/backtoback.sh`.
+   model, the generated code, the recorded MIL inputs and outputs, the SIL and PIL runs (PIL on item 4's emulated
+   board) and `checks/backtoback.sh`. It comes after items 2, 3 and 4, since it replaces part of item 2's firmware and
+   uses the twin and the emulated board; it is optional only because it needs MathWorks licences.
 
 Definition of done for the sample itself: runs on one Linux host, or a Mac with a container runtime, from `setup.sh`
 to a signed-off evidence page without a robot; `cleanup.sh` removes everything it created, including the optional
@@ -385,7 +405,7 @@ names, code, data or identifying details; no credentials or account identifiers;
 | --- | --- |
 | `knowledge/` | Synthetic robot notes, fact entries, team rules, the hazard log, the frozen requirement and tests |
 | `checks/` | The eight checks and the back-to-back check of the model-based profile |
-| `model/` | The optional model-based profile: model, generated code, recorded model results |
+| `model/` | The optional model-based profile: model, generated code, recorded MIL inputs and outputs, code generation manifest |
 | `mcp/` | `build`, `twin` and `robot` servers and their guardrail tests |
 | `reference-project/` | Controller firmware with its hardware abstraction layer, the main computer's app and update client |
 | `twin/` | MuJoCo model, firmware-in-the-loop harness, the recorded pushes (LeRobot format), the simple simulator and the rewritten controller |
@@ -407,9 +427,12 @@ pushes. They are fetched at build time, not included in the repository; MCUboot 
 into the bootloader image and listed in its software bill of materials. The optional AWS profile also needs an AWS
 account and the AWS CLI.
 
-The optional model-based profile also needs MATLAB, Simulink, Stateflow and Embedded Coder from MathWorks
-(commercial licences), and the MATLAB MCP Core Server and the Simulink Agentic Toolkit, whose terms are checked before
-the profile is built.
+The optional model-based profile also needs MATLAB, Simulink, Fixed-Point Designer, MATLAB Coder, Simulink Coder and
+Embedded Coder from MathWorks (commercial licences; Simulink Test is optional for the back-to-back runs; the actuator
+guard is built from Simulink blocks, not a Stateflow chart, so Stateflow is not needed), and the MATLAB MCP Server and
+the Simulink Agentic Toolkit, whose terms are checked before the profile is built. Without the licences,
+`checks/backtoback.sh` runs on the committed generated code and the recorded MIL inputs and outputs (see [the Simulink
+section](#optional-a-control-law-designed-in-simulink)); changing the model needs them.
 
 ## Cost
 
