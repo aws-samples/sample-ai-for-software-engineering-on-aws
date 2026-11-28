@@ -193,10 +193,11 @@ ends with a trailer holding the SHA-256 of header and image and an ECDSA P-256 s
 holds the public key; the private key is held only by the signing step of the build server.
 
 **§5.4 Start.** At every start the bootloader checks the image in the primary slot: size, digest and signature. It
-swaps in a new image from the secondary slot only if that image's signature verifies and its sequence number is not
-lower than the running image's. A swapped-in image runs as a *trial*: it confirms itself after its self-test (§5.5)
-passes. If it has not confirmed itself, the next reset, from the failed self-test, the watchdog or the flash gate's
-time-out, swaps the previous image back.
+swaps in a new image from the secondary slot only if that image's signature verifies. A swapped-in image runs as a
+*trial*: it confirms itself after its self-test (§5.5) passes, by setting the confirmation flag in its image trailer
+in the primary slot. If it has not confirmed itself, the next reset, from the failed self-test, the watchdog or the
+flash gate's time-out, swaps the previous image back. The bootloader does not compare sequence numbers; the flash gate
+refuses an image whose sequence number is lower than the running image's.
 
 **§5.5 Self-test.** Within 2 s of starting, the firmware reads the IMU, runs 10 balance loop cycles with the motors
 disabled and checks their period against §3.1, checks that the guard limits of §3.3 are in place and that motion is

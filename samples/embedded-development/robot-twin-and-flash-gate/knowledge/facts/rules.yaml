@@ -42,8 +42,9 @@ facts:
     erase destroys it.
   source: '[RB1-NOTES p.6 §5.2]'
 - id: BOOT-TRIAL
-  statement: A new image is swapped in only with a valid signature and a sequence number not lower than the running
-    one's, runs as a trial, and is swapped back at the next reset unless it confirmed itself.
+  statement: A new image is swapped in only with a valid signature, runs as a trial, confirms itself in its image
+    trailer in the primary slot, and is swapped back at the next reset unless it confirmed itself. The flash gate, not
+    the bootloader, refuses a lower sequence number.
   source: '[RB1-NOTES p.6 §5.4]'
 - id: SELF-TEST
   statement: Within 2 s of starting, the firmware checks the IMU, 10 loop periods with the motors disabled, the guard
