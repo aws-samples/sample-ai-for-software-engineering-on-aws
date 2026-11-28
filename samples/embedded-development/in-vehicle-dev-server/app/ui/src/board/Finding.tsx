@@ -89,9 +89,11 @@ export function startsExtending(run: RunDetail): boolean {
 }
 
 // what checks/lib/check_static.py says of a finding the batch removed without a decision that allows it
-const GONE = /\b(F-\d{3}): no longer reported, but triaged as (later|defer)\b/ // i18n-keep: the check's own words
+// (checkwords.test.ts reads the check's source and keeps the two the same); i18n-keep: the check's own words
+export const GONE = /\b(F-\d{3}): no longer reported, but triaged as (later|defer)\b/
 // what checks/lib/check_trace.py says (its own words) of a commit citing a finding the triage does not fix or justify
-const UNTRACED = /\b([0-9a-f]{7,40}): cites (F-\d{3}), which the approved triage does not fix or justify \(([^)]*)\)/
+export const UNTRACED =
+  /\b([0-9a-f]{7,40}): cites (F-\d{3}), which the approved triage does not fix or justify \(([^)]*)\)/
 /** The finding a held check cannot be cleared for, which neither 补登发现 nor 加路径 can change (both only add):
  * static's, no longer reported with its decision later or defer; or trace's, cited by a commit (*commit*: history is
  * not rewritten) while the triage does not fix or justify it. Null when the hold is any other shape. */

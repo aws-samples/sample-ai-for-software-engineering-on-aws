@@ -6,6 +6,7 @@ import { apiCalls, apiError, setApiRoutes } from '../test/stubs/app-sdk'
 import { clone, vstatdBoard } from '../test/fixtures'
 import { TeamPage } from '../main'
 import { goneFinding, locationOf, toolOf } from './Finding'
+import en from '../i18n/en.json'
 
 const API = '/api/apps/vstatd-team'
 const TREE = '/Users/you/workplace/vstatd-team/runs/r1006a/results/1/work/unit/tree/'
@@ -330,6 +331,9 @@ describe('一个已经不报的发现卡住了运行', () => {
     expect(box.getByText(/提交 0123456789ab 引用了 F-022/)).toBeInTheDocument()
     expect(box.getByText(/历史不能改写/)).toBeInTheDocument()
     expect(box.getByText(/新运行的分诊里把它判成 fix 或 justify/)).toBeInTheDocument()
+    // #64: the refactor's own way out, a new run whose commits cite its TR §4.4 entry, is said too, in both languages
+    expect(box.getByText(/新运行的提交改为引用重构自己在 TR §4\.4 补登的条目/)).toBeInTheDocument()
+    expect(en['board.FlowStrip.45']).toMatch(/for the refactor, its commits cite the refactor's own TR §4\.4 entry/)
     expect(box.getByText(/trace 过不去/)).toBeInTheDocument()
     expect(screen.queryAllByRole('button', { name: '补登发现并交给角色' })).toHaveLength(0)
     expect(screen.queryByTestId('kt-finding-dialog')).not.toBeInTheDocument()

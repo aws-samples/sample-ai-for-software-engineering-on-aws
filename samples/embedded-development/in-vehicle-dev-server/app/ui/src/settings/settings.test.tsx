@@ -170,4 +170,41 @@ describe('设置', () => {
     expect(screen.queryByTestId('st-save')).not.toBeInTheDocument()
     expect(apiCalls.filter((c) => c.method === 'POST')).toHaveLength(0)
   })
+
+  test('a stored setting the backend dropped is said, and a save that stores it again clears the note', async () => {
+    // #64: settings.json held a baseline that no longer passes; the team file's value is used, and the page says so
+    const said = '「基线目录」要在 ${sample}/…、~/workplace/vstatd-team/… 或 app 的数据目录下面（它会被只读挂进跑检查的容器）'
+    setApiRoutes({
+      [`GET ${API}/settings`]: () => ({ ...clone(DIRECT), dropped: [said] }),
+      [`POST ${API}/settings`]: (body) => {
+        const b = body as { settings: SettingsPage['settings'] }
+        return { ok: true, settings: b.settings, defaults: clone(DIRECT.defaults), release: null, dropped: [] }
+      },
+    })
+    render(<SettingsView />)
+    const note = await screen.findByTestId('st-dropped')
+    expect(note).toHaveTextContent('不再通过检查，现在用的是团队文件的默认值')
+    expect(within(note).getByRole('listitem')).toHaveTextContent(said)
+    await userEvent.click(screen.getByLabelText('servers 模式下看板上也能批准、拒绝（board_decides）'))
+    await userEvent.click(screen.getByTestId('st-save'))
+    await waitFor(() => expect(screen.queryByTestId('st-dropped')).not.toBeInTheDocument())
+  })
+
+  test('with a dropped setting the page may be saved untouched, which takes it out of settings.json', async () => {
+    // #68 review Y1: the dropped value comes back as the default, so the form is unchanged; the save must not be shut
+    setApiRoutes({
+      [`GET ${API}/settings`]: () => ({ ...clone(DIRECT), dropped: ['「基线目录」不再通过检查'] }),
+      [`POST ${API}/settings`]: (body) => {
+        const b = body as { settings: SettingsPage['settings'] }
+        return { ok: true, settings: b.settings, defaults: clone(DIRECT.defaults), release: null, dropped: [] }
+      },
+    })
+    render(<SettingsView />)
+    expect(await screen.findByTestId('st-dropped')).toHaveTextContent('保存后这几项会从 settings.json 里去掉、回到默认值')
+    expect(screen.getByTestId('st-save')).toBeEnabled()
+    await userEvent.click(screen.getByTestId('st-save'))
+    await waitFor(() => expect(screen.queryByTestId('st-dropped')).not.toBeInTheDocument())
+    expect(apiCalls.filter((c) => c.method === 'POST')).toHaveLength(1)
+    expect(screen.getByTestId('st-save')).toBeDisabled()
+  })
 })

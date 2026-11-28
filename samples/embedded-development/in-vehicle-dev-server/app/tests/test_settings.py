@@ -41,7 +41,7 @@ triage = "{root}/server/triage/triage.json"
 def scenario(tmp_path, monkeypatch):
     """The app with the shipped team file, a stand-in scenario folder and both servers' configuration files."""
     sample = tmp_path / "sample"
-    for d in ("checks", "reference-project", "bench"):
+    for d in ("checks", "reference-project", "bench/own-baseline"):
         (sample / d).mkdir(parents=True)
     (sample / "bench" / "console.py").write_text("", encoding="utf-8")
     team = json.loads(constants.TEAM_FILE.read_text(encoding="utf-8"))
@@ -280,6 +280,9 @@ def test_a_path_out_of_the_allowed_folders_is_refused_and_so_is_a_control_charac
             assert any(said in p for p in r.body["problems"]), (patch, r.body["problems"])
             assert not (svc.data_dir / "settings.json").exists(), patch
         # inside the scenario folder it holds, and so does the bench owner's folder and the app's data directory
+        (svc.data_dir / "baseline").mkdir()
+        for d in ("baseline-final", "baseline"):  # a baseline is an existing folder wherever it is
+            (home / "workplace" / "vstatd-team" / d).mkdir(parents=True, exist_ok=True)
         for value in ("${sample}/bench/own-baseline", "~/workplace/vstatd-team/baseline-final",
                       str(home / "workplace" / "vstatd-team" / "baseline"), str(svc.data_dir / "baseline")):
             r = await post(routes, {"settings": {"baseline": value}})
@@ -316,6 +319,114 @@ def test_the_baseline_cannot_be_the_home_folder_a_dot_folder_or_a_link_out_of_th
                                               "baseline": "~/.aws"})
         team, _ = await asyncio.to_thread(svc._default_team)
         assert team["bench"]["baseline"] == str(tmp_path / "sample" / "bench" / "baseline")
+
+    asyncio.run(go())
+
+
+def test_a_root_that_is_a_link_to_the_home_folder_or_above_it_allows_nothing(tmp_path, monkeypatch):
+    """From #64: with ~/workplace/vstatd-team a symbolic link to ~, the root resolved to the home folder and
+    ~/Documents was accepted. A root that resolves to the home folder or above it is left out, the data directory's
+    baseline/ folder too; the scenario folder still holds."""
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    home = tmp_path / "home"
+    (home / "Documents").mkdir(parents=True)
+    (home / "workplace").mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    team_dir = home / "workplace" / "vstatd-team"
+
+    async def go():
+        for target in (home, tmp_path):  # the home folder, and a folder above it
+            team_dir.unlink(missing_ok=True)
+            team_dir.symlink_to(target)
+            (svc.data_dir / "baseline").unlink(missing_ok=True)
+            (svc.data_dir / "baseline").symlink_to(target)
+            for value in ("~/Documents", str(home / "Documents"), "~/workplace/vstatd-team/Documents",
+                          str(svc.data_dir / "baseline"), str(svc.data_dir / "baseline" / "Documents")):
+                r = await post(routes, {"settings": {"baseline": value}})
+                assert (r.status, r.code) == (400, "invalid_settings"), (target, value)
+                assert any("只读挂进" in p for p in r.body["problems"]), (value, r.body["problems"])
+                assert not (svc.data_dir / "settings.json").exists(), value
+        r = await post(routes, {"settings": {"baseline": "${sample}/bench/own-baseline"}})
+        assert r.status == 200, r.body
+
+    asyncio.run(go())
+
+
+def test_a_root_that_is_a_link_into_a_dot_folder_or_another_users_home_allows_nothing(tmp_path, monkeypatch):
+    """From the review of #67: a root linked to ~/.ssh had nothing below it starting with a dot, and one linked to
+    another user's home is not above this one, so both still let a folder in. A root a link leads out of where it is
+    written allows nothing. glayyiyi's review of #67 adds ~/.aws and a folder outside the home folder (as /etc)."""
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    home, other, etc = tmp_path / "home", tmp_path / "users" / "bob", tmp_path / "etc"
+    targets = (home / ".ssh", home / ".aws", other, etc)
+    for d in (home / "workplace", *(t / "sub" for t in targets)):
+        d.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    team_dir, data_base = home / "workplace" / "vstatd-team", svc.data_dir / "baseline"
+
+    async def go():
+        for target in targets:
+            for link in (team_dir, data_base):
+                link.unlink(missing_ok=True)
+                link.symlink_to(target)
+            for value in ("~/workplace/vstatd-team/sub", str(data_base), str(data_base / "sub")):
+                r = await post(routes, {"settings": {"baseline": value}})
+                assert (r.status, r.code) == (400, "invalid_settings"), (target, value)
+                assert any("只读挂进" in p for p in r.body["problems"]), (value, r.body["problems"])
+                assert not (svc.data_dir / "settings.json").exists(), value
+
+    asyncio.run(go())
+
+
+def test_a_baseline_in_the_scenario_or_the_team_folder_must_be_an_existing_folder_too(tmp_path, monkeypatch):
+    """From glayyiyi's review of #67: only the data directory's baseline/ had to be a folder, so a file or a missing
+    path below ${sample}/ or the team folder was saved. Each is refused; an existing folder holds."""
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    home = tmp_path / "home"
+    team_dir = home / "workplace" / "vstatd-team"
+    team_dir.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    (tmp_path / "sample" / "bench" / "a-file").write_text("", encoding="utf-8")
+    (team_dir / "a-file").write_text("", encoding="utf-8")
+
+    async def go():
+        for value in ("${sample}/bench/a-file", "${sample}/bench/not-there", "~/workplace/vstatd-team/a-file",
+                      "~/workplace/vstatd-team/not-there"):
+            r = await post(routes, {"settings": {"baseline": value}})
+            assert (r.status, r.code) == (400, "invalid_settings"), value
+            assert any("已有的文件夹" in p for p in r.body["problems"]), (value, r.body["problems"])
+            assert not (svc.data_dir / "settings.json").exists(), value
+        (team_dir / "own").mkdir()
+        for value in ("${sample}/bench/own-baseline", "~/workplace/vstatd-team/own"):
+            r = await post(routes, {"settings": {"baseline": value}})
+            assert r.status == 200, (value, r.body)
+
+    asyncio.run(go())
+
+
+def test_only_the_baseline_folder_of_the_data_directory_holds_and_it_must_be_a_folder(tmp_path, monkeypatch):
+    """From #64: the whole data directory was a root, so its runs/ and even sample.json were accepted. Only its
+    baseline/ folder (or a folder below it) holds, and it must be a folder that is there."""
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    data = svc.data_dir
+    (data / "runs" / "r1").mkdir(parents=True)
+
+    async def go():
+        for value in (data / "runs", data / "runs" / "r1", data / "sample.json", data / "baseline"):
+            r = await post(routes, {"settings": {"baseline": str(value)}})
+            assert (r.status, r.code) == (400, "invalid_settings"), value
+            assert any("基线目录" in p for p in r.body["problems"]), (value, r.body["problems"])
+        (data / "baseline").write_text("", encoding="utf-8")  # a file of that name is not a folder
+        r = await post(routes, {"settings": {"baseline": str(data / "baseline")}})
+        assert (r.status, r.code) == (400, "invalid_settings")
+        assert any("已有的文件夹" in p for p in r.body["problems"]), r.body["problems"]
+        (data / "baseline").unlink()
+        (data / "baseline" / "own").mkdir(parents=True)
+        assert not (data / "settings.json").exists()
+        for value in (data / "baseline", data / "baseline" / "own"):
+            r = await post(routes, {"settings": {"baseline": str(value)}})
+            assert r.status == 200, (value, r.body)
 
     asyncio.run(go())
 
@@ -376,7 +487,7 @@ def test_readiness_reads_the_settings_that_are_loaded_not_what_the_team_dict_giv
         assert item["detail"] == page["detail"] + "；要粘的三行在「设置」页上"
         # what 准备情况 handed release_inputs is the settings as they were loaded, field for field — the same source
         # the page reads (_settings_view)
-        got, _ = await asyncio.to_thread(svc._settings)
+        got, _, _ = await asyncio.to_thread(svc._settings)
         assert seen == [got]
         # the team dict cannot give every field back, so re-deriving the settings from it drops the Docker host
         team, _ = await asyncio.to_thread(svc._default_team)
@@ -428,3 +539,108 @@ def test_defaults_apply_and_check_stand_on_their_own():
     assert out["servers"]["build"][-2:] == team["servers"]["build"][-2:]
     twice = settings_mod.apply(settings_mod.apply(team, changed), changed)  # applied again: one -H, not two
     assert twice["check_runner"]["docker"].count("-H") == 1
+
+
+# --- #64: follow-ups from the review of #57 ---------------------------------------------------------------------- #
+
+def test_a_stored_setting_that_no_longer_holds_up_is_said_on_the_page_not_dropped_silently(tmp_path, monkeypatch):
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    outside = tmp_path / "elsewhere" / "baseline"  # not below ${sample}/, ~/workplace/vstatd-team/ or the data dir
+    outside.mkdir(parents=True)
+
+    async def go():
+        r = await call(routes, "GET", "/settings")
+        assert r.status == 200 and r.body["dropped"] == []  # no file: nothing was saved, nothing dropped
+        # a file saved by an older version, or before the folder rules were what they are now
+        (svc.data_dir / "settings.json").write_text(json.dumps({"baseline": str(outside), "board_decides": True}),
+                                                    encoding="utf-8")
+        r = await call(routes, "GET", "/settings")
+        assert r.body["settings"]["baseline"] == r.body["defaults"]["baseline"]  # the team file's value is used
+        assert r.body["settings"]["board_decides"] is True  # what still holds is kept
+        [said] = r.body["dropped"]
+        assert "「基线目录」" in said
+        # a file that is not JSON at all is said too
+        (svc.data_dir / "settings.json").write_text("{ not json", encoding="utf-8")
+        r = await call(routes, "GET", "/settings")
+        assert r.body["settings"] == r.body["defaults"] and len(r.body["dropped"]) == 1
+        assert "settings.json 读不了" in r.body["dropped"][0]
+        # a save stores what holds up today: nothing is dropped any more
+        r = await post(routes, {"settings": {"board_decides": True}})
+        assert r.status == 200 and r.body["dropped"] == []
+        assert (await call(routes, "GET", "/settings")).body["dropped"] == []
+
+    asyncio.run(go())
+
+
+def test_settings_json_keeps_only_the_fields_that_differ_from_the_team_file(tmp_path, monkeypatch):
+    svc, routes, server = scenario(tmp_path, monkeypatch)
+    file = svc.data_dir / "settings.json"
+
+    async def go():
+        dflt = (await call(routes, "GET", "/settings")).body["defaults"]
+        r = await post(routes, {"settings": {**dflt, "board_decides": True}})  # the page sends every field back
+        assert r.status == 200 and r.body["settings"] == {**dflt, "board_decides": True}
+        kept = {"board_decides": True, "docker": {"runner": "", "host": ""}}  # stored every time (the next test)
+        assert json.loads(file.read_text(encoding="utf-8")) == kept
+        build = str(server / "build.toml")
+        r = await post(routes, {"settings": {"mode": "servers", "server_configs": {**dflt["server_configs"],
+                                                                                   "build": build}}})
+        assert r.status == 200
+        assert json.loads(file.read_text(encoding="utf-8")) == {
+            "mode": "servers", "server_configs": {"build": build}, **kept, "board_decides": False}
+        # a file stored whole by the version before this one is still read as it was
+        file.write_text(json.dumps({**dflt, "board_decides": True}), encoding="utf-8")
+        got = (await call(routes, "GET", "/settings")).body
+        assert got["settings"] == {**dflt, "board_decides": True} and got["dropped"] == []
+        # a default the team file changes later is followed, as it is not pinned in settings.json
+        file.write_text(json.dumps({"mode": "servers", "server_configs": {"build": build}}), encoding="utf-8")
+        team = json.loads(svc.team_file.read_text(encoding="utf-8"))
+        team["bench"]["baseline"] = "${sample}/bench/new-baseline"
+        svc.team_file.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
+        got = (await call(routes, "GET", "/settings")).body
+        assert got["settings"]["baseline"] == "${sample}/bench/new-baseline" and got["dropped"] == []
+        assert got["settings"]["mode"] == "servers" and got["settings"]["server_configs"]["build"] == shown(build)
+
+    asyncio.run(go())
+
+
+def test_the_security_switches_saved_equal_to_the_default_stay_as_saved_when_the_default_changes(tmp_path,
+                                                                                               monkeypatch):
+    svc, routes, _ = scenario(tmp_path, monkeypatch)
+    real = settings_mod.defaults
+
+    async def go():
+        dflt = (await call(routes, "GET", "/settings")).body["defaults"]
+        assert dflt["board_decides"] is False and dflt["docker"] == {"runner": "", "host": ""}
+        assert (await post(routes, {"settings": dflt})).status == 200  # saved as the defaults are
+        # a team file that later turns board_decides on does not turn it on for the owner who saved it off
+        team = json.loads(svc.team_file.read_text(encoding="utf-8"))
+        team["servers"]["board_decides"] = True
+        svc.team_file.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
+        # nor does a version whose Docker defaults are another runner and a remote host
+        runner = executable(tmp_path / "bin" / "other-docker")
+        monkeypatch.setattr(settings_mod, "defaults",
+                            lambda t: {**real(t), "docker": {"runner": runner, "host": "tcp://alice-box:2375"}})
+        got = (await call(routes, "GET", "/settings")).body
+        assert got["defaults"]["board_decides"] is True and got["defaults"]["docker"]["host"] == "tcp://alice-box:2375"
+        assert got["settings"]["board_decides"] is False
+        assert got["settings"]["docker"] == {"runner": "", "host": ""} and got["dropped"] == []
+        stored = json.loads((svc.data_dir / "settings.json").read_text(encoding="utf-8"))
+        assert stored == {"board_decides": False, "docker": {"runner": "", "host": ""}}
+
+    asyncio.run(go())
+
+
+def test_a_server_configuration_file_must_be_a_toml_file(tmp_path, monkeypatch):
+    svc, routes, server = scenario(tmp_path, monkeypatch)
+
+    async def go():
+        for name in ("build.conf", "build.toml.bak", "build"):
+            r = await post(routes, {"settings": {"server_configs": {"build": str(server / name)}}})
+            assert (r.status, r.code) == (400, "invalid_settings"), name
+            assert r.body["problems"] == ["「build 服务器的配置文件」要是 .toml 文件"], name
+            assert not (svc.data_dir / "settings.json").exists(), name
+        r = await post(routes, {"settings": {"server_configs": {"bench": "~/elsewhere/bench.toml"}}})
+        assert r.status == 200 and r.body["settings"]["server_configs"]["bench"] == "~/elsewhere/bench.toml"
+
+    asyncio.run(go())

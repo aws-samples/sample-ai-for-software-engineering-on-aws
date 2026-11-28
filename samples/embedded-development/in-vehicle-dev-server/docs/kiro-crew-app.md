@@ -344,7 +344,8 @@ check: the tool, `file:line` from its first reason, that file as a path, and the
 appends the finding to the approved triage with `added: {found_by: "checks/<check>.sh", tool, location}` and the
 person's decision, checks the whole triage by the checks' rules (400 with the problems; nothing changes), and writes
 `triage.json` and its `.sha256` again, `base` unchanged: the person is the one approving it. The role named may write
-the paths given from then on (kept in the run's team, so the merge and the attribution of failures see them; a test
+the paths given from then on (a path its scope covers already, such as `tests/test_a.cpp` under `tests/**`, is not
+added again; kept in the run's team, so the merge and the attribution of failures see them; a test
 file given this way does not make the role the test writer), and the audit shows the registration as the person's
 action. A finding added already may also go to the tester (再加路径): the test a unit-test finding still lacks
 (TR §4.1) is the tester's to write, so the developer is never given `tests/**`. With 「接着运行」 the hold ends, the
@@ -417,7 +418,10 @@ stand-in servers only, never on a real server or a real run.
 mode, each server's `--config` path, the direct-mode baseline, the Docker the direct-mode checks run
 (`check_runner.docker`'s first word and a `-H <host>`) and `board_decides`. Every default is read from the team file,
 so an install with no settings file behaves exactly as this section describes; a save is validated first and written
-in one step, and both routes are the dashboard owner's alone (`httpkit.Kit.deny`). That guard covers the routes
+in one step (`board_decides` and the Docker runner and host every time, the other fields only where they differ from
+the team file), and both routes are the dashboard owner's alone
+(`httpkit.Kit.deny`). A stored field that no longer passes when it is loaded is listed on 设置 and the team file's
+value is used. That guard covers the routes
 only: an agent's shell runs as the same user and can edit `settings.json` directly (turn `board_decides` on, swap
 `docker.runner`), as it can the bench state
 ([D2](#d2-kiro-crew-runs-on-the-users-own-machine-agents-have-a-shell-sessions-auto-approve)); the boundary against
@@ -429,9 +433,20 @@ when they are missing, 设置 gives the three lines to paste, derived from the b
 `baseline`. A person pastes them in the server's own file; the app cannot, and the server would refuse a file it does
 not own (`check_trusted()`). Those lines spell the home folder out rather than `~` — the one exception to `display.py`
 — because that server expands no `~`. The baseline is the one path the checks' container sees (bind-mounted
-read-only), so it is kept below `${sample}/`, `~/workplace/vstatd-team/` or the app's data directory, resolved with
-`realpath`, never the home folder and with no dot folder below that root. A run in progress keeps who approves its
-bench requests: `POST /bench/decide` reads that run's own team, and a restart does not rewrite it from 设置.
+read-only), so it is kept an existing folder below `${sample}/` or `~/workplace/vstatd-team/`, or at or below
+the app's data directory's `baseline/` (not its `runs/` or `sample.json`), resolved with `realpath`, never the home
+folder and with no dot folder below that root; a root that a symbolic link leads out of where it is written (a
+`~/workplace/vstatd-team` that links to `~`, to `~/.ssh` or to another user's home), or a `baseline/` that links out
+of the data directory, allows nothing. A baseline saved in 设置 before these rules that is outside them is dropped
+when the settings are loaded, and runs use the team file's value instead. The checks mount and give the baseline as
+it resolves when the container starts, and check it again on that path by the same rules, with the app's data
+directory (the service hands it to the checks; a run's work tree is under `~/workplace/vstatd-team/runs/`, not in
+it): one that no longer holds (a link swapped since 设置 saved it) starts no container and is BLOCKED for a person
+with the reason. Between that check and Docker resolving the mount source itself there is a short window, which is
+accepted: swapping a folder on that path needs write access above the baseline, and a check container has only
+`runs/<run>` mounted read-write. A run in progress
+keeps who approves its bench requests: `POST /bench/decide` reads that run's own team, and a restart does not
+rewrite it from 设置.
 
 The agents do not get the servers: as before, only the app runs checks and bench actions. What a person approves,
 and the D7 rules (attribution to a file's owner, BLOCKED to a person, the repair-round bounds), stay as they are. A
@@ -702,6 +717,67 @@ Alternatives considered: the agents calling the servers themselves (the open tru
 `mcp/bench/README.md`, for after this); keeping tests first in `direct` mode (no temporary commit, but one check
 outside the servers); a `git worktree` as the server's work tree (its `.git` lies outside the mounted folder).
 
+### D18. The app reports how big each commit is; the refactor commits a move and a change separately
+
+In `r11170658` (D17) the fix commits had 1 to 49 changed lines, but the refactor's first commit, `c6579f9`, had 796:
+448 moved and 348 not, and `754eaaa` had 156: 73 moved and 83 not. The reviewer got `git diff base HEAD` as plain
+text and had to find the 348 lines that really changed among the 796.
+
+Decided on 2026-11-23:
+
+- **The prompts** (`app/team/team-vstatd.json`). The architect writes each step of `refactor-plan.md` as two commits:
+  a move (code moved, the new function's signature and its call added, its body unchanged), then a change, and names
+  the findings the change fixes, only those the triage decided to fix. The refactor developer commits them in that
+  order, `[dev-refactor] F-031 搬移：…` citing only the work item, then `[dev-refactor] F-031、F-023 修改：…` citing
+  every finding it fixes: each finding the triage decided to fix (F-022, F-024 and F-026 always; F-023 and F-025 as
+  the triage decides) has to be cited by some commit, or `trace` fails (D13), and one the triage did not decide to fix
+  or justify must not be cited, or `trace` fails too. A finding the move itself removes is cited in the move commit,
+  after F-031, which says the move removed it. The fix developer makes one commit
+  per finding, an inline suppression for a justification included. The reviewer also gets the table below and reads
+  commit by commit (`git show <sha>`): a move only for whether its content stayed the same, the changes and fixes
+  closely. TR §7.2 and the task template are unchanged.
+- **The figures** (`app/backend/team/commits.py`). For each non-merge commit of `base..HEAD` on the run branch: its
+  role and findings (from the `[role] F-nnn …` its subject starts with), files, lines (added + removed), moved and
+  not moved. The app's own commits are listed apart and not counted: `[run] …` (gate decisions, merges) and the
+  subject `[role] （app 代提交）` exactly, which also starts with a role's tag and so is recognised first. Each run is
+  measured once into `results/commit-sizes.json` with the HEAD it was taken at, and again when HEAD has moved since:
+  it is looked at before a reviewer's round, in the tick that ends the run, and before the scorecard is read. Once the
+  run has ended, HEAD is compared one last time and the file is marked `final`; from then on it is read as it is
+  while HEAD stays at the commit it was measured at, and measured again if a resumed run (a retry) has merged more.
+  A measurement that fails is not tried again, and not warned about again, until HEAD moves. An imported run has none.
+- **Where they show.** The reviewer's task (a table, oldest first), the scorecard (each run's not-moved lines per
+  commit, the most and the median, and which commit was the biggest: measured figures only, D8) and the sign-off
+  card (every commit, most not-moved lines first). The commits are counted from the run's base, the requirement
+  commit, so the triage's, the architect's and the tester's are listed too; trace counts from the triage's base, so
+  the two lists can differ by a few commits.
+
+How moved lines are counted, fixed so that the same git gives the same numbers:
+
+```
+git -c color.diff.oldMoved=blue -c color.diff.newMoved=yellow -c color.diff.oldMovedAlternative=blue \
+    -c color.diff.newMovedAlternative=yellow show --format= --color=always --color-moved=zebra \
+    --color-moved-ws=allow-indentation-change <sha>
+```
+
+Each `+` or `-` line is counted by the colour it starts with: blue or yellow is moved, red or green is not. The app
+also sets those two colours and the bold of the headers, so no colour setting in a repository changes the count.
+git marks a block as moved only when it has at least 20 letters or digits, so a shorter move counts as not moved
+and the not-moved figure is usually high. A block copied to several places counts every copy as moved, though: a
+6-line block removed from one file and added to two others is 18 lines, 18 moved, 0 not moved, although 6 of them
+are new code. The user's global and system git configuration is not read, but the
+repository's own `.git/config` and `.gitattributes` still are, so a setting there (for example `diff.renames`, or a
+`textconv`) can change the count. A binary file and a pure rename count as 0 lines, as in `git diff --numstat`. Read only on the `r11170658` work tree, this gives `c6579f9`
+796 / 448 / 348 and `754eaaa` 156 / 73 / 83.
+
+Why reported only: nothing has measured yet what size a reviewer can read well, so no check fails on it, nothing is
+sent back, and the merge is unchanged. No limit goes into `checks/limits.json` for now either: every value there
+cites its source in the knowledge, and none states one. Once rehearsals have produced figures, TR or CC1-PN can
+state a limit and a check can cite it.
+
+Alternatives considered: a size limit that fails a commit (no source for the number); the reviewer computing the
+moves itself (each review would do it differently); counting moves with a diff of our own (git's is already there
+and its minimum block is documented).
+
 ## Implementation plan
 
 Each step ends with its verification; a step is done when that verification passes. Steps 1 to 11 run without the
@@ -784,7 +860,10 @@ evidence page, redacted, are in [rehearsal/first-delivery/](../rehearsal/first-d
   compiled or run, and a module without a test file still gets nothing proposed. Every other path in another
   role's scope is still the person's to type.
   The person checks it and sends it. `POST /runs/{rid}/finding` refuses a path or glob that
-  can reach the first five (400): one click must not hand a role what judges it. Another role's file it accepts,
+  can reach the first five (400): one click must not hand a role what judges it. A glob is judged by what it says
+  and by what each path of the work tree it matches resolves to, so `src/*` cannot reach a committed link to
+  `mcp/`; a link in its own literal part counts by where it leads, so `src/lroot/**` with `src/lroot -> ..` is
+  refused too. Another role's file it accepts,
   since a person may type it on purpose (TR §4.1: a unit-test finding is the developer's, `tests/**` the tester's).
 - **A review still 要改 after its rounds.** The review asked for the citations in the commit of F-028's
   justification; the developer would not rewrite a merged commit. The run ended with no button for the person: the

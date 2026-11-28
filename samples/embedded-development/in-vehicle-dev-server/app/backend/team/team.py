@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import errno
 import json
 import logging
+import os
 import re
 import secrets
 import shutil
@@ -30,6 +32,7 @@ from typing import Any, Awaitable, Callable
 
 from . import bench as bench_mod
 from . import checks, gitwork, messages
+from . import commits as commits_mod
 from . import delivery as delivery_mod
 from . import servers as servers_mod
 from . import triage as triage_mod
@@ -109,16 +112,42 @@ def fenced(globs: list[str], root: Path | None = None) -> list[str]:
     """The paths or globs a person asked for that could reach what a role is never given (FENCED): by what the glob
     itself says and, with *root* (the work tree), by what a path of it resolves to, so a symlink committed at a path
     outside FENCED cannot stand in for a file inside it, nor for one outside the work tree (the source repo's own
-    checks/, say)."""
+    checks/, say). A link in the glob's own literal part counts too: ``src/lroot/**``, ``src/lroot -> ..``, reaches
+    checks/ though nothing of the work tree matches it.
+
+    It checks the work tree as it is when the finding is registered: ``src/**`` on a tree with no links is accepted,
+    and a link ``src/evil -> ../checks`` that appears afterwards is not seen here. Writes through links that appear
+    later are for the gates and the checks made at write time to catch. Blocking (it walks the work tree): call it
+    off the event loop."""
     return [g for g in globs
-            if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED) or resolves_fenced(g, root)]
+            if any(_globs_meet(g.split("/"), f.split("/")) for f in FENCED) or resolves_fenced(g, root)
+            or _prefix_reaches_fenced(g, root) or _matches_fenced(g, root)]
+
+
+def _prefix_reaches_fenced(g: str, root: Path | None) -> bool:
+    """Whether path or glob *g*, its literal part resolved through the links of the work tree *root*, may meet FENCED
+    (glob against glob, a trailing ``/`` kept as everything below): ``src/lmcp/`` with ``src/lmcp -> ../mcp`` is
+    ``mcp/**``. Out of the work tree, unreadable, or a loop the resolving sees is refused. False without a *root*."""
+    if root is None:
+        return False
+    try:
+        rel = (root / g).resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError, RuntimeError):  # out of the tree, unreadable, or a loop (up to Python 3.12)
+        return True
+    parts = ([] if rel == "." else rel.split("/")) + (["**"] if g.endswith("/") else [])
+    return any(_globs_meet(parts, f.split("/")) for f in FENCED)
 
 
 def resolves_fenced(p: str, root: Path | None) -> bool:
     """Whether a path of the work tree *root* resolves, through a symlink, to what a role is never given: FENCED, or
-    anything outside the work tree. False without a *root*."""
+    anything outside the work tree, or nothing at all (a symbolic link loop). False without a *root*."""
     if root is None:
         return False
+    try:  # strict: a loop in any part (src/a/x.cpp with src/a one) is ELOOP on every Python version
+        os.path.realpath(root / p, strict=True)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:  # it leads nowhere a role may be given
+            return True
     try:
         rel = (root / p).resolve().relative_to(root.resolve())
     except ValueError:  # outside the work tree: no role's to be given
@@ -155,6 +184,54 @@ def _globs_meet(a: list[str], b: list[str]) -> bool:
     else:
         meet = x == y
     return meet and _globs_meet(a[1:], b[1:])
+
+
+def _matches_fenced(glob: str, root: Path | None) -> bool:
+    """Whether a path of the work tree *root* that *glob* matches resolves to what a role is never given
+    (resolves_fenced): ``src/*`` gives a role ``src/x``, a symlink to ``checks/``, by what it matches, which the
+    glob's own text does not show. False without a *root* or for a plain path (resolves_fenced judges that one).
+    A symlinked folder is judged itself and not walked into, also when the glob may reach below it (``s*/lroot/**``);
+    ``.git`` is not walked, no role is given it.
+
+    shortcut: a folder that cannot be listed is skipped; refuse instead if a work tree ever holds one a role can
+    write below."""
+    if root is None or not (any(c in glob for c in "*?") or glob.endswith("/")):
+        return False
+    todo, want = [root], glob.split("/")
+    # a folder is walked only when the glob may reach below it (build/ is not, for src/*); a part with ** in it
+    # (src/a**/x) crosses folders, so it is taken as ** here: never a folder skipped that the glob may reach
+    reach = ["**" if "**" in w else w for w in want]
+    while todo:
+        try:
+            entries = list(todo.pop().iterdir())
+        except OSError:
+            continue
+        for p in entries:
+            rel = p.relative_to(root).as_posix()
+            below = p.is_symlink() and _globs_meet(reach, [*rel.split("/"), "**"])  # s*/lroot/**: below a link
+            if (gitwork.matches(rel, [glob]) or below) and _reaches_fenced(p, rel, root):
+                return True
+            if (p.is_dir() and not p.is_symlink() and p.name != ".git"
+                    and _globs_meet(reach, [*rel.split("/"), "*", "**"])):  # may meet something inside it
+                todo.append(p)
+    return False
+
+
+def _reaches_fenced(p: Path, rel: str, root: Path) -> bool:
+    """Whether the work tree's path *p* (*rel*) leads to what a role is never given: it resolves there
+    (resolves_fenced), or it is a link to a folder in which FENCED may match (what is below a link is below its
+    target), or it is a link loop that resolve() raises on (Python up to 3.12; 3.13 resolves a loop without raising,
+    so it is not refused here)."""
+    try:
+        if resolves_fenced(rel, root):
+            return True
+        if not (p.is_symlink() and p.is_dir()):
+            return False
+        target = p.resolve().relative_to(root.resolve()).as_posix()
+    except (OSError, RuntimeError, ValueError):  # a loop (RuntimeError up to Python 3.12) or out of the tree
+        return True
+    parts = [] if target == "." else target.split("/")  # "." : a link to the work tree itself
+    return any(_globs_meet([*parts, "**"], f.split("/")) for f in FENCED)
 
 
 def _ids_in(text: str) -> set[str]:
@@ -634,6 +711,8 @@ class TeamRun:
         async with self._lock:
             try:
                 await self._advance()
+                if self.ended:  # the batch's commits as they stay (D18), for the sign-off card
+                    await self.commit_sizes()
                 self.errors = 0
             except Exception as exc:
                 self.errors += 1
@@ -817,7 +896,8 @@ class TeamRun:
             caught_up = await self._catch_up(key) if role["writable"] and lane.get("merged_sha") else False
             task, label = self._discuss_task(key, n, review, caught_up), self.msg("label.discuss")
         else:
-            task, label = self._work_task(key, n), (self.msg("label.again") if n > 1 else "")
+            sizes = await self.commit_sizes() if not role["writable"] else None  # the reviewer's table (D18)
+            task, label = self._work_task(key, n, sizes), (self.msg("label.again") if n > 1 else "")
         lane["attempts"].append({"n": n, "kind": kind, "label": label, "agent": None, "conv": None, "task": task,
                                  "requested_at": now, "started": None, "ended": None, "error": None, "summary": None,
                                  "credits": None, "tries": 0})
@@ -1133,9 +1213,11 @@ class TeamRun:
             # a finding added already may also go to a test writer: the test a unit-test finding lacks is its to write
             if (role not in self.impl and not (ext and role in self.test_writers)) or not self.roles[role]["writable"]:
                 choices = "、".join(self.impl)
-                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}）", str(role))
+                tw = "、".join(self.test_writers)
+                also = f"；写测试的角色（{tw}）只能在给已补登的发现加路径（extend）时选" if tw else ""
+                raise FindingRequestError(f"{role} 不是做实现的角色（可以选：{choices}{also}）", str(role))
             wt = self.s.get("run_wt")
-            bad = fenced(body["paths"], Path(wt) if wt else None)
+            bad = await asyncio.to_thread(fenced, body["paths"], Path(wt) if wt else None)
             if bad:  # what judges the role, the servers, the bench or the gates' record: never the role's to change
                 raise FindingRequestError(f"{'、'.join(bad)} 会碰到检查、服务器、台架或门禁决定的文件"
                                           f"（{'、'.join(FENCED)}），不能交给角色改", ", ".join(bad))
@@ -1172,7 +1254,10 @@ class TeamRun:
                 if isinstance(self.s.get("triage"), dict):
                     self.s["triage"]["sha256"] = digest
             r = self.roles[role]
-            added = [g for g in body["paths"] if g not in r["writable"]]
+            # a path its scope covers already is not added again (tests/test_a.cpp under tests/**): a glob is
+            # compared as written, since a narrower glob in the scope must not stand in for a wider one asked for
+            added = [g for g in body["paths"] if g not in r["writable"]
+                     and (any(c in g for c in "*?") or g.endswith("/") or not gitwork.matches(g, r["writable"]))]
             r["writable"] = [*r["writable"], *added]
             r["granted"] = [*(r.get("granted") or []), *added]
             reg = {"id": fid, "check": check, "role": role, "paths": list(body["paths"]), "added_paths": added,
@@ -2422,6 +2507,19 @@ class TeamRun:
                 "removed": sum(int((ln.get("lines") or {}).get("removed") or 0) for ln in lanes),
                 "checks": f"{t['passed']}/{t['total']}", "review": str(s.get("verdict") or "")}
 
+    async def commit_sizes(self) -> dict[str, Any] | None:
+        """The batch's commits and how big each is (D18, commits.py), kept in the run's results directory; None for an
+        imported run (no repository here) or when git cannot say. A report only: nothing is judged on it."""
+        s = self.s
+        if s.get("imported") or not s.get("base") or not s.get("run_wt") or not Path(s["run_wt"]).is_dir():
+            return None
+        try:
+            return await commits_mod.ensure(Path(s["repo"]).parent / "results", s["run_wt"], s["base"],
+                                            moving=not self.ended)
+        except Exception:  # noqa: BLE001 - the run goes on without the figures
+            self.d.log.warning("vstatd-team: %s cannot measure its commits", self.rid, exc_info=True)
+            return None
+
     async def merge_pr(self) -> str:
         """签字放行合并 PR: the run branch goes into main of the run's repository (a fast-forward: main has not moved
         since the run branched off). Returns main's new commit, or "" when there is no repository here (a run imported
@@ -2690,13 +2788,15 @@ class TeamRun:
     def _writable(self, key: str) -> str:
         return "、".join(f"`{g}`" for g in self.roles[key]["writable"]) or "无（只读，不改任何文件）"
 
-    def _work_task(self, key: str, n: int = 1) -> str:
+    def _work_task(self, key: str, n: int = 1, sizes: dict[str, Any] | None = None) -> str:
         s, lane, role = self.s, self.lane(key), self.roles[key]
         brief = role.get("brief", "")
         if (s.get("plan") or {}).get(key):  # the split a person approved at the gate
             brief = f"这次分给你的任务（{self._planner()}提议、人在关卡上批准的分工）：{s['plan'][key]}。\n\n" + brief
         if not role["writable"] and s.get("base"):
             brief += f"（需求提交是 {s['base'][:12]}，`git diff {s['base'][:12]} HEAD` 就是全部改动。）"
+            if commits_mod.table(sizes):
+                brief += "\n\n" + commits_mod.table(sizes) + "\n\n"
             t = s.get("tests") or {}
             if t.get("total"):
                 red = [c["name"] for c in t.get("cases", []) if c.get("status") == "fail"]

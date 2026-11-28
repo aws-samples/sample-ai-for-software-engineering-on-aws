@@ -138,6 +138,12 @@ export function SettingsView() {
       {saved && !changed && (
         <div className="kt-banner" role="status" data-testid="st-saved">{tr('settings.saved')}</div>
       )}
+      {!!page.dropped?.length && (
+        <div className="kt-banner" role="status" data-testid="st-dropped">
+          <b>{tr('settings.dropped')}</b>
+          <ul>{page.dropped.map((p) => <li key={p}>{p}</li>)}</ul>
+        </div>
+      )}
 
       <section className="kt-card" data-testid="st-mode">
         <h3>{tr('settings.mode')}</h3>
@@ -205,8 +211,8 @@ export function SettingsView() {
       )}
 
       <div className="st-actions">
-        <button type="button" className="kt-btn is-on" onClick={() => void save()} disabled={saving || !changed}
-          data-testid="st-save">
+        <button type="button" className="kt-btn is-on" onClick={() => void save()}
+          disabled={saving || (!changed && !page.dropped?.length)} data-testid="st-save">
           {saving ? tr('settings.saving') : tr('settings.save')}
         </button>
         {changed && (

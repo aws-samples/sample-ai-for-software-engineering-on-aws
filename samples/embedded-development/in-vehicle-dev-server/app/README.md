@@ -37,7 +37,9 @@ Installing it, and what it does not enforce: [the scenario README](../README.md#
 
 The scorecard (`GET /scorecard`) is computed from each run's `run.json`, `events.jsonl`, approved triage, results
 directories and the bench's `actions.jsonl`; [backend/team/scorecard.py](backend/team/scorecard.py) says how each figure
-is taken (D8).
+is taken (D8). It also reports each run's commit sizes (D18, [backend/team/commits.py](backend/team/commits.py)): the
+changed, moved and not-moved lines of every commit the roles made, kept in `results/commit-sizes.json`; the reviewer's
+task and the sign-off card list them too. They are reported only: no check fails and nothing is sent back on them.
 
 With no run yet, the board shows the work item, the flow from triage to sign-off as a 人机分工 grid (steps × 人 / AI / app / 台架, what each is to do; `ui/src/board/division.ts`), and a
 checklist from `GET /readiness`: the knowledge source, the build container image, `bench/doctor.sh`, the target, the
@@ -60,8 +62,8 @@ role's scope has it. It is proposed only when that test file exists in the proje
 names its test sources one by one in `tests/CMakeLists.txt`, so a file the project does not have yet would not be
 compiled or run and nothing is proposed for a module without a test file. Any other path in another role's scope
 stays the person's to type. `POST /runs/{rid}/finding` refuses a path or glob that can reach the first five, or
-that resolves outside the run's work tree (400, `invalid_finding`); with `extend` it also takes a role that writes
-tests, not only an implementing one.
+that resolves outside the run's work tree or through a symbolic link loop in any part of it (400, `invalid_finding`);
+with `extend` it also takes a role that writes tests, not only an implementing one.
 
 `POST /runs/{rid}/retry` takes `note` and `by` (who decides, named in the audit). On a run that ended on a 要改 review after its rounds (the board's `review_redo`), it sends that review back once more with the person's decision (按评审意见再改一轮); on a held bench step it carries on from that step.
 
@@ -77,14 +79,24 @@ tests, not only an implementing one.
 data directory ([backend/team/settings.py](backend/team/settings.py), [ui/src/settings/](ui/src/settings/)). Every
 default is read from the team file, so an install that never opens the page behaves exactly as before; a saved file
 is validated first (types, absolute or `~` paths, unknown keys dropped) and written in one step, and a field that
-does not hold up is refused with every problem named and nothing written. A save takes effect for the next run; a
+does not hold up is refused with every problem named and nothing written. Every save stores the security-relevant
+switches, `board_decides`, `docker.runner` and `docker.host`, even when they equal the default: `board_decides` saved
+as false stays false when a later team file says true, and the Docker runner and host stay as saved whatever a later
+version's defaults are. Of the other fields `settings.json` keeps only those that differ from the team file, so a
+default the team file changes later is followed; a choice saved equal to the default is not stored and follows the
+team file from then on. An install that never saved follows the team file for all of them. A file saved whole by an
+earlier version is still read, and it keeps every value fixed (team file changes not followed) until the next save.
+A stored field that no longer passes when the file is loaded (a rule added since, a folder
+gone), or a file that cannot be read, gets the team file's value and is listed on the page (`dropped` in
+`GET /settings`) rather than dropped silently. A save takes effect for the next run; a
 run in progress keeps the team it started with, who approves its bench requests too: while it runs, 批准 on the
-board follows that run's own `mode` and `board_decides`, and restarting the app leaves a loaded run's team as saved.
+board follows that run's own `mode` and `board_decides` (even when the team file cannot be read then), and
+restarting the app leaves a loaded run's team as saved.
 
 | Field | Default (team file) | What it changes |
 | --- | --- | --- |
 | `mode` | `connectors` (`direct`) | `direct` or `servers` (D17), without editing the team file or reinstalling |
-| `server_configs.build` / `.bench` | the `--config` in `servers.build` / `servers.bench` | which configuration file each MCP server is started with |
+| `server_configs.build` / `.bench` | the `--config` in `servers.build` / `servers.bench` | which configuration file each MCP server is started with (a `.toml` file) |
 | `baseline` | `bench.baseline` | direct mode's baseline directory (servers mode reads the bench server's own `baseline`) |
 | `docker.runner` | `""`: the docker found on this machine | security-relevant: an executable file that speaks Docker's command line, for the direct-mode checks (`check_runner.docker`'s first word) |
 | `docker.host` | `""`: the local daemon | a daemon address (`unix://`, `tcp://`, `ssh://`, `npipe://`, `fd://`), passed as `docker -H`; `tcp://` sends the checks and their mounts unencrypted |
@@ -106,17 +118,22 @@ lines to paste, derived from the bench server's own `state` and `baseline`. Past
 server's own file. Those lines are the one thing a reply writes with the home folder spelled out instead of `~`
 ([backend/team/display.py](backend/team/display.py)), because the build server takes absolute paths only and expands
 no `~`. The baseline folder is a setting the checks' container sees — it is bind-mounted read-only into a container
-that runs the agents' code with network access — so 设置 keeps it below `${sample}/`, `~/workplace/vstatd-team/` or
-the app's data directory, resolved with `realpath` after `${sample}` and `~` are filled in, never the home folder
-itself and with no part below that folder starting with a dot (`.aws`, `.ssh`). It refuses a control character in
-any path.
+that runs the agents' code with network access — so 设置 keeps it an existing folder below `${sample}/` or
+`~/workplace/vstatd-team/`, or at or below the data directory's `baseline/`, resolved with `realpath` after `${sample}`
+and `~` are filled in, never the home folder itself and with no part below that folder starting with a dot (`.aws`,
+`.ssh`); a root that a symbolic link leads out of where it is written (into a dot folder, another user's home, the
+home folder or above it), or a `baseline/` that links out of the data directory, allows nothing. The checks mount
+it as it resolves and check it again right before `docker run`, with the app's own data directory. It refuses a
+control character in any path. When upgrading: a team file edited by hand to put `bench.baseline` outside these
+folders (for example `/srv/bench/…`) now stops its checks that read the baseline at BLOCKED in direct mode; move the
+baseline into one of them.
 
 ## Code map
 
 | Path | What it is |
 | --- | --- |
 | `app.json` | Kiro Crew app manifest |
-| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/settings.py` (`GET` / `POST /settings`), `team/scorecard.py`, `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
+| `backend/` | `routes.py` and `hooks.py` (the host's entry points); `team/team.py` (one run's state machine and the tasks), `team/service.py` (all runs, the tick, gates, sign-off), `team/checks.py` (the check adapter and tests first), `team/triage.py`, `team/bench.py`, `team/paths.py`, `team/settings.py` (`GET` / `POST /settings`), `team/scorecard.py`, `team/commits.py` (commit sizes, D18), `team/board.py` (`GET /board`), `team/readiness.py` (`GET /readiness`), `team/library.py` (`GET /knowledge`), `team/roster.py` (`GET /team`), `team/flow.py` (`GET /runs/{rid}/flow`), `team/audit.py` (`GET /runs/{rid}/audit`, `GET /audit/bench`), `team/gitwork.py`, `team/sessions.py`, `team/handlers.py` |
 | `backend/team/servers.py`, `mcpclient.py` | Servers mode (D17): the steps as tool calls, and the stdio MCP client |
 | `ui/src/` | The page: `main.tsx`, `AppBar.tsx`, `nav.ts`, `board/` (team board: flow strip and readiness, audit trail (`Audit.tsx`), 人机分工 (`DivisionGrid.tsx`, `division.ts`), graph, lanes, check wall, bench panel, gates, sign-off, replay), `scorecard/`, `settings/` (设置), `item/` (交付详情), `types.ts` (the contract with the backend) |
 | `ui/preview/` | A preview page on test data, without Kiro Crew (`npm run preview:build`; `?fixture=vstatd` (the default), `vstatd-triage`, `vstatd-release`, `empty`, `?view=score`, `?view=item&run=<id>`) |
